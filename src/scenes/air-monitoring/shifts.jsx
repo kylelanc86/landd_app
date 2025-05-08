@@ -23,6 +23,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Grid,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
@@ -34,15 +35,16 @@ import {
   shifts as initialShifts,
   getJobProject,
   getProjectClient,
+  projects,
 } from "../../data/mockData";
+import AssessmentIcon from "@mui/icons-material/Assessment";
+import DeleteIcon from "@mui/icons-material/Delete";
 
+const JOBS_KEY = "ldc_jobs";
 const SHIFTS_KEY = "ldc_shifts";
 
 const emptyForm = {
-  name: "",
   date: "",
-  startTime: "",
-  endTime: "",
   supervisor: "",
   status: "In Progress",
   notes: "",
@@ -53,6 +55,9 @@ const Shifts = () => {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [shifts, setShifts] = useState([]);
+  const [job, setJob] = useState(null);
+  const [project, setProject] = useState(null);
+  const [client, setClient] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -61,16 +66,45 @@ const Shifts = () => {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState("date");
   const [sortAsc, setSortAsc] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [shiftToDelete, setShiftToDelete] = useState(null);
 
-  const job = jobs.find((j) => j.id === parseInt(jobId));
-  const project = job ? getJobProject(job.id) : null;
-  const client = project ? getProjectClient(project.id) : null;
+  // Load job and project data
+  useEffect(() => {
+    // First try to get job from localStorage
+    const storedJobs = localStorage.getItem(JOBS_KEY);
+    if (storedJobs) {
+      const jobs = JSON.parse(storedJobs);
+      const foundJob = jobs.find((j) => j.id === parseInt(jobId));
+      if (foundJob) {
+        setJob(foundJob);
+        const foundProject = projects.find((p) => p.id === foundJob.projectId);
+        if (foundProject) {
+          setProject(foundProject);
+          setClient(getProjectClient(foundProject.id));
+        }
+      }
+    } else {
+      // Fallback to mockData if not found in localStorage
+      const mockJob = jobs.find((j) => j.id === parseInt(jobId));
+      if (mockJob) {
+        setJob(mockJob);
+        const foundProject = getJobProject(mockJob.id);
+        if (foundProject) {
+          setProject(foundProject);
+          setClient(getProjectClient(foundProject.id));
+        }
+      }
+    }
+  }, [jobId]);
 
   // Load shifts from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(SHIFTS_KEY);
-    if (stored && JSON.parse(stored).length > 0) {
-      setShifts(JSON.parse(stored));
+    if (stored) {
+      const allShifts = JSON.parse(stored);
+      const jobShifts = allShifts.filter((s) => s.jobId === parseInt(jobId));
+      setShifts(jobShifts);
     } else {
       const jobShifts = initialShifts.filter(
         (s) => s.jobId === parseInt(jobId)
@@ -82,7 +116,9 @@ const Shifts = () => {
 
   // Save shifts to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(SHIFTS_KEY, JSON.stringify(shifts));
+    if (shifts.length > 0) {
+      localStorage.setItem(SHIFTS_KEY, JSON.stringify(shifts));
+    }
   }, [shifts]);
 
   const handleChange = (e) => {
@@ -95,13 +131,15 @@ const Shifts = () => {
 
   const handleAddShift = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.date) return;
+    if (!form.date) return;
     const newShift = {
       id: Date.now(),
       jobId: parseInt(jobId),
       ...form,
     };
-    setShifts([newShift, ...shifts]);
+    const updatedShifts = [newShift, ...shifts];
+    setShifts(updatedShifts);
+    localStorage.setItem(SHIFTS_KEY, JSON.stringify(updatedShifts));
     setForm(emptyForm);
     setDialogOpen(false);
   };
@@ -114,23 +152,46 @@ const Shifts = () => {
 
   const handleSaveEdit = (e) => {
     e.preventDefault();
-    setShifts(
-      shifts.map((s) => (s.id === editId ? { ...editForm, id: editId } : s))
+    const updatedShifts = shifts.map((s) =>
+      s.id === editId ? { ...editForm, id: editId } : s
     );
+    setShifts(updatedShifts);
+    localStorage.setItem(SHIFTS_KEY, JSON.stringify(updatedShifts));
     setEditDialogOpen(false);
     setEditId(null);
     setEditForm(emptyForm);
   };
 
   const handleViewSamples = (shiftId) => {
-    navigate(`/air-monitoring/shifts/${shiftId}/samples`);
+    navigate(`/air-monitoring/shift/${shiftId}/samples`);
+  };
+
+  const handleDeleteShift = (shiftId) => {
+    setShiftToDelete(shiftId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (shiftToDelete) {
+      const updatedShifts = shifts.filter(
+        (shift) => shift.id !== shiftToDelete
+      );
+      setShifts(updatedShifts);
+      localStorage.setItem(SHIFTS_KEY, JSON.stringify(updatedShifts));
+      setDeleteDialogOpen(false);
+      setShiftToDelete(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setShiftToDelete(null);
   };
 
   // Filtering and sorting
   const filteredShifts = shifts.filter((s) => {
     const q = search.toLowerCase();
     return (
-      s.name.toLowerCase().includes(q) ||
       s.supervisor.toLowerCase().includes(q) ||
       s.notes.toLowerCase().includes(q)
     );
@@ -180,7 +241,7 @@ const Shifts = () => {
           >
             Back to Jobs
           </Button>
-          <Typography
+          {/* <Typography
             variant="h4"
             sx={{
               color:
@@ -192,7 +253,7 @@ const Shifts = () => {
               hyphens: "auto",
             }}
           >
-            {job.name}
+            Project ID: {job.projectId}
           </Typography>
           <Typography
             variant="subtitle1"
@@ -206,7 +267,37 @@ const Shifts = () => {
             {project
               ? `${project.name} (${client ? client.name : "Unknown Client"})`
               : "Unknown Project"}
-          </Typography>
+          </Typography> */}
+
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Job Details
+                </Typography>
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body1">
+                    <strong>Project:</strong> {project?.name || "N/A"}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Client:</strong> {client?.name || "N/A"}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Status:</strong> {job.status}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Start Date:</strong> {job.startDate}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Location:</strong> {job.location}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Description:</strong> {job.description}
+                  </Typography>
+                </Box>
+              </Paper>
+            </Grid>
+          </Grid>
         </Box>
         <Button
           variant="contained"
@@ -266,23 +357,10 @@ const Shifts = () => {
         />
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: "8px" }}>
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell
-                onClick={() => handleSort("name")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Shift Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : ""}
-              </TableCell>
               <TableCell
                 onClick={() => handleSort("date")}
                 sx={{
@@ -305,7 +383,7 @@ const Shifts = () => {
                       : theme.palette.secondary[200],
                 }}
               >
-                Time
+                Sampler
               </TableCell>
               <TableCell
                 onClick={() => handleSort("status")}
@@ -329,37 +407,68 @@ const Shifts = () => {
                       : theme.palette.secondary[200],
                 }}
               >
+                Notes
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  color:
+                    theme.palette.mode === "dark"
+                      ? "#fff"
+                      : theme.palette.secondary[200],
+                }}
+              >
                 Actions
               </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedShifts.map((shift) => (
-              <TableRow key={shift.id}>
-                <TableCell>{shift.name}</TableCell>
+              <TableRow
+                key={shift.id}
+                onClick={() => handleViewSamples(shift.id)}
+                sx={{
+                  cursor: "pointer",
+                  "&:hover": {
+                    backgroundColor: theme.palette.action.hover,
+                  },
+                }}
+              >
                 <TableCell>{shift.date}</TableCell>
-                <TableCell>{`${shift.startTime} - ${shift.endTime}`}</TableCell>
+                <TableCell>{shift.supervisor}</TableCell>
                 <TableCell>{shift.status}</TableCell>
+                <TableCell>{shift.notes}</TableCell>
                 <TableCell>
-                  <IconButton
-                    onClick={() => handleEditShift(shift)}
-                    sx={{
-                      color:
-                        theme.palette.mode === "dark"
-                          ? "#fff"
-                          : theme.palette.secondary[200],
-                      mr: 1,
-                    }}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => handleViewSamples(shift.id)}
-                  >
-                    View Samples
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewSamples(shift.id);
+                      }}
+                      size="small"
+                    >
+                      <AssessmentIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditShift(shift);
+                      }}
+                      size="small"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteShift(shift.id);
+                      }}
+                      size="small"
+                      sx={{ color: theme.palette.error.main }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Stack>
                 </TableCell>
               </TableRow>
             ))}
@@ -373,35 +482,10 @@ const Shifts = () => {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField
-              name="name"
-              label="Shift Name"
-              value={form.name}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
               name="date"
               label="Date"
               type="date"
               value={form.date}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="startTime"
-              label="Start Time"
-              type="time"
-              value={form.startTime}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="endTime"
-              label="End Time"
-              type="time"
-              value={form.endTime}
               onChange={handleChange}
               fullWidth
               InputLabelProps={{ shrink: true }}
@@ -421,9 +505,9 @@ const Shifts = () => {
                 onChange={handleChange}
                 label="Status"
               >
-                <MenuItem value="Pending">Pending</MenuItem>
                 <MenuItem value="In Progress">In Progress</MenuItem>
                 <MenuItem value="Completed">Completed</MenuItem>
+                <MenuItem value="Pending">Pending</MenuItem>
               </Select>
             </FormControl>
             <TextField
@@ -439,7 +523,11 @@ const Shifts = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddShift} variant="contained">
+          <Button
+            onClick={handleAddShift}
+            variant="contained"
+            disabled={!form.date}
+          >
             Add Shift
           </Button>
         </DialogActions>
@@ -451,35 +539,10 @@ const Shifts = () => {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
             <TextField
-              name="name"
-              label="Shift Name"
-              value={editForm.name}
-              onChange={handleEditChange}
-              fullWidth
-            />
-            <TextField
               name="date"
               label="Date"
               type="date"
               value={editForm.date}
-              onChange={handleEditChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="startTime"
-              label="Start Time"
-              type="time"
-              value={editForm.startTime}
-              onChange={handleEditChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="endTime"
-              label="End Time"
-              type="time"
-              value={editForm.endTime}
               onChange={handleEditChange}
               fullWidth
               InputLabelProps={{ shrink: true }}
@@ -499,9 +562,9 @@ const Shifts = () => {
                 onChange={handleEditChange}
                 label="Status"
               >
-                <MenuItem value="Pending">Pending</MenuItem>
                 <MenuItem value="In Progress">In Progress</MenuItem>
                 <MenuItem value="Completed">Completed</MenuItem>
+                <MenuItem value="Pending">Pending</MenuItem>
               </Select>
             </FormControl>
             <TextField
@@ -519,6 +582,29 @@ const Shifts = () => {
           <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleSaveEdit} variant="contained">
             Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to delete this shift?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+          >
+            Delete
           </Button>
         </DialogActions>
       </Dialog>

@@ -10,8 +10,13 @@ import Calendar from "./scenes/calendar";
 import AirMonitoring from "./scenes/air-monitoring";
 import Shifts from "./scenes/air-monitoring/shifts";
 import Samples from "./scenes/air-monitoring/samples";
-import Readings from "./scenes/air-monitoring/readings";
 import Projects from "./scenes/projects";
+import SampleList from "./scenes/air-monitoring/air-monitoring-sample-list";
+import NewSample from "./scenes/air-monitoring/new-sample";
+import EditSample from "./scenes/air-monitoring/edit-sample";
+import Analysis from "./scenes/air-monitoring/analysis";
+import AsbestosAssessment from "./scenes/asbestos-assessment";
+import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -36,16 +41,27 @@ function App() {
                   element={<Shifts />}
                 />
                 <Route
-                  path="/air-monitoring/shifts/:shiftId/samples"
-                  element={<Samples />}
+                  path="/air-monitoring/shift/:shiftId/samples"
+                  element={<SampleList />}
                 />
                 <Route
-                  path="/air-monitoring/samples/:sampleId/readings"
-                  element={<Readings />}
+                  path="/air-monitoring/shift/:shiftId/samples/new"
+                  element={<NewSample />}
+                />
+                <Route
+                  path="/air-monitoring/shift/:shiftId/samples/edit/:sampleId"
+                  element={<EditSample />}
+                />
+                <Route
+                  path="/air-monitoring/shift/:shiftId/analysis"
+                  element={<Analysis />}
                 />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/invoices" element={<Invoices />} />
+                <Route path="/asbestos-assessment" element={<AsbestosAssessment />} />
+                <Route path="/asbestos-assessment/samples" element={<AssessmentSamples />} />
+
               </Routes>
             </main>
           </BrowserRouter>

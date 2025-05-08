@@ -12,6 +12,7 @@ import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import { tokens } from "../../theme";
 
 const Item = ({ title, to, icon, selected, setSelected }) => {
@@ -70,7 +71,8 @@ const Sidebar = () => {
   const theme = useTheme();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selected, setSelected] = useState("Dashboard");
-  const userName = "Admin"; // This should come from your auth context/state
+  const userName = "Kyle Lancaster"; // This should come from your auth context/state
+  const userType = "Admin"; // This should come from your auth context/state
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -248,7 +250,7 @@ const Sidebar = () => {
                   variant="h5"
                   color={theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32"}
                 >
-                  {userName}
+                  {userType}
                 </Typography>
               </Box>
             </Box>
@@ -275,6 +277,13 @@ const Sidebar = () => {
             >
               Data
             </Typography>
+            <Item
+              title="Projects"
+              to="/projects"
+              icon={<MapOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+            />
             <Item
               title="Clients"
               to="/clients"
@@ -326,6 +335,13 @@ const Sidebar = () => {
               title="Air Monitoring"
               to="/air-monitoring"
               icon={<AirOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+            />
+            <Item
+              title="Asbestos Assessment"
+              to="/asbestos-assessment"
+              icon={<AssessmentIcon />}
               selected={selected}
               setSelected={setSelected}
             />

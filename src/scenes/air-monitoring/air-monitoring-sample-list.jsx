@@ -12,17 +12,9 @@ import {
   TableRow,
   IconButton,
   TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Stack,
   InputAdornment,
   useTheme,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
@@ -30,50 +22,20 @@ import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
-import {
-  jobs,
-  shifts,
-  samples as initialSamples,
-  getJobProject,
-  getProjectClient,
-} from "../../data/mockData";
-import { format, differenceInMinutes, parse } from "date-fns";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 
 const SAMPLES_KEY = "ldc_samples";
 
-const emptyForm = {
-  sampleNo: "",
-  type: "Background",
-  location: "",
-  pumpNo: "",
-  filterSize: "",
-  startTime: "",
-  endTime: "",
-  minutes: 0,
-  initialFlowrate: "",
-  finalFlowrate: "",
-  averageFlowrate: 0,
-  notes: "",
-};
-
-const Samples = () => {
+const SampleList = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
   const [samples, setSamples] = useState([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [editForm, setEditForm] = useState(emptyForm);
-  const [editId, setEditId] = useState(null);
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState("startTime");
+  const [sortField, setSortField] = useState("sampleNo");
   const [sortAsc, setSortAsc] = useState(true);
   const [shift, setShift] = useState(null);
-
-  const job = shift ? jobs.find((j) => j.id === shift.jobId) : null;
-  const project = job ? getJobProject(job.id) : null;
-  const client = project ? getProjectClient(project.id) : null;
+  const [allSamplesComplete, setAllSamplesComplete] = useState(false);
 
   // Load shift and samples data
   useEffect(() => {
@@ -98,70 +60,33 @@ const Samples = () => {
     }
   }, [shiftId]);
 
-  // Save samples to localStorage whenever they change
+  // Check if all samples are complete
   useEffect(() => {
-    localStorage.setItem(SAMPLES_KEY, JSON.stringify(samples));
-  }, [samples]);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => {
-      const newForm = { ...prev, [name]: value };
-
-      // Calculate minutes if both times are present
-      if (name === "startTime" || name === "endTime") {
-        if (newForm.startTime && newForm.endTime) {
-          const start = parse(newForm.startTime, "HH:mm", new Date());
-          const end = parse(newForm.endTime, "HH:mm", new Date());
-          newForm.minutes = differenceInMinutes(end, start);
-        }
-      }
-
-      // Calculate average flowrate if both flowrates are present
-      if (name === "initialFlowrate" || name === "finalFlowrate") {
-        if (newForm.initialFlowrate && newForm.finalFlowrate) {
-          const initial = parseFloat(newForm.initialFlowrate);
-          const final = parseFloat(newForm.finalFlowrate);
-          if (!isNaN(initial) && !isNaN(final)) {
-            newForm.averageFlowrate = ((initial + final) / 2).toFixed(2);
-          }
-        }
-      }
-
-      return newForm;
-    });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    // Get existing samples
-    const storedSamples = localStorage.getItem(SAMPLES_KEY);
-    const allSamples = storedSamples ? JSON.parse(storedSamples) : [];
-
-    // Create new sample
-    const newSample = {
-      ...form,
-      id: Date.now(), // Use timestamp as unique ID
-      shiftId: parseInt(shiftId),
-      createdAt: new Date().toISOString(),
+    const isSampleComplete = (sample) => {
+      return (
+        sample.type &&
+        sample.location &&
+        sample.pumpNo &&
+        sample.cowlNo &&
+        sample.filterSize &&
+        sample.startTime &&
+        sample.endTime &&
+        sample.initialFlowrate &&
+        sample.finalFlowrate
+      );
     };
 
-    // Add to samples array and save
-    allSamples.push(newSample);
-    localStorage.setItem(SAMPLES_KEY, JSON.stringify(allSamples));
-
-    // Navigate back to sample list
-    navigate(`/air-monitoring/shift/${shiftId}/samples`);
-  };
+    const allComplete = samples.length > 0 && samples.every(isSampleComplete);
+    setAllSamplesComplete(allComplete);
+  }, [samples]);
 
   // Filtering and sorting
   const filteredSamples = samples.filter((s) => {
     const q = search.toLowerCase();
     return (
-      s.name.toLowerCase().includes(q) ||
+      s.sampleNo.toLowerCase().includes(q) ||
       s.location.toLowerCase().includes(q) ||
-      s.notes.toLowerCase().includes(q)
+      s.type.toLowerCase().includes(q)
     );
   });
 
@@ -180,19 +105,42 @@ const Samples = () => {
     }
   };
 
-  if (!shift || !job) {
+  const handleDeleteSample = (sampleId) => {
+    const updatedSamples = samples.filter((s) => s.id !== sampleId);
+    setSamples(updatedSamples);
+    localStorage.setItem(SAMPLES_KEY, JSON.stringify(updatedSamples));
+  };
+
+  // PDF generation placeholder
+  const handlePrintPDF = () => {
+    // TODO: Implement PDF generation logic
+    alert("PDF generation coming soon!");
+  };
+
+  if (!shift) {
     return (
       <Box sx={{ p: 4 }}>
-        <Typography>Shift or job not found</Typography>
-        <Button onClick={() => navigate("/air-monitoring")}>
-          Back to Jobs
-        </Button>
+        <Typography>Shift not found</Typography>
+        <Button onClick={() => navigate(-1)}>Back to Shifts</Button>
       </Box>
     );
   }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+      {/* Analysis Complete Banner and Print Button */}
+      {shift?.status === "Analysis Complete" && (
+        <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 2 }}>
+          <Typography
+            sx={{ color: "success.main", fontWeight: "bold", fontSize: 20 }}
+          >
+            Analysis complete
+          </Typography>
+          <Button variant="contained" color="success" onClick={handlePrintPDF}>
+            Print Report PDF
+          </Button>
+        </Box>
+      )}
       <Box
         sx={{
           display: "flex",
@@ -217,8 +165,6 @@ const Samples = () => {
                   ? "#fff"
                   : theme.palette.secondary[200],
               fontSize: { xs: "1.5rem", sm: "2rem", md: "2.5rem" },
-              wordBreak: "break-word",
-              hyphens: "auto",
             }}
           >
             Shift Date: {shift.date}
@@ -235,19 +181,40 @@ const Samples = () => {
             Supervisor: {shift.supervisor}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate(`/air-monitoring/sample/${shiftId}/new`)}
-          sx={{
-            backgroundColor: theme.palette.primary[500],
-            "&:hover": {
-              backgroundColor: theme.palette.primary[600],
-            },
-          }}
-        >
-          Add Sample
-        </Button>
+        <Stack direction="row" spacing={2}>
+          {allSamplesComplete && (
+            <Button
+              variant="contained"
+              startIcon={<AssessmentIcon />}
+              onClick={() =>
+                navigate(`/air-monitoring/shift/${shiftId}/analysis`)
+              }
+              sx={{
+                backgroundColor: theme.palette.success[500],
+                "&:hover": {
+                  backgroundColor: theme.palette.success[600],
+                },
+              }}
+            >
+              Complete Analysis
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() =>
+              navigate(`/air-monitoring/shift/${shiftId}/samples/new`)
+            }
+            sx={{
+              backgroundColor: theme.palette.primary[500],
+              "&:hover": {
+                backgroundColor: theme.palette.primary[600],
+              },
+            }}
+          >
+            Add Sample
+          </Button>
+        </Stack>
       </Box>
 
       <Box sx={{ mb: 3 }}>
@@ -298,7 +265,7 @@ const Samples = () => {
           <TableHead>
             <TableRow>
               <TableCell
-                onClick={() => handleSort("name")}
+                onClick={() => handleSort("sampleNo")}
                 sx={{
                   fontWeight: "bold",
                   color:
@@ -308,7 +275,8 @@ const Samples = () => {
                   cursor: "pointer",
                 }}
               >
-                Sample Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : ""}
+                Sample No{" "}
+                {sortField === "sampleNo" ? (sortAsc ? "▲" : "▼") : ""}
               </TableCell>
               <TableCell
                 onClick={() => handleSort("type")}
@@ -348,17 +316,26 @@ const Samples = () => {
                 Time
               </TableCell>
               <TableCell
-                onClick={() => handleSort("status")}
                 sx={{
                   fontWeight: "bold",
                   color:
                     theme.palette.mode === "dark"
                       ? "#fff"
                       : theme.palette.secondary[200],
-                  cursor: "pointer",
                 }}
               >
-                Status {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
+                Minutes
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: "bold",
+                  color:
+                    theme.palette.mode === "dark"
+                      ? "#fff"
+                      : theme.palette.secondary[200],
+                }}
+              >
+                Average Flowrate
               </TableCell>
               <TableCell
                 sx={{
@@ -376,17 +353,18 @@ const Samples = () => {
           <TableBody>
             {sortedSamples.map((sample) => (
               <TableRow key={sample.id}>
-                <TableCell>{sample.name}</TableCell>
+                <TableCell>{sample.sampleNo}</TableCell>
                 <TableCell>{sample.type}</TableCell>
                 <TableCell>{sample.location}</TableCell>
                 <TableCell>{`${sample.startTime} - ${sample.endTime}`}</TableCell>
-                <TableCell>{sample.status}</TableCell>
+                <TableCell>{sample.minutes}</TableCell>
+                <TableCell>{sample.averageFlowrate}</TableCell>
                 <TableCell>
                   <Stack direction="row" spacing={1}>
                     <IconButton
                       onClick={() =>
                         navigate(
-                          `/air-monitoring/sample/${shiftId}/edit/${sample.id}`
+                          `/air-monitoring/shift/${shiftId}/samples/edit/${sample.id}`
                         )
                       }
                       size="small"
@@ -394,16 +372,7 @@ const Samples = () => {
                       <EditIcon />
                     </IconButton>
                     <IconButton
-                      onClick={() => {
-                        const updatedSamples = samples.filter(
-                          (s) => s.id !== sample.id
-                        );
-                        setSamples(updatedSamples);
-                        localStorage.setItem(
-                          SAMPLES_KEY,
-                          JSON.stringify(updatedSamples)
-                        );
-                      }}
+                      onClick={() => handleDeleteSample(sample.id)}
                       size="small"
                       sx={{ color: theme.palette.error.main }}
                     >
@@ -420,4 +389,4 @@ const Samples = () => {
   );
 };
 
-export default Samples;
+export default SampleList;

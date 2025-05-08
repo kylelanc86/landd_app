@@ -29,6 +29,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Autocomplete,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -36,7 +37,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
-import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   jobs as initialJobs,
   projects,
@@ -47,7 +48,6 @@ const JOBS_KEY = "ldc_jobs";
 
 const emptyForm = {
   projectId: "",
-  name: "",
   status: "Pending",
   startDate: "",
   endDate: "",
@@ -72,13 +72,31 @@ const AirMonitoring = () => {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState("name");
   const [sortAsc, setSortAsc] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState(null);
+
+  // Load projects from localStorage
+  const [availableProjects, setAvailableProjects] = useState([]);
+
+  useEffect(() => {
+    // Load projects from localStorage
+    const storedProjects = localStorage.getItem("ldc_projects");
+    if (storedProjects) {
+      setAvailableProjects(JSON.parse(storedProjects));
+    } else {
+      // Fallback to mock data if no projects in localStorage
+      setAvailableProjects(projects);
+    }
+  }, []);
 
   // Load jobs from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(JOBS_KEY);
-    if (stored && JSON.parse(stored).length > 0) {
-      setJobs(JSON.parse(stored));
+    if (stored) {
+      const parsedJobs = JSON.parse(stored);
+      setJobs(parsedJobs);
     } else {
+      // Only set initial jobs if there are none in localStorage
       setJobs(initialJobs);
       localStorage.setItem(JOBS_KEY, JSON.stringify(initialJobs));
     }
@@ -86,7 +104,9 @@ const AirMonitoring = () => {
 
   // Save jobs to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+    if (jobs.length > 0) {
+      localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+    }
   }, [jobs]);
 
   const handleChange = (e) => {
@@ -99,14 +119,25 @@ const AirMonitoring = () => {
 
   const handleAddJob = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.projectId) return;
+    if (!selectedProject) return;
+
     const newJob = {
       id: Date.now(),
-      ...form,
+      projectId: selectedProject.id,
+      status: "Pending",
+      startDate: new Date().toISOString().split("T")[0],
+      endDate: "",
+      description: `Air monitoring job for ${selectedProject.name}`,
+      location: selectedProject.location || "",
+      supervisor: "",
     };
-    setJobs([newJob, ...jobs]);
-    setForm(emptyForm);
-    setDialogOpen(false);
+
+    const updatedJobs = [newJob, ...jobs];
+    setJobs(updatedJobs);
+    localStorage.setItem(JOBS_KEY, JSON.stringify(updatedJobs));
+    setOpenDialog(false);
+    setSelectedProject(null);
+    setSearchQuery("");
   };
 
   const handleEditJob = (job) => {
@@ -117,9 +148,11 @@ const AirMonitoring = () => {
 
   const handleSaveEdit = (e) => {
     e.preventDefault();
-    setJobs(
-      jobs.map((j) => (j.id === editId ? { ...editForm, id: editId } : j))
+    const updatedJobs = jobs.map((j) =>
+      j.id === editId ? { ...editForm, id: editId } : j
     );
+    setJobs(updatedJobs);
+    localStorage.setItem(JOBS_KEY, JSON.stringify(updatedJobs));
     setEditDialogOpen(false);
     setEditId(null);
     setEditForm(emptyForm);
@@ -129,22 +162,47 @@ const AirMonitoring = () => {
     navigate(`/air-monitoring/jobs/${jobId}/shifts`);
   };
 
+  const handleDeleteClick = (e, job) => {
+    e.stopPropagation();
+    setJobToDelete(job);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (jobToDelete) {
+      const updatedJobs = jobs.filter((job) => job.id !== jobToDelete.id);
+      setJobs(updatedJobs);
+      localStorage.setItem(JOBS_KEY, JSON.stringify(updatedJobs));
+      setDeleteDialogOpen(false);
+      setJobToDelete(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setJobToDelete(null);
+  };
+
   // Filtering and sorting
   const filteredJobs = jobs.filter((j) => {
     const q = search.toLowerCase();
-    const project = projects.find((p) => p.id === j.projectId);
+    const project = availableProjects.find((p) => p.id === j.projectId);
     const client = project ? getProjectClient(project.id) : null;
+
     return (
-      j.name.toLowerCase().includes(q) ||
-      j.description.toLowerCase().includes(q) ||
-      j.location.toLowerCase().includes(q) ||
-      j.supervisor.toLowerCase().includes(q) ||
-      (project && project.name.toLowerCase().includes(q)) ||
-      (client && client.name.toLowerCase().includes(q))
+      (j.projectId?.toString() || "").toLowerCase().includes(q) ||
+      (project?.name || "").toLowerCase().includes(q) ||
+      (j.status || "").toLowerCase().includes(q) ||
+      (j.startDate || "").toLowerCase().includes(q) ||
+      (client?.name || "").toLowerCase().includes(q)
     );
   });
 
   const sortedJobs = [...filteredJobs].sort((a, b) => {
+    if (!a[sortField] && !b[sortField]) return 0;
+    if (!a[sortField]) return sortAsc ? 1 : -1;
+    if (!b[sortField]) return sortAsc ? -1 : 1;
+
     if (a[sortField] < b[sortField]) return sortAsc ? -1 : 1;
     if (a[sortField] > b[sortField]) return sortAsc ? 1 : -1;
     return 0;
@@ -173,7 +231,7 @@ const AirMonitoring = () => {
   };
 
   const handleOpenJob = (jobId) => {
-    navigate(`/air-monitoring/project/${jobId}`);
+    navigate(`/air-monitoring/jobs/${jobId}/shifts`);
   };
 
   const handleCloseReport = (jobId) => {
@@ -184,16 +242,6 @@ const AirMonitoring = () => {
   const handlePrintReport = (jobId) => {
     // Implement print report functionality
     console.log("Print report for job:", jobId);
-  };
-
-  const handleCreateJob = () => {
-    if (selectedProject) {
-      // Implement create job functionality with selected project
-      console.log("Creating new job for project:", selectedProject);
-      setOpenDialog(false);
-      setSelectedProject(null);
-      setSearchQuery("");
-    }
   };
 
   return (
@@ -249,18 +297,25 @@ const AirMonitoring = () => {
                       : theme.palette.secondary[200],
                 }}
               >
-                Show Completed Jobs
+                Show Completed
               </Typography>
             }
           />
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => setDialogOpen(true)}
+            onClick={() => setOpenDialog(true)}
             sx={{
-              backgroundColor: theme.palette.primary[500],
+              backgroundColor:
+                theme.palette.mode === "dark"
+                  ? theme.palette.primary[500]
+                  : theme.palette.primary[700],
+              color: "#fff",
               "&:hover": {
-                backgroundColor: theme.palette.primary[600],
+                backgroundColor:
+                  theme.palette.mode === "dark"
+                    ? theme.palette.primary[600]
+                    : theme.palette.primary[800],
               },
             }}
           >
@@ -269,153 +324,168 @@ const AirMonitoring = () => {
         </Box>
       </Box>
 
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          label="Search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <SearchIcon
-                  sx={{
-                    color:
-                      theme.palette.mode === "dark"
-                        ? "#fff"
-                        : theme.palette.secondary[200],
+      {/* Project Selection Dialog */}
+      <Dialog
+        open={openDialog}
+        onClose={() => {
+          setOpenDialog(false);
+          setSelectedProject(null);
+          setSearchQuery("");
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Select Project</Typography>
+            <IconButton
+              onClick={() => {
+                setOpenDialog(false);
+                setSelectedProject(null);
+                setSearchQuery("");
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Autocomplete
+              options={availableProjects}
+              getOptionLabel={(option) => option.name}
+              value={selectedProject}
+              onChange={(event, newValue) => {
+                setSelectedProject(newValue);
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search Projects"
+                  variant="outlined"
+                  fullWidth
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <InputAdornment position="start">
+                          <SearchIcon />
+                        </InputAdornment>
+                        {params.InputProps.startAdornment}
+                      </>
+                    ),
                   }}
                 />
-              </InputAdornment>
-            ),
-          }}
-          sx={{
-            width: 300,
-            "& .MuiInputLabel-root": {
-              color:
-                theme.palette.mode === "dark"
-                  ? "#fff"
-                  : theme.palette.secondary[200],
-            },
-            "& .MuiOutlinedInput-root": {
-              color:
-                theme.palette.mode === "dark"
-                  ? "#fff"
-                  : theme.palette.secondary[200],
-              "& fieldset": {
-                borderColor:
-                  theme.palette.mode === "dark"
-                    ? "#fff"
-                    : theme.palette.secondary[200],
-              },
-            },
-          }}
-        />
-      </Box>
+              )}
+              renderOption={(props, option) => (
+                <ListItem {...props}>
+                  <ListItemText
+                    primary={option.name}
+                    secondary={`Client: ${
+                      getProjectClient(option.id)?.name || "N/A"
+                    }`}
+                  />
+                </ListItem>
+              )}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setOpenDialog(false);
+              setSelectedProject(null);
+              setSearchQuery("");
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAddJob}
+            variant="contained"
+            disabled={!selectedProject}
+          >
+            Create Job
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-      <TableContainer component={Paper} sx={{ borderRadius: "8px" }}>
+      {/* Rest of your existing table code */}
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell
-                onClick={() => handleSort("name")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Job Name {sortField === "name" ? (sortAsc ? "▲" : "▼") : ""}
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Project
-              </TableCell>
-              <TableCell
-                onClick={() => handleSort("status")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Status {sortField === "status" ? (sortAsc ? "▲" : "▼") : ""}
-              </TableCell>
-              <TableCell
-                onClick={() => handleSort("startDate")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Start Date{" "}
-                {sortField === "startDate" ? (sortAsc ? "▲" : "▼") : ""}
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Actions
-              </TableCell>
+              <TableCell>Project ID</TableCell>
+              <TableCell>Project Name</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Start Date</TableCell>
+              <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedJobs.map((job) => {
-              const project = projects.find((p) => p.id === job.projectId);
-              const client = project ? getProjectClient(project.id) : null;
+              const project = availableProjects.find(
+                (p) => p.id === job.projectId
+              );
               return (
-                <TableRow key={job.id}>
-                  <TableCell>{job.name}</TableCell>
+                <TableRow
+                  key={job.id}
+                  onClick={() => handleOpenJob(job.id)}
+                  sx={{
+                    cursor: "pointer",
+                    "&:hover": {
+                      backgroundColor: theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <TableCell>{job.projectId}</TableCell>
+                  <TableCell>{project?.name || "N/A"}</TableCell>
                   <TableCell>
-                    {project
-                      ? `${project.name} (${
-                          client ? client.name : "Unknown Client"
-                        })`
-                      : "Unknown Project"}
-                  </TableCell>
-                  <TableCell>{job.status}</TableCell>
-                  <TableCell>{job.startDate}</TableCell>
-                  <TableCell>
-                    <IconButton
-                      onClick={() => handleEditJob(job)}
+                    <Box
                       sx={{
-                        color:
-                          theme.palette.mode === "dark"
-                            ? "#fff"
-                            : theme.palette.secondary[200],
-                        mr: 1,
+                        backgroundColor: getStatusColor(job.status),
+                        color: theme.palette.mode === "dark" ? "#000" : "#fff",
+                        padding: "4px 8px",
+                        borderRadius: "4px",
+                        display: "inline-block",
                       }}
                     >
-                      <EditIcon />
-                    </IconButton>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => handleViewShifts(job.id)}
-                    >
-                      View Shifts
-                    </Button>
+                      {job.status}
+                    </Box>
+                  </TableCell>
+                  <TableCell>{job.startDate}</TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={1}>
+                      <IconButton
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewShifts(job.id);
+                        }}
+                        size="small"
+                      >
+                        <AssessmentIcon />
+                      </IconButton>
+                      <IconButton
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrintReport(job.id);
+                        }}
+                        size="small"
+                      >
+                        <PrintIcon />
+                      </IconButton>
+                      <IconButton
+                        onClick={(e) => handleDeleteClick(e, job)}
+                        size="small"
+                        sx={{ color: theme.palette.error.main }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               );
@@ -424,190 +494,39 @@ const AirMonitoring = () => {
         </Table>
       </TableContainer>
 
-      {/* Add Job Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
-        <DialogTitle>Add New Job</DialogTitle>
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel>Project</InputLabel>
-              <Select
-                name="projectId"
-                value={form.projectId}
-                onChange={handleChange}
-                label="Project"
-              >
-                {projects.map((project) => {
-                  const client = getProjectClient(project.id);
-                  return (
-                    <MenuItem key={project.id} value={project.id}>
-                      {project.name} ({client ? client.name : "Unknown Client"})
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-            </FormControl>
-            <TextField
-              name="name"
-              label="Job Name"
-              value={form.name}
-              onChange={handleChange}
-              fullWidth
-            />
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-                label="Status"
-              >
-                <MenuItem value="Pending">Pending</MenuItem>
-                <MenuItem value="In Progress">In Progress</MenuItem>
-                <MenuItem value="Completed">Completed</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              name="startDate"
-              label="Start Date"
-              type="date"
-              value={form.startDate}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="endDate"
-              label="End Date"
-              type="date"
-              value={form.endDate}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="description"
-              label="Description"
-              value={form.description}
-              onChange={handleChange}
-              fullWidth
-              multiline
-              rows={3}
-            />
-            <TextField
-              name="location"
-              label="Location"
-              value={form.location}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
-              name="supervisor"
-              label="Supervisor"
-              value={form.supervisor}
-              onChange={handleChange}
-              fullWidth
-            />
-          </Stack>
+          <Typography>
+            Are you sure you want to delete this air monitoring job?
+          </Typography>
+          {jobToDelete && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle1">
+                Project ID: {jobToDelete.projectId}
+              </Typography>
+              <Typography variant="subtitle1">
+                Project:{" "}
+                {availableProjects.find((p) => p.id === jobToDelete.projectId)
+                  ?.name || "N/A"}
+              </Typography>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleAddJob} variant="contained">
-            Add Job
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Edit Job Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)}>
-        <DialogTitle>Edit Job</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel>Project</InputLabel>
-              <Select
-                name="projectId"
-                value={editForm.projectId}
-                onChange={handleEditChange}
-                label="Project"
-              >
-                {projects.map((project) => {
-                  const client = getProjectClient(project.id);
-                  return (
-                    <MenuItem key={project.id} value={project.id}>
-                      {project.name} ({client ? client.name : "Unknown Client"})
-                    </MenuItem>
-                  );
-                })}
-              </Select>
-            </FormControl>
-            <TextField
-              name="name"
-              label="Job Name"
-              value={editForm.name}
-              onChange={handleEditChange}
-              fullWidth
-            />
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                name="status"
-                value={editForm.status}
-                onChange={handleEditChange}
-                label="Status"
-              >
-                <MenuItem value="Pending">Pending</MenuItem>
-                <MenuItem value="In Progress">In Progress</MenuItem>
-                <MenuItem value="Completed">Completed</MenuItem>
-              </Select>
-            </FormControl>
-            <TextField
-              name="startDate"
-              label="Start Date"
-              type="date"
-              value={editForm.startDate}
-              onChange={handleEditChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="endDate"
-              label="End Date"
-              type="date"
-              value={editForm.endDate}
-              onChange={handleEditChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              name="description"
-              label="Description"
-              value={editForm.description}
-              onChange={handleEditChange}
-              fullWidth
-              multiline
-              rows={3}
-            />
-            <TextField
-              name="location"
-              label="Location"
-              value={editForm.location}
-              onChange={handleEditChange}
-              fullWidth
-            />
-            <TextField
-              name="supervisor"
-              label="Supervisor"
-              value={editForm.supervisor}
-              onChange={handleEditChange}
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveEdit} variant="contained">
-            Save Changes
+          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+          >
+            Delete
           </Button>
         </DialogActions>
       </Dialog>
