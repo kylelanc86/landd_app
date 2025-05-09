@@ -30,7 +30,7 @@ const Item = ({ title, to, icon, selected, setSelected }) => {
               : tokens.primary[100]
             : "transparent",
         borderRadius: "8px",
-        margin: "4px 8px",
+        margin: "4px 4px",
         transition: "all 0.3s ease",
       }}
       onClick={() => setSelected(title)}
@@ -58,6 +58,10 @@ const Item = ({ title, to, icon, selected, setSelected }) => {
                 : theme.palette.mode === "dark"
                 ? tokens.grey[100]
                 : tokens.grey[700],
+            whiteSpace: "normal",
+            wordBreak: "break-word",
+            fontSize: "0.9rem",
+            lineHeight: 1.2,
           }}
         >
           {title}
@@ -114,8 +118,8 @@ const Sidebar = () => {
         "& .pro-sidebar-inner": {
           background:
             theme.palette.mode === "dark"
-              ? "#1a1a1a" // Dark theme background
-              : "#ffffff" + " !important", // Light theme background
+              ? "#1a1a1a"
+              : "#ffffff" + " !important",
           borderRight: `1px solid ${
             theme.palette.mode === "dark" ? "#2d2d2d" : "#e0e0e0"
           }`,
@@ -124,13 +128,13 @@ const Sidebar = () => {
           backgroundColor: "transparent !important",
         },
         "& .pro-inner-item": {
-          padding: "5px 35px 5px 20px !important",
+          padding: "5px 20px 5px 10px !important",
         },
         "& .pro-inner-item:hover": {
           color:
             theme.palette.mode === "dark"
-              ? "#4CAF50" // Dark theme hover color
-              : "#2E7D32" + " !important", // Light theme hover color
+              ? "#4CAF50"
+              : "#2E7D32" + " !important",
         },
         "& .pro-menu-item.active": {
           color:
@@ -275,7 +279,7 @@ const Sidebar = () => {
                 opacity: 0.8,
               }}
             >
-              Data
+              Pages
             </Typography>
             <Item
               title="Projects"
@@ -298,21 +302,8 @@ const Sidebar = () => {
               selected={selected}
               setSelected={setSelected}
             />
-
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "15px 0 5px 20px",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-              }}
-            >
-              Pages
-            </Typography>
             <Item
-              title="Calendar"
+              title="Scheduler"
               to="/calendar"
               icon={<CalendarTodayOutlinedIcon />}
               selected={selected}

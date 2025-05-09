@@ -5,7 +5,6 @@ import {
   Grid,
   Card,
   CardContent,
-  Paper,
 } from "@mui/material";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import RateReviewIcon from "@mui/icons-material/RateReview";
@@ -14,9 +13,11 @@ import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
 
   // Mock data - replace with actual data from your backend
   const stats = {
@@ -26,41 +27,60 @@ const Dashboard = () => {
     outstandingInvoices: 8,
   };
 
-  // Update the grid boxes to display the new metrics
+  // Update the grid items with distinct colors and navigation
   const gridItems = [
     {
-      title: "Active Air Monitoring Shifts",
-      value: "5", // Replace with actual data
-      icon: <AirOutlinedIcon />,
+      title: "Active Projects",
+      value: "5",
+      icon: <AssessmentIcon />,
+      bgColor: theme.palette.primary[500],
+      filter: "active",
     },
     {
-      title: "Asbestos Assessment Reports Ready for Review",
-      value: "3", // Replace with actual data
-      icon: <AssessmentIcon />,
+      title: "Report Ready for Review",
+      value: "7",
+      icon: <MapOutlinedIcon />,
+      bgColor: theme.palette.info[500],
+      filter: "review",
+    },
+    {
+      title: "Ready for Invoicing",
+      value: "3",
+      icon: <ReceiptOutlinedIcon />,
+      bgColor: theme.palette.secondary[500],
+      filter: "invoice",
     },
     {
       title: "Outstanding Invoices",
-      value: "10", // Replace with actual data
+      value: "10",
       icon: <ReceiptOutlinedIcon />,
-    },
-    {
-      title: "Projects Ready for Invoicing",
-      value: "7", // Replace with actual data
-      icon: <MapOutlinedIcon />,
+      bgColor: theme.palette.success[500],
+      filter: "outstanding",
     },
   ];
 
-  const StatCard = ({ title, value, icon, color }) => (
+  const handleCardClick = (filter) => {
+    navigate(`/projects?filter=${filter}`);
+  };
+
+  const StatCard = ({ title, value, icon, bgColor, filter }) => (
     <Card
+      onClick={() => handleCardClick(filter)}
       sx={{
-        height: "100%",
-        backgroundColor: theme.palette.background.paper,
+        height: "200px",
+        width: "100%",
+        backgroundColor: bgColor,
         borderRadius: "10px",
         boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-        transition: "transform 0.2s ease-in-out",
+        transition: "all 0.2s ease-in-out",
+        cursor: "pointer",
         "&:hover": {
           transform: "translateY(-5px)",
+          boxShadow: "0 6px 12px rgba(0, 0, 0, 0.15)",
         },
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
       }}
     >
       <CardContent>
@@ -72,9 +92,11 @@ const Dashboard = () => {
         >
           <Box
             sx={{
-              backgroundColor: `${color}20`,
+              backgroundColor: bgColor,
               borderRadius: "8px",
               p: 1,
+              color: theme.palette.mode === "dark" ? "white" : "black",
+              opacity: 0.8,
             }}
           >
             {icon}
@@ -82,7 +104,7 @@ const Dashboard = () => {
           <Typography
             variant="h4"
             sx={{
-              color: theme.palette.secondary[200],
+              color: theme.palette.mode === "dark" ? "white" : "black",
               fontWeight: "bold",
             }}
           >
@@ -92,8 +114,9 @@ const Dashboard = () => {
         <Typography
           variant="h6"
           sx={{
-            color: theme.palette.grey[100],
+            color: theme.palette.mode === "dark" ? "white" : "black",
             fontSize: "0.9rem",
+            opacity: 0.9,
           }}
         >
           {title}
@@ -109,25 +132,14 @@ const Dashboard = () => {
       </Typography>
       <Grid container spacing={3}>
         {gridItems.map((item, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Paper
-              sx={{
-                p: 3,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-              }}
-            >
-              {item.icon}
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                {item.title}
-              </Typography>
-              <Typography variant="h4" sx={{ mt: 1 }}>
-                {item.value}
-              </Typography>
-            </Paper>
+          <Grid item xs={12} sm={6} md={3} key={index} sx={{ width: "100%" }}>
+            <StatCard
+              title={item.title}
+              value={item.value}
+              icon={item.icon}
+              bgColor={item.bgColor}
+              filter={item.filter}
+            />
           </Grid>
         ))}
       </Grid>

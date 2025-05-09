@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -23,28 +23,24 @@ import {
   DialogActions,
   TextField,
   DialogContentText,
+  Menu,
+  Divider,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import TableSortLabel from "@mui/material/TableSortLabel";
+import {
+  JOB_STATUS,
+  ACTIVE_STATUSES,
+  INACTIVE_STATUSES,
+  StatusChip,
+  UserAvatar,
+} from "../../components/JobStatus";
+import { PROJECT_TYPES, fakeProjects } from "../../data/mockData";
+import { useLocation } from "react-router-dom";
+import { useTheme } from "@mui/material/styles";
 
 const PROJECTS_KEY = "ldc_projects";
-const PROJECT_TYPES = ["Air Monitoring", "Asbestos Assessment", "Other"];
-const PROJECT_STATUSES = ["Active", "Completed", "On Hold", "Cancelled"];
-
-const FAKE_PROJECTS = Array.from({ length: 15 }).map((_, i) => ({
-  id: 1000 + i,
-  name: `Project ${i + 1}`,
-  client: `Client ${String.fromCharCode(65 + (i % 5))}`,
-  type: PROJECT_TYPES[i % PROJECT_TYPES.length],
-  address: `${100 + i} Example St, City ${(i % 3) + 1}`,
-  users: [
-    `user${i + 1}@example.com`,
-    ...(i % 2 === 0 ? [`user${i + 2}@example.com`] : []),
-  ],
-  status: PROJECT_STATUSES[i % PROJECT_STATUSES.length],
-  createdAt: new Date(Date.now() - i * 86400000).toISOString(),
-}));
 
 const emptyForm = {
   name: "",
@@ -52,7 +48,86 @@ const emptyForm = {
   type: PROJECT_TYPES[0],
   address: "",
   users: "",
-  status: PROJECT_STATUSES[0], 
+  status: ACTIVE_STATUSES[0],
+};
+
+const EditableStatusCell = ({ project, onStatusChange }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+    setIsEditing(true);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+    setIsEditing(false);
+  };
+
+  const handleStatusSelect = (newStatus) => {
+    onStatusChange(project.id, newStatus);
+    handleClose();
+  };
+
+  return (
+    <TableCell>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box
+          onClick={handleClick}
+          sx={{
+            cursor: "pointer",
+            "&:hover": {
+              opacity: 0.8,
+            },
+          }}
+        >
+          <StatusChip status={project.status} />
+        </Box>
+        <Menu
+          anchorEl={anchorEl}
+          open={isEditing}
+          onClose={handleClose}
+          PaperProps={{
+            sx: {
+              maxHeight: 300,
+              width: 250,
+            },
+          }}
+        >
+          <MenuItem disabled>
+            <Typography variant="subtitle2" color="text.secondary">
+              Active Jobs
+            </Typography>
+          </MenuItem>
+          {ACTIVE_STATUSES.map((status) => (
+            <MenuItem
+              key={status}
+              onClick={() => handleStatusSelect(status)}
+              selected={project.status === status}
+            >
+              <StatusChip status={status} />
+            </MenuItem>
+          ))}
+          <Divider />
+          <MenuItem disabled>
+            <Typography variant="subtitle2" color="text.secondary">
+              Inactive Jobs
+            </Typography>
+          </MenuItem>
+          {INACTIVE_STATUSES.map((status) => (
+            <MenuItem
+              key={status}
+              onClick={() => handleStatusSelect(status)}
+              selected={project.status === status}
+            >
+              <StatusChip status={status} />
+            </MenuItem>
+          ))}
+        </Menu>
+      </Box>
+    </TableCell>
+  );
 };
 
 const Projects = ({ toggleColorMode, mode }) => {
@@ -66,24 +141,56 @@ const Projects = ({ toggleColorMode, mode }) => {
   const [deleteId, setDeleteId] = useState(null);
   const [sortBy, setSortBy] = useState("name");
   const [sortDir, setSortDir] = useState("asc");
-  const [filterStatus, setFilterStatus] = useState("Active");
+  const [filterStatus, setFilterStatus] = useState("All");
   const [filterClient, setFilterClient] = useState("");
+  const location = useLocation();
+  const theme = useTheme();
 
-  // Load projects from localStorage on mount
-  useEffect(() => {
+  const initializeLocalStorage = () => {
     const stored = localStorage.getItem(PROJECTS_KEY);
-    if (stored && JSON.parse(stored).length > 0) {
-      setProjects(JSON.parse(stored));
-    } else {
-      setProjects(FAKE_PROJECTS);
-      localStorage.setItem(PROJECTS_KEY, JSON.stringify(FAKE_PROJECTS));
+    if (!stored) {
+      console.log("Initializing localStorage with fake projects");
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(fakeProjects));
     }
+  };
+
+  const loadProjects = () => {
+    try {
+      const stored = localStorage.getItem(PROJECTS_KEY);
+      console.log("Loading projects from localStorage:", stored);
+
+      if (stored) {
+        const parsedProjects = JSON.parse(stored);
+        if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
+          console.log("Setting projects from localStorage:", parsedProjects);
+          setProjects(parsedProjects);
+        } else {
+          console.error("Invalid stored data format");
+          setProjects(fakeProjects);
+        }
+      } else {
+        console.log("No stored data found");
+        setProjects(fakeProjects);
+      }
+    } catch (error) {
+      console.error("Error loading projects:", error);
+      setProjects(fakeProjects);
+    }
+  };
+
+  useEffect(() => {
+    initializeLocalStorage();
+    loadProjects();
   }, []);
 
-  // Save projects to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
-  }, [projects]);
+    const searchParams = new URLSearchParams(location.search);
+    const searchParam = searchParams.get("search");
+
+    if (searchParam) {
+      setFilterClient(searchParam);
+    }
+  }, [location.search]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -102,7 +209,8 @@ const Projects = ({ toggleColorMode, mode }) => {
       users: form.users
         .split(",")
         .map((u) => u.trim())
-        .filter(Boolean),
+        .filter(Boolean)
+        .map((name) => ({ name })),
       createdAt: new Date().toISOString(),
     };
     setProjects([newProject, ...projects]);
@@ -117,7 +225,7 @@ const Projects = ({ toggleColorMode, mode }) => {
       client: project.client,
       type: project.type,
       address: project.address,
-      users: project.users ? project.users.join(", ") : "",
+      users: project.users ? project.users.map((u) => u.name).join(", ") : "",
       status: project.status,
     });
     setEditDialogOpen(true);
@@ -134,7 +242,8 @@ const Projects = ({ toggleColorMode, mode }) => {
               users: editForm.users
                 .split(",")
                 .map((u) => u.trim())
-                .filter(Boolean),
+                .filter(Boolean)
+                .map((name) => ({ name })),
             }
           : p
       )
@@ -151,21 +260,71 @@ const Projects = ({ toggleColorMode, mode }) => {
     setDeleteId(null);
   };
 
+  const handleStatusChange = (projectId, newStatus) => {
+    try {
+      console.log("Changing status for project:", projectId, "to:", newStatus);
+
+      // Create new array with updated project
+      const updatedProjects = projects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              status: newStatus,
+            }
+          : p
+      );
+
+      // Update state first
+      setProjects(updatedProjects);
+
+      // Then save to localStorage
+      const projectsString = JSON.stringify(updatedProjects);
+      localStorage.setItem(PROJECTS_KEY, projectsString);
+
+      // Verify the save
+      const savedData = localStorage.getItem(PROJECTS_KEY);
+      if (!savedData) {
+        throw new Error("Failed to save to localStorage");
+      }
+    } catch (error) {
+      console.error("Error updating project status:", error);
+      // Revert state if save failed
+      setProjects(projects);
+    }
+  };
+
   // Filtering and sorting
-  const filteredProjects = projects.filter((p) => {
-    // Only show not completed/cancelled by default
-    const statusOk = !["Completed", "Cancelled"].includes(p.status);
-    const statusMatch = !filterStatus || p.status === filterStatus;
-    const clientMatch = !filterClient || p.client === filterClient;
-    return statusOk && statusMatch && clientMatch;
-  });
-  const sortedProjects = [...filteredProjects].sort((a, b) => {
-    if (a[sortBy] < b[sortBy]) return sortDir === "asc" ? -1 : 1;
-    if (a[sortBy] > b[sortBy]) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
+  const getFilteredProjects = useCallback(() => {
+    let filtered = [...projects];
+
+    // Apply status dropdown filter
+    if (filterStatus && filterStatus !== "All") {
+      filtered = filtered.filter((project) => project.status === filterStatus);
+    }
+
+    // Apply client filter
+    if (filterClient) {
+      const searchLower = filterClient.toLowerCase();
+      filtered = filtered.filter((project) =>
+        project.client.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply sorting
+    return filtered.sort((a, b) => {
+      const aValue = a[sortBy];
+      const bValue = b[sortBy];
+      if (sortDir === "asc") {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  }, [projects, filterStatus, filterClient, sortBy, sortDir]);
+
+  const sortedProjects = [...getFilteredProjects()];
   const uniqueClients = Array.from(new Set(projects.map((p) => p.client)));
-  const uniqueStatuses = Array.from(new Set(projects.map((p) => p.status)));
+  const uniqueStatuses = [...ACTIVE_STATUSES, ...INACTIVE_STATUSES];
   const handleSort = (field) => {
     if (sortBy === field) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -180,6 +339,29 @@ const Projects = ({ toggleColorMode, mode }) => {
   const handleGoToProject = (projectId) => {
     window.location.href = `/projects?search=${encodeURIComponent(projectId)}`;
   };
+
+  // Add a useEffect to monitor projects changes
+  useEffect(() => {
+    console.log("Projects state changed:", projects);
+  }, [projects]);
+
+  // Add a useEffect to monitor localStorage changes
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === PROJECTS_KEY) {
+        console.log("localStorage changed:", e.newValue);
+        try {
+          const newProjects = JSON.parse(e.newValue);
+          setProjects(newProjects);
+        } catch (error) {
+          console.error("Error parsing localStorage data:", error);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   return (
     <Box sx={{ maxWidth: 1100, mx: "auto", mt: 4 }}>
@@ -211,8 +393,8 @@ const Projects = ({ toggleColorMode, mode }) => {
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
-              <MenuItem value="">All</MenuItem>
-              {uniqueStatuses.map((status) => (
+              <MenuItem value="All">All</MenuItem>
+              {[...ACTIVE_STATUSES, ...INACTIVE_STATUSES].map((status) => (
                 <MenuItem key={status} value={status}>
                   {status}
                 </MenuItem>
@@ -261,7 +443,7 @@ const Projects = ({ toggleColorMode, mode }) => {
                     active={sortBy === "name"}
                     direction={sortBy === "name" ? sortDir : "asc"}
                   >
-                    Project Name
+                    Address/Name
                   </TableSortLabel>
                 </TableCell>
                 <TableCell
@@ -286,7 +468,7 @@ const Projects = ({ toggleColorMode, mode }) => {
                     Project Type
                   </TableSortLabel>
                 </TableCell>
-                <TableCell>Project Address</TableCell>
+                <TableCell>Secondary Address/Name</TableCell>
                 <TableCell>Users</TableCell>
                 <TableCell
                   onClick={() => handleSort("status")}
@@ -303,14 +485,14 @@ const Projects = ({ toggleColorMode, mode }) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {sortedProjects.length === 0 && (
+              {getFilteredProjects().length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} align="center">
                     No projects yet.
                   </TableCell>
                 </TableRow>
               )}
-              {sortedProjects.map((project) => (
+              {getFilteredProjects().map((project) => (
                 <TableRow key={project.id}>
                   <TableCell>
                     <Button
@@ -340,12 +522,15 @@ const Projects = ({ toggleColorMode, mode }) => {
                     {project.users && project.users.length > 0 ? (
                       <Stack direction="row" spacing={1}>
                         {project.users.map((user, idx) => (
-                          <Chip key={idx} label={user} size="small" />
+                          <UserAvatar key={idx} user={user} />
                         ))}
                       </Stack>
                     ) : null}
                   </TableCell>
-                  <TableCell>{project.status}</TableCell>
+                  <EditableStatusCell
+                    project={project}
+                    onStatusChange={handleStatusChange}
+                  />
                   <TableCell align="center">
                     <IconButton
                       size="small"
@@ -377,7 +562,7 @@ const Projects = ({ toggleColorMode, mode }) => {
               sx={{ mb: 2 }}
             >
               <TextField
-                label="Project Name"
+                label="Address/Name"
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -409,7 +594,7 @@ const Projects = ({ toggleColorMode, mode }) => {
             </Stack>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
-                label="Project Address"
+                label="Secondary Address/Name"
                 name="address"
                 value={form.address}
                 onChange={handleChange}
@@ -430,7 +615,22 @@ const Projects = ({ toggleColorMode, mode }) => {
                   value={form.status}
                   onChange={handleChange}
                 >
-                  {PROJECT_STATUSES.map((status) => (
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Active Jobs
+                    </Typography>
+                  </MenuItem>
+                  {ACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Inactive Jobs
+                    </Typography>
+                  </MenuItem>
+                  {INACTIVE_STATUSES.map((status) => (
                     <MenuItem key={status} value={status}>
                       {status}
                     </MenuItem>
@@ -465,7 +665,7 @@ const Projects = ({ toggleColorMode, mode }) => {
               sx={{ mb: 2 }}
             >
               <TextField
-                label="Project Name"
+                label="Address/Name"
                 name="name"
                 value={editForm.name}
                 onChange={handleEditChange}
@@ -497,7 +697,7 @@ const Projects = ({ toggleColorMode, mode }) => {
             </Stack>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
-                label="Project Address"
+                label="Secondary Address/Name"
                 name="address"
                 value={editForm.address}
                 onChange={handleEditChange}
@@ -518,7 +718,22 @@ const Projects = ({ toggleColorMode, mode }) => {
                   value={editForm.status}
                   onChange={handleEditChange}
                 >
-                  {PROJECT_STATUSES.map((status) => (
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Active Jobs
+                    </Typography>
+                  </MenuItem>
+                  {ACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Inactive Jobs
+                    </Typography>
+                  </MenuItem>
+                  {INACTIVE_STATUSES.map((status) => (
                     <MenuItem key={status} value={status}>
                       {status}
                     </MenuItem>

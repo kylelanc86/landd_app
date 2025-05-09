@@ -3,6 +3,42 @@ import { createTheme } from "@mui/material/styles";
 
 // color design tokens
 export const tokens = {
+  primary: {
+    50: "#E6F4F8",
+    100: "#CCE9F1",
+    200: "#99D3E3",
+    300: "#66BDD5",
+    400: "#33A7C7",
+    500: "#74B3CE", // Main color
+    600: "#4A8BA8",
+    700: "#3A6F86",
+    800: "#2B5364",
+    900: "#1B3742",
+  },
+  secondary: {
+    50: "#E6F7F3",
+    100: "#CCEFE7",
+    200: "#99DFCF",
+    300: "#66CFB7",
+    400: "#33BF9F",
+    500: "#09BC8A", // Main color
+    600: "#068B6A",
+    700: "#056A52",
+    800: "#034A3A",
+    900: "#022A22",
+  },
+  neutral: {
+    50: "#F0F2F5",
+    100: "#E1E5EA",
+    200: "#C3CBD5",
+    300: "#A5B1C0",
+    400: "#8797AB",
+    500: "#508991", // Muted blue
+    600: "#3D6B71",
+    700: "#2B4D51",
+    800: "#1A2E31",
+    900: "#172A3A", // Dark blue
+  },
   grey: {
     0: "#FFFFFF",
     10: "#F6F6F6",
@@ -18,45 +54,11 @@ export const tokens = {
     900: "#0A0A0A",
     1000: "#000000",
   },
-  primary: {
-    50: "#E6FBFF",
-    100: "#CCF7FE",
-    200: "#99EEFD",
-    300: "#66E6FC",
-    400: "#33DDFB",
-    500: "#00D5FA",
-    600: "#00A0BC",
-    700: "#006B7D",
-    800: "#00353F",
-    900: "#001519",
-  },
-  secondary: {
-    50: "#F0F7FF",
-    100: "#C6E3FF",
-    200: "#8ABEFF",
-    300: "#4E99FF",
-    400: "#1274FF",
-    500: "#0066FF",
-    600: "#0052CC",
-    700: "#003D99",
-    800: "#002966",
-    900: "#001433",
-  },
-  tertiary: {
-    50: "#E6FAF5",
-    100: "#CCF5EB",
-    200: "#99EBD7",
-    300: "#66E0C3",
-    400: "#33D6AF",
-    500: "#00CC9B",
-    600: "#009A74",
-    700: "#00674D",
-    800: "#003527",
-    900: "#001A13",
-  },
   background: {
     light: "#FFFFFF",
-    main: "#1F2026",
+    main: "#F5F5F5",
+    dark: "#172A3A",
+    paper: "#004346",
   },
 };
 
@@ -70,70 +72,163 @@ export const themeSettings = (mode) => {
             // palette values for dark mode
             primary: {
               main: tokens.primary[500],
+              light: tokens.primary[400],
+              dark: tokens.primary[600],
+              contrastText: "#fff",
             },
             secondary: {
               main: tokens.secondary[500],
+              light: tokens.secondary[400],
+              dark: tokens.secondary[600],
+              contrastText: "#fff",
             },
             neutral: {
-              dark: tokens.grey[700],
-              main: tokens.grey[500],
-              light: tokens.grey[100],
+              dark: tokens.neutral[700],
+              main: tokens.neutral[500],
+              light: tokens.neutral[100],
             },
             background: {
-              default: tokens.background.main,
-              alt: tokens.background.main,
+              default: tokens.background.dark,
+              paper: tokens.background.paper,
+            },
+            text: {
+              primary: "#FFFFFF",
+              secondary: tokens.primary[500],
             },
           }
         : {
             // palette values for light mode
             primary: {
               main: tokens.primary[500],
+              light: tokens.primary[400],
+              dark: tokens.primary[600],
+              contrastText: "#fff",
             },
             secondary: {
               main: tokens.secondary[500],
+              light: tokens.secondary[400],
+              dark: tokens.secondary[600],
+              contrastText: "#fff",
             },
             neutral: {
-              dark: tokens.grey[700],
-              main: tokens.grey[500],
-              light: tokens.grey[100],
+              dark: tokens.neutral[700],
+              main: tokens.neutral[500],
+              light: tokens.neutral[100],
             },
             background: {
               default: tokens.background.light,
-              alt: tokens.background.light,
+              paper: tokens.background.main,
+            },
+            text: {
+              primary: tokens.neutral[900],
+              secondary: tokens.neutral[500],
             },
           }),
     },
     typography: {
-      fontFamily: ["Inter", "sans-serif"].join(","),
-      fontSize: 12,
+      fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
       h1: {
-        fontFamily: ["Inter", "sans-serif"].join(","),
-        fontSize: 32,
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "2.5rem",
+        fontWeight: 600,
       },
       h2: {
-        fontFamily: ["Inter", "sans-serif"].join(","),
-        fontSize: 24,
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "2rem",
+        fontWeight: 600,
       },
       h3: {
-        fontFamily: ["Inter", "sans-serif"].join(","),
-        fontSize: 20,
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "1.75rem",
         fontWeight: 600,
-        color: tokens.grey[200],
       },
       h4: {
-        fontFamily: ["Inter", "sans-serif"].join(","),
-        fontSize: 14,
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "1.5rem",
         fontWeight: 600,
-        color: tokens.grey[300],
       },
       h5: {
-        fontFamily: ["Inter", "sans-serif"].join(","),
-        fontSize: 12,
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "1.25rem",
         fontWeight: 500,
       },
       h6: {
-        fontFamily: ["Inter", "sans-serif"].join(","),
-        fontSize: 10,
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "1rem",
+        fontWeight: 500,
+      },
+      subtitle1: {
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "1rem",
+        fontWeight: 500,
+      },
+      subtitle2: {
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "0.875rem",
+        fontWeight: 500,
+      },
+      body1: {
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "1rem",
+        fontWeight: 400,
+      },
+      body2: {
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "0.875rem",
+        fontWeight: 400,
+      },
+      button: {
+        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontSize: "0.875rem",
+        fontWeight: 500,
+        textTransform: "none",
+      },
+    },
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: "none",
+            borderRadius: 8,
+            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontWeight: 500,
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+          },
+        },
+      },
+      MuiMenuItem: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+          },
+        },
       },
     },
   };

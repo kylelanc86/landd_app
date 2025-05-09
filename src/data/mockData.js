@@ -362,4 +362,52 @@ export const getInvoiceClient = (invoiceId) => {
 
 export const getSampleReadings = (sampleId) => {
   return readings.filter(reading => reading.sampleId === sampleId);
-}; 
+};
+
+export const PROJECT_TYPES = ["Air Monitoring", "Asbestos Assessment", "Other"];
+
+export const fakeProjects = Array.from({ length: 15 }).map((_, i) => ({
+  id: 1000 + i,
+  name: [
+    "Skyline Tower",
+    "Harbor View Plaza",
+    "Central Business Complex",
+    "Riverside Apartments",
+    "Metro Office Park",
+    "Green Valley Mall",
+    "Sunset Heights Condos",
+    "Downtown Medical Center",
+    "Industrial Park Building A",
+    "Tech Campus North",
+    "Heritage Square",
+    "Oceanfront Residences",
+    "University Research Lab",
+    "City Hall Annex",
+    "Shopping Center West"
+  ][i],
+  client: `Client ${String.fromCharCode(65 + (i % 5))}`,
+  type: PROJECT_TYPES[i % PROJECT_TYPES.length],
+  address: [
+    "123 Main Street, Suite 400",
+    "456 Market Square, Floor 2",
+    "789 Business Park Drive",
+    "321 Tech Boulevard",
+    "654 Innovation Way",
+    "", // Empty for some entries
+    "987 Corporate Center",
+    "147 Medical Plaza",
+    "258 Industrial Zone",
+    "369 Research Park",
+    "", // Empty for some entries
+    "741 Coastal Highway",
+    "852 Campus Drive",
+    "963 Government Center",
+    "159 Retail Row"
+  ][i],
+  users: [
+    { name: `User ${i + 1}` },
+    ...(i % 2 === 0 ? [{ name: `User ${i + 2}` }] : []),
+  ],
+  status: "Assigned", // Default status
+  createdAt: new Date(Date.now() - i * 86400000).toISOString(),
+})); 
