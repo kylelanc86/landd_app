@@ -17,6 +17,7 @@ import EditSample from "./scenes/air-monitoring/edit-sample";
 import Analysis from "./scenes/air-monitoring/analysis";
 import AsbestosAssessment from "./scenes/asbestos-assessment";
 import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
+import Users from "./scenes/users";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -59,9 +60,15 @@ function App() {
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/invoices" element={<Invoices />} />
-                <Route path="/asbestos-assessment" element={<AsbestosAssessment />} />
-                <Route path="/asbestos-assessment/samples" element={<AssessmentSamples />} />
-
+                <Route
+                  path="/asbestos-assessment"
+                  element={<AsbestosAssessment />}
+                />
+                <Route
+                  path="/asbestos-assessment/samples"
+                  element={<AssessmentSamples />}
+                />
+                <Route path="/users" element={<Users />} />
               </Routes>
             </main>
           </BrowserRouter>

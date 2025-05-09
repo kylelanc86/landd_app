@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
 import "react-pro-sidebar/dist/css/styles.css";
 import { Box, IconButton, Typography, useTheme, Avatar } from "@mui/material";
@@ -13,7 +13,10 @@ import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import { tokens } from "../../theme";
+
+const USERS_KEY = "ldc_users";
 
 const Item = ({ title, to, icon, selected, setSelected }) => {
   const theme = useTheme();
@@ -75,8 +78,29 @@ const Sidebar = () => {
   const theme = useTheme();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selected, setSelected] = useState("Dashboard");
-  const userName = "Kyle Lancaster"; // This should come from your auth context/state
-  const userType = "Admin"; // This should come from your auth context/state
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const loadCurrentUser = () => {
+      try {
+        const stored = localStorage.getItem(USERS_KEY);
+        if (stored) {
+          const users = JSON.parse(stored);
+          // Find John Smith (admin user)
+          const johnSmith = users.find(
+            (user) => user.firstName === "John" && user.lastName === "Smith"
+          );
+          if (johnSmith) {
+            setCurrentUser(johnSmith);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading current user:", error);
+      }
+    };
+
+    loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -238,7 +262,7 @@ const Sidebar = () => {
                     fontWeight: "bold",
                   }}
                 >
-                  {userName.charAt(0)}
+                  {currentUser ? currentUser.firstName.charAt(0) : "J"}
                 </Avatar>
               </Box>
               <Box textAlign="center">
@@ -248,13 +272,15 @@ const Sidebar = () => {
                   fontWeight="bold"
                   sx={{ m: "10px 0 0 0" }}
                 >
-                  {userName}
+                  {currentUser
+                    ? `${currentUser.firstName} ${currentUser.lastName}`
+                    : "John Smith"}
                 </Typography>
                 <Typography
                   variant="h5"
                   color={theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32"}
                 >
-                  {userType}
+                  {currentUser ? currentUser.userLevel : "Admin"}
                 </Typography>
               </Box>
             </Box>
@@ -265,6 +291,13 @@ const Sidebar = () => {
               title="Dashboard"
               to="/"
               icon={<HomeOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+            />
+            <Item
+              title="User Management"
+              to="/users"
+              icon={<AccessibilityIcon />}
               selected={selected}
               setSelected={setSelected}
             />

@@ -25,6 +25,8 @@ import {
   DialogContentText,
   Menu,
   Divider,
+  Checkbox,
+  ListItemText,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -192,6 +194,20 @@ const Projects = ({ toggleColorMode, mode }) => {
     }
   }, [location.search]);
 
+  // Add this effect to handle URL parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get("status");
+
+    if (statusParam) {
+      if (statusParam === "active") {
+        setFilterStatus("Active");
+      } else {
+        setFilterStatus(statusParam);
+      }
+    }
+  }, [location.search]);
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -293,13 +309,39 @@ const Projects = ({ toggleColorMode, mode }) => {
     }
   };
 
+  const handleStatusFilterChange = (event) => {
+    const value = event.target.value;
+    if (value === "Active") {
+      // If "Active" is selected, add all active statuses
+      setFilterStatus("Active");
+    } else {
+      // For other statuses, toggle them individually
+      setFilterStatus((prev) => {
+        // Remove the status if it's already selected
+        if (prev.includes(value)) {
+          return prev.filter((status) => status !== value);
+        }
+        // Add the status if it's not selected
+        return [...prev, value];
+      });
+    }
+  };
+
   // Filtering and sorting
   const getFilteredProjects = useCallback(() => {
     let filtered = [...projects];
 
-    // Apply status dropdown filter
+    // Apply status filter
     if (filterStatus && filterStatus !== "All") {
-      filtered = filtered.filter((project) => project.status === filterStatus);
+      if (filterStatus === "Active") {
+        filtered = filtered.filter((project) =>
+          ACTIVE_STATUSES.includes(project.status)
+        );
+      } else {
+        filtered = filtered.filter(
+          (project) => project.status === filterStatus
+        );
+      }
     }
 
     // Apply client filter
@@ -386,7 +428,7 @@ const Projects = ({ toggleColorMode, mode }) => {
       </Box>
       <Paper sx={{ p: 2 }}>
         <Box sx={{ display: "flex", mb: 2, gap: 2 }}>
-          <FormControl sx={{ minWidth: 120 }} size="small">
+          <FormControl sx={{ minWidth: 200 }} size="small">
             <InputLabel>Status</InputLabel>
             <Select
               label="Status"
@@ -394,6 +436,13 @@ const Projects = ({ toggleColorMode, mode }) => {
               onChange={(e) => setFilterStatus(e.target.value)}
             >
               <MenuItem value="All">All</MenuItem>
+              <MenuItem value="Active">Active Projects</MenuItem>
+              <Divider />
+              <MenuItem disabled>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Individual Statuses
+                </Typography>
+              </MenuItem>
               {[...ACTIVE_STATUSES, ...INACTIVE_STATUSES].map((status) => (
                 <MenuItem key={status} value={status}>
                   {status}

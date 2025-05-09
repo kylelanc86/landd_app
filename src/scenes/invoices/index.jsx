@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import jsPDF from "jspdf";
 import {
   Box,
@@ -23,10 +23,12 @@ import {
   FormControl,
   Stack,
   TableSortLabel,
+  Chip,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import autoTable from "jspdf-autotable";
+import { useLocation } from "react-router-dom";
 
 const INVOICES_KEY = "ldc_invoices";
 const STATUS_OPTIONS = ["Paid", "Unpaid"];
@@ -93,6 +95,7 @@ const handleInvoicePDF = (invoice) => {
 };
 
 const Invoices = ({ toggleColorMode, mode }) => {
+  const location = useLocation();
   const [invoices, setInvoices] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -101,24 +104,42 @@ const Invoices = ({ toggleColorMode, mode }) => {
   const [editId, setEditId] = useState(null);
   const [sortBy, setSortBy] = useState("invoiceDate");
   const [sortDir, setSortDir] = useState("desc");
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
   const [filterClient, setFilterClient] = useState("");
 
   // Load invoices from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(INVOICES_KEY);
-    if (stored && JSON.parse(stored).length > 0) {
-      setInvoices(JSON.parse(stored));
-    } else {
-      setInvoices(FAKE_INVOICES);
-      localStorage.setItem(INVOICES_KEY, JSON.stringify(FAKE_INVOICES));
-    }
+    const loadInvoices = () => {
+      try {
+        const stored = localStorage.getItem(INVOICES_KEY);
+        if (stored) {
+          const parsedInvoices = JSON.parse(stored);
+          if (Array.isArray(parsedInvoices) && parsedInvoices.length > 0) {
+            setInvoices(parsedInvoices);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading invoices:", error);
+      }
+    };
+
+    loadInvoices();
   }, []);
 
   // Save invoices to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem(INVOICES_KEY, JSON.stringify(invoices));
   }, [invoices]);
+
+  // Add this effect to handle URL parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get("status");
+
+    if (statusParam) {
+      setFilterStatus(statusParam);
+    }
+  }, [location.search]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -171,13 +192,21 @@ const Invoices = ({ toggleColorMode, mode }) => {
 
   // Only show unpaid invoices by default
   const unpaidInvoices = invoices.filter((inv) => inv.status !== "Paid");
-  const sortedInvoices = [...unpaidInvoices]
-    .filter(
-      (inv) =>
-        (!filterStatus || inv.status === filterStatus) &&
-        (!filterClient || inv.client === filterClient)
-    )
-    .sort((a, b) => {
+  const getFilteredInvoices = useCallback(() => {
+    let filtered = [...invoices];
+
+    // Apply status filter
+    if (filterStatus && filterStatus !== "All") {
+      filtered = filtered.filter((invoice) => invoice.status === filterStatus);
+    }
+
+    // Apply client filter
+    if (filterClient) {
+      filtered = filtered.filter((invoice) => invoice.client === filterClient);
+    }
+
+    // Apply sorting
+    return filtered.sort((a, b) => {
       let valA = a[sortBy],
         valB = b[sortBy];
       if (sortBy === "amount") {
@@ -188,6 +217,7 @@ const Invoices = ({ toggleColorMode, mode }) => {
       if (valA > valB) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
+  }, [invoices, filterStatus, filterClient, sortBy, sortDir]);
 
   // Unique clients for filter
   const uniqueClients = Array.from(new Set(invoices.map((inv) => inv.client)));
@@ -211,6 +241,28 @@ const Invoices = ({ toggleColorMode, mode }) => {
     window.location.href = `/projects?search=${encodeURIComponent(
       projectName
     )}`;
+  };
+
+  // Add this function to handle status toggle
+  const handleStatusToggle = (invoiceId) => {
+    try {
+      const updatedInvoices = invoices.map((invoice) =>
+        invoice.id === invoiceId
+          ? {
+              ...invoice,
+              status: invoice.status === "Paid" ? "Unpaid" : "Paid",
+            }
+          : invoice
+      );
+
+      // Update state
+      setInvoices(updatedInvoices);
+
+      // Save to localStorage
+      localStorage.setItem(INVOICES_KEY, JSON.stringify(updatedInvoices));
+    } catch (error) {
+      console.error("Error updating invoice status:", error);
+    }
   };
 
   return (
@@ -237,36 +289,35 @@ const Invoices = ({ toggleColorMode, mode }) => {
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
           <FilterListIcon />
-          <FormControl sx={{ minWidth: 120 }} size="small">
-            <InputLabel>Status</InputLabel>
-            <Select
-              label="Status"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <MenuItem value="">All</MenuItem>
-              {STATUS_OPTIONS.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl sx={{ minWidth: 120 }} size="small">
-            <InputLabel>Client</InputLabel>
-            <Select
-              label="Client"
-              value={filterClient}
-              onChange={(e) => setFilterClient(e.target.value)}
-            >
-              <MenuItem value="">All</MenuItem>
-              {uniqueClients.map((client) => (
-                <MenuItem key={client} value={client}>
-                  {client}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ display: "flex", mb: 2, gap: 2 }}>
+            <FormControl sx={{ minWidth: 200 }} size="small">
+              <InputLabel>Status</InputLabel>
+              <Select
+                label="Status"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <MenuItem value="All">All Invoices</MenuItem>
+                <MenuItem value="Paid">Paid</MenuItem>
+                <MenuItem value="Unpaid">Unpaid</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 120 }} size="small">
+              <InputLabel>Client</InputLabel>
+              <Select
+                label="Client"
+                value={filterClient}
+                onChange={(e) => setFilterClient(e.target.value)}
+              >
+                <MenuItem value="">All</MenuItem>
+                {uniqueClients.map((client) => (
+                  <MenuItem key={client} value={client}>
+                    {client}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
           <Typography sx={{ ml: 2, fontWeight: 600 }}>
             Total Unpaid: ${totalUnpaid}
           </Typography>
@@ -342,14 +393,14 @@ const Invoices = ({ toggleColorMode, mode }) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {sortedInvoices.length === 0 && (
+              {getFilteredInvoices().length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} align="center">
                     No invoices found.
                   </TableCell>
                 </TableRow>
               )}
-              {sortedInvoices.map((invoice) => (
+              {getFilteredInvoices().map((invoice) => (
                 <TableRow key={invoice.id}>
                   <TableCell>{invoice.id}</TableCell>
                   <TableCell>
@@ -371,7 +422,22 @@ const Invoices = ({ toggleColorMode, mode }) => {
                   <TableCell>${invoice.amount}</TableCell>
                   <TableCell>{invoice.invoiceDate}</TableCell>
                   <TableCell>{invoice.dueDate}</TableCell>
-                  <TableCell>{invoice.status}</TableCell>
+                  <TableCell>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                      }}
+                    >
+                      <Chip
+                        label={invoice.status}
+                        color={invoice.status === "Paid" ? "success" : "error"}
+                        onClick={() => handleStatusToggle(invoice.id)}
+                        sx={{ cursor: "pointer" }}
+                      />
+                    </Box>
+                  </TableCell>
                   <TableCell align="center">
                     <IconButton
                       size="small"

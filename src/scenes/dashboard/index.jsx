@@ -27,61 +27,66 @@ const Dashboard = () => {
     outstandingInvoices: 8,
   };
 
-  // Update the grid items with distinct colors and navigation
+  // Update the grid items with direct color values
   const gridItems = [
     {
       title: "Active Projects",
       value: "5",
       icon: <AssessmentIcon />,
-      bgColor: theme.palette.primary[500],
+      bgColor: "#74B3CE", // Primary blue
       filter: "active",
+      path: "/projects",
+      queryParams: { status: "active" },
     },
     {
       title: "Report Ready for Review",
       value: "7",
       icon: <MapOutlinedIcon />,
-      bgColor: theme.palette.info[500],
+      bgColor: "#FFC107", // Warning yellow
       filter: "review",
+      path: "/projects",
+      queryParams: { status: "Report sent for review" },
     },
     {
       title: "Ready for Invoicing",
       value: "3",
       icon: <ReceiptOutlinedIcon />,
-      bgColor: theme.palette.secondary[500],
+      bgColor: "#2196F3", // Info blue
       filter: "invoice",
+      path: "/projects",
+      queryParams: { status: "Ready for invoicing" },
     },
     {
       title: "Outstanding Invoices",
       value: "10",
       icon: <ReceiptOutlinedIcon />,
-      bgColor: theme.palette.success[500],
+      bgColor: "#F44336", // Error red
       filter: "outstanding",
+      path: "/invoices",
+      queryParams: { status: "Unpaid" },
     },
   ];
 
-  const handleCardClick = (filter) => {
-    navigate(`/projects?filter=${filter}`);
+  const handleCardClick = (item) => {
+    const queryParams = new URLSearchParams(item.queryParams).toString();
+    navigate(`${item.path}?${queryParams}`);
   };
 
-  const StatCard = ({ title, value, icon, bgColor, filter }) => (
+  const StatCard = ({ title, value, icon, bgColor, item }) => (
     <Card
-      onClick={() => handleCardClick(filter)}
+      key={title}
       sx={{
-        height: "200px",
-        width: "100%",
-        backgroundColor: bgColor,
-        borderRadius: "10px",
-        boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-        transition: "all 0.2s ease-in-out",
-        cursor: "pointer",
-        "&:hover": {
-          transform: "translateY(-5px)",
-          boxShadow: "0 6px 12px rgba(0, 0, 0, 0.15)",
-        },
+        p: 2,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
+        height: "100%",
+        cursor: "pointer",
+        backgroundColor: bgColor,
+        "&:hover": {
+          opacity: 0.9,
+        },
       }}
+      onClick={() => handleCardClick(item)}
     >
       <CardContent>
         <Box
@@ -138,7 +143,7 @@ const Dashboard = () => {
               value={item.value}
               icon={item.icon}
               bgColor={item.bgColor}
-              filter={item.filter}
+              item={item}
             />
           </Grid>
         ))}
