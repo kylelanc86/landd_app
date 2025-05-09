@@ -71,16 +71,14 @@ export const StatusChip = ({ status }) => {
 
 export const UserAvatar = ({ user }) => {
   // Generate a consistent color based on the user's name
-  const getInitials = (name) => {
-    return name
-      .split(" ")
-      .map((word) => word[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
+  const getInitials = (firstName, lastName) => {
+    if (!firstName || !lastName) return "?";
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
-  const getColorFromName = (name) => {
+  const getColorFromName = (firstName, lastName) => {
+    if (!firstName || !lastName) return "#757575"; // Default grey for unknown users
+
     const colors = [
       "#f44336", // Red
       "#e91e63", // Pink
@@ -99,6 +97,7 @@ export const UserAvatar = ({ user }) => {
       "#ff5722", // Deep Orange
     ];
 
+    const name = `${firstName}${lastName}`;
     const hash = name.split("").reduce((acc, char) => {
       return char.charCodeAt(0) + ((acc << 5) - acc);
     }, 0);
@@ -106,23 +105,15 @@ export const UserAvatar = ({ user }) => {
     return colors[Math.abs(hash) % colors.length];
   };
 
-  const initials = getInitials(user.name);
-  const backgroundColor = getColorFromName(user.name);
-
-  return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-      }}
-    >
+  // Ensure we have valid user data
+  if (!user || !user.firstName || !user.lastName) {
+    return (
       <Box
         sx={{
           width: 32,
           height: 32,
           borderRadius: "50%",
-          backgroundColor,
+          backgroundColor: "#757575",
           color: "#fff",
           display: "flex",
           alignItems: "center",
@@ -130,10 +121,37 @@ export const UserAvatar = ({ user }) => {
           fontSize: "0.875rem",
           fontWeight: "bold",
         }}
+        title="Unknown User"
       >
-        {initials}
+        ?
       </Box>
-      <Typography variant="body2">{user.name}</Typography>
+    );
+  }
+
+  const initials = getInitials(user.firstName, user.lastName);
+  const backgroundColor = getColorFromName(user.firstName, user.lastName);
+
+  return (
+    <Box
+      sx={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        backgroundColor,
+        color: "#fff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "0.875rem",
+        fontWeight: "bold",
+        cursor: "pointer",
+        "&:hover": {
+          opacity: 0.9,
+        },
+      }}
+      title={`${user.firstName} ${user.lastName}`}
+    >
+      {initials}
     </Box>
   );
 };

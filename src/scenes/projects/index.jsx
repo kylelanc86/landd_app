@@ -39,17 +39,18 @@ import {
   UserAvatar,
 } from "../../components/JobStatus";
 import { PROJECT_TYPES, fakeProjects } from "../../data/mockData";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "@mui/material/styles";
 
 const PROJECTS_KEY = "ldc_projects";
+const USERS_KEY = "ldc_users";
 
 const emptyForm = {
   name: "",
   client: "",
   type: PROJECT_TYPES[0],
   address: "",
-  users: "",
+  users: [],
   status: ACTIVE_STATUSES[0],
 };
 
@@ -132,8 +133,56 @@ const EditableStatusCell = ({ project, onStatusChange }) => {
   );
 };
 
+// Update the ProjectIdDisplay component to ensure proper formatting
+const ProjectIdDisplay = ({ projectId }) => {
+  // Ensure projectId is a number and format it
+  const formattedId =
+    typeof projectId === "number" ? projectId : parseInt(projectId);
+  return (
+    <Typography
+      variant="body1"
+      sx={{
+        color: "text.secondary",
+        mb: 2,
+        fontFamily: "monospace",
+        fontSize: "1.1rem",
+      }}
+    >
+      Project ID: {`LDJ${String(formattedId).padStart(5, "0")}`}
+    </Typography>
+  );
+};
+
+// Helper functions outside the component
+const generateProjectId = (projects) => {
+  if (projects.length === 0) return 1;
+
+  // Find the highest existing project ID
+  const highestId = Math.max(
+    ...projects.map((project) => {
+      // Convert any existing IDs to numbers and get the numeric part
+      const idStr = String(project.id);
+      const numericPart = parseInt(idStr.replace(/\D/g, ""));
+      return isNaN(numericPart) ? 0 : numericPart;
+    })
+  );
+  return highestId + 1;
+};
+
+const resetProjectIds = (projects) => {
+  return projects.map((project, index) => ({
+    ...project,
+    id: index + 1, // Start fresh from 1
+  }));
+};
+
+// Main Projects component
 const Projects = ({ toggleColorMode, mode }) => {
+  const theme = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -141,18 +190,22 @@ const Projects = ({ toggleColorMode, mode }) => {
   const [editForm, setEditForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
-  const [sortBy, setSortBy] = useState("name");
-  const [sortDir, setSortDir] = useState("asc");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterClient, setFilterClient] = useState("");
-  const location = useLocation();
-  const theme = useTheme();
+  const [sortBy, setSortBy] = useState("id");
+  const [sortDir, setSortDir] = useState("asc");
 
   const initializeLocalStorage = () => {
     const stored = localStorage.getItem(PROJECTS_KEY);
     if (!stored) {
       console.log("Initializing localStorage with fake projects");
-      localStorage.setItem(PROJECTS_KEY, JSON.stringify(fakeProjects));
+      const projectsWithIds = resetProjectIds(fakeProjects);
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(projectsWithIds));
+    } else {
+      // Reset IDs for existing projects
+      const existingProjects = JSON.parse(stored);
+      const resetProjects = resetProjectIds(existingProjects);
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(resetProjects));
     }
   };
 
@@ -164,25 +217,45 @@ const Projects = ({ toggleColorMode, mode }) => {
       if (stored) {
         const parsedProjects = JSON.parse(stored);
         if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
-          console.log("Setting projects from localStorage:", parsedProjects);
-          setProjects(parsedProjects);
+          // Reset IDs for existing projects
+          const resetProjects = resetProjectIds(parsedProjects);
+          console.log("Setting projects with reset IDs:", resetProjects);
+          setProjects(resetProjects);
         } else {
           console.error("Invalid stored data format");
-          setProjects(fakeProjects);
+          const projectsWithIds = resetProjectIds(fakeProjects);
+          setProjects(projectsWithIds);
         }
       } else {
         console.log("No stored data found");
-        setProjects(fakeProjects);
+        const projectsWithIds = resetProjectIds(fakeProjects);
+        setProjects(projectsWithIds);
       }
     } catch (error) {
       console.error("Error loading projects:", error);
-      setProjects(fakeProjects);
+      const projectsWithIds = resetProjectIds(fakeProjects);
+      setProjects(projectsWithIds);
+    }
+  };
+
+  const loadUsers = () => {
+    try {
+      const stored = localStorage.getItem(USERS_KEY);
+      if (stored) {
+        const parsedUsers = JSON.parse(stored);
+        if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+          setUsers(parsedUsers.filter((user) => user.isActive));
+        }
+      }
+    } catch (error) {
+      console.error("Error loading users:", error);
     }
   };
 
   useEffect(() => {
     initializeLocalStorage();
     loadProjects();
+    loadUsers();
   }, []);
 
   useEffect(() => {
@@ -194,7 +267,6 @@ const Projects = ({ toggleColorMode, mode }) => {
     }
   }, [location.search]);
 
-  // Add this effect to handle URL parameters
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const statusParam = searchParams.get("status");
@@ -219,17 +291,19 @@ const Projects = ({ toggleColorMode, mode }) => {
   const handleAddProject = (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+
+    const projectId = generateProjectId(projects);
     const newProject = {
-      id: Date.now(),
+      id: projectId,
       ...form,
-      users: form.users
-        .split(",")
-        .map((u) => u.trim())
-        .filter(Boolean)
-        .map((name) => ({ name })),
       createdAt: new Date().toISOString(),
     };
-    setProjects([newProject, ...projects]);
+
+    // Update state and localStorage
+    const updatedProjects = [newProject, ...projects];
+    setProjects(updatedProjects);
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(updatedProjects));
+
     setForm(emptyForm);
     setDialogOpen(false);
   };
@@ -241,7 +315,7 @@ const Projects = ({ toggleColorMode, mode }) => {
       client: project.client,
       type: project.type,
       address: project.address,
-      users: project.users ? project.users.map((u) => u.name).join(", ") : "",
+      users: project.users || [],
       status: project.status,
     });
     setEditDialogOpen(true);
@@ -249,21 +323,19 @@ const Projects = ({ toggleColorMode, mode }) => {
 
   const handleSaveEdit = (e) => {
     e.preventDefault();
-    setProjects(
-      projects.map((p) =>
-        p.id === editId
-          ? {
-              ...p,
-              ...editForm,
-              users: editForm.users
-                .split(",")
-                .map((u) => u.trim())
-                .filter(Boolean)
-                .map((name) => ({ name })),
-            }
-          : p
-      )
+    const updatedProjects = projects.map((p) =>
+      p.id === editId
+        ? {
+            ...p,
+            ...editForm,
+          }
+        : p
     );
+
+    // Update state and localStorage
+    setProjects(updatedProjects);
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(updatedProjects));
+
     setEditDialogOpen(false);
     setEditId(null);
     setEditForm(emptyForm);
@@ -367,6 +439,7 @@ const Projects = ({ toggleColorMode, mode }) => {
   const sortedProjects = [...getFilteredProjects()];
   const uniqueClients = Array.from(new Set(projects.map((p) => p.client)));
   const uniqueStatuses = [...ACTIVE_STATUSES, ...INACTIVE_STATUSES];
+
   const handleSort = (field) => {
     if (sortBy === field) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -375,11 +448,13 @@ const Projects = ({ toggleColorMode, mode }) => {
       setSortDir("asc");
     }
   };
-  const handleGoToClient = (client) => {
-    window.location.href = `/clients?search=${encodeURIComponent(client)}`;
+
+  const handleGoToClient = (clientName) => {
+    navigate(`/clients?search=${encodeURIComponent(clientName)}`);
   };
+
   const handleGoToProject = (projectId) => {
-    window.location.href = `/projects?search=${encodeURIComponent(projectId)}`;
+    navigate(`/projects/${projectId}`);
   };
 
   // Add a useEffect to monitor projects changes
@@ -426,38 +501,34 @@ const Projects = ({ toggleColorMode, mode }) => {
           Add Project
         </Button>
       </Box>
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: "flex", mb: 2, gap: 2 }}>
-          <FormControl sx={{ minWidth: 200 }} size="small">
-            <InputLabel>Status</InputLabel>
+
+      <Paper sx={{ p: 2, mb: 4 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Status Filter</InputLabel>
             <Select
-              label="Status"
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              label="Status Filter"
+              onChange={handleStatusFilterChange}
             >
-              <MenuItem value="All">All</MenuItem>
-              <MenuItem value="Active">Active Projects</MenuItem>
-              <Divider />
-              <MenuItem disabled>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Individual Statuses
-                </Typography>
-              </MenuItem>
-              {[...ACTIVE_STATUSES, ...INACTIVE_STATUSES].map((status) => (
+              <MenuItem value="All">All Statuses</MenuItem>
+              <MenuItem value="Active">Active</MenuItem>
+              {INACTIVE_STATUSES.map((status) => (
                 <MenuItem key={status} value={status}>
                   {status}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
-          <FormControl sx={{ minWidth: 120 }} size="small">
-            <InputLabel>Client</InputLabel>
+
+          <FormControl sx={{ minWidth: 200 }}>
+            <InputLabel>Client Filter</InputLabel>
             <Select
-              label="Client"
               value={filterClient}
+              label="Client Filter"
               onChange={(e) => setFilterClient(e.target.value)}
             >
-              <MenuItem value="">All</MenuItem>
+              <MenuItem value="">All Clients</MenuItem>
               {uniqueClients.map((client) => (
                 <MenuItem key={client} value={client}>
                   {client}
@@ -465,98 +536,71 @@ const Projects = ({ toggleColorMode, mode }) => {
               ))}
             </Select>
           </FormControl>
-        </Box>
-        <Typography variant="h6" sx={{ mb: 1, fontSize: { xs: 22, md: 28 } }}>
-          Project Register
-        </Typography>
+        </Stack>
+
         <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell
-                  onClick={() => handleSort("id")}
-                  style={{ cursor: "pointer" }}
-                >
+                <TableCell>
                   <TableSortLabel
                     active={sortBy === "id"}
                     direction={sortBy === "id" ? sortDir : "asc"}
+                    onClick={() => handleSort("id")}
                   >
                     Project ID
                   </TableSortLabel>
                 </TableCell>
-                <TableCell
-                  onClick={() => handleSort("name")}
-                  style={{ cursor: "pointer" }}
-                >
+                <TableCell>
                   <TableSortLabel
                     active={sortBy === "name"}
                     direction={sortBy === "name" ? sortDir : "asc"}
+                    onClick={() => handleSort("name")}
                   >
-                    Address/Name
+                    Project Name
                   </TableSortLabel>
                 </TableCell>
-                <TableCell
-                  onClick={() => handleSort("client")}
-                  style={{ cursor: "pointer" }}
-                >
+                <TableCell>
                   <TableSortLabel
                     active={sortBy === "client"}
                     direction={sortBy === "client" ? sortDir : "asc"}
+                    onClick={() => handleSort("client")}
                   >
                     Client
                   </TableSortLabel>
                 </TableCell>
-                <TableCell
-                  onClick={() => handleSort("type")}
-                  style={{ cursor: "pointer" }}
-                >
+                <TableCell>
                   <TableSortLabel
                     active={sortBy === "type"}
                     direction={sortBy === "type" ? sortDir : "asc"}
+                    onClick={() => handleSort("type")}
                   >
-                    Project Type
+                    Type
                   </TableSortLabel>
                 </TableCell>
-                <TableCell>Secondary Address/Name</TableCell>
-                <TableCell>Users</TableCell>
-                <TableCell
-                  onClick={() => handleSort("status")}
-                  style={{ cursor: "pointer" }}
-                >
-                  <TableSortLabel
-                    active={sortBy === "status"}
-                    direction={sortBy === "status" ? sortDir : "asc"}
-                  >
-                    Project Status
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell align="center">Actions</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {getFilteredProjects().length === 0 && (
+              {sortedProjects.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} align="center">
-                    No projects yet.
+                  <TableCell colSpan={6} align="center">
+                    No projects found.
                   </TableCell>
                 </TableRow>
               )}
-              {getFilteredProjects().map((project) => (
+              {sortedProjects.map((project) => (
                 <TableRow key={project.id}>
                   <TableCell>
                     <Button
                       variant="text"
                       onClick={() => handleGoToProject(project.id)}
-                    >{`LDJ${String(project.id).padStart(5, "0")}`}</Button>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="text"
-                      onClick={() => handleGoToProject(project.id)}
                     >
-                      {project.name}
+                      {`LDJ${String(project.id).padStart(5, "0")}`}
                     </Button>
                   </TableCell>
+                  <TableCell>{project.name}</TableCell>
                   <TableCell>
                     <Button
                       variant="text"
@@ -566,27 +610,24 @@ const Projects = ({ toggleColorMode, mode }) => {
                     </Button>
                   </TableCell>
                   <TableCell>{project.type}</TableCell>
-                  <TableCell>{project.address}</TableCell>
-                  <TableCell>
-                    {project.users && project.users.length > 0 ? (
-                      <Stack direction="row" spacing={1}>
-                        {project.users.map((user, idx) => (
-                          <UserAvatar key={idx} user={user} />
-                        ))}
-                      </Stack>
-                    ) : null}
-                  </TableCell>
                   <EditableStatusCell
                     project={project}
                     onStatusChange={handleStatusChange}
                   />
-                  <TableCell align="center">
+                  <TableCell>
                     <IconButton
-                      size="small"
-                      color="primary"
                       onClick={() => handleEditProject(project)}
+                      sx={{ mr: 1 }}
                     >
                       <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => {
+                        setDeleteId(project.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                    >
+                      <DeleteIcon />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -595,6 +636,7 @@ const Projects = ({ toggleColorMode, mode }) => {
           </Table>
         </TableContainer>
       </Paper>
+
       {/* Add Project Dialog */}
       <Dialog
         open={dialogOpen}
@@ -605,13 +647,9 @@ const Projects = ({ toggleColorMode, mode }) => {
         <DialogTitle>Add New Project</DialogTitle>
         <form onSubmit={handleAddProject}>
           <DialogContent>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={2}
-              sx={{ mb: 2 }}
-            >
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <TextField
-                label="Address/Name"
+                label="Project Name"
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -623,9 +661,12 @@ const Projects = ({ toggleColorMode, mode }) => {
                 name="client"
                 value={form.client}
                 onChange={handleChange}
+                required
                 sx={{ flex: 1 }}
               />
-              <FormControl sx={{ minWidth: 150 }}>
+            </Stack>
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+              <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Project Type</InputLabel>
                 <Select
                   label="Project Type"
@@ -640,23 +681,7 @@ const Projects = ({ toggleColorMode, mode }) => {
                   ))}
                 </Select>
               </FormControl>
-            </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                label="Secondary Address/Name"
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                sx={{ flex: 2 }}
-              />
-              <TextField
-                label="Users (comma separated)"
-                name="users"
-                value={form.users}
-                onChange={handleChange}
-                sx={{ flex: 1 }}
-              />
-              <FormControl sx={{ minWidth: 150 }}>
+              <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Status</InputLabel>
                 <Select
                   label="Status"
@@ -664,22 +689,7 @@ const Projects = ({ toggleColorMode, mode }) => {
                   value={form.status}
                   onChange={handleChange}
                 >
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Jobs
-                    </Typography>
-                  </MenuItem>
                   {ACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Inactive Jobs
-                    </Typography>
-                  </MenuItem>
-                  {INACTIVE_STATUSES.map((status) => (
                     <MenuItem key={status} value={status}>
                       {status}
                     </MenuItem>
@@ -687,6 +697,15 @@ const Projects = ({ toggleColorMode, mode }) => {
                 </Select>
               </FormControl>
             </Stack>
+            <TextField
+              label="Address"
+              name="address"
+              value={form.address}
+              onChange={handleChange}
+              fullWidth
+              multiline
+              rows={2}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDialogOpen(false)} color="secondary">
@@ -698,6 +717,7 @@ const Projects = ({ toggleColorMode, mode }) => {
           </DialogActions>
         </form>
       </Dialog>
+
       {/* Edit Project Dialog */}
       <Dialog
         open={editDialogOpen}
@@ -708,13 +728,9 @@ const Projects = ({ toggleColorMode, mode }) => {
         <DialogTitle>Edit Project</DialogTitle>
         <form onSubmit={handleSaveEdit}>
           <DialogContent>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={2}
-              sx={{ mb: 2 }}
-            >
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <TextField
-                label="Address/Name"
+                label="Project Name"
                 name="name"
                 value={editForm.name}
                 onChange={handleEditChange}
@@ -726,9 +742,12 @@ const Projects = ({ toggleColorMode, mode }) => {
                 name="client"
                 value={editForm.client}
                 onChange={handleEditChange}
+                required
                 sx={{ flex: 1 }}
               />
-              <FormControl sx={{ minWidth: 150 }}>
+            </Stack>
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+              <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Project Type</InputLabel>
                 <Select
                   label="Project Type"
@@ -743,23 +762,7 @@ const Projects = ({ toggleColorMode, mode }) => {
                   ))}
                 </Select>
               </FormControl>
-            </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                label="Secondary Address/Name"
-                name="address"
-                value={editForm.address}
-                onChange={handleEditChange}
-                sx={{ flex: 2 }}
-              />
-              <TextField
-                label="Users (comma separated)"
-                name="users"
-                value={editForm.users}
-                onChange={handleEditChange}
-                sx={{ flex: 1 }}
-              />
-              <FormControl sx={{ minWidth: 150 }}>
+              <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Status</InputLabel>
                 <Select
                   label="Status"
@@ -767,22 +770,7 @@ const Projects = ({ toggleColorMode, mode }) => {
                   value={editForm.status}
                   onChange={handleEditChange}
                 >
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Jobs
-                    </Typography>
-                  </MenuItem>
                   {ACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Inactive Jobs
-                    </Typography>
-                  </MenuItem>
-                  {INACTIVE_STATUSES.map((status) => (
                     <MenuItem key={status} value={status}>
                       {status}
                     </MenuItem>
@@ -790,19 +778,19 @@ const Projects = ({ toggleColorMode, mode }) => {
                 </Select>
               </FormControl>
             </Stack>
+            <TextField
+              label="Address"
+              name="address"
+              value={editForm.address}
+              onChange={handleEditChange}
+              fullWidth
+              multiline
+              rows={2}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEditDialogOpen(false)} color="secondary">
               Cancel
-            </Button>
-            <Button
-              color="error"
-              onClick={() => {
-                setDeleteId(editId);
-                setDeleteDialogOpen(true);
-              }}
-            >
-              Delete Project
             </Button>
             <Button type="submit" variant="contained" color="primary">
               Save Changes
@@ -810,6 +798,7 @@ const Projects = ({ toggleColorMode, mode }) => {
           </DialogActions>
         </form>
       </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
@@ -826,11 +815,7 @@ const Projects = ({ toggleColorMode, mode }) => {
           <Button onClick={() => setDeleteDialogOpen(false)} color="secondary">
             Cancel
           </Button>
-          <Button
-            onClick={handleDeleteProject}
-            color="error"
-            variant="contained"
-          >
+          <Button onClick={handleDeleteProject} color="error">
             Delete
           </Button>
         </DialogActions>

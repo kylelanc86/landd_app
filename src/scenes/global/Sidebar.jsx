@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
 import "react-pro-sidebar/dist/css/styles.css";
-import { Box, IconButton, Typography, useTheme, Avatar } from "@mui/material";
+import {
+  Box,
+  IconButton,
+  Typography,
+  useTheme,
+  Avatar,
+  Divider,
+} from "@mui/material";
 import { Link } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
@@ -15,10 +22,9 @@ import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import { tokens } from "../../theme";
+import { useAuth } from "../../context/AuthContext";
 
-const USERS_KEY = "ldc_users";
-
-const Item = ({ title, to, icon, selected, setSelected }) => {
+const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
   const theme = useTheme();
   return (
     <MenuItem
@@ -33,7 +39,7 @@ const Item = ({ title, to, icon, selected, setSelected }) => {
               : tokens.primary[100]
             : "transparent",
         borderRadius: "8px",
-        margin: "4px 4px",
+        margin: isCollapsed ? "2px 4px" : "4px 4px",
         transition: "all 0.3s ease",
       }}
       onClick={() => setSelected(title)}
@@ -47,30 +53,55 @@ const Item = ({ title, to, icon, selected, setSelected }) => {
           width: "100%",
           display: "flex",
           alignItems: "center",
-          padding: "8px 0",
+          padding: isCollapsed ? "4px 0" : "8px 0",
         }}
       >
-        <Typography
-          sx={{
-            fontWeight: selected === title ? "bold" : "normal",
-            color:
-              selected === title
-                ? theme.palette.mode === "dark"
+        {!isCollapsed && (
+          <Typography
+            sx={{
+              fontWeight: selected === title ? "bold" : "normal",
+              color:
+                selected === title
+                  ? theme.palette.mode === "dark"
+                    ? tokens.grey[100]
+                    : tokens.primary[700]
+                  : theme.palette.mode === "dark"
                   ? tokens.grey[100]
-                  : tokens.primary[700]
-                : theme.palette.mode === "dark"
-                ? tokens.grey[100]
-                : tokens.grey[700],
-            whiteSpace: "normal",
-            wordBreak: "break-word",
-            fontSize: "0.9rem",
-            lineHeight: 1.2,
-          }}
-        >
-          {title}
-        </Typography>
+                  : tokens.grey[700],
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+              fontSize: "0.9rem",
+              lineHeight: 1.2,
+            }}
+          >
+            {title}
+          </Typography>
+        )}
       </Link>
     </MenuItem>
+  );
+};
+
+const SectionDivider = ({ isCollapsed }) => {
+  const theme = useTheme();
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        my: isCollapsed ? 1 : 2,
+        px: isCollapsed ? 1 : 2,
+      }}
+    >
+      <Divider
+        sx={{
+          width: isCollapsed ? "30px" : "100%",
+          borderColor:
+            theme.palette.mode === "dark" ? tokens.grey[700] : tokens.grey[300],
+        }}
+      />
+    </Box>
   );
 };
 
@@ -78,29 +109,7 @@ const Sidebar = () => {
   const theme = useTheme();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selected, setSelected] = useState("Dashboard");
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const loadCurrentUser = () => {
-      try {
-        const stored = localStorage.getItem(USERS_KEY);
-        if (stored) {
-          const users = JSON.parse(stored);
-          // Find John Smith (admin user)
-          const johnSmith = users.find(
-            (user) => user.firstName === "John" && user.lastName === "Smith"
-          );
-          if (johnSmith) {
-            setCurrentUser(johnSmith);
-          }
-        }
-      } catch (error) {
-        console.error("Error loading current user:", error);
-      }
-    };
-
-    loadCurrentUser();
-  }, []);
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -152,7 +161,9 @@ const Sidebar = () => {
           backgroundColor: "transparent !important",
         },
         "& .pro-inner-item": {
-          padding: "5px 20px 5px 10px !important",
+          padding: isCollapsed
+            ? "5px 10px 5px 10px !important"
+            : "5px 20px 5px 10px !important",
         },
         "& .pro-inner-item:hover": {
           color:
@@ -293,6 +304,7 @@ const Sidebar = () => {
               icon={<HomeOutlinedIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
             <Item
               title="User Management"
@@ -300,26 +312,33 @@ const Sidebar = () => {
               icon={<AccessibilityIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
 
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "15px 0 5px 20px",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-              }}
-            >
-              Pages
-            </Typography>
+            {!isCollapsed ? (
+              <Typography
+                variant="h3"
+                color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+                sx={{
+                  m: "15px 0 5px 20px",
+                  fontSize: "1.2rem",
+                  fontWeight: "bold",
+                  opacity: 0.8,
+                }}
+              >
+                Pages
+              </Typography>
+            ) : (
+              <SectionDivider isCollapsed={isCollapsed} />
+            )}
+
             <Item
               title="Projects"
               to="/projects"
               icon={<MapOutlinedIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
             <Item
               title="Clients"
@@ -327,6 +346,7 @@ const Sidebar = () => {
               icon={<ContactsOutlinedIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
             <Item
               title="Invoices"
@@ -334,6 +354,7 @@ const Sidebar = () => {
               icon={<ReceiptOutlinedIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
             <Item
               title="Scheduler"
@@ -341,26 +362,33 @@ const Sidebar = () => {
               icon={<CalendarTodayOutlinedIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
 
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "15px 0 5px 20px",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-              }}
-            >
-              Site Work
-            </Typography>
+            {!isCollapsed ? (
+              <Typography
+                variant="h3"
+                color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+                sx={{
+                  m: "15px 0 5px 20px",
+                  fontSize: "1.2rem",
+                  fontWeight: "bold",
+                  opacity: 0.8,
+                }}
+              >
+                Site Work
+              </Typography>
+            ) : (
+              <SectionDivider isCollapsed={isCollapsed} />
+            )}
+
             <Item
               title="Air Monitoring"
               to="/air-monitoring"
               icon={<AirOutlinedIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
             <Item
               title="Asbestos Assessment"
@@ -368,6 +396,7 @@ const Sidebar = () => {
               icon={<AssessmentIcon />}
               selected={selected}
               setSelected={setSelected}
+              isCollapsed={isCollapsed}
             />
           </Box>
         </Menu>
