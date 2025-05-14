@@ -47,10 +47,7 @@ const Topbar = ({ toggleColorMode }) => {
         backgroundColor: theme.palette.background.paper,
         boxShadow: 1,
         width: "100%",
-        left: "0",
-        top: 0,
-        transition: "left 0.3s ease",
-        zIndex: 1,
+        zIndex: (theme) => theme.zIndex.drawer - 1,
       }}
     >
       <Toolbar>
@@ -84,7 +81,7 @@ const Topbar = ({ toggleColorMode }) => {
                 sx={{
                   width: 32,
                   height: 32,
-                  bgcolor: theme.palette.secondary[200],
+                  bgcolor: theme.palette.secondary.main,
                 }}
               >
                 <AccountCircleIcon />
@@ -92,15 +89,16 @@ const Topbar = ({ toggleColorMode }) => {
             </IconButton>
           </Tooltip>
         </Box>
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleClose}
+          onClick={handleClose}
+        >
+          <MenuItem onClick={handleProfileClick}>Profile</MenuItem>
+          <MenuItem onClick={handleLogout}>Logout</MenuItem>
+        </Menu>
       </Toolbar>
-
-      {/* Settings Menu */}
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
-        <MenuItem onClick={handleClose}>General Settings</MenuItem>
-        <MenuItem onClick={handleClose}>Notifications</MenuItem>
-        <MenuItem onClick={handleClose}>Privacy</MenuItem>
-        <MenuItem onClick={handleClose}>Help & Support</MenuItem>
-      </Menu>
     </AppBar>
   );
 };

@@ -1,27 +1,36 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState } from "react";
+import { authService } from "../services/api";
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check if user is already logged in
+  const [currentUser, setCurrentUser] = useState(() => {
+    // Only check localStorage on initial render
     const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      setCurrentUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
-  }, []);
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+  const [loading, setLoading] = useState(false);
 
-  const login = (user) => {
-    setCurrentUser(user);
-    localStorage.setItem("currentUser", JSON.stringify(user));
+  const login = async (email, password) => {
+    setLoading(true);
+    try {
+      const response = await authService.login({ email, password });
+      const { token, user } = response.data;
+      localStorage.setItem("token", token);
+      localStorage.setItem("currentUser", JSON.stringify(user));
+      setCurrentUser(user);
+      return user;
+    } catch (error) {
+      console.error("Login failed:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = () => {
     setCurrentUser(null);
+    localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
   };
 
@@ -32,11 +41,7 @@ export const AuthProvider = ({ children }) => {
     loading,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

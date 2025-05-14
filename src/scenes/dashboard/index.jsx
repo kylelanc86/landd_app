@@ -32,7 +32,8 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const projects = await projectService.getAll();
+        const response = await projectService.getAll();
+        const projects = response.data;
 
         // Calculate stats
         const activeProjects = projects.filter(
@@ -185,7 +186,7 @@ const Dashboard = () => {
       </Typography>
       <Grid container spacing={3}>
         {gridItems.map((item, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index} sx={{ width: "100%" }}>
+          <Grid item xs={12} sm={6} md={3} key={index}>
             <StatCard
               title={item.title}
               value={item.value}

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { ThemeProvider, CssBaseline } from "@mui/material";
+import { ThemeProvider, CssBaseline, Box } from "@mui/material";
 import { ColorModeContext, useMode } from "./theme";
 import Topbar from "./scenes/global/Topbar";
 import Sidebar from "./scenes/global/Sidebar";
@@ -22,6 +22,7 @@ import AsbestosAssessment from "./scenes/asbestos-assessment";
 import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
 import Users from "./scenes/users";
 import Profile from "./scenes/profile";
+import Layout from "./components/Layout";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -33,79 +34,60 @@ function App() {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
+              {/* Public routes */}
               <Route path="/login" element={<Login />} />
+
+              {/* Protected routes */}
               <Route
                 path="/*"
                 element={
                   <ProtectedRoute>
-                    <div
-                      className="app"
-                      style={{ display: "flex", minHeight: "100vh" }}
+                    <Layout
+                      toggleColorMode={colorMode.toggleColorMode}
+                      mode={theme.palette.mode}
                     >
-                      <Sidebar />
-                      <div
-                        style={{
-                          flexGrow: 1,
-                          display: "flex",
-                          flexDirection: "column",
-                        }}
-                      >
-                        <Topbar toggleColorMode={colorMode.toggleColorMode} />
-                        <main
-                          className="content"
-                          style={{
-                            flexGrow: 1,
-                            marginLeft: "250px",
-                            padding: "20px",
-                            marginTop: "64px", // Height of the topbar
-                            position: "relative",
-                            overflow: "auto",
-                          }}
-                        >
-                          <Routes>
-                            <Route path="/" element={<Dashboard />} />
-                            <Route
-                              path="/air-monitoring"
-                              element={<AirMonitoring />}
-                            />
-                            <Route
-                              path="/air-monitoring/jobs/:jobId/shifts"
-                              element={<Shifts />}
-                            />
-                            <Route
-                              path="/air-monitoring/shift/:shiftId/samples"
-                              element={<SampleList />}
-                            />
-                            <Route
-                              path="/air-monitoring/shift/:shiftId/samples/new"
-                              element={<NewSample />}
-                            />
-                            <Route
-                              path="/air-monitoring/shift/:shiftId/samples/edit/:sampleId"
-                              element={<EditSample />}
-                            />
-                            <Route
-                              path="/air-monitoring/shift/:shiftId/analysis"
-                              element={<Analysis />}
-                            />
-                            <Route path="/projects" element={<Projects />} />
-                            <Route path="/clients" element={<Clients />} />
-                            <Route path="/invoices" element={<Invoices />} />
-                            <Route path="/calendar" element={<Calendar />} />
-                            <Route path="/users" element={<Users />} />
-                            <Route path="/profile" element={<Profile />} />
-                            <Route
-                              path="/asbestos-assessment"
-                              element={<AsbestosAssessment />}
-                            />
-                            <Route
-                              path="/asbestos-assessment/samples"
-                              element={<AssessmentSamples />}
-                            />
-                          </Routes>
-                        </main>
-                      </div>
-                    </div>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route
+                          path="/air-monitoring"
+                          element={<AirMonitoring />}
+                        />
+                        <Route
+                          path="/air-monitoring/jobs/:jobId/shifts"
+                          element={<Shifts />}
+                        />
+                        <Route
+                          path="/air-monitoring/shift/:shiftId/samples"
+                          element={<SampleList />}
+                        />
+                        <Route
+                          path="/air-monitoring/shift/:shiftId/samples/new"
+                          element={<NewSample />}
+                        />
+                        <Route
+                          path="/air-monitoring/shift/:shiftId/samples/edit/:sampleId"
+                          element={<EditSample />}
+                        />
+                        <Route
+                          path="/air-monitoring/shift/:shiftId/analysis"
+                          element={<Analysis />}
+                        />
+                        <Route path="/projects" element={<Projects />} />
+                        <Route path="/clients" element={<Clients />} />
+                        <Route path="/invoices" element={<Invoices />} />
+                        <Route path="/calendar" element={<Calendar />} />
+                        <Route path="/users" element={<Users />} />
+                        <Route path="/profile" element={<Profile />} />
+                        <Route
+                          path="/asbestos-assessment"
+                          element={<AsbestosAssessment />}
+                        />
+                        <Route
+                          path="/asbestos-assessment/samples"
+                          element={<AssessmentSamples />}
+                        />
+                      </Routes>
+                    </Layout>
                   </ProtectedRoute>
                 }
               />

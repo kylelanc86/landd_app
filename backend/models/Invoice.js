@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const invoiceSchema = new mongoose.Schema({
+  invoiceID: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
@@ -17,8 +23,8 @@ const invoiceSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'pending', 'paid', 'overdue', 'cancelled'],
-    default: 'draft'
+    enum: ['pending', 'paid', 'overdue'],
+    default: 'pending'
   },
   date: {
     type: Date,

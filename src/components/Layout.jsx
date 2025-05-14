@@ -11,24 +11,41 @@ const Layout = ({ children, toggleColorMode, mode }) => {
     <Box
       sx={{
         display: "flex",
-        height: "100vh",
+        minHeight: "100vh",
         backgroundColor: theme.palette.background.default,
       }}
     >
-      {/* Sidebar */}
-      <Sidebar />
-
       {/* Top Navigation Bar */}
       <Topbar toggleColorMode={toggleColorMode} mode={mode} />
 
-      {/* Main Content */}
+      {/* Sidebar */}
+      <Box
+        sx={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          height: "100vh",
+          zIndex: (theme) => theme.zIndex.drawer,
+        }}
+      >
+        <Sidebar />
+      </Box>
+
+      {/* Main Content Area */}
       <Box
         component="main"
-        className="main-content"
         sx={{
-          flexGrow: 1,
+          position: "fixed",
+          top: "64px",
+          left: { sm: "240px" },
+          right: 0,
+          bottom: 0,
+          transition: "left 0.3s ease",
+          "&.collapsed": {
+            left: { sm: "80px" },
+          },
+          overflow: "auto",
           p: 3,
-          mt: 8,
         }}
       >
         {children}

@@ -8,26 +8,47 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in on mount
-    const user = authService.getCurrentUser();
-    if (user) {
-      setUser(user);
-    }
-    setLoading(false);
+    const checkAuth = async () => {
+      try {
+        const response = await authService.getCurrentUser();
+        console.log("Auth check response:", response);
+        setUser(response.data);
+      } catch (error) {
+        // Ignore "No token available" errors
+        if (error.message !== 'No token available') {
+          console.error('Auth check failed:', error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (email, password) => {
     try {
-      const data = await authService.login(email, password);
-      setUser(data.user);
-      return data;
+      console.log("AuthContext: Attempting login with:", { email, password });
+      const response = await authService.login({ email, password });
+      console.log("AuthContext: Login response:", response);
+      
+      // Store token and user data
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      
+      setUser(user);
+      return response.data;
     } catch (error) {
+      console.error("AuthContext: Login failed", error);
       throw error;
     }
   };
 
   const logout = () => {
-    authService.logout();
+    console.log("AuthContext: Logging out");
+    localStorage.removeItem('token');
+    localStorage.removeItem('currentUser');
     setUser(null);
   };
 

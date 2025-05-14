@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -19,24 +19,35 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      console.log("User logged in, redirecting to home");
+      navigate("/");
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
     try {
-      await login(email, password);
-      navigate("/");
+      console.log("Login component: Attempting login");
+      const result = await login(email, password);
+      console.log("Login component: Login successful", result);
+      // Navigation will be handled by the useEffect above
     } catch (err) {
-      console.error("Login error:", err);
-      setError(err.response?.data?.message || "Failed to login");
-    } finally {
-      setLoading(false);
+      console.error("Login component: Login error details:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        stack: err.stack,
+      });
+      setError(err.response?.data?.message || err.message || "Failed to login");
     }
   };
 

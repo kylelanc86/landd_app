@@ -24,112 +24,67 @@ import {
   Stack,
   TableSortLabel,
   Chip,
+  useTheme,
 } from "@mui/material";
+import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
+import PrintIcon from "@mui/icons-material/Print";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import autoTable from "jspdf-autotable";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { invoiceService } from "../../services/api";
+import Header from "../../components/Header";
+import { tokens } from "../../theme";
 
-const INVOICES_KEY = "ldc_invoices";
-const STATUS_OPTIONS = ["Paid", "Unpaid"];
-
-// Fake data for demo
-const FAKE_INVOICES = Array.from({ length: 12 }).map((_, i) => ({
-  id: 2000 + i,
-  projectId: `LDJ${String(1000 + i).padStart(5, "0")}`,
-  projectName: `Project ${i + 1}`,
-  client: `Client ${String.fromCharCode(65 + (i % 5))}`,
-  amount: (Math.random() * 5000 + 500).toFixed(2),
-  invoiceDate: new Date(Date.now() - i * 86400000 * 3)
-    .toISOString()
-    .slice(0, 10),
-  dueDate: new Date(Date.now() + (i % 5) * 86400000 * 7)
-    .toISOString()
-    .slice(0, 10),
-  status: STATUS_OPTIONS[i % 2],
-}));
+const STATUS_OPTIONS = ["draft", "pending", "paid", "overdue", "cancelled"];
 
 const emptyForm = {
-  projectId: "",
-  projectName: "",
+  invoiceID: "",
+  project: "",
   client: "",
   amount: "",
-  invoiceDate: "",
+  status: "draft",
+  date: "",
   dueDate: "",
-  status: STATUS_OPTIONS[1],
+  description: "",
 };
 
-const handleInvoicePDF = (invoice) => {
-  const doc = new jsPDF();
-
-  // Add header information
-  doc.setFontSize(18);
-  doc.text("Invoice", 14, 16);
-  doc.setFontSize(12);
-
-  // Add invoice details
-  const details = [
-    ["Invoice ID:", invoice.id],
-    ["Project Name:", invoice.projectName],
-    ["Client:", invoice.client],
-    ["Amount:", `$${invoice.amount}`],
-    ["Invoice Date:", invoice.invoiceDate],
-    ["Due Date:", invoice.dueDate],
-    ["Status:", invoice.status],
-  ];
-
-  // Add details table
-  autoTable(doc, {
-    body: details,
-    startY: 28,
-    theme: "plain",
-    styles: { fontSize: 12 },
-    columnStyles: {
-      0: { cellWidth: 40 },
-      1: { cellWidth: 60 },
-    },
-  });
-
-  // Save the PDF
-  doc.save(`Invoice_${invoice.id}.pdf`);
-};
-
-const Invoices = ({ toggleColorMode, mode }) => {
+const Invoices = () => {
+  const theme = useTheme();
+  const colors = tokens;
   const location = useLocation();
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
-  const [sortBy, setSortBy] = useState("invoiceDate");
+  const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [filterClient, setFilterClient] = useState("");
 
-  // Load invoices from localStorage on mount
   useEffect(() => {
-    const loadInvoices = () => {
+    const fetchInvoices = async () => {
       try {
-        const stored = localStorage.getItem(INVOICES_KEY);
-        if (stored) {
-          const parsedInvoices = JSON.parse(stored);
-          if (Array.isArray(parsedInvoices) && parsedInvoices.length > 0) {
-            setInvoices(parsedInvoices);
-          }
+        const response = await invoiceService.getAll();
+        if (!Array.isArray(response.data)) {
+          setError("Invalid data format received from server");
+          setLoading(false);
+          return;
         }
-      } catch (error) {
-        console.error("Error loading invoices:", error);
+        setInvoices(response.data);
+        setLoading(false);
+      } catch (err) {
+        setError("Failed to fetch invoices");
+        setLoading(false);
       }
     };
 
-    loadInvoices();
+    fetchInvoices();
   }, []);
-
-  // Save invoices to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(INVOICES_KEY, JSON.stringify(invoices));
-  }, [invoices]);
 
   // Add this effect to handle URL parameters
   useEffect(() => {
@@ -144,40 +99,66 @@ const Invoices = ({ toggleColorMode, mode }) => {
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
+
   const handleEditChange = (e) => {
     setEditForm({ ...editForm, [e.target.name]: e.target.value });
   };
 
-  const handleAddInvoice = (e) => {
+  const handleAddInvoice = async (e) => {
     e.preventDefault();
-    if (
-      !form.projectId.trim() ||
-      !form.projectName.trim() ||
-      !form.client.trim()
-    )
-      return;
-    const newInvoice = {
-      id: Date.now(),
-      ...form,
-    };
-    setInvoices([newInvoice, ...invoices]);
-    setForm(emptyForm);
-    setDialogOpen(false);
+    try {
+      // Format dates before sending to API
+      const formattedForm = {
+        ...form,
+        date: form.date ? new Date(form.date).toISOString() : null,
+        dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
+      };
+      const response = await invoiceService.create(formattedForm);
+      setInvoices([response.data, ...invoices]);
+      setForm(emptyForm);
+      setDialogOpen(false);
+    } catch (err) {
+      console.error("Error creating invoice:", err);
+    }
   };
 
   const handleEditInvoice = (invoice) => {
-    setEditId(invoice.id);
-    setEditForm({ ...invoice });
+    setEditId(invoice._id);
+    // Format dates for the form
+    const formattedInvoice = {
+      ...invoice,
+      date: invoice.date
+        ? new Date(invoice.date).toISOString().split("T")[0]
+        : "",
+      dueDate: invoice.dueDate
+        ? new Date(invoice.dueDate).toISOString().split("T")[0]
+        : "",
+    };
+    setEditForm(formattedInvoice);
     setEditDialogOpen(true);
   };
-  const handleSaveEdit = (e) => {
+
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
-    setInvoices(
-      invoices.map((inv) => (inv.id === editId ? { ...editForm } : inv))
-    );
-    setEditDialogOpen(false);
-    setEditId(null);
-    setEditForm(emptyForm);
+    try {
+      // Format dates before sending to API
+      const formattedForm = {
+        ...editForm,
+        date: editForm.date ? new Date(editForm.date).toISOString() : null,
+        dueDate: editForm.dueDate
+          ? new Date(editForm.dueDate).toISOString()
+          : null,
+      };
+      const response = await invoiceService.update(editId, formattedForm);
+      setInvoices(
+        invoices.map((inv) => (inv._id === editId ? response.data : inv))
+      );
+      setEditDialogOpen(false);
+      setEditId(null);
+      setEditForm(emptyForm);
+    } catch (err) {
+      console.error("Error updating invoice:", err);
+    }
   };
 
   // Sorting
@@ -190,8 +171,6 @@ const Invoices = ({ toggleColorMode, mode }) => {
     }
   };
 
-  // Only show unpaid invoices by default
-  const unpaidInvoices = invoices.filter((inv) => inv.status !== "Paid");
   const getFilteredInvoices = useCallback(() => {
     let filtered = [...invoices];
 
@@ -200,13 +179,8 @@ const Invoices = ({ toggleColorMode, mode }) => {
       filtered = filtered.filter((invoice) => invoice.status === filterStatus);
     }
 
-    // Apply client filter
-    if (filterClient) {
-      filtered = filtered.filter((invoice) => invoice.client === filterClient);
-    }
-
     // Apply sorting
-    return filtered.sort((a, b) => {
+    const sorted = filtered.sort((a, b) => {
       let valA = a[sortBy],
         valB = b[sortBy];
       if (sortBy === "amount") {
@@ -217,249 +191,226 @@ const Invoices = ({ toggleColorMode, mode }) => {
       if (valA > valB) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [invoices, filterStatus, filterClient, sortBy, sortDir]);
 
-  // Unique clients for filter
-  const uniqueClients = Array.from(new Set(invoices.map((inv) => inv.client)));
+    return sorted;
+  }, [invoices, filterStatus, sortBy, sortDir]);
 
   // Sum of unpaid invoice amounts
-  const totalUnpaid = unpaidInvoices
+  const totalUnpaid = invoices
+    .filter((inv) => inv.status === "pending" || inv.status === "overdue")
     .reduce((sum, inv) => sum + parseFloat(inv.amount), 0)
     .toFixed(2);
 
-  // Print to PDF function (placeholder)
-  const handlePrintPDF = () => {
-    window.print();
+  const handleInvoicePDF = (invoice) => {
+    const doc = new jsPDF();
+
+    // Add header information
+    doc.setFontSize(18);
+    doc.text("Invoice", 14, 16);
+    doc.setFontSize(12);
+
+    // Add invoice details
+    const details = [
+      ["Invoice ID:", invoice._id],
+      ["Project:", invoice.project?.name || "N/A"],
+      ["Client:", invoice.client?.name || "N/A"],
+      ["Amount:", `$${invoice.amount}`],
+      ["Date:", new Date(invoice.date).toLocaleDateString()],
+      ["Due Date:", new Date(invoice.dueDate).toLocaleDateString()],
+      ["Status:", invoice.status],
+      ["Description:", invoice.description],
+    ];
+
+    // Add details table
+    autoTable(doc, {
+      body: details,
+      startY: 28,
+      theme: "plain",
+      styles: { fontSize: 12 },
+      columnStyles: {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 60 },
+      },
+    });
+
+    // Save the PDF
+    doc.save(`Invoice_${invoice._id}.pdf`);
   };
 
-  // Navigation for client/project links (assume react-router-dom v6)
-  const handleGoToClient = (client) => {
-    // You may want to use client ID if available
-    window.location.href = `/clients?search=${encodeURIComponent(client)}`;
-  };
-  const handleGoToProject = (projectName) => {
-    window.location.href = `/projects?search=${encodeURIComponent(
-      projectName
-    )}`;
-  };
-
-  // Add this function to handle status toggle
-  const handleStatusToggle = (invoiceId) => {
-    try {
-      const updatedInvoices = invoices.map((invoice) =>
-        invoice.id === invoiceId
-          ? {
-              ...invoice,
-              status: invoice.status === "Paid" ? "Unpaid" : "Paid",
+  const columns = [
+    {
+      field: "invoiceID",
+      headerName: "Invoice ID",
+      flex: 1,
+      valueGetter: (params) => params || "N/A",
+    },
+    {
+      field: "project",
+      headerName: "Project",
+      flex: 1,
+      valueGetter: (params) => {
+        const project = params?.row?.project || params;
+        return project?.name || "N/A";
+      },
+    },
+    {
+      field: "client",
+      headerName: "Client",
+      flex: 1,
+      valueGetter: (params) => {
+        const client = params?.row?.client || params;
+        return client?.name || "N/A";
+      },
+    },
+    {
+      field: "amount",
+      headerName: "Amount",
+      flex: 1,
+      valueGetter: (params) => {
+        const amount = params?.row?.amount || params;
+        if (amount !== undefined && amount !== null) {
+          return `$${Number(amount).toLocaleString()}`;
+        }
+        return "N/A";
+      },
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      flex: 1,
+      valueGetter: (params) => params?.row?.status || params || "draft",
+      renderCell: (params) => {
+        const status = params?.row?.status || params || "draft";
+        return (
+          <Chip
+            label={status}
+            color={
+              status === "paid"
+                ? "success"
+                : status === "pending"
+                ? "warning"
+                : status === "overdue"
+                ? "error"
+                : "default"
             }
-          : invoice
-      );
+          />
+        );
+      },
+    },
+    {
+      field: "date",
+      headerName: "Date",
+      flex: 1,
+      valueGetter: (params) => {
+        const date = params?.row?.date || params;
+        if (!date) return "N/A";
+        try {
+          return new Date(date).toLocaleDateString();
+        } catch (error) {
+          return "Invalid Date";
+        }
+      },
+    },
+    {
+      field: "dueDate",
+      headerName: "Due Date",
+      flex: 1,
+      valueGetter: (params) => {
+        const date = params?.row?.dueDate || params;
+        if (!date) return "N/A";
+        try {
+          return new Date(date).toLocaleDateString();
+        } catch (error) {
+          return "Invalid Date";
+        }
+      },
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      flex: 1,
+      renderCell: (params) => {
+        const row = params?.row || params;
+        if (!row) return null;
+        return (
+          <Box>
+            <IconButton onClick={() => handleEditInvoice(row)}>
+              <EditIcon />
+            </IconButton>
+            <IconButton onClick={() => handleInvoicePDF(row)}>
+              <PrintIcon />
+            </IconButton>
+          </Box>
+        );
+      },
+    },
+  ];
 
-      // Update state
-      setInvoices(updatedInvoices);
-
-      // Save to localStorage
-      localStorage.setItem(INVOICES_KEY, JSON.stringify(updatedInvoices));
-    } catch (error) {
-      console.error("Error updating invoice status:", error);
+  // Add data validation before rendering
+  const validatedInvoices = React.useMemo(() => {
+    if (!Array.isArray(invoices)) {
+      return [];
     }
-  };
+    return invoices.map((invoice) => ({
+      ...invoice,
+      _id: invoice._id,
+      invoiceID: invoice.invoiceID,
+      project: invoice.project,
+      client: invoice.client,
+      amount: invoice.amount,
+      status: invoice.status,
+      date: invoice.date,
+      dueDate: invoice.dueDate,
+    }));
+  }, [invoices]);
+
+  if (loading) return <Typography>Loading invoices...</Typography>;
+  if (error) return <Typography color="error">{error}</Typography>;
 
   return (
-    <Box sx={{ maxWidth: 1100, mx: "auto", mt: 4 }}>
+    <Box m="20px">
+      <Header title="INVOICES" subtitle="Managing your invoices" />
       <Box
+        m="40px 0 0 0"
+        height="75vh"
         sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 2,
+          "& .MuiDataGrid-root": {
+            border: "none",
+          },
+          "& .MuiDataGrid-cell": {
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-columnHeaders": {
+            backgroundColor: colors.primary[600],
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-virtualScroller": {
+            backgroundColor: colors.primary[400],
+          },
+          "& .MuiDataGrid-footerContainer": {
+            borderTop: "none",
+            backgroundColor: colors.primary[600],
+          },
+          "& .MuiCheckbox-root": {
+            color: `${colors.secondary[500]} !important`,
+          },
         }}
       >
-        <Typography variant="h4" sx={{ fontSize: { xs: 32, md: 40 } }}>
-          Invoices
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => setDialogOpen(true)}
-        >
-          Create Invoice
-        </Button>
+        {validatedInvoices.length > 0 && (
+          <DataGrid
+            rows={validatedInvoices}
+            columns={columns}
+            getRowId={(row) => row._id}
+            pageSize={10}
+            rowsPerPageOptions={[10]}
+            checkboxSelection
+            disableSelectionOnClick
+            loading={loading}
+            autoHeight
+          />
+        )}
       </Box>
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-          <FilterListIcon />
-          <Box sx={{ display: "flex", mb: 2, gap: 2 }}>
-            <FormControl sx={{ minWidth: 200 }} size="small">
-              <InputLabel>Status</InputLabel>
-              <Select
-                label="Status"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-              >
-                <MenuItem value="All">All Invoices</MenuItem>
-                <MenuItem value="Paid">Paid</MenuItem>
-                <MenuItem value="Unpaid">Unpaid</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 120 }} size="small">
-              <InputLabel>Client</InputLabel>
-              <Select
-                label="Client"
-                value={filterClient}
-                onChange={(e) => setFilterClient(e.target.value)}
-              >
-                <MenuItem value="">All</MenuItem>
-                {uniqueClients.map((client) => (
-                  <MenuItem key={client} value={client}>
-                    {client}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-          <Typography sx={{ ml: 2, fontWeight: 600 }}>
-            Total Unpaid: ${totalUnpaid}
-          </Typography>
-        </Stack>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "id"}
-                    direction={sortBy === "id" ? sortDir : "asc"}
-                    onClick={() => handleSort("id")}
-                  >
-                    Invoice ID
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "projectName"}
-                    direction={sortBy === "projectName" ? sortDir : "asc"}
-                    onClick={() => handleSort("projectName")}
-                  >
-                    Project Name
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "client"}
-                    direction={sortBy === "client" ? sortDir : "asc"}
-                    onClick={() => handleSort("client")}
-                  >
-                    Client
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "amount"}
-                    direction={sortBy === "amount" ? sortDir : "asc"}
-                    onClick={() => handleSort("amount")}
-                  >
-                    Invoice Amount
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "invoiceDate"}
-                    direction={sortBy === "invoiceDate" ? sortDir : "asc"}
-                    onClick={() => handleSort("invoiceDate")}
-                  >
-                    Invoice Date
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "dueDate"}
-                    direction={sortBy === "dueDate" ? sortDir : "asc"}
-                    onClick={() => handleSort("dueDate")}
-                  >
-                    Invoice Due Date
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "status"}
-                    direction={sortBy === "status" ? sortDir : "asc"}
-                    onClick={() => handleSort("status")}
-                  >
-                    Status
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {getFilteredInvoices().length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} align="center">
-                    No invoices found.
-                  </TableCell>
-                </TableRow>
-              )}
-              {getFilteredInvoices().map((invoice) => (
-                <TableRow key={invoice.id}>
-                  <TableCell>{invoice.id}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="text"
-                      onClick={() => handleGoToProject(invoice.projectName)}
-                    >
-                      {invoice.projectName}
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="text"
-                      onClick={() => handleGoToClient(invoice.client)}
-                    >
-                      {invoice.client}
-                    </Button>
-                  </TableCell>
-                  <TableCell>${invoice.amount}</TableCell>
-                  <TableCell>{invoice.invoiceDate}</TableCell>
-                  <TableCell>{invoice.dueDate}</TableCell>
-                  <TableCell>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <Chip
-                        label={invoice.status}
-                        color={invoice.status === "Paid" ? "success" : "error"}
-                        onClick={() => handleStatusToggle(invoice.id)}
-                        sx={{ cursor: "pointer" }}
-                      />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      color="primary"
-                      onClick={() => handleEditInvoice(invoice)}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      color="primary"
-                      onClick={() => handleInvoicePDF(invoice)}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+
       {/* Add Invoice Dialog */}
       <Dialog
         open={dialogOpen}
@@ -470,23 +421,19 @@ const Invoices = ({ toggleColorMode, mode }) => {
         <DialogTitle>Create Invoice</DialogTitle>
         <form onSubmit={handleAddInvoice}>
           <DialogContent>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={2}
-              sx={{ mb: 2 }}
-            >
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <TextField
-                label="Project ID"
-                name="projectId"
-                value={form.projectId}
+                label="Invoice ID"
+                name="invoiceID"
+                value={form.invoiceID}
                 onChange={handleChange}
                 required
                 sx={{ flex: 1 }}
               />
               <TextField
-                label="Project Name"
-                name="projectName"
-                value={form.projectName}
+                label="Project"
+                name="project"
+                value={form.project}
                 onChange={handleChange}
                 required
                 sx={{ flex: 1 }}
@@ -500,9 +447,9 @@ const Invoices = ({ toggleColorMode, mode }) => {
                 sx={{ flex: 1 }}
               />
             </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <Stack direction="row" spacing={2}>
               <TextField
-                label="Invoice Amount"
+                label="Amount"
                 name="amount"
                 value={form.amount}
                 onChange={handleChange}
@@ -511,9 +458,9 @@ const Invoices = ({ toggleColorMode, mode }) => {
                 sx={{ flex: 1 }}
               />
               <TextField
-                label="Invoice Date"
-                name="invoiceDate"
-                value={form.invoiceDate}
+                label="Date"
+                name="date"
+                value={form.date}
                 onChange={handleChange}
                 type="date"
                 InputLabelProps={{ shrink: true }}
@@ -546,6 +493,16 @@ const Invoices = ({ toggleColorMode, mode }) => {
                 </Select>
               </FormControl>
             </Stack>
+            <TextField
+              label="Description"
+              name="description"
+              value={form.description}
+              onChange={handleChange}
+              multiline
+              rows={4}
+              fullWidth
+              sx={{ mt: 2 }}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDialogOpen(false)} color="secondary">
@@ -557,6 +514,7 @@ const Invoices = ({ toggleColorMode, mode }) => {
           </DialogActions>
         </form>
       </Dialog>
+
       {/* Edit Invoice Dialog */}
       <Dialog
         open={editDialogOpen}
@@ -567,23 +525,19 @@ const Invoices = ({ toggleColorMode, mode }) => {
         <DialogTitle>Edit Invoice</DialogTitle>
         <form onSubmit={handleSaveEdit}>
           <DialogContent>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={2}
-              sx={{ mb: 2 }}
-            >
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <TextField
-                label="Project ID"
-                name="projectId"
-                value={editForm.projectId}
+                label="Invoice ID"
+                name="invoiceID"
+                value={editForm.invoiceID}
                 onChange={handleEditChange}
                 required
                 sx={{ flex: 1 }}
               />
               <TextField
-                label="Project Name"
-                name="projectName"
-                value={editForm.projectName}
+                label="Project"
+                name="project"
+                value={editForm.project}
                 onChange={handleEditChange}
                 required
                 sx={{ flex: 1 }}
@@ -597,9 +551,9 @@ const Invoices = ({ toggleColorMode, mode }) => {
                 sx={{ flex: 1 }}
               />
             </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <Stack direction="row" spacing={2}>
               <TextField
-                label="Invoice Amount"
+                label="Amount"
                 name="amount"
                 value={editForm.amount}
                 onChange={handleEditChange}
@@ -608,9 +562,9 @@ const Invoices = ({ toggleColorMode, mode }) => {
                 sx={{ flex: 1 }}
               />
               <TextField
-                label="Invoice Date"
-                name="invoiceDate"
-                value={editForm.invoiceDate}
+                label="Date"
+                name="date"
+                value={editForm.date}
                 onChange={handleEditChange}
                 type="date"
                 InputLabelProps={{ shrink: true }}
@@ -643,6 +597,16 @@ const Invoices = ({ toggleColorMode, mode }) => {
                 </Select>
               </FormControl>
             </Stack>
+            <TextField
+              label="Description"
+              name="description"
+              value={editForm.description}
+              onChange={handleEditChange}
+              multiline
+              rows={4}
+              fullWidth
+              sx={{ mt: 2 }}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEditDialogOpen(false)} color="secondary">

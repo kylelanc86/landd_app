@@ -38,11 +38,10 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
-import {
-  jobs as initialJobs,
-  projects,
-  getProjectClient,
-} from "../../data/mockData";
+import { jobService, projectService } from "../../services/api";
+import { DataGrid } from "@mui/x-data-grid";
+import Header from "../../components/Header";
+import { tokens } from "../../theme";
 
 const JOBS_KEY = "ldc_jobs";
 
@@ -58,6 +57,7 @@ const emptyForm = {
 
 const AirMonitoring = () => {
   const theme = useTheme();
+  const colors = tokens;
   const navigate = useNavigate();
   const [showCompleted, setShowCompleted] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
@@ -74,40 +74,29 @@ const AirMonitoring = () => {
   const [sortAsc, setSortAsc] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
-
-  // Load projects from localStorage
-  const [availableProjects, setAvailableProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [projects, setProjects] = useState([]);
 
   useEffect(() => {
-    // Load projects from localStorage
-    const storedProjects = localStorage.getItem("ldc_projects");
-    if (storedProjects) {
-      setAvailableProjects(JSON.parse(storedProjects));
-    } else {
-      // Fallback to mock data if no projects in localStorage
-      setAvailableProjects(projects);
-    }
+    const fetchData = async () => {
+      try {
+        const [jobsResponse, projectsResponse] = await Promise.all([
+          jobService.getAll(),
+          projectService.getAll(),
+        ]);
+        setJobs(jobsResponse.data);
+        setProjects(projectsResponse.data);
+        setLoading(false);
+      } catch (err) {
+        setError("Failed to fetch data");
+        setLoading(false);
+        console.error("Error fetching data:", err);
+      }
+    };
+
+    fetchData();
   }, []);
-
-  // Load jobs from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(JOBS_KEY);
-    if (stored) {
-      const parsedJobs = JSON.parse(stored);
-      setJobs(parsedJobs);
-    } else {
-      // Only set initial jobs if there are none in localStorage
-      setJobs(initialJobs);
-      localStorage.setItem(JOBS_KEY, JSON.stringify(initialJobs));
-    }
-  }, []);
-
-  // Save jobs to localStorage whenever they change
-  useEffect(() => {
-    if (jobs.length > 0) {
-      localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
-    }
-  }, [jobs]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -186,15 +175,13 @@ const AirMonitoring = () => {
   // Filtering and sorting
   const filteredJobs = jobs.filter((j) => {
     const q = search.toLowerCase();
-    const project = availableProjects.find((p) => p.id === j.projectId);
-    const client = project ? getProjectClient(project.id) : null;
+    const project = projects.find((p) => p._id === j.projectId);
 
     return (
       (j.projectId?.toString() || "").toLowerCase().includes(q) ||
       (project?.name || "").toLowerCase().includes(q) ||
       (j.status || "").toLowerCase().includes(q) ||
-      (j.startDate || "").toLowerCase().includes(q) ||
-      (client?.name || "").toLowerCase().includes(q)
+      (j.startDate || "").toLowerCase().includes(q)
     );
   });
 
@@ -244,292 +231,95 @@ const AirMonitoring = () => {
     console.log("Print report for job:", jobId);
   };
 
+  const columns = [
+    { field: "name", headerName: "Job Name", flex: 1 },
+    { field: "status", headerName: "Status", flex: 1 },
+    { field: "location", headerName: "Location", flex: 1 },
+    {
+      field: "startDate",
+      headerName: "Start Date",
+      flex: 1,
+      valueGetter: (params) => {
+        if (!params || !params.row) return "Not set";
+        return params.row.startDate
+          ? new Date(params.row.startDate).toLocaleDateString()
+          : "Not set";
+      },
+    },
+    {
+      field: "endDate",
+      headerName: "End Date",
+      flex: 1,
+      valueGetter: (params) => {
+        if (!params || !params.row) return "Not set";
+        return params.row.endDate
+          ? new Date(params.row.endDate).toLocaleDateString()
+          : "Ongoing";
+      },
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      flex: 1,
+      renderCell: (params) => {
+        if (!params || !params.row) return null;
+        return (
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() =>
+              navigate(`/air-monitoring/jobs/${params.row._id}/shifts`)
+            }
+          >
+            View Details
+          </Button>
+        );
+      },
+    },
+  ];
+
+  if (loading) return <Typography>Loading jobs...</Typography>;
+  if (error) return <Typography color="error">{error}</Typography>;
+
   return (
-    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+    <Box m="20px">
+      <Header title="AIR MONITORING" subtitle="Managing your monitoring jobs" />
       <Box
+        m="40px 0 0 0"
+        height="75vh"
         sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 4,
+          "& .MuiDataGrid-root": {
+            border: "none",
+          },
+          "& .MuiDataGrid-cell": {
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-columnHeaders": {
+            backgroundColor: colors.primary[600],
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-virtualScroller": {
+            backgroundColor: colors.primary[400],
+          },
+          "& .MuiDataGrid-footerContainer": {
+            borderTop: "none",
+            backgroundColor: colors.primary[600],
+          },
+          "& .MuiCheckbox-root": {
+            color: `${colors.secondary[500]} !important`,
+          },
         }}
       >
-        <Typography
-          variant="h4"
-          sx={{
-            color:
-              theme.palette.mode === "dark"
-                ? "#fff"
-                : theme.palette.secondary[200],
-            fontSize: { xs: "1.5rem", sm: "2rem", md: "2.5rem" },
-            wordBreak: "break-word",
-            hyphens: "auto",
-          }}
-        >
-          Air Monitoring Jobs
-        </Typography>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={showCompleted}
-                onChange={(e) => setShowCompleted(e.target.checked)}
-                sx={{
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  "&.Mui-checked": {
-                    color:
-                      theme.palette.mode === "dark"
-                        ? "#fff"
-                        : theme.palette.secondary[200],
-                  },
-                }}
-              />
-            }
-            label={
-              <Typography
-                sx={{
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Show Completed
-              </Typography>
-            }
-          />
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenDialog(true)}
-            sx={{
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? theme.palette.primary[500]
-                  : theme.palette.primary[700],
-              color: "#fff",
-              "&:hover": {
-                backgroundColor:
-                  theme.palette.mode === "dark"
-                    ? theme.palette.primary[600]
-                    : theme.palette.primary[800],
-              },
-            }}
-          >
-            Add Job
-          </Button>
-        </Box>
+        <DataGrid
+          rows={filteredJobs}
+          columns={columns}
+          getRowId={(row) => row._id}
+          pageSize={10}
+          rowsPerPageOptions={[10]}
+          checkboxSelection
+          disableSelectionOnClick
+        />
       </Box>
-
-      {/* Project Selection Dialog */}
-      <Dialog
-        open={openDialog}
-        onClose={() => {
-          setOpenDialog(false);
-          setSelectedProject(null);
-          setSearchQuery("");
-        }}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-          >
-            <Typography variant="h6">Select Project</Typography>
-            <IconButton
-              onClick={() => {
-                setOpenDialog(false);
-                setSelectedProject(null);
-                setSearchQuery("");
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <Autocomplete
-              options={availableProjects}
-              getOptionLabel={(option) => option.name}
-              value={selectedProject}
-              onChange={(event, newValue) => {
-                setSelectedProject(newValue);
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Search Projects"
-                  variant="outlined"
-                  fullWidth
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <>
-                        <InputAdornment position="start">
-                          <SearchIcon />
-                        </InputAdornment>
-                        {params.InputProps.startAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
-              renderOption={(props, option) => (
-                <ListItem {...props}>
-                  <ListItemText
-                    primary={option.name}
-                    secondary={`Client: ${
-                      getProjectClient(option.id)?.name || "N/A"
-                    }`}
-                  />
-                </ListItem>
-              )}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setOpenDialog(false);
-              setSelectedProject(null);
-              setSearchQuery("");
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleAddJob}
-            variant="contained"
-            disabled={!selectedProject}
-          >
-            Create Job
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Rest of your existing table code */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Project ID</TableCell>
-              <TableCell>Project Name</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Start Date</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sortedJobs.map((job) => {
-              const project = availableProjects.find(
-                (p) => p.id === job.projectId
-              );
-              return (
-                <TableRow
-                  key={job.id}
-                  onClick={() => handleOpenJob(job.id)}
-                  sx={{
-                    cursor: "pointer",
-                    "&:hover": {
-                      backgroundColor: theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <TableCell>{job.projectId}</TableCell>
-                  <TableCell>{project?.name || "N/A"}</TableCell>
-                  <TableCell>
-                    <Box
-                      sx={{
-                        backgroundColor: getStatusColor(job.status),
-                        color: theme.palette.mode === "dark" ? "#000" : "#fff",
-                        padding: "4px 8px",
-                        borderRadius: "4px",
-                        display: "inline-block",
-                      }}
-                    >
-                      {job.status}
-                    </Box>
-                  </TableCell>
-                  <TableCell>{job.startDate}</TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={1}>
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewShifts(job.id);
-                        }}
-                        size="small"
-                      >
-                        <AssessmentIcon />
-                      </IconButton>
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePrintReport(job.id);
-                        }}
-                        size="small"
-                      >
-                        <PrintIcon />
-                      </IconButton>
-                      <IconButton
-                        onClick={(e) => handleDeleteClick(e, job)}
-                        size="small"
-                        sx={{ color: theme.palette.error.main }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Stack>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={handleDeleteCancel}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this air monitoring job?
-          </Typography>
-          {jobToDelete && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle1">
-                Project ID: {jobToDelete.projectId}
-              </Typography>
-              <Typography variant="subtitle1">
-                Project:{" "}
-                {availableProjects.find((p) => p.id === jobToDelete.projectId)
-                  ?.name || "N/A"}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDeleteCancel}>Cancel</Button>
-          <Button
-            onClick={handleDeleteConfirm}
-            variant="contained"
-            color="error"
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
