@@ -43,7 +43,26 @@ const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
         transition: "all 0.3s ease",
       }}
       onClick={() => setSelected(title)}
-      icon={icon}
+      icon={
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "32px",
+            height: "32px",
+            borderRadius: "8px",
+            backgroundColor: "transparent",
+            boxShadow:
+              theme.palette.mode === "dark"
+                ? "none"
+                : "0 2px 4px rgba(0,0,0,0.1)",
+            mr: 1,
+          }}
+        >
+          {icon}
+        </Box>
+      }
     >
       <Link
         to={to}

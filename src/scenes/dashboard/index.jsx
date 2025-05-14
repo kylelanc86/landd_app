@@ -16,7 +16,8 @@ import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { projectService } from "../../services/api";
+import { projectService, invoiceService } from "../../services/api";
+import { ACTIVE_STATUSES } from "../../components/JobStatus";
 
 const Dashboard = () => {
   const theme = useTheme();
@@ -32,25 +33,34 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await projectService.getAll();
-        const projects = response.data;
+        // Fetch projects and invoices in parallel
+        const [projectsRes, invoicesRes] = await Promise.all([
+          projectService.getAll(),
+          invoiceService.getAll(),
+        ]);
+        const projects = projectsRes.data;
+        const invoices = invoicesRes.data;
 
-        // Calculate stats
-        const activeProjects = projects.filter(
-          (p) => p.status === "in_progress"
+        // Use ACTIVE_STATUSES for active projects
+        const activeProjects = projects.filter((p) =>
+          ACTIVE_STATUSES.includes(p.status)
         ).length;
         const reviewProjects = projects.filter(
-          (p) => p.status === "pending"
+          (p) => p.status === "Report sent for review"
         ).length;
         const invoiceProjects = projects.filter(
-          (p) => p.status === "completed"
+          (p) => p.status === "Ready for invoicing"
+        ).length;
+
+        const outstandingInvoices = invoices.filter(
+          (inv) => inv.status === "unpaid"
         ).length;
 
         setStats({
           activeProjects,
           reviewProjects,
           invoiceProjects,
-          outstandingInvoices: 0, // This will need to be implemented when we add invoice functionality
+          outstandingInvoices,
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -70,7 +80,7 @@ const Dashboard = () => {
       bgColor: "#74B3CE",
       filter: "active",
       path: "/projects",
-      queryParams: { status: "in_progress" },
+      queryParams: { status: "active" },
     },
     {
       title: "Report Ready for Review",
@@ -79,7 +89,7 @@ const Dashboard = () => {
       bgColor: "#FFC107",
       filter: "review",
       path: "/projects",
-      queryParams: { status: "pending" },
+      queryParams: { status: "Report sent for review" },
     },
     {
       title: "Ready for Invoicing",
@@ -88,7 +98,7 @@ const Dashboard = () => {
       bgColor: "#2196F3",
       filter: "invoice",
       path: "/projects",
-      queryParams: { status: "completed" },
+      queryParams: { status: "Ready for invoicing" },
     },
     {
       title: "Outstanding Invoices",
@@ -97,7 +107,7 @@ const Dashboard = () => {
       bgColor: "#F44336",
       filter: "outstanding",
       path: "/invoices",
-      queryParams: { status: "Unpaid" },
+      queryParams: { status: "unpaid" },
     },
   ];
 

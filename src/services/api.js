@@ -41,26 +41,14 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle errors
+// Add response interceptor
 api.interceptors.response.use(
   (response) => {
-    console.log("API Response:", {
-      url: response.config.url,
-      status: response.status,
-      data: response.data
-    });
     return response;
   },
   (error) => {
-    console.error("API Response Error:", {
-      url: error.config?.url,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      localStorage.removeItem("token");
       localStorage.removeItem('currentUser');
       // Only redirect if not already on login page
       if (!window.location.pathname.includes('/login')) {
@@ -101,7 +89,7 @@ export const projectService = {
   getAll: () => api.get('/projects'),
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
-  update: (id, data) => api.put(`/projects/${id}`, data),
+  update: (id, data) => api.patch(`/projects/${id}`, data),
   delete: (id) => api.delete(`/projects/${id}`)
 };
 

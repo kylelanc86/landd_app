@@ -35,15 +35,16 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { invoiceService } from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import { formatDate, formatDateForInput } from "../../utils/dateFormat";
 
-const STATUS_OPTIONS = ["draft", "pending", "paid", "overdue", "cancelled"];
+const STATUS_OPTIONS = ["paid", "unpaid"];
 
 const emptyForm = {
   invoiceID: "",
   project: "",
   client: "",
   amount: "",
-  status: "draft",
+  status: "unpaid",
   date: "",
   dueDate: "",
   description: "",
@@ -127,12 +128,8 @@ const Invoices = () => {
     // Format dates for the form
     const formattedInvoice = {
       ...invoice,
-      date: invoice.date
-        ? new Date(invoice.date).toISOString().split("T")[0]
-        : "",
-      dueDate: invoice.dueDate
-        ? new Date(invoice.dueDate).toISOString().split("T")[0]
-        : "",
+      date: invoice.date ? formatDateForInput(invoice.date) : "",
+      dueDate: invoice.dueDate ? formatDateForInput(invoice.dueDate) : "",
     };
     setEditForm(formattedInvoice);
     setEditDialogOpen(true);
@@ -197,7 +194,7 @@ const Invoices = () => {
 
   // Sum of unpaid invoice amounts
   const totalUnpaid = invoices
-    .filter((inv) => inv.status === "pending" || inv.status === "overdue")
+    .filter((inv) => inv.status === "unpaid")
     .reduce((sum, inv) => sum + parseFloat(inv.amount), 0)
     .toFixed(2);
 
@@ -215,8 +212,8 @@ const Invoices = () => {
       ["Project:", invoice.project?.name || "N/A"],
       ["Client:", invoice.client?.name || "N/A"],
       ["Amount:", `$${invoice.amount}`],
-      ["Date:", new Date(invoice.date).toLocaleDateString()],
-      ["Due Date:", new Date(invoice.dueDate).toLocaleDateString()],
+      ["Date:", formatDate(invoice.date)],
+      ["Due Date:", formatDate(invoice.dueDate)],
       ["Status:", invoice.status],
       ["Description:", invoice.description],
     ];
@@ -278,21 +275,23 @@ const Invoices = () => {
       field: "status",
       headerName: "Status",
       flex: 1,
-      valueGetter: (params) => params?.row?.status || params || "draft",
+      valueGetter: (params) => params?.row?.status || params || "unpaid",
       renderCell: (params) => {
-        const status = params?.row?.status || params || "draft";
+        const status = params?.row?.status || params || "unpaid";
+        const isOverdue =
+          params.row.dueDate && new Date(params.row.dueDate) < new Date();
+
         return (
           <Chip
             label={status}
-            color={
-              status === "paid"
-                ? "success"
-                : status === "pending"
-                ? "warning"
-                : status === "overdue"
-                ? "error"
-                : "default"
-            }
+            color={status === "paid" ? "success" : "error"}
+            sx={{
+              color: "white",
+              fontWeight: isOverdue && status === "unpaid" ? "bold" : "normal",
+              "& .MuiChip-label": {
+                color: "white",
+              },
+            }}
           />
         );
       },
@@ -303,12 +302,7 @@ const Invoices = () => {
       flex: 1,
       valueGetter: (params) => {
         const date = params?.row?.date || params;
-        if (!date) return "N/A";
-        try {
-          return new Date(date).toLocaleDateString();
-        } catch (error) {
-          return "Invalid Date";
-        }
+        return formatDate(date);
       },
     },
     {
@@ -317,9 +311,34 @@ const Invoices = () => {
       flex: 1,
       valueGetter: (params) => {
         const date = params?.row?.dueDate || params;
+        return formatDate(date);
+      },
+      renderCell: (params) => {
+        const date = params?.row?.dueDate || params;
         if (!date) return "N/A";
         try {
-          return new Date(date).toLocaleDateString();
+          const dueDate = new Date(date);
+          const isOverdue =
+            dueDate < new Date() && params.row.status === "unpaid";
+          return (
+            <Box
+              sx={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                height: "100%",
+              }}
+            >
+              <Typography
+                sx={{
+                  color: isOverdue ? "error.main" : "inherit",
+                  fontWeight: isOverdue ? "bold" : "normal",
+                }}
+              >
+                {formatDate(dueDate)}
+              </Typography>
+            </Box>
+          );
         } catch (error) {
           return "Invalid Date";
         }
@@ -369,7 +388,22 @@ const Invoices = () => {
 
   return (
     <Box m="20px">
-      <Header title="INVOICES" subtitle="Managing your invoices" />
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Header title="INVOICES" subtitle="Managing your invoices" />
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => setDialogOpen(true)}
+          sx={{
+            backgroundColor: colors.secondary[500],
+            "&:hover": {
+              backgroundColor: colors.secondary[600],
+            },
+          }}
+        >
+          Add Invoice
+        </Button>
+      </Box>
       <Box
         m="40px 0 0 0"
         height="75vh"

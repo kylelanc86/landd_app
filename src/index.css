@@ -17,3 +17,10 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 } 
+
+.pro-sidebar .pro-menu .pro-menu-item .pro-icon-wrapper,
+.pro-sidebar .pro-icon-wrapper,
+.pro-sidebar .pro-icon {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}

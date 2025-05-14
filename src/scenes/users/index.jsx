@@ -29,6 +29,10 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { USER_LEVELS, fakeUsers } from "../../data/userData";
+import Header from "../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../theme";
+import { useTheme } from "@mui/material/styles";
 
 const USERS_KEY = "ldc_users";
 
@@ -53,6 +57,8 @@ const Users = () => {
   const [statusChangeType, setStatusChangeType] = useState(null);
   const [sortBy, setSortBy] = useState("lastName");
   const [sortDir, setSortDir] = useState("asc");
+  const theme = useTheme();
+  const colors = tokens;
 
   // Load users from localStorage on mount
   useEffect(() => {
@@ -212,196 +218,96 @@ const Users = () => {
     return 0;
   });
 
+  const columns = [
+    { field: "userID", headerName: "User ID", flex: 1 },
+    { field: "firstName", headerName: "First Name", flex: 1 },
+    { field: "lastName", headerName: "Last Name", flex: 1 },
+    { field: "email", headerName: "Email", flex: 1 },
+    { field: "phone", headerName: "Phone", flex: 1 },
+    { field: "userLevel", headerName: "User Level", flex: 1 },
+    {
+      field: "isActive",
+      headerName: "Status",
+      flex: 1,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? "Active" : "Inactive"}
+          color={params.value ? "success" : "error"}
+          sx={{ color: "white" }}
+        />
+      ),
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      flex: 1,
+      renderCell: (params) => (
+        <Box>
+          <IconButton onClick={() => handleEditUser(params.row)}>
+            <EditIcon />
+          </IconButton>
+          <IconButton
+            onClick={() =>
+              handleStatusChange(params.row.id, !params.row.isActive)
+            }
+          >
+            <DeleteIcon />
+          </IconButton>
+        </Box>
+      ),
+      sortable: false,
+      filterable: false,
+    },
+  ];
+
   return (
-    <Box sx={{ maxWidth: 1100, mx: "auto", mt: 4 }}>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <Typography variant="h4" sx={{ fontSize: { xs: 32, md: 40 } }}>
-          Users
-        </Typography>
+    <Box m="20px">
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Header title="USER MANAGEMENT" subtitle="Manage your users" />
         <Button
           variant="contained"
-          color="primary"
+          color="secondary"
           onClick={() => setDialogOpen(true)}
+          sx={{
+            backgroundColor: theme.palette.secondary.main,
+            "&:hover": { backgroundColor: theme.palette.secondary.dark },
+          }}
         >
           Add User
         </Button>
       </Box>
-      <Paper sx={{ p: 2, mb: 4 }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>User ID</TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "firstName"}
-                    direction={sortBy === "firstName" ? sortDir : "asc"}
-                    onClick={() => handleSort("firstName")}
-                  >
-                    First Name
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "lastName"}
-                    direction={sortBy === "lastName" ? sortDir : "asc"}
-                    onClick={() => handleSort("lastName")}
-                  >
-                    Last Name
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "email"}
-                    direction={sortBy === "email" ? sortDir : "asc"}
-                    onClick={() => handleSort("email")}
-                  >
-                    Email
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell>Phone</TableCell>
-                <TableCell>
-                  <TableSortLabel
-                    active={sortBy === "userLevel"}
-                    direction={sortBy === "userLevel" ? sortDir : "asc"}
-                    onClick={() => handleSort("userLevel")}
-                  >
-                    User Level
-                  </TableSortLabel>
-                </TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortedUsers.filter((user) => user.isActive).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    No active users found.
-                  </TableCell>
-                </TableRow>
-              )}
-              {sortedUsers
-                .filter((user) => user.isActive)
-                .map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.userID}</TableCell>
-                    <TableCell>{user.firstName}</TableCell>
-                    <TableCell>{user.lastName}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.phone}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={user.userLevel}
-                        color={
-                          user.userLevel === "admin"
-                            ? "error"
-                            : user.userLevel === "manager"
-                            ? "warning"
-                            : "success"
-                        }
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <IconButton
-                        size="small"
-                        color="primary"
-                        onClick={() => handleEditUser(user)}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => handleStatusChange(user.id, false)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
-
-      {/* Inactive Users Section */}
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        Inactive Users
-      </Typography>
-      <Paper sx={{ p: 2 }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>User ID</TableCell>
-                <TableCell>First Name</TableCell>
-                <TableCell>Last Name</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Phone</TableCell>
-                <TableCell>User Level</TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortedUsers.filter((user) => !user.isActive).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    No inactive users found.
-                  </TableCell>
-                </TableRow>
-              )}
-              {sortedUsers
-                .filter((user) => !user.isActive)
-                .map((user) => (
-                  <TableRow
-                    key={user.id}
-                    sx={{
-                      "& td": {
-                        color: "text.secondary",
-                        opacity: 0.7,
-                      },
-                    }}
-                  >
-                    <TableCell>{user.userID}</TableCell>
-                    <TableCell>{user.firstName}</TableCell>
-                    <TableCell>{user.lastName}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.phone}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={user.userLevel}
-                        color={
-                          user.userLevel === "admin"
-                            ? "error"
-                            : user.userLevel === "manager"
-                            ? "warning"
-                            : "success"
-                        }
-                        sx={{ opacity: 0.7 }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <Button
-                        size="small"
-                        color="primary"
-                        onClick={() => handleStatusChange(user.id, true)}
-                      >
-                        Restore
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+      <Box
+        m="40px 0 0 0"
+        height="75vh"
+        sx={{
+          "& .MuiDataGrid-root": { border: "none" },
+          "& .MuiDataGrid-cell": { borderBottom: "none" },
+          "& .MuiDataGrid-columnHeaders": {
+            backgroundColor: theme.palette.primary.dark,
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-virtualScroller": {
+            backgroundColor: theme.palette.background.default,
+          },
+          "& .MuiDataGrid-footerContainer": {
+            borderTop: "none",
+            backgroundColor: theme.palette.primary.dark,
+          },
+          "& .MuiCheckbox-root": {
+            color: `${theme.palette.secondary.main} !important`,
+          },
+        }}
+      >
+        <DataGrid
+          rows={users}
+          columns={columns}
+          getRowId={(row) => row.id}
+          pageSize={10}
+          rowsPerPageOptions={[10]}
+          autoHeight
+          disableSelectionOnClick
+        />
+      </Box>
 
       {/* Add User Dialog */}
       <Dialog

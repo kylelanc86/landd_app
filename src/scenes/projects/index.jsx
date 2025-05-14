@@ -40,11 +40,12 @@ import {
 } from "../../components/JobStatus";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "@mui/material/styles";
-import { DataGrid } from "@mui/x-data-grid";
+import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { projectService, clientService } from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import AddIcon from "@mui/icons-material/Add";
+import { useJobStatus } from "../../hooks/useJobStatus";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -55,8 +56,6 @@ const PROJECT_TYPES = [
   "soil_analysis",
   "other",
 ];
-
-const STATUS_OPTIONS = ["pending", "in_progress", "completed", "cancelled"];
 
 const emptyForm = {
   name: "",
@@ -189,11 +188,99 @@ const resetProjectIds = (projects) => {
   }));
 };
 
+const StatusCell = ({ params, onStatusChange }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const handleClick = (event) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleStatusSelect = async (newStatus) => {
+    try {
+      const response = await projectService.update(params.row._id, {
+        status: newStatus,
+      });
+      if (response.data) {
+        onStatusChange(params.row._id, response.data.status);
+      }
+      handleClose();
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to update status. Please try again.");
+    }
+  };
+
+  return (
+    <Box>
+      <Box
+        onClick={handleClick}
+        sx={{
+          cursor: "pointer",
+          "&:hover": {
+            opacity: 0.8,
+          },
+        }}
+      >
+        <StatusChip status={params.value} />
+      </Box>
+      <Menu
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        PaperProps={{
+          sx: {
+            maxHeight: 300,
+            width: 250,
+          },
+        }}
+      >
+        <MenuItem disabled>
+          <Typography variant="subtitle2" color="text.secondary">
+            Active Jobs
+          </Typography>
+        </MenuItem>
+        {ACTIVE_STATUSES.map((status) => (
+          <MenuItem
+            key={status}
+            onClick={() => handleStatusSelect(status)}
+            selected={params.value === status}
+          >
+            <StatusChip status={status} />
+          </MenuItem>
+        ))}
+        <Divider />
+        <MenuItem disabled>
+          <Typography variant="subtitle2" color="text.secondary">
+            Inactive Jobs
+          </Typography>
+        </MenuItem>
+        {INACTIVE_STATUSES.map((status) => (
+          <MenuItem
+            key={status}
+            onClick={() => handleStatusSelect(status)}
+            selected={params.value === status}
+          >
+            <StatusChip status={status} />
+          </MenuItem>
+        ))}
+      </Menu>
+    </Box>
+  );
+};
+
 // Main Projects component
 const Projects = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
+  const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
+    useJobStatus();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -204,7 +291,7 @@ const Projects = () => {
     name: "",
     client: "",
     type: PROJECT_TYPES[0],
-    status: STATUS_OPTIONS[0],
+    status: ACTIVE_STATUSES[0],
     address: "",
     startDate: "",
     endDate: "",
@@ -219,10 +306,33 @@ const Projects = () => {
     const fetchProjects = async () => {
       try {
         const response = await projectService.getAll();
-        const formattedProjects = response.data.map((project) => ({
-          id: project._id,
-          ...project,
-        }));
+        const formattedProjects = response.data.map((project) => {
+          // Ensure status is one of the allowed values
+          let status = project.status;
+          if (
+            ![
+              "Assigned",
+              "In progress",
+              "Samples submitted",
+              "Lab Analysis Complete",
+              "Report sent for review",
+              "Ready for invoicing",
+              "Invoice sent",
+              "Job complete",
+              "On hold",
+              "Quote sent",
+              "Cancelled",
+            ].includes(status)
+          ) {
+            status = "Assigned"; // Default to Assigned if status is invalid
+          }
+
+          return {
+            id: project._id,
+            ...project,
+            status: status,
+          };
+        });
         setProjects(formattedProjects);
         setLoading(false);
       } catch (err) {
@@ -249,6 +359,7 @@ const Projects = () => {
 
   const handleEditChange = (e) => {
     const { name, value } = e.target;
+    console.log("Form field changed:", name, value);
     setEditForm((prev) => ({
       ...prev,
       [name]: value,
@@ -258,6 +369,8 @@ const Projects = () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
+      console.log("Submitting form with data:", editForm);
+
       const formattedData = {
         ...editForm,
         startDate: editForm.startDate
@@ -268,15 +381,18 @@ const Projects = () => {
           : null,
       };
 
+      console.log("Sending update with data:", formattedData);
+
       const response = await projectService.update(
         selectedProject._id,
         formattedData
       );
 
       if (response.data) {
+        console.log("Update successful, response:", response.data);
         setProjects(
           projects.map((p) =>
-            p._id === selectedProject._id ? response.data : p
+            p._id === selectedProject._id ? { ...p, ...response.data } : p
           )
         );
         setDetailsDialogOpen(false);
@@ -284,6 +400,7 @@ const Projects = () => {
         throw new Error("No data received from server");
       }
     } catch (err) {
+      console.error("Error updating project:", err);
       if (err.response) {
         alert(
           `Error updating project: ${
@@ -323,13 +440,19 @@ const Projects = () => {
       field: "status",
       headerName: "Status",
       flex: 1,
-      valueGetter: (params) => {
-        const status = params;
-        return status
-          .split("_")
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(" ");
-      },
+      renderCell: (params) => (
+        <StatusCell
+          params={params}
+          onStatusChange={(projectId, newStatus) => {
+            setProjects((prevProjects) =>
+              prevProjects.map((p) =>
+                p._id === projectId ? { ...p, status: newStatus } : p
+              )
+            );
+          }}
+        />
+      ),
+      editable: false,
     },
     {
       field: "address",
@@ -395,7 +518,7 @@ const Projects = () => {
         name: "",
         client: "",
         type: PROJECT_TYPES[0],
-        status: STATUS_OPTIONS[0],
+        status: ACTIVE_STATUSES[0],
         address: "",
         startDate: "",
         endDate: "",
@@ -409,6 +532,56 @@ const Projects = () => {
             err.response.data.message || "Unknown error"
           }`
         );
+      }
+    }
+  };
+
+  const handleCellEditCommit = async (params) => {
+    if (params.field === "status") {
+      try {
+        console.log("Cell edit commit params:", params);
+
+        // Get the project ID from the row
+        const projectId = params.row._id;
+        if (!projectId) {
+          throw new Error("No project ID found in row data");
+        }
+
+        // Create update object with only the status field
+        const updateData = {
+          status: params.value,
+        };
+
+        console.log("Sending update to backend:", {
+          projectId,
+          updateData,
+        });
+
+        // Send update to backend
+        const response = await projectService.update(projectId, updateData);
+        console.log("Backend response:", response);
+
+        if (!response.data) {
+          throw new Error("No data received from server");
+        }
+
+        // Update local state
+        setProjects((prevProjects) => {
+          const updatedProjects = prevProjects.map((p) => {
+            if (p._id === projectId) {
+              console.log("Updating project in state:", {
+                before: p.status,
+                after: response.data.status,
+              });
+              return { ...p, status: response.data.status };
+            }
+            return p;
+          });
+          return updatedProjects;
+        });
+      } catch (error) {
+        console.error("Error in handleCellEditCommit:", error);
+        alert("Failed to update project status. Please try again.");
       }
     }
   };
@@ -459,13 +632,30 @@ const Projects = () => {
         <DataGrid
           rows={projects}
           columns={columns}
-          getRowId={(row) => row.id}
-          pageSize={10}
-          rowsPerPageOptions={[10]}
-          checkboxSelection
-          disableSelectionOnClick
-          loading={loading}
-          error={error}
+          components={{
+            Toolbar: GridToolbar,
+          }}
+          getRowId={(row) => row._id}
+          onCellEditCommit={handleCellEditCommit}
+          editMode="cell"
+          experimentalFeatures={{ newEditingApi: true }}
+          processRowUpdate={async (newRow, oldRow) => {
+            console.log("Processing row update:", { newRow, oldRow });
+            try {
+              const response = await projectService.update(newRow._id, {
+                status: newRow.status,
+              });
+              console.log("Update response:", response);
+              return response.data;
+            } catch (error) {
+              console.error("Error updating row:", error);
+              throw error;
+            }
+          }}
+          onProcessRowUpdateError={(error) => {
+            console.error("Error processing row update:", error);
+            alert("Failed to update project status. Please try again.");
+          }}
         />
       </Box>
 
@@ -519,24 +709,7 @@ const Projects = () => {
                 </FormControl>
                 <FormControl fullWidth required>
                   <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={editForm?.status || ""}
-                    onChange={handleEditChange}
-                    label="Status"
-                  >
-                    {STATUS_OPTIONS.map((status) => (
-                      <MenuItem key={status} value={status}>
-                        {status
-                          .split("_")
-                          .map(
-                            (word) =>
-                              word.charAt(0).toUpperCase() + word.slice(1)
-                          )
-                          .join(" ")}
-                      </MenuItem>
-                    ))}
-                  </Select>
+                  {renderStatusSelect(editForm?.status, handleEditChange)}
                 </FormControl>
                 <TextField
                   label="Address"
@@ -659,18 +832,7 @@ const Projects = () => {
               </FormControl>
               <FormControl fullWidth required>
                 <InputLabel>Status</InputLabel>
-                <Select
-                  name="status"
-                  value={form.status}
-                  onChange={handleChange}
-                  label="Status"
-                >
-                  {STATUS_OPTIONS.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status.replace("_", " ").toUpperCase()}
-                    </MenuItem>
-                  ))}
-                </Select>
+                {renderStatusSelect(form.status, handleChange)}
               </FormControl>
               <TextField
                 label="Address"
