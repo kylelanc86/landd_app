@@ -1,0 +1,123 @@
+const express = require('express');
+const router = express.Router();
+const User = require('../models/User');
+const auth = require('../middleware/auth');
+
+// Get all users
+router.get('/', auth, async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
+    console.log('Users from database:', users.map(u => ({ 
+      id: u._id, 
+      email: u.email, 
+      role: u.role,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      phone: u.phone 
+    })));
+    res.json(users);
+  } catch (err) {
+    console.error('Error fetching users:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get user by ID
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Create new user
+router.post('/', auth, async (req, res) => {
+  try {
+    const { firstName, lastName, email, password, role, phone } = req.body;
+
+    // Check if user already exists
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create new user
+    user = new User({
+      firstName,
+      lastName,
+      email,
+      password,
+      role: role || 'employee',
+      phone,
+      isActive: true
+    });
+
+    await user.save();
+
+    // Return user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.status(201).json(userResponse);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Update user
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { firstName, lastName, email, role, phone, isActive } = req.body;
+    console.log('Update request body:', req.body);
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update fields
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (email) user.email = email;
+    if (role) user.role = role;
+    // Always update phone field, even if it's an empty string
+    user.phone = phone || '';
+    if (typeof isActive === 'boolean') user.isActive = isActive;
+
+    console.log('User before save:', user.toObject());
+    await user.save();
+    console.log('User after save:', user.toObject());
+
+    // Return updated user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.json(userResponse);
+  } catch (err) {
+    console.error('Error updating user:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete user
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Instead of deleting, set isActive to false
+    user.isActive = false;
+    await user.save();
+
+    res.json({ message: 'User deactivated successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router; 
