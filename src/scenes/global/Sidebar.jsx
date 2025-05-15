@@ -24,6 +24,49 @@ import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 
+const getRandomColor = (user) => {
+  const colors = [
+    "#FF6B6B", // coral red
+    "#4ECDC4", // turquoise
+    "#45B7D1", // sky blue
+    "#96CEB4", // sage green
+    "#FFD93D", // golden yellow
+    "#FF8B94", // soft pink
+    "#6C5CE7", // purple
+    "#00B894", // mint green
+    "#FDCB6E", // amber
+    "#E17055", // terracotta
+    "#0984E3", // ocean blue
+    "#6C5CE7", // royal purple
+    "#00B894", // emerald
+    "#FDCB6E", // marigold
+    "#E17055", // rust
+    "#00CEC9", // teal
+    "#FF7675", // salmon
+    "#74B9FF", // light blue
+    "#A29BFE", // lavender
+    "#55EFC4", // mint
+  ];
+
+  let identifier = "";
+  if (user.firstName && user.lastName) {
+    identifier = `${user.firstName} ${user.lastName}`;
+  } else if (user.name) {
+    identifier = user.name;
+  } else if (user._id) {
+    identifier = user._id;
+  } else {
+    identifier = Math.random().toString();
+  }
+
+  const hash = identifier.split("").reduce((acc, char) => {
+    return char.charCodeAt(0) + ((acc << 5) - acc);
+  }, 0);
+
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
+
 const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
   const theme = useTheme();
   return (
@@ -128,7 +171,7 @@ const Sidebar = () => {
   const theme = useTheme();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selected, setSelected] = useState("Dashboard");
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -155,6 +198,23 @@ const Sidebar = () => {
       document.head.removeChild(style);
     };
   }, [theme.palette.mode]);
+
+  const getInitials = (user) => {
+    if (!user) return "?";
+    if (user.firstName && user.lastName) {
+      return `${user.firstName.charAt(0)}${user.lastName.charAt(
+        0
+      )}`.toUpperCase();
+    }
+    if (user.name) {
+      return user.name
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .toUpperCase();
+    }
+    return "?";
+  };
 
   return (
     <ProSidebar collapsed={isCollapsed}>
@@ -233,18 +293,23 @@ const Sidebar = () => {
         {!isCollapsed && (
           <Box mb="25px">
             <Box display="flex" justifyContent="center" alignItems="center">
-              <Avatar
+              <Box
                 sx={{
                   width: 100,
                   height: 100,
-                  bgcolor:
-                    theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32",
+                  borderRadius: "50%",
+                  backgroundColor: user ? getRandomColor(user) : "#757575",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
                   fontSize: "2.5rem",
                   fontWeight: "bold",
+                  boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
                 }}
               >
-                {currentUser ? currentUser.firstName.charAt(0) : "J"}
-              </Avatar>
+                {user ? getInitials(user) : "?"}
+              </Box>
             </Box>
             <Box textAlign="center">
               <Typography
@@ -253,15 +318,14 @@ const Sidebar = () => {
                 fontWeight="bold"
                 sx={{ m: "10px 0 0 0" }}
               >
-                {currentUser
-                  ? `${currentUser.firstName} ${currentUser.lastName}`
-                  : "John Smith"}
+                {user ? `${user.firstName} ${user.lastName}` : "Unknown User"}
               </Typography>
               <Typography
                 variant="h5"
                 color={theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32"}
+                sx={{ textTransform: "capitalize" }}
               >
-                {currentUser ? currentUser.userLevel : "Admin"}
+                {user ? user.role : "Guest"}
               </Typography>
             </Box>
           </Box>
