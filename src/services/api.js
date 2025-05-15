@@ -24,15 +24,14 @@ api.interceptors.request.use(
       return config;
     }
 
-    // Skip auth check for /me endpoint if no token
-    if (config.url === '/auth/me' && !localStorage.getItem('token')) {
-      return Promise.reject(new Error('No token available'));
+    const token = localStorage.getItem('token');
+    if (!token) {
+      // Don't reject the promise, just return the config without the token
+      // This allows the request to fail naturally with a 401
+      return config;
     }
 
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => {
@@ -48,11 +47,27 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem('currentUser');
-      // Only redirect if not already on login page
+      // For Xero-related endpoints, just reject the error without redirecting
+      if (error.config.url.includes('/xero/')) {
+        const errorMessage = error.response?.data?.message || 'Not connected to Xero';
+        console.log('Xero auth error:', errorMessage);
+        // Don't reject the promise, return a custom error response
+        return Promise.resolve({
+          data: {
+            error: 'XERO_AUTH_REQUIRED',
+            message: errorMessage,
+            connected: false
+          }
+        });
+      }
+      
+      // For other endpoints, clear auth data and redirect if not on login page
       if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+        console.log('Auth error, clearing session and redirecting to login');
+        localStorage.removeItem("token");
+        localStorage.removeItem('currentUser');
+        // Use replace instead of href to prevent back button issues
+        window.location.replace('/login');
       }
     }
     return Promise.reject(error);
@@ -143,6 +158,31 @@ export const userService = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`)
+};
+
+// Xero service
+export const xeroService = {
+  getAuthUrl: () => api.get('/xero/auth-url'),
+  handleCallback: (code) => api.get(`/xero/callback?code=${code}`),
+  getContacts: () => api.get('/xero/contacts'),
+  syncInvoices: async () => {
+    try {
+      const response = await api.post('/xero/sync-invoices');
+      return response;
+    } catch (error) {
+      if (error.response?.status === 401) {
+        return {
+          data: {
+            error: 'XERO_AUTH_REQUIRED',
+            message: 'Please connect to Xero first'
+          }
+        };
+      }
+      throw error;
+    }
+  },
+  checkStatus: () => api.get('/xero/status'),
+  disconnect: () => api.post('/xero/disconnect')
 };
 
 export default api; 

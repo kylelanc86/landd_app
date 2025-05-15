@@ -11,6 +11,7 @@ const jobRoutes = require('./routes/jobs');
 const sampleRoutes = require('./routes/samples');
 const invoiceRoutes = require('./routes/invoices');
 const usersRouter = require('./routes/users');
+const xeroRoutes = require('./routes/xero');
 
 // Load environment variables
 dotenv.config();
@@ -38,6 +39,7 @@ connectDB()
     app.use('/api/samples', sampleRoutes);
     app.use('/api/invoices', invoiceRoutes);
     app.use('/api/users', usersRouter);
+    app.use('/api/xero', xeroRoutes);
 
     // Error handling middleware
     app.use((err, req, res, next) => {

@@ -4,20 +4,32 @@ import { authService } from '../services/api';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    // Initialize user from localStorage if available
+    const storedUser = localStorage.getItem('currentUser');
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No token found in localStorage');
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await authService.getCurrentUser();
         console.log("Auth check response:", response);
         setUser(response.data);
       } catch (error) {
-        // Ignore "No token available" errors
-        if (error.message !== 'No token available') {
-          console.error('Auth check failed:', error);
-        }
+        console.error('Auth check failed:', error);
+        // Clear invalid token and user data
+        localStorage.removeItem('token');
+        localStorage.removeItem('currentUser');
+        setUser(null);
       } finally {
         setLoading(false);
       }

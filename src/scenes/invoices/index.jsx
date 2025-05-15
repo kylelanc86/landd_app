@@ -29,6 +29,8 @@ import {
   Switch,
   FormControlLabel,
   InputAdornment,
+  Alert,
+  Snackbar,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
@@ -40,11 +42,15 @@ import {
   invoiceService,
   projectService,
   clientService,
+  xeroService,
 } from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { formatDate, formatDateForInput } from "../../utils/dateFormat";
 import SearchIcon from "@mui/icons-material/Search";
+import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
+import { useAuth } from "../../context/AuthContext";
+import SyncIcon from "@mui/icons-material/Sync";
 
 const STATUS_OPTIONS = ["paid", "unpaid"];
 
@@ -64,6 +70,7 @@ const Invoices = () => {
   const colors = tokens;
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
@@ -81,8 +88,20 @@ const Invoices = () => {
   const [projectSearch, setProjectSearch] = useState("");
   const [showPaidInvoices, setShowPaidInvoices] = useState(false);
   const [search, setSearch] = useState("");
+  const [xeroConnected, setXeroConnected] = useState(false);
+  const [xeroError, setXeroError] = useState(null);
+  const [showXeroAlert, setShowXeroAlert] = useState(false);
 
   useEffect(() => {
+    // Don't fetch data if auth is still loading
+    if (authLoading) return;
+
+    // If no user after auth loading, redirect to login
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
     const fetchData = async () => {
       try {
         const [invoicesRes, projectsRes, clientsRes] = await Promise.all([
@@ -102,21 +121,74 @@ const Invoices = () => {
         setClients(clientsRes.data);
         setLoading(false);
       } catch (err) {
+        console.error("Error fetching data:", err);
         setError("Failed to fetch data");
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [user, authLoading, navigate]);
 
-  // Add this effect to handle URL parameters
+  // Add this effect to check Xero connection status
+  useEffect(() => {
+    // Don't check Xero connection if auth is still loading or no user
+    if (authLoading || !user) return;
+
+    const checkXeroConnection = async () => {
+      try {
+        // Try to get contacts as a way to verify connection
+        const response = await xeroService.getContacts();
+        if (response && response.data) {
+          setXeroConnected(true);
+          setXeroError(null);
+          console.log("Xero connection verified");
+        } else {
+          setXeroConnected(false);
+          setXeroError("No data received from Xero");
+          console.log("Xero connection not verified - no data received");
+        }
+      } catch (error) {
+        console.log("Xero not connected:", error);
+        setXeroConnected(false);
+
+        // Handle different types of errors
+        if (error.response?.status === 401) {
+          setXeroError("Not connected to Xero. Please connect to continue.");
+        } else {
+          setXeroError(
+            error.response?.data?.message || "Failed to verify Xero connection"
+          );
+        }
+
+        // Only show error alert for non-auth errors
+        if (error.response?.status !== 401) {
+          setShowXeroAlert(true);
+        }
+      }
+    };
+
+    checkXeroConnection();
+  }, [user, authLoading]);
+
+  // Update the URL parameters effect
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const statusParam = searchParams.get("status");
+    const xeroStatus = searchParams.get("xero_connected");
+    const xeroError = searchParams.get("xero_error");
 
     if (statusParam) {
       setFilterStatus(statusParam);
+    }
+
+    if (xeroStatus === "true") {
+      setXeroConnected(true);
+      setXeroError(null);
+      setShowXeroAlert(true);
+    } else if (xeroError) {
+      setXeroError(decodeURIComponent(xeroError));
+      setShowXeroAlert(true);
     }
   }, [location.search]);
 
@@ -471,27 +543,214 @@ const Invoices = () => {
     setDialogOpen(true);
   };
 
-  if (loading) return <Typography>Loading invoices...</Typography>;
-  if (error) return <Typography color="error">{error}</Typography>;
+  const handleConnectXero = async () => {
+    console.log("handleConnectXero called");
+    console.log("Current user:", user);
+    console.log("Token in localStorage:", localStorage.getItem("token"));
+
+    if (!user) {
+      console.log("No user found, redirecting to login");
+      setError("Please log in to connect to Xero");
+      alert("Please log in to connect to Xero");
+      navigate("/login");
+      return;
+    }
+
+    try {
+      console.log("Calling xeroService.getAuthUrl()");
+      const response = await xeroService.getAuthUrl();
+      console.log("Raw response from server:", response);
+
+      if (!response || !response.data) {
+        console.error("Invalid response format:", response);
+        throw new Error("Invalid response from server");
+      }
+
+      const { authUrl } = response.data;
+      console.log("Auth URL from server:", authUrl);
+
+      if (
+        !authUrl ||
+        typeof authUrl !== "string" ||
+        !authUrl.startsWith("http")
+      ) {
+        console.error("Invalid auth URL format:", authUrl);
+        throw new Error("Invalid auth URL received from server");
+      }
+
+      // Extract state from the auth URL
+      const urlParams = new URLSearchParams(authUrl.split("?")[1]);
+      const state = urlParams.get("state");
+
+      if (!state) {
+        console.error("No state parameter in auth URL");
+        throw new Error("Invalid auth URL: missing state parameter");
+      }
+
+      // Store the state in localStorage
+      localStorage.setItem("xero_state", state);
+      console.log("Stored Xero state:", state);
+
+      // Clear any existing Xero error
+      setXeroError(null);
+      setShowXeroAlert(false);
+
+      console.log("Redirecting to Xero auth URL:", authUrl);
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error("Error in handleConnectXero:", error);
+      console.error("Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      setXeroError(error.message || "Failed to connect to Xero");
+      setShowXeroAlert(true);
+    }
+  };
+
+  const handleSyncXero = async () => {
+    try {
+      console.log("Starting Xero sync...");
+      setXeroError(null);
+
+      const response = await xeroService.syncInvoices();
+      console.log("Sync response:", response);
+
+      // Refresh the invoices list
+      const invoicesRes = await invoiceService.getAll();
+      setInvoices(invoicesRes.data);
+
+      setXeroError(null);
+      setShowXeroAlert(true);
+    } catch (error) {
+      console.error("Error syncing with Xero:", error);
+      let errorMessage = "Failed to sync with Xero";
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      // If the error indicates we need to reconnect, update the connection state
+      if (
+        errorMessage.includes("reconnect") ||
+        errorMessage.includes("connect first")
+      ) {
+        setXeroConnected(false);
+      }
+
+      setXeroError(errorMessage);
+      setShowXeroAlert(true);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <Typography>Loading...</Typography>
+      </Box>
+    );
+  }
+
+  if (!user) {
+    return null; // Will be redirected by the useEffect
+  }
+
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <Typography>Loading invoices...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box m="20px">
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Header title="INVOICES" subtitle="Managing your invoices" />
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={handleOpenDialog}
-          sx={{
-            backgroundColor: colors.secondary[500],
-            "&:hover": {
-              backgroundColor: colors.secondary[600],
-            },
-          }}
-        >
-          Add Invoice
-        </Button>
+        <Box>
+          {!xeroConnected ? (
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleConnectXero}
+              sx={{
+                backgroundColor: colors.secondary[500],
+                "&:hover": {
+                  backgroundColor: colors.secondary[600],
+                },
+                mr: 2,
+              }}
+            >
+              <AccountBalanceIcon sx={{ mr: 1 }} />
+              Connect to Xero
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSyncXero}
+              sx={{
+                backgroundColor: colors.primary[500],
+                "&:hover": {
+                  backgroundColor: colors.primary[600],
+                },
+                mr: 2,
+              }}
+            >
+              <SyncIcon sx={{ mr: 1 }} />
+              Sync from Xero
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleOpenDialog}
+            sx={{
+              backgroundColor: colors.secondary[500],
+              "&:hover": {
+                backgroundColor: colors.secondary[600],
+              },
+            }}
+          >
+            Add Invoice
+          </Button>
+        </Box>
       </Box>
+
+      <Snackbar
+        open={showXeroAlert}
+        autoHideDuration={6000}
+        onClose={() => setShowXeroAlert(false)}
+      >
+        <Alert
+          onClose={() => setShowXeroAlert(false)}
+          severity={xeroError ? "error" : "success"}
+          sx={{ width: "100%" }}
+        >
+          {xeroError || "Successfully connected to Xero!"}
+        </Alert>
+      </Snackbar>
 
       {/* Search and Summary Section */}
       <Box

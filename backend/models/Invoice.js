@@ -37,6 +37,21 @@ const invoiceSchema = new mongoose.Schema({
   description: {
     type: String,
     required: false
+  },
+  // Xero integration fields
+  xeroInvoiceId: {
+    type: String
+  },
+  xeroContactId: {
+    type: String
+  },
+  xeroStatus: {
+    type: String,
+    enum: ['DRAFT', 'SUBMITTED', 'AUTHORISED', 'PAID', 'VOIDED'],
+    default: 'DRAFT'
+  },
+  lastSynced: {
+    type: Date
   }
 }, {
   timestamps: true
