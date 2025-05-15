@@ -20,6 +20,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
+import Header from "../../components/Header";
 
 const PROJECTS_KEY = "ldc_projects";
 
@@ -81,11 +82,45 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
   };
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: "auto", mt: 4 }}>
-      <Typography variant="h4" sx={{ mb: 2 }}>
-        Calendar
-      </Typography>
-      <Paper sx={{ p: 2 }}>
+    <Box m="20px">
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Header title="CALENDAR" subtitle="Manage your project schedule" />
+      </Box>
+      <Box
+        mt="20px"
+        height="75vh"
+        sx={{
+          "& .fc": {
+            backgroundColor: "background.paper",
+            borderRadius: "4px",
+            boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+          },
+          "& .fc-toolbar": {
+            padding: "16px",
+          },
+          "& .fc-toolbar-title": {
+            fontSize: "1.2rem !important",
+            fontWeight: "bold",
+          },
+          "& .fc-button": {
+            backgroundColor: "primary.main !important",
+            borderColor: "primary.main !important",
+            "&:hover": {
+              backgroundColor: "primary.dark !important",
+              borderColor: "primary.dark !important",
+            },
+          },
+          "& .fc-daygrid-day": {
+            borderColor: "divider",
+          },
+          "& .fc-event": {
+            cursor: "pointer",
+            "&:hover": {
+              opacity: 0.9,
+            },
+          },
+        }}
+      >
         <FullCalendar
           ref={calendarRef}
           plugins={[
@@ -115,12 +150,13 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           nowIndicator={true}
           slotMinTime="06:00:00"
           slotMaxTime="20:00:00"
-          height="auto"
+          height="100%"
           events={events}
           editable={true}
           dayMaxEvents={true}
         />
-      </Paper>
+      </Box>
+
       {/* Booking Dialog */}
       <Dialog
         open={bookingDialogOpen}

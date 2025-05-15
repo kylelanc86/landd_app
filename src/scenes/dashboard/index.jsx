@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { projectService, invoiceService } from "../../services/api";
 import { ACTIVE_STATUSES } from "../../components/JobStatus";
+import Header from "../../components/Header";
 
 const Dashboard = () => {
   const theme = useTheme();
@@ -116,64 +117,6 @@ const Dashboard = () => {
     navigate(`${item.path}?${queryParams}`);
   };
 
-  const StatCard = ({ title, value, icon, bgColor, item }) => (
-    <Card
-      key={title}
-      sx={{
-        p: 2,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        cursor: "pointer",
-        backgroundColor: bgColor,
-        "&:hover": {
-          opacity: 0.9,
-        },
-      }}
-      onClick={() => handleCardClick(item)}
-    >
-      <CardContent>
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={2}
-        >
-          <Box
-            sx={{
-              backgroundColor: bgColor,
-              borderRadius: "8px",
-              p: 1,
-              color: theme.palette.mode === "dark" ? "white" : "black",
-              opacity: 0.8,
-            }}
-          >
-            {icon}
-          </Box>
-          <Typography
-            variant="h4"
-            sx={{
-              color: theme.palette.mode === "dark" ? "white" : "black",
-              fontWeight: "bold",
-            }}
-          >
-            {value}
-          </Typography>
-        </Box>
-        <Typography
-          variant="h6"
-          sx={{
-            color: theme.palette.mode === "dark" ? "white" : "black",
-            fontSize: "0.9rem",
-            opacity: 0.9,
-          }}
-        >
-          {title}
-        </Typography>
-      </CardContent>
-    </Card>
-  );
-
   if (loading) {
     return (
       <Box
@@ -190,23 +133,80 @@ const Dashboard = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      <Typography variant="h4" sx={{ mb: 4 }}>
-        Dashboard
-      </Typography>
-      <Grid container spacing={3}>
+    <Box m="20px">
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Header title="DASHBOARD" subtitle="Welcome to your dashboard" />
+      </Box>
+      <Box
+        mt="20px"
+        display="grid"
+        gridTemplateColumns="repeat(12, 1fr)"
+        gridAutoRows="140px"
+        gap="20px"
+      >
         {gridItems.map((item, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <StatCard
-              title={item.title}
-              value={item.value}
-              icon={item.icon}
-              bgColor={item.bgColor}
-              item={item}
-            />
-          </Grid>
+          <Box
+            gridColumn="span 3"
+            gridRow="span 1"
+            key={index}
+            sx={{
+              backgroundColor: item.bgColor,
+              borderRadius: "4px",
+              boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
+              cursor: "pointer",
+              "&:hover": {
+                opacity: 0.9,
+                transform: "translateY(-2px)",
+                transition: "all 0.3s ease",
+              },
+            }}
+            onClick={() => handleCardClick(item)}
+          >
+            <Box
+              p="20px"
+              display="flex"
+              flexDirection="column"
+              justifyContent="space-between"
+              height="100%"
+            >
+              <Box
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+              >
+                <Box
+                  sx={{
+                    backgroundColor: "rgba(255, 255, 255, 0.2)",
+                    borderRadius: "8px",
+                    p: 1,
+                  }}
+                >
+                  {item.icon}
+                </Box>
+                <Typography
+                  variant="h4"
+                  sx={{
+                    color: "white",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {item.value}
+                </Typography>
+              </Box>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: "white",
+                  fontSize: "0.9rem",
+                  opacity: 0.9,
+                }}
+              >
+                {item.title}
+              </Typography>
+            </Box>
+          </Box>
         ))}
-      </Grid>
+      </Box>
     </Box>
   );
 };

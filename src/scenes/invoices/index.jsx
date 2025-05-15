@@ -32,7 +32,11 @@ import PrintIcon from "@mui/icons-material/Print";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import autoTable from "jspdf-autotable";
 import { useLocation, useNavigate } from "react-router-dom";
-import { invoiceService } from "../../services/api";
+import {
+  invoiceService,
+  projectService,
+  clientService,
+} from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { formatDate, formatDateForInput } from "../../utils/dateFormat";
@@ -56,6 +60,8 @@ const Invoices = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -66,25 +72,34 @@ const Invoices = () => {
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [dueDateManuallyChanged, setDueDateManuallyChanged] = useState(false);
 
   useEffect(() => {
-    const fetchInvoices = async () => {
+    const fetchData = async () => {
       try {
-        const response = await invoiceService.getAll();
-        if (!Array.isArray(response.data)) {
+        const [invoicesRes, projectsRes, clientsRes] = await Promise.all([
+          invoiceService.getAll(),
+          projectService.getAll(),
+          clientService.getAll(),
+        ]);
+
+        if (!Array.isArray(invoicesRes.data)) {
           setError("Invalid data format received from server");
           setLoading(false);
           return;
         }
-        setInvoices(response.data);
+
+        setInvoices(invoicesRes.data);
+        setProjects(projectsRes.data);
+        setClients(clientsRes.data);
         setLoading(false);
       } catch (err) {
-        setError("Failed to fetch invoices");
+        setError("Failed to fetch data");
         setLoading(false);
       }
     };
 
-    fetchInvoices();
+    fetchData();
   }, []);
 
   // Add this effect to handle URL parameters
@@ -96,6 +111,18 @@ const Invoices = () => {
       setFilterStatus(statusParam);
     }
   }, [location.search]);
+
+  // When invoice date changes, auto-set due date if not manually changed
+  useEffect(() => {
+    if (form.date && !dueDateManuallyChanged) {
+      const dateObj = new Date(form.date);
+      dateObj.setDate(dateObj.getDate() + 30);
+      setForm((prev) => ({
+        ...prev,
+        dueDate: dateObj.toISOString().split("T")[0], // format as yyyy-mm-dd for input
+      }));
+    }
+  }, [form.date, dueDateManuallyChanged]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -113,13 +140,18 @@ const Invoices = () => {
         ...form,
         date: form.date ? new Date(form.date).toISOString() : null,
         dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
+        amount: parseFloat(form.amount), // Ensure amount is a number
+        project: form.project, // This is already the ID from the Select
+        client: form.client, // This is already the ID from the Select
       };
+      console.log("Sending invoice data:", formattedForm);
       const response = await invoiceService.create(formattedForm);
       setInvoices([response.data, ...invoices]);
       setForm(emptyForm);
       setDialogOpen(false);
     } catch (err) {
       console.error("Error creating invoice:", err);
+      // Add error handling UI feedback here
     }
   };
 
@@ -145,7 +177,11 @@ const Invoices = () => {
         dueDate: editForm.dueDate
           ? new Date(editForm.dueDate).toISOString()
           : null,
+        amount: parseFloat(editForm.amount), // Ensure amount is a number
+        project: editForm.project, // This is already the ID from the Select
+        client: editForm.client, // This is already the ID from the Select
       };
+      console.log("Sending updated invoice data:", formattedForm);
       const response = await invoiceService.update(editId, formattedForm);
       setInvoices(
         invoices.map((inv) => (inv._id === editId ? response.data : inv))
@@ -155,6 +191,7 @@ const Invoices = () => {
       setEditForm(emptyForm);
     } catch (err) {
       console.error("Error updating invoice:", err);
+      // Add error handling UI feedback here
     }
   };
 
@@ -383,6 +420,21 @@ const Invoices = () => {
     }));
   }, [invoices]);
 
+  const handleDueDateChange = (e) => {
+    setDueDateManuallyChanged(true);
+    setForm((prev) => ({
+      ...prev,
+      dueDate: e.target.value,
+    }));
+  };
+
+  // When opening the dialog, reset manual change flag
+  const handleOpenDialog = () => {
+    setForm(emptyForm);
+    setDueDateManuallyChanged(false);
+    setDialogOpen(true);
+  };
+
   if (loading) return <Typography>Loading invoices...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -393,7 +445,7 @@ const Invoices = () => {
         <Button
           variant="contained"
           color="secondary"
-          onClick={() => setDialogOpen(true)}
+          onClick={handleOpenDialog}
           sx={{
             backgroundColor: colors.secondary[500],
             "&:hover": {
@@ -464,22 +516,38 @@ const Invoices = () => {
                 required
                 sx={{ flex: 1 }}
               />
-              <TextField
-                label="Project"
-                name="project"
-                value={form.project}
-                onChange={handleChange}
-                required
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Client"
-                name="client"
-                value={form.client}
-                onChange={handleChange}
-                required
-                sx={{ flex: 1 }}
-              />
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel>Project</InputLabel>
+                <Select
+                  label="Project"
+                  name="project"
+                  value={form.project}
+                  onChange={handleChange}
+                  required
+                >
+                  {projects.map((project) => (
+                    <MenuItem key={project._id} value={project._id}>
+                      {project.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel>Client</InputLabel>
+                <Select
+                  label="Client"
+                  name="client"
+                  value={form.client}
+                  onChange={handleChange}
+                  required
+                >
+                  {clients.map((client) => (
+                    <MenuItem key={client._id} value={client._id}>
+                      {client.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Stack>
             <Stack direction="row" spacing={2}>
               <TextField
@@ -505,7 +573,7 @@ const Invoices = () => {
                 label="Due Date"
                 name="dueDate"
                 value={form.dueDate}
-                onChange={handleChange}
+                onChange={handleDueDateChange}
                 type="date"
                 InputLabelProps={{ shrink: true }}
                 required
@@ -568,22 +636,38 @@ const Invoices = () => {
                 required
                 sx={{ flex: 1 }}
               />
-              <TextField
-                label="Project"
-                name="project"
-                value={editForm.project}
-                onChange={handleEditChange}
-                required
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Client"
-                name="client"
-                value={editForm.client}
-                onChange={handleEditChange}
-                required
-                sx={{ flex: 1 }}
-              />
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel>Project</InputLabel>
+                <Select
+                  label="Project"
+                  name="project"
+                  value={editForm.project}
+                  onChange={handleEditChange}
+                  required
+                >
+                  {projects.map((project) => (
+                    <MenuItem key={project._id} value={project._id}>
+                      {project.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel>Client</InputLabel>
+                <Select
+                  label="Client"
+                  name="client"
+                  value={editForm.client}
+                  onChange={handleEditChange}
+                  required
+                >
+                  {clients.map((client) => (
+                    <MenuItem key={client._id} value={client._id}>
+                      {client.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Stack>
             <Stack direction="row" spacing={2}>
               <TextField

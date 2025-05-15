@@ -89,7 +89,15 @@ export const projectService = {
   getAll: () => api.get('/projects'),
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
-  update: (id, data) => api.patch(`/projects/${id}`, data),
+  update: (id, data) => {
+    // Ensure users is included in the update
+    const updateData = {
+      ...data,
+      users: Array.isArray(data.users) ? data.users : []
+    };
+    console.log('Project service update data:', updateData);
+    return api.patch(`/projects/${id}`, updateData);
+  },
   delete: (id) => api.delete(`/projects/${id}`)
 };
 
@@ -126,6 +134,15 @@ export const invoiceService = {
   create: (data) => api.post('/invoices', data),
   update: (id, data) => api.put(`/invoices/${id}`, data),
   delete: (id) => api.delete(`/invoices/${id}`)
+};
+
+// User service
+export const userService = {
+  getAll: () => api.get('/users'),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`)
 };
 
 export default api; 
