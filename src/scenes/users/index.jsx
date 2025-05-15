@@ -25,14 +25,17 @@ import {
   TableSortLabel,
   Chip,
   alpha,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { USER_LEVELS, fakeUsers } from "../../data/userData";
+import { USER_LEVELS } from "../../data/userData";
 import Header from "../../components/Header";
 import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
 import { useTheme } from "@mui/material/styles";
+import { userService } from "../../services/api";
 
 const USERS_KEY = "ldc_users";
 
@@ -41,7 +44,7 @@ const emptyForm = {
   lastName: "",
   email: "",
   phone: "",
-  userLevel: USER_LEVELS[2], // Default to employee
+  role: "employee",
   isActive: true,
 };
 
@@ -60,54 +63,24 @@ const Users = () => {
   const theme = useTheme();
   const colors = tokens;
 
-  // Load users from localStorage on mount
+  // Fetch users from the API on mount
   useEffect(() => {
-    const loadUsers = () => {
+    const fetchUsers = async () => {
       try {
-        const stored = localStorage.getItem(USERS_KEY);
-        if (stored) {
-          const parsedUsers = JSON.parse(stored);
-          if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
-            setUsers(parsedUsers);
-          } else {
-            // Only initialize with fakeUsers if there's no valid data
-            const initialUsers = fakeUsers.map((user) => ({
-              ...user,
-              isActive: true, // Ensure initial state is set
-            }));
-            setUsers(initialUsers);
-            localStorage.setItem(USERS_KEY, JSON.stringify(initialUsers));
-          }
-        } else {
-          // Only initialize with fakeUsers if there's no stored data
-          const initialUsers = fakeUsers.map((user) => ({
-            ...user,
-            isActive: true, // Ensure initial state is set
-          }));
-          setUsers(initialUsers);
-          localStorage.setItem(USERS_KEY, JSON.stringify(initialUsers));
-        }
-      } catch (error) {
-        console.error("Error loading users:", error);
-        // Only use fakeUsers as fallback if there's an error
-        const initialUsers = fakeUsers.map((user) => ({
+        const response = await userService.getAll();
+        console.log("Users data from API:", response.data);
+        // Transform the data to ensure role is properly set
+        const transformedUsers = response.data.map((user) => ({
           ...user,
-          isActive: true, // Ensure initial state is set
+          role: user.role || "employee",
         }));
-        setUsers(initialUsers);
-        localStorage.setItem(USERS_KEY, JSON.stringify(initialUsers));
+        setUsers(transformedUsers);
+      } catch (error) {
+        console.error("Error fetching users:", error);
       }
     };
-
-    loadUsers();
+    fetchUsers();
   }, []);
-
-  // Save users to localStorage whenever they change
-  useEffect(() => {
-    if (users.length > 0) {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    }
-  }, [users]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -117,50 +90,70 @@ const Users = () => {
     setEditForm({ ...editForm, [e.target.name]: e.target.value });
   };
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim())
       return;
-    const newUser = {
-      id: Date.now(),
-      userID: `${form.firstName.charAt(0)}${form.lastName.charAt(0)}${String(
-        Date.now()
-      ).slice(-3)}`,
-      ...form,
-      isActive: true, // Explicitly set isActive to true for new users
-    };
-    const updatedUsers = [newUser, ...users];
-    setUsers(updatedUsers);
-    localStorage.setItem(USERS_KEY, JSON.stringify(updatedUsers));
-    setForm(emptyForm);
-    setDialogOpen(false);
+
+    try {
+      const userData = {
+        ...form,
+        password: "defaultPassword123", // You might want to implement a proper password setup
+        phone: form.phone.trim() || "", // Ensure phone is included and trimmed
+      };
+      console.log("Creating user with data:", userData);
+      const response = await userService.create(userData);
+      setUsers([response.data, ...users]);
+      setForm(emptyForm);
+      setDialogOpen(false);
+    } catch (error) {
+      console.error("Error adding user:", error);
+    }
   };
 
   const handleEditUser = (user) => {
-    setEditId(user.id);
-    setEditForm({ ...user });
+    console.log("Editing user:", user);
+    setEditId(user._id);
+    setEditForm({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      role: user.role || "employee",
+      isActive: user.isActive,
+    });
     setEditDialogOpen(true);
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
-    const updatedUsers = users.map((u) =>
-      u.id === editId ? { ...u, ...editForm, isActive: u.isActive } : u
-    );
-    setUsers(updatedUsers);
-    localStorage.setItem(USERS_KEY, JSON.stringify(updatedUsers));
-    setEditDialogOpen(false);
-    setEditId(null);
-    setEditForm(emptyForm);
+    try {
+      const updateData = {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        email: editForm.email,
+        phone: editForm.phone.trim() || "",
+        role: editForm.role,
+        isActive: editForm.isActive,
+      };
+      console.log("Updating user with data:", updateData);
+      const response = await userService.update(editId, updateData);
+      setUsers(users.map((u) => (u._id === editId ? response.data : u)));
+      setEditDialogOpen(false);
+      setEditId(null);
+      setEditForm(emptyForm);
+    } catch (error) {
+      console.error("Error updating user:", error);
+    }
   };
 
   const handleStatusChange = (userId, newStatus) => {
     // Check if trying to deactivate the last admin
     if (!newStatus) {
-      const userToDeactivate = users.find((u) => u.id === userId);
-      if (userToDeactivate.userLevel === "admin") {
+      const userToDeactivate = users.find((u) => u._id === userId);
+      if (userToDeactivate.role === "admin") {
         const activeAdmins = users.filter(
-          (u) => u.isActive && u.userLevel === "admin"
+          (u) => u.isActive && u.role === "admin"
         );
         if (activeAdmins.length <= 1) {
           setStatusDialogOpen(true);
@@ -175,14 +168,13 @@ const Users = () => {
     setStatusDialogOpen(true);
   };
 
-  const confirmStatusChange = () => {
-    const userToDeactivate = users.find((u) => u.id === statusChangeId);
-    if (!statusChangeType && userToDeactivate.userLevel === "admin") {
+  const confirmStatusChange = async () => {
+    const userToDeactivate = users.find((u) => u._id === statusChangeId);
+    if (!statusChangeType && userToDeactivate.role === "admin") {
       const activeAdmins = users.filter(
-        (u) => u.isActive && u.userLevel === "admin"
+        (u) => u.isActive && u.role === "admin"
       );
       if (activeAdmins.length <= 1) {
-        // Show error dialog instead of proceeding
         setStatusDialogOpen(false);
         setStatusChangeId(null);
         setStatusChangeType(null);
@@ -190,14 +182,19 @@ const Users = () => {
       }
     }
 
-    const updatedUsers = users.map((u) =>
-      u.id === statusChangeId ? { ...u, isActive: statusChangeType } : u
-    );
-    setUsers(updatedUsers);
-    localStorage.setItem(USERS_KEY, JSON.stringify(updatedUsers));
-    setStatusDialogOpen(false);
-    setStatusChangeId(null);
-    setStatusChangeType(null);
+    try {
+      const response = await userService.update(statusChangeId, {
+        isActive: statusChangeType,
+      });
+      setUsers(
+        users.map((u) => (u._id === statusChangeId ? response.data : u))
+      );
+      setStatusDialogOpen(false);
+      setStatusChangeId(null);
+      setStatusChangeType(null);
+    } catch (error) {
+      console.error("Error updating user status:", error);
+    }
   };
 
   // Sorting
@@ -219,12 +216,32 @@ const Users = () => {
   });
 
   const columns = [
-    { field: "userID", headerName: "User ID", flex: 1 },
     { field: "firstName", headerName: "First Name", flex: 1 },
     { field: "lastName", headerName: "Last Name", flex: 1 },
     { field: "email", headerName: "Email", flex: 1 },
     { field: "phone", headerName: "Phone", flex: 1 },
-    { field: "userLevel", headerName: "User Level", flex: 1 },
+    {
+      field: "role",
+      headerName: "User Level",
+      flex: 1,
+      renderCell: (params) => {
+        const role = params.row.role || "employee";
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              height: "100%",
+              width: "100%",
+            }}
+          >
+            <Typography>
+              {role.charAt(0).toUpperCase() + role.slice(1)}
+            </Typography>
+          </Box>
+        );
+      },
+    },
     {
       field: "isActive",
       headerName: "Status",
@@ -248,7 +265,7 @@ const Users = () => {
           </IconButton>
           <IconButton
             onClick={() =>
-              handleStatusChange(params.row.id, !params.row.isActive)
+              handleStatusChange(params.row._id, !params.row.isActive)
             }
           >
             <DeleteIcon />
@@ -257,6 +274,52 @@ const Users = () => {
       ),
       sortable: false,
       filterable: false,
+    },
+  ];
+
+  const inactiveColumns = [
+    { field: "firstName", headerName: "First Name", flex: 1 },
+    { field: "lastName", headerName: "Last Name", flex: 1 },
+    { field: "email", headerName: "Email", flex: 1 },
+    { field: "phone", headerName: "Phone", flex: 1 },
+    {
+      field: "role",
+      headerName: "User Level",
+      flex: 1,
+      renderCell: (params) => {
+        const role = params.row.role || "employee";
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              height: "100%",
+              width: "100%",
+            }}
+          >
+            <Typography>
+              {role.charAt(0).toUpperCase() + role.slice(1)}
+            </Typography>
+          </Box>
+        );
+      },
+    },
+    {
+      field: "reactivate",
+      headerName: "Reactivate",
+      flex: 1,
+      renderCell: (params) => (
+        <FormControlLabel
+          control={
+            <Switch
+              checked={false}
+              onChange={() => handleStatusChange(params.row._id, true)}
+              color="primary"
+            />
+          }
+          label="Reactivate"
+        />
+      ),
     },
   ];
 
@@ -276,37 +339,81 @@ const Users = () => {
           Add User
         </Button>
       </Box>
-      <Box
-        m="40px 0 0 0"
-        height="75vh"
-        sx={{
-          "& .MuiDataGrid-root": { border: "none" },
-          "& .MuiDataGrid-cell": { borderBottom: "none" },
-          "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.dark,
-            borderBottom: "none",
-          },
-          "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: theme.palette.background.default,
-          },
-          "& .MuiDataGrid-footerContainer": {
-            borderTop: "none",
-            backgroundColor: theme.palette.primary.dark,
-          },
-          "& .MuiCheckbox-root": {
-            color: `${theme.palette.secondary.main} !important`,
-          },
-        }}
-      >
-        <DataGrid
-          rows={users}
-          columns={columns}
-          getRowId={(row) => row.id}
-          pageSize={10}
-          rowsPerPageOptions={[10]}
-          autoHeight
-          disableSelectionOnClick
-        />
+
+      {/* Active Users Table */}
+      <Box mt="20px">
+        <Typography variant="h5" mb="10px" color={colors.grey[100]}>
+          Active Users
+        </Typography>
+        <Box
+          height="40vh"
+          sx={{
+            "& .MuiDataGrid-root": { border: "none" },
+            "& .MuiDataGrid-cell": { borderBottom: "none" },
+            "& .MuiDataGrid-columnHeaders": {
+              backgroundColor: theme.palette.primary.dark,
+              borderBottom: "none",
+            },
+            "& .MuiDataGrid-virtualScroller": {
+              backgroundColor: theme.palette.background.default,
+            },
+            "& .MuiDataGrid-footerContainer": {
+              borderTop: "none",
+              backgroundColor: theme.palette.primary.dark,
+            },
+            "& .MuiCheckbox-root": {
+              color: `${theme.palette.secondary.main} !important`,
+            },
+          }}
+        >
+          <DataGrid
+            rows={users.filter((user) => user.isActive)}
+            columns={columns}
+            getRowId={(row) => row._id}
+            pageSize={5}
+            rowsPerPageOptions={[5]}
+            autoHeight
+            disableSelectionOnClick
+          />
+        </Box>
+      </Box>
+
+      {/* Inactive Users Table */}
+      <Box mt="40px">
+        <Typography variant="h5" mb="10px" color={colors.grey[100]}>
+          Inactive Users
+        </Typography>
+        <Box
+          height="30vh"
+          sx={{
+            "& .MuiDataGrid-root": { border: "none" },
+            "& .MuiDataGrid-cell": { borderBottom: "none" },
+            "& .MuiDataGrid-columnHeaders": {
+              backgroundColor: theme.palette.primary.dark,
+              borderBottom: "none",
+            },
+            "& .MuiDataGrid-virtualScroller": {
+              backgroundColor: theme.palette.background.default,
+            },
+            "& .MuiDataGrid-footerContainer": {
+              borderTop: "none",
+              backgroundColor: theme.palette.primary.dark,
+            },
+            "& .MuiCheckbox-root": {
+              color: `${theme.palette.secondary.main} !important`,
+            },
+          }}
+        >
+          <DataGrid
+            rows={users.filter((user) => !user.isActive)}
+            columns={inactiveColumns}
+            getRowId={(row) => row._id}
+            pageSize={5}
+            rowsPerPageOptions={[5]}
+            autoHeight
+            disableSelectionOnClick
+          />
+        </Box>
       </Box>
 
       {/* Add User Dialog */}
@@ -359,8 +466,8 @@ const Users = () => {
               <InputLabel>User Level</InputLabel>
               <Select
                 label="User Level"
-                name="userLevel"
-                value={form.userLevel}
+                name="role"
+                value={form.role}
                 onChange={handleChange}
               >
                 {USER_LEVELS.map((level) => (
@@ -423,26 +530,41 @@ const Users = () => {
               <TextField
                 label="Phone"
                 name="phone"
-                value={editForm.phone}
+                value={editForm.phone || ""}
                 onChange={handleEditChange}
                 sx={{ flex: 1 }}
               />
             </Stack>
-            <FormControl fullWidth>
-              <InputLabel>User Level</InputLabel>
-              <Select
-                label="User Level"
-                name="userLevel"
-                value={editForm.userLevel}
-                onChange={handleEditChange}
-              >
-                {USER_LEVELS.map((level) => (
-                  <MenuItem key={level} value={level}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+              <FormControl fullWidth>
+                <InputLabel>User Level</InputLabel>
+                <Select
+                  label="User Level"
+                  name="role"
+                  value={editForm.role}
+                  onChange={handleEditChange}
+                >
+                  {USER_LEVELS.map((level) => (
+                    <MenuItem key={level} value={level}>
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={editForm.isActive}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, isActive: e.target.checked })
+                    }
+                    color="primary"
+                  />
+                }
+                label="Active"
+                sx={{ minWidth: "120px" }}
+              />
+            </Stack>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEditDialogOpen(false)} color="secondary">
@@ -467,10 +589,9 @@ const Users = () => {
           <DialogContentText>
             {statusChangeType
               ? "Are you sure you want to restore this user? They will regain access to the system."
-              : users.find((u) => u.id === statusChangeId)?.userLevel ===
-                  "admin" &&
-                users.filter((u) => u.isActive && u.userLevel === "admin")
-                  .length <= 1
+              : users.find((u) => u._id === statusChangeId)?.role === "admin" &&
+                users.filter((u) => u.isActive && u.role === "admin").length <=
+                  1
               ? "Cannot deactivate the last active admin user. Please ensure another admin user is active before deactivating this user."
               : "Are you sure you want to deactivate this user? They will lose access to the system but can be restored later."}
           </DialogContentText>
@@ -480,9 +601,8 @@ const Users = () => {
             Cancel
           </Button>
           {!(
-            users.find((u) => u.id === statusChangeId)?.userLevel === "admin" &&
-            users.filter((u) => u.isActive && u.userLevel === "admin").length <=
-              1
+            users.find((u) => u._id === statusChangeId)?.role === "admin" &&
+            users.filter((u) => u.isActive && u.role === "admin").length <= 1
           ) && (
             <Button
               onClick={confirmStatusChange}
