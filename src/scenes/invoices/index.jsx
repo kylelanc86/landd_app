@@ -25,6 +25,10 @@ import {
   TableSortLabel,
   Chip,
   useTheme,
+  Autocomplete,
+  Switch,
+  FormControlLabel,
+  InputAdornment,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
@@ -40,12 +44,13 @@ import {
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { formatDate, formatDateForInput } from "../../utils/dateFormat";
+import SearchIcon from "@mui/icons-material/Search";
 
 const STATUS_OPTIONS = ["paid", "unpaid"];
 
 const emptyForm = {
   invoiceID: "",
-  project: "",
+  projectID: "",
   client: "",
   amount: "",
   status: "unpaid",
@@ -73,6 +78,9 @@ const Invoices = () => {
   const [sortDir, setSortDir] = useState("desc");
   const [filterStatus, setFilterStatus] = useState("All");
   const [dueDateManuallyChanged, setDueDateManuallyChanged] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [showPaidInvoices, setShowPaidInvoices] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -132,17 +140,33 @@ const Invoices = () => {
     setEditForm({ ...editForm, [e.target.name]: e.target.value });
   };
 
+  // Filter projects based on search text
+  const filteredProjects = useCallback(() => {
+    if (!projectSearch) return projects;
+    return projects.filter(
+      (project) =>
+        project.projectID
+          ?.toLowerCase()
+          .includes(projectSearch.toLowerCase()) ||
+        project.name?.toLowerCase().includes(projectSearch.toLowerCase())
+    );
+  }, [projects, projectSearch]);
+
   const handleAddInvoice = async (e) => {
     e.preventDefault();
     try {
-      // Format dates before sending to API
+      // Find the project object that matches the projectID
+      const selectedProject = projects.find(
+        (p) => p.projectID === form.projectID
+      );
+
       const formattedForm = {
         ...form,
         date: form.date ? new Date(form.date).toISOString() : null,
         dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
-        amount: parseFloat(form.amount), // Ensure amount is a number
-        project: form.project, // This is already the ID from the Select
-        client: form.client, // This is already the ID from the Select
+        amount: parseFloat(form.amount),
+        project: selectedProject?._id || form.projectID, // Use project _id if found, otherwise use projectID
+        client: form.client,
       };
       console.log("Sending invoice data:", formattedForm);
       const response = await invoiceService.create(formattedForm);
@@ -151,7 +175,6 @@ const Invoices = () => {
       setDialogOpen(false);
     } catch (err) {
       console.error("Error creating invoice:", err);
-      // Add error handling UI feedback here
     }
   };
 
@@ -170,16 +193,20 @@ const Invoices = () => {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     try {
-      // Format dates before sending to API
+      // Find the project object that matches the projectID
+      const selectedProject = projects.find(
+        (p) => p.projectID === editForm.projectID
+      );
+
       const formattedForm = {
         ...editForm,
         date: editForm.date ? new Date(editForm.date).toISOString() : null,
         dueDate: editForm.dueDate
           ? new Date(editForm.dueDate).toISOString()
           : null,
-        amount: parseFloat(editForm.amount), // Ensure amount is a number
-        project: editForm.project, // This is already the ID from the Select
-        client: editForm.client, // This is already the ID from the Select
+        amount: parseFloat(editForm.amount),
+        project: selectedProject?._id || editForm.projectID, // Use project _id if found, otherwise use projectID
+        client: editForm.client,
       };
       console.log("Sending updated invoice data:", formattedForm);
       const response = await invoiceService.update(editId, formattedForm);
@@ -191,7 +218,6 @@ const Invoices = () => {
       setEditForm(emptyForm);
     } catch (err) {
       console.error("Error updating invoice:", err);
-      // Add error handling UI feedback here
     }
   };
 
@@ -208,7 +234,26 @@ const Invoices = () => {
   const getFilteredInvoices = useCallback(() => {
     let filtered = [...invoices];
 
-    // Apply status filter
+    // Apply search filter
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter((invoice) => {
+        return (
+          invoice.invoiceID?.toLowerCase().includes(searchLower) ||
+          invoice.client?.name?.toLowerCase().includes(searchLower) ||
+          invoice.projectID?.toLowerCase().includes(searchLower) ||
+          invoice.amount?.toString().includes(search) ||
+          invoice.status?.toLowerCase().includes(searchLower)
+        );
+      });
+    }
+
+    // Filter by paid/unpaid status
+    if (!showPaidInvoices) {
+      filtered = filtered.filter((invoice) => invoice.status === "unpaid");
+    }
+
+    // Apply status filter from URL if present
     if (filterStatus && filterStatus !== "All") {
       filtered = filtered.filter((invoice) => invoice.status === filterStatus);
     }
@@ -227,7 +272,7 @@ const Invoices = () => {
     });
 
     return sorted;
-  }, [invoices, filterStatus, sortBy, sortDir]);
+  }, [invoices, filterStatus, sortBy, sortDir, showPaidInvoices, search]);
 
   // Sum of unpaid invoice amounts
   const totalUnpaid = invoices
@@ -277,15 +322,6 @@ const Invoices = () => {
       headerName: "Invoice ID",
       flex: 1,
       valueGetter: (params) => params || "N/A",
-    },
-    {
-      field: "project",
-      headerName: "Project",
-      flex: 1,
-      valueGetter: (params) => {
-        const project = params?.row?.project || params;
-        return project?.name || "N/A";
-      },
     },
     {
       field: "client",
@@ -411,7 +447,7 @@ const Invoices = () => {
       ...invoice,
       _id: invoice._id,
       invoiceID: invoice.invoiceID,
-      project: invoice.project,
+      projectID: invoice.projectID,
       client: invoice.client,
       amount: invoice.amount,
       status: invoice.status,
@@ -456,6 +492,70 @@ const Invoices = () => {
           Add Invoice
         </Button>
       </Box>
+
+      {/* Search and Summary Section */}
+      <Box
+        sx={{
+          backgroundColor: colors.primary[600],
+          p: 2,
+          borderRadius: 1,
+          mt: 2,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6" color="white">
+            Outstanding Invoices: ${totalUnpaid}
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showPaidInvoices}
+                onChange={(e) => setShowPaidInvoices(e.target.checked)}
+                color="secondary"
+              />
+            }
+            label="Show Paid Invoices"
+            sx={{ color: "white" }}
+          />
+        </Box>
+
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search invoices..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{
+            backgroundColor: colors.primary[400],
+            borderRadius: 1,
+            "& .MuiOutlinedInput-root": {
+              "& fieldset": {
+                borderColor: colors.primary[300],
+              },
+              "&:hover fieldset": {
+                borderColor: colors.primary[200],
+              },
+              "&.Mui-focused fieldset": {
+                borderColor: colors.secondary[500],
+              },
+            },
+            "& .MuiInputBase-input": {
+              color: colors.grey[100],
+            },
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: colors.grey[100] }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
+
       <Box
         m="40px 0 0 0"
         height="75vh"
@@ -484,7 +584,7 @@ const Invoices = () => {
       >
         {validatedInvoices.length > 0 && (
           <DataGrid
-            rows={validatedInvoices}
+            rows={getFilteredInvoices()}
             columns={columns}
             getRowId={(row) => row._id}
             pageSize={10}
@@ -516,22 +616,37 @@ const Invoices = () => {
                 required
                 sx={{ flex: 1 }}
               />
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Project</InputLabel>
-                <Select
-                  label="Project"
-                  name="project"
-                  value={form.project}
-                  onChange={handleChange}
-                  required
-                >
-                  {projects.map((project) => (
-                    <MenuItem key={project._id} value={project._id}>
-                      {project.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Autocomplete
+                freeSolo
+                options={filteredProjects()}
+                getOptionLabel={(option) => {
+                  if (typeof option === "string") return option;
+                  return `${option.projectID || ""} - ${option.name || ""}`;
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Project ID"
+                    required
+                    sx={{ flex: 1 }}
+                  />
+                )}
+                value={form.projectID}
+                onChange={(event, newValue) => {
+                  if (typeof newValue === "string") {
+                    setForm((prev) => ({ ...prev, projectID: newValue }));
+                  } else if (newValue && newValue.projectID) {
+                    setForm((prev) => ({
+                      ...prev,
+                      projectID: newValue.projectID,
+                    }));
+                  }
+                }}
+                onInputChange={(event, newInputValue) => {
+                  setProjectSearch(newInputValue);
+                }}
+                sx={{ flex: 1 }}
+              />
               <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Client</InputLabel>
                 <Select
@@ -636,22 +751,37 @@ const Invoices = () => {
                 required
                 sx={{ flex: 1 }}
               />
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Project</InputLabel>
-                <Select
-                  label="Project"
-                  name="project"
-                  value={editForm.project}
-                  onChange={handleEditChange}
-                  required
-                >
-                  {projects.map((project) => (
-                    <MenuItem key={project._id} value={project._id}>
-                      {project.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Autocomplete
+                freeSolo
+                options={filteredProjects()}
+                getOptionLabel={(option) => {
+                  if (typeof option === "string") return option;
+                  return `${option.projectID || ""} - ${option.name || ""}`;
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Project ID"
+                    required
+                    sx={{ flex: 1 }}
+                  />
+                )}
+                value={editForm.projectID}
+                onChange={(event, newValue) => {
+                  if (typeof newValue === "string") {
+                    setEditForm((prev) => ({ ...prev, projectID: newValue }));
+                  } else if (newValue && newValue.projectID) {
+                    setEditForm((prev) => ({
+                      ...prev,
+                      projectID: newValue.projectID,
+                    }));
+                  }
+                }}
+                onInputChange={(event, newInputValue) => {
+                  setProjectSearch(newInputValue);
+                }}
+                sx={{ flex: 1 }}
+              />
               <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Client</InputLabel>
                 <Select
