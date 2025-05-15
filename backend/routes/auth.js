@@ -47,26 +47,32 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log('Login attempt for email:', email);
 
     // Find user
     const user = await User.findOne({ email });
     if (!user) {
+      console.log('User not found:', email);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+    console.log('User found:', { id: user._id, email: user.email, role: user.role });
 
     // Check password
     const isMatch = await user.comparePassword(password);
+    console.log('Password match:', isMatch);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // Check if user is active
     if (!user.isActive) {
+      console.log('User is inactive:', email);
       return res.status(400).json({ message: 'Account is inactive' });
     }
 
     // Generate token
     const token = user.generateAuthToken();
+    console.log('Token generated successfully');
 
     res.json({
       token,
@@ -79,6 +85,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ message: err.message });
   }
 });

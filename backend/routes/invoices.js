@@ -44,25 +44,39 @@ router.get('/:id', async (req, res) => {
 
 // Create invoice
 router.post('/', async (req, res) => {
-  const invoice = new Invoice({
-    invoiceID: req.body.invoiceID,
-    project: req.body.project,
-    client: req.body.client,
-    amount: req.body.amount,
-    status: req.body.status,
-    date: req.body.date,
-    dueDate: req.body.dueDate,
-    description: req.body.description
-  });
-
+  console.log('Received invoice creation request with data:', req.body);
+  
   try {
+    const invoice = new Invoice({
+      invoiceID: req.body.invoiceID,
+      project: req.body.project,
+      client: req.body.client,
+      amount: req.body.amount,
+      status: req.body.status,
+      date: req.body.date,
+      dueDate: req.body.dueDate,
+      description: req.body.description
+    });
+
+    console.log('Created invoice instance:', invoice.toObject());
+    
     const newInvoice = await invoice.save();
+    console.log('Invoice saved successfully:', newInvoice.toObject());
+    
     const populatedInvoice = await Invoice.findById(newInvoice._id)
       .populate('project', 'name')
       .populate('client', 'name');
     res.status(201).json(populatedInvoice);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.error('Error saving invoice:', err);
+    if (err.errors) {
+      console.error('Validation errors:', err.errors);
+    }
+    res.status(400).json({ 
+      message: err.message,
+      validationErrors: err.errors,
+      details: 'Invoice creation failed'
+    });
   }
 });
 

@@ -41,18 +41,22 @@ const projectSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: true
+    required: false
   },
   startDate: {
     type: Date,
     required: true
   },
-  endDate: Date,
-  description: String,
-  projectManager: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+  endDate: {
+    type: Date,
+    required: false
   },
+  description: String,
+  users: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  }],
   createdAt: {
     type: Date,
     default: Date.now
@@ -139,5 +143,11 @@ projectSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
+
+// Add a method to handle user updates
+projectSchema.methods.updateUsers = async function(userIds) {
+  this.users = userIds;
+  return this.save();
+};
 
 module.exports = mongoose.model('Project', projectSchema); 

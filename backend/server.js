@@ -10,6 +10,7 @@ const clientRoutes = require('./routes/clients');
 const jobRoutes = require('./routes/jobs');
 const sampleRoutes = require('./routes/samples');
 const invoiceRoutes = require('./routes/invoices');
+const usersRouter = require('./routes/users');
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,7 @@ connectDB()
     app.use('/api/jobs', jobRoutes);
     app.use('/api/samples', sampleRoutes);
     app.use('/api/invoices', invoiceRoutes);
+    app.use('/api/users', usersRouter);
 
     // Error handling middleware
     app.use((err, req, res, next) => {
