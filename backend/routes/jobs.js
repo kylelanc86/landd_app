@@ -1,86 +1,112 @@
 const express = require('express');
 const router = express.Router();
-const Job = require('../models/Job');
+const AirMonitoringJob = require('../models/Job');
+const auth = require('../middleware/auth');
 
-// Get all jobs
-router.get('/', async (req, res) => {
+// Get all air monitoring jobs
+router.get('/', auth, async (req, res) => {
   try {
-    const jobs = await Job.find()
+    const jobs = await AirMonitoringJob.find()
       .populate('project')
-      .populate('assignedTo')
-      .sort({ createdAt: -1 });
+      .populate('assignedTo', 'firstName lastName');
     res.json(jobs);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
-// Get single job
-router.get('/:id', async (req, res) => {
+// Get a single air monitoring job
+router.get('/:id', auth, async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id)
+    const job = await AirMonitoringJob.findById(req.params.id)
       .populate('project')
-      .populate('assignedTo');
+      .populate('assignedTo', 'firstName lastName');
     if (!job) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({ message: 'Air monitoring job not found' });
     }
     res.json(job);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
-// Create job
-router.post('/', async (req, res) => {
-  const job = new Job({
-    name: req.body.name,
-    project: req.body.project,
-    status: req.body.status,
-    startDate: req.body.startDate,
-    endDate: req.body.endDate,
-    description: req.body.description,
-    assignedTo: req.body.assignedTo
-  });
-
+// Create a new air monitoring job
+router.post('/', auth, async (req, res) => {
   try {
-    const newJob = await job.save();
-    res.status(201).json(newJob);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
+    console.log('Creating new air monitoring job with data:', req.body);
 
-// Update job
-router.patch('/:id', async (req, res) => {
-  try {
-    const job = await Job.findById(req.params.id);
-    if (!job) {
-      return res.status(404).json({ message: 'Job not found' });
+    // Validate required fields
+    const requiredFields = ['project', 'asbestosRemovalist', 'startDate'];
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    
+    if (missingFields.length > 0) {
+      console.log('Missing required fields:', missingFields);
+      return res.status(400).json({ 
+        message: 'Missing required fields', 
+        fields: missingFields 
+      });
     }
 
-    Object.keys(req.body).forEach(key => {
-      job[key] = req.body[key];
+    const job = new AirMonitoringJob({
+      name: req.body.name || 'Air Monitoring Job',
+      project: req.body.project,
+      status: req.body.status || 'pending',
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      asbestosRemovalist: req.body.asbestosRemovalist,
+      description: req.body.description,
+      location: req.body.location,
+      assignedTo: req.body.assignedTo
     });
 
-    const updatedJob = await job.save();
-    res.json(updatedJob);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.log('Created job object:', job);
+
+    const newJob = await job.save();
+    console.log('Saved job:', newJob);
+    
+    // Populate the project and assignedTo fields before sending response
+    const populatedJob = await AirMonitoringJob.findById(newJob._id)
+      .populate('project')
+      .populate('assignedTo', 'firstName lastName');
+
+    res.status(201).json(populatedJob);
+  } catch (error) {
+    console.error('Error creating air monitoring job:', error);
+    res.status(400).json({ 
+      message: error.message,
+      details: error.errors // Include validation errors if any
+    });
   }
 });
 
-// Delete job
-router.delete('/:id', async (req, res) => {
+// Update an air monitoring job
+router.put('/:id', auth, async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id);
+    const job = await AirMonitoringJob.findById(req.params.id);
     if (!job) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({ message: 'Air monitoring job not found' });
     }
 
-    await job.deleteOne();
-    res.json({ message: 'Job deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    Object.assign(job, req.body);
+    const updatedJob = await job.save();
+    res.json(updatedJob);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete an air monitoring job
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const job = await AirMonitoringJob.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: 'Air monitoring job not found' });
+    }
+
+    await job.remove();
+    res.json({ message: 'Air monitoring job deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

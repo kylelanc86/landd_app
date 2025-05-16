@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const shiftSchema = new mongoose.Schema({
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Job',
+    ref: 'AirMonitoringJob',
     required: true
   },
   name: {
@@ -36,7 +36,8 @@ const shiftSchema = new mongoose.Schema({
     type: String
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'air_monitoring_shifts'
 });
 
 module.exports = mongoose.model('Shift', shiftSchema); 

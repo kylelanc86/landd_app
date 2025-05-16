@@ -319,4 +319,41 @@ const seedDatabase = async () => {
 };
 
 // Run the seed function
-seedDatabase(); 
+seedDatabase();
+
+const seedAdmin = async () => {
+  try {
+    // Connect to MongoDB
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    console.log('Connected to MongoDB');
+
+    // Check if admin user already exists
+    const adminExists = await User.findOne({ email: 'admin@example.com' });
+    if (adminExists) {
+      console.log('Admin user already exists');
+      process.exit(0);
+    }
+
+    // Create admin user
+    const admin = new User({
+      firstName: 'Admin',
+      lastName: 'User',
+      email: 'admin@example.com',
+      password: 'admin123', // This will be hashed by the pre-save hook
+      role: 'admin',
+      isActive: true
+    });
+
+    await admin.save();
+    console.log('Admin user created successfully');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error seeding admin user:', error);
+    process.exit(1);
+  }
+};
+
+seedAdmin(); 

@@ -12,6 +12,7 @@ const sampleRoutes = require('./routes/samples');
 const invoiceRoutes = require('./routes/invoices');
 const usersRouter = require('./routes/users');
 const xeroRoutes = require('./routes/xero');
+const shiftRoutes = require('./routes/shifts');
 
 // Load environment variables
 dotenv.config();
@@ -35,11 +36,12 @@ connectDB()
     app.use('/api/auth', authRoutes);
     app.use('/api/projects', projectRoutes);
     app.use('/api/clients', clientRoutes);
-    app.use('/api/jobs', jobRoutes);
+    app.use('/api/air-monitoring-jobs', jobRoutes);
     app.use('/api/samples', sampleRoutes);
     app.use('/api/invoices', invoiceRoutes);
     app.use('/api/users', usersRouter);
     app.use('/api/xero', xeroRoutes);
+    app.use('/api/air-monitoring-shifts', shiftRoutes);
 
     // Error handling middleware
     app.use((err, req, res, next) => {

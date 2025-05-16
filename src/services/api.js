@@ -118,11 +118,11 @@ export const projectService = {
 
 // Job service
 export const jobService = {
-  getAll: () => api.get('/jobs'),
-  getById: (id) => api.get(`/jobs/${id}`),
-  create: (data) => api.post('/jobs', data),
-  update: (id, data) => api.put(`/jobs/${id}`, data),
-  delete: (id) => api.delete(`/jobs/${id}`)
+  getAll: () => api.get('/air-monitoring-jobs'),
+  getById: (id) => api.get(`/air-monitoring-jobs/${id}`),
+  create: (data) => api.post('/air-monitoring-jobs', data),
+  update: (id, data) => api.put(`/air-monitoring-jobs/${id}`, data),
+  delete: (id) => api.delete(`/air-monitoring-jobs/${id}`)
 };
 
 // Sample service
@@ -135,11 +135,12 @@ export const sampleService = {
 };
 
 export const shiftService = {
-  getAll: () => api.get('/shifts'),
-  getById: (id) => api.get(`/shifts/${id}`),
-  create: (data) => api.post('/shifts', data),
-  update: (id, data) => api.put(`/shifts/${id}`, data),
-  delete: (id) => api.delete(`/shifts/${id}`)
+  getAll: () => api.get('/air-monitoring-shifts'),
+  getById: (id) => api.get(`/air-monitoring-shifts/${id}`),
+  getByJob: (jobId) => api.get(`/air-monitoring-shifts/job/${jobId}`),
+  create: (data) => api.post('/air-monitoring-shifts', data),
+  update: (id, data) => api.put(`/air-monitoring-shifts/${id}`, data),
+  delete: (id) => api.delete(`/air-monitoring-shifts/${id}`)
 };
 
 // Invoice service

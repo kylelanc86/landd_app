@@ -167,9 +167,8 @@ const SectionDivider = ({ isCollapsed }) => {
   );
 };
 
-const Sidebar = () => {
+const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const theme = useTheme();
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [selected, setSelected] = useState("Dashboard");
   const { user } = useAuth();
 
@@ -219,7 +218,6 @@ const Sidebar = () => {
   return (
     <ProSidebar collapsed={isCollapsed}>
       <Menu iconShape="square">
-        {/* LOGO AND MENU ICON */}
         <MenuItem
           onClick={() => setIsCollapsed(!isCollapsed)}
           icon={isCollapsed ? <MenuOutlinedIcon /> : undefined}
@@ -231,12 +229,12 @@ const Sidebar = () => {
                 : tokens.grey[700],
           }}
         >
-          {!isCollapsed ? (
+          {!isCollapsed && (
             <Box
               display="flex"
-              justifyContent="center"
+              justifyContent="space-between"
               alignItems="center"
-              ml="15px"
+              ml="10px"
             >
               <img
                 src="/logo.png"
@@ -267,25 +265,6 @@ const Sidebar = () => {
                   }
                 }}
               />
-            </Box>
-          ) : (
-            <Box
-              display="flex"
-              justifyContent="center"
-              alignItems="center"
-              ml="15px"
-            >
-              <IconButton
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                sx={{
-                  color:
-                    theme.palette.mode === "dark"
-                      ? tokens.grey[100]
-                      : tokens.grey[700],
-                }}
-              >
-                <MenuOutlinedIcon />
-              </IconButton>
             </Box>
           )}
         </MenuItem>

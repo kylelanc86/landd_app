@@ -1,108 +1,204 @@
 import React, { useState, useEffect } from "react";
 import {
   Box,
-  Typography,
   Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Stack,
-  InputAdornment,
+  Typography,
   useTheme,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  useMediaQuery,
   Grid,
 } from "@mui/material";
-import { useParams, useNavigate } from "react-router-dom";
-import EditIcon from "@mui/icons-material/Edit";
-import SearchIcon from "@mui/icons-material/Search";
-import AddIcon from "@mui/icons-material/Add";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import DeleteIcon from "@mui/icons-material/Delete";
 import { DataGrid } from "@mui/x-data-grid";
-import { shiftService } from "../../services/api";
-import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import Header from "../../components/Header";
+import { useNavigate, useParams } from "react-router-dom";
+import { shiftService, jobService } from "../../services/api";
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 const Shifts = () => {
   const theme = useTheme();
-  const colors = tokens(theme.palette.mode);
-  const { jobId } = useParams();
+  const colors = tokens;
   const navigate = useNavigate();
+  const { jobId } = useParams();
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [projectDetails, setProjectDetails] = useState(null);
 
   useEffect(() => {
-    const fetchShifts = async () => {
+    const fetchData = async () => {
       try {
-        const response = await shiftService.getAll();
-        setShifts(response.data);
-        setLoading(false);
+        setLoading(true);
+
+        // First, get the job details to get project information
+        const jobResponse = await jobService.getById(jobId);
+        console.log("Job response:", jobResponse.data);
+
+        if (jobResponse.data && jobResponse.data.project) {
+          setProjectDetails(jobResponse.data.project);
+        }
+
+        // Then get the shifts
+        const shiftsResponse = await shiftService.getByJob(jobId);
+        console.log("Shifts response:", shiftsResponse.data);
+        setShifts(shiftsResponse.data || []);
+
+        setError(null);
       } catch (err) {
-        setError("Failed to fetch shifts");
+        console.error("Error fetching data:", err);
+        setError("Failed to load data. Please try again later.");
+      } finally {
         setLoading(false);
-        console.error("Error fetching shifts:", err);
       }
     };
 
-    fetchShifts();
-  }, []);
+    fetchData();
+  }, [jobId]);
+
+  const handleAddShift = () => {
+    navigate(`/air-monitoring-shifts/new/${jobId}`);
+  };
+
+  const handleEditShift = (id) => {
+    navigate(`/air-monitoring-shifts/edit/${id}`);
+  };
+
+  const handleDeleteShift = async (id) => {
+    if (window.confirm("Are you sure you want to delete this shift?")) {
+      try {
+        await shiftService.delete(id);
+        setShifts(shifts.filter((shift) => shift._id !== id));
+      } catch (err) {
+        console.error("Error deleting shift:", err);
+        setError("Failed to delete shift. Please try again later.");
+      }
+    }
+  };
 
   const columns = [
-    { field: "projectName", headerName: "Project", flex: 1 },
-    { field: "jobName", headerName: "Job", flex: 1 },
-    { field: "technician", headerName: "Technician", flex: 1 },
+    {
+      field: "name",
+      headerName: "Shift Name",
+      flex: 1,
+    },
+    {
+      field: "date",
+      headerName: "Date",
+      flex: 1,
+      valueGetter: (params) => {
+        return new Date(params.row.date).toLocaleDateString();
+      },
+    },
     {
       field: "startTime",
       headerName: "Start Time",
       flex: 1,
-      valueGetter: (params) => new Date(params.row.startTime).toLocaleString(),
     },
     {
       field: "endTime",
       headerName: "End Time",
       flex: 1,
-      valueGetter: (params) =>
-        params.row.endTime
-          ? new Date(params.row.endTime).toLocaleString()
-          : "Ongoing",
+    },
+    {
+      field: "supervisor",
+      headerName: "Supervisor",
+      flex: 1,
+      valueGetter: (params) => {
+        return params.row.supervisor
+          ? `${params.row.supervisor.firstName} ${params.row.supervisor.lastName}`
+          : "Unknown";
+      },
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      flex: 1,
+      renderCell: ({ row: { status } }) => {
+        return (
+          <Box
+            width="60%"
+            m="0 auto"
+            p="5px"
+            display="flex"
+            justifyContent="center"
+            backgroundColor={
+              status === "completed"
+                ? colors.secondary[500]
+                : status === "in_progress"
+                ? colors.primary[500]
+                : status === "cancelled"
+                ? colors.neutral[700]
+                : colors.grey[700]
+            }
+            borderRadius="4px"
+          >
+            <Typography color={colors.grey[0]} sx={{ ml: "5px" }}>
+              {status.charAt(0).toUpperCase() +
+                status.slice(1).replace("_", " ")}
+            </Typography>
+          </Box>
+        );
+      },
     },
     {
       field: "actions",
       headerName: "Actions",
       flex: 1,
-      renderCell: (params) => (
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => navigate(`/shifts/${params.row._id}`)}
-        >
-          View Details
-        </Button>
-      ),
+      renderCell: ({ row: { _id } }) => {
+        return (
+          <Box>
+            <IconButton onClick={() => handleEditShift(_id)}>
+              <EditIcon />
+            </IconButton>
+            <IconButton onClick={() => handleDeleteShift(_id)}>
+              <DeleteIcon />
+            </IconButton>
+          </Box>
+        );
+      },
     },
   ];
 
-  if (loading) return <Typography>Loading shifts...</Typography>;
-  if (error) return <Typography color="error">{error}</Typography>;
-
   return (
     <Box m="20px">
-      <Header title="SHIFTS" subtitle="Managing your shifts" />
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb="20px"
+      >
+        <Box>
+          <Header
+            title="Managing Your Shifts"
+            subtitle={`Project: ${
+              projectDetails?.projectID || "Loading..."
+            } - ${projectDetails?.name || "Loading..."}`}
+          />
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddShift}
+          sx={{
+            backgroundColor: colors.primary[500],
+            color: colors.grey[0],
+            fontSize: "14px",
+            fontWeight: "bold",
+            padding: "10px 20px",
+          }}
+        >
+          Add Shift
+        </Button>
+      </Box>
+
+      {error && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
+
       <Box
         m="40px 0 0 0"
         height="75vh"
@@ -113,8 +209,11 @@ const Shifts = () => {
           "& .MuiDataGrid-cell": {
             borderBottom: "none",
           },
+          "& .name-column--cell": {
+            color: colors.secondary[500],
+          },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: colors.blueAccent[700],
+            backgroundColor: colors.primary[500],
             borderBottom: "none",
           },
           "& .MuiDataGrid-virtualScroller": {
@@ -122,10 +221,10 @@ const Shifts = () => {
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: colors.blueAccent[700],
+            backgroundColor: colors.primary[500],
           },
           "& .MuiCheckbox-root": {
-            color: `${colors.greenAccent[200]} !important`,
+            color: `${colors.secondary[500]} !important`,
           },
         }}
       >
@@ -133,10 +232,8 @@ const Shifts = () => {
           rows={shifts}
           columns={columns}
           getRowId={(row) => row._id}
-          pageSize={10}
-          rowsPerPageOptions={[10]}
-          checkboxSelection
-          disableSelectionOnClick
+          loading={loading}
+          disableRowSelectionOnClick
         />
       </Box>
     </Box>

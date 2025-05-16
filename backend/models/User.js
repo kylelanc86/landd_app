@@ -18,7 +18,8 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
     trim: true,
-    lowercase: true
+    lowercase: true,
+    index: true
   },
   password: {
     type: String,
@@ -42,32 +43,53 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, {
+  timestamps: true
 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 10);
+    try {
+      this.password = await bcrypt.hash(this.password, 10);
+    } catch (error) {
+      return next(error);
+    }
   }
   next();
 });
 
 // Generate JWT token
 userSchema.methods.generateAuthToken = function() {
-  return jwt.sign(
-    { 
-      id: this._id,
-      email: this.email,
-      role: this.role
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE }
-  );
+  try {
+    return jwt.sign(
+      { 
+        id: this._id,
+        email: this.email,
+        role: this.role
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: process.env.JWT_EXPIRE || '24h' }
+    );
+  } catch (error) {
+    console.error('Token generation error:', error);
+    throw error;
+  }
 };
 
 // Compare password
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    console.error('Password comparison error:', error);
+    throw error;
+  }
 };
 
-module.exports = mongoose.model('User', userSchema); 
+// Create indexes
+userSchema.index({ email: 1 });
+
+const User = mongoose.model('User', userSchema);
+
+module.exports = User; 

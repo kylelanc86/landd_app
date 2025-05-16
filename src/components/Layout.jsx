@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material";
 import Sidebar from "../scenes/global/Sidebar";
@@ -6,6 +6,7 @@ import Topbar from "../scenes/global/Topbar";
 
 const Layout = ({ children, toggleColorMode, mode }) => {
   const theme = useTheme();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <Box
@@ -28,21 +29,28 @@ const Layout = ({ children, toggleColorMode, mode }) => {
           zIndex: (theme) => theme.zIndex.drawer,
         }}
       >
-        <Sidebar />
+        <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
       </Box>
 
       {/* Main Content Area */}
       <Box
         component="main"
+        className={isCollapsed ? "collapsed" : ""}
         sx={{
           position: "fixed",
           top: "64px",
-          left: { sm: "240px" },
+          left: "240px",
           right: 0,
           bottom: 0,
-          transition: "left 0.3s ease",
+          transition: "all 0.3s ease",
+          "@media (max-width: 600px)": {
+            left: 0,
+          },
           "&.collapsed": {
-            left: { sm: "80px" },
+            left: "80px",
+            "@media (max-width: 600px)": {
+              left: 0,
+            },
           },
           overflow: "auto",
           p: 3,

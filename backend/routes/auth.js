@@ -71,19 +71,24 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate token
-    const token = user.generateAuthToken();
-    console.log('Token generated successfully');
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role
-      }
-    });
+    try {
+      const token = user.generateAuthToken();
+      console.log('Token generated successfully');
+      
+      res.json({
+        token,
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role
+        }
+      });
+    } catch (tokenError) {
+      console.error('Token generation error:', tokenError);
+      throw tokenError;
+    }
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: err.message });

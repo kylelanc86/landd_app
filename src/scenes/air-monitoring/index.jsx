@@ -38,8 +38,10 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { jobService, projectService } from "../../services/api";
-import { DataGrid } from "@mui/x-data-grid";
+import EditIcon from "@mui/icons-material/Edit";
+import DescriptionIcon from "@mui/icons-material/Description";
+import { jobService, projectService, clientService } from "../../services/api";
+import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 
@@ -47,12 +49,10 @@ const JOBS_KEY = "ldc_jobs";
 
 const emptyForm = {
   projectId: "",
-  status: "Pending",
-  startDate: "",
-  endDate: "",
-  description: "",
-  location: "",
-  supervisor: "",
+  projectName: "",
+  client: "",
+  asbestosRemovalist: "",
+  status: "pending",
 };
 
 const AirMonitoring = () => {
@@ -80,18 +80,54 @@ const AirMonitoring = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const [jobsResponse, projectsResponse] = await Promise.all([
           jobService.getAll(),
           projectService.getAll(),
         ]);
-        setJobs(jobsResponse.data);
+
+        if (!jobsResponse.data || !projectsResponse.data) {
+          throw new Error("No data received from server");
+        }
+
+        console.log("Raw jobs data:", jobsResponse.data);
+        console.log("Raw projects data:", projectsResponse.data);
+
+        // Process jobs to include project details
+        const processedJobs = jobsResponse.data.map((job) => {
+          console.log("Processing job:", job);
+          console.log("Job project object:", job.project);
+          console.log("Project ID from job:", job.project?.projectID);
+          console.log("Project name from job:", job.project?.name);
+
+          const projectData = job.project;
+          console.log("Project data:", projectData);
+          console.log("Project ID:", projectData?.projectID);
+          console.log("Project name:", projectData?.name);
+
+          const processedJob = {
+            id: job._id,
+            _id: job._id,
+            projectID: projectData?.projectID || "Unknown",
+            projectName: projectData?.name || "Unknown Project",
+            status: job.status,
+            asbestosRemovalist: job.asbestosRemovalist,
+          };
+
+          console.log("Processed job:", processedJob);
+          return processedJob;
+        });
+
+        console.log("Final processed jobs:", processedJobs);
+        setJobs(processedJobs);
         setProjects(projectsResponse.data);
-        setLoading(false);
       } catch (err) {
-        setError("Failed to fetch data");
-        setLoading(false);
         console.error("Error fetching data:", err);
+        setError(err.message || "Failed to fetch data");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -106,27 +142,48 @@ const AirMonitoring = () => {
     setEditForm({ ...editForm, [e.target.name]: e.target.value });
   };
 
-  const handleAddJob = (e) => {
+  const handleAddJob = async (e) => {
     e.preventDefault();
     if (!selectedProject) return;
 
-    const newJob = {
-      id: Date.now(),
-      projectId: selectedProject.id,
-      status: "Pending",
-      startDate: new Date().toISOString().split("T")[0],
-      endDate: "",
-      description: `Air monitoring job for ${selectedProject.name}`,
-      location: selectedProject.location || "",
-      supervisor: "",
-    };
+    setLoading(true);
+    setError(null);
+    try {
+      console.log("Creating new job with form data:", form);
+      console.log("Selected project:", selectedProject);
 
-    const updatedJobs = [newJob, ...jobs];
-    setJobs(updatedJobs);
-    localStorage.setItem(JOBS_KEY, JSON.stringify(updatedJobs));
-    setOpenDialog(false);
-    setSelectedProject(null);
-    setSearchQuery("");
+      const newJob = {
+        name: selectedProject.name,
+        project: selectedProject._id,
+        status: form.status,
+        startDate: new Date(),
+        asbestosRemovalist: form.asbestosRemovalist,
+        description: `Air monitoring job for ${selectedProject.name}`,
+        location: selectedProject.address || "Not specified",
+      };
+
+      console.log("Sending job data to API:", newJob);
+
+      const response = await jobService.create(newJob);
+      console.log("API response:", response);
+
+      if (!response.data) {
+        throw new Error("No data received from server");
+      }
+
+      // Add the new job to the list
+      setJobs((prevJobs) => [response.data, ...prevJobs]);
+      setOpenDialog(false);
+      setSelectedProject(null);
+      setForm(emptyForm);
+    } catch (error) {
+      console.error("Error creating job:", error);
+      setError(
+        error.response?.data?.message || error.message || "Failed to create job"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditJob = (job) => {
@@ -148,6 +205,7 @@ const AirMonitoring = () => {
   };
 
   const handleViewShifts = (jobId) => {
+    console.log("Navigating to shifts for job:", jobId);
     navigate(`/air-monitoring/jobs/${jobId}/shifts`);
   };
 
@@ -157,13 +215,18 @@ const AirMonitoring = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (jobToDelete) {
-      const updatedJobs = jobs.filter((job) => job.id !== jobToDelete.id);
-      setJobs(updatedJobs);
-      localStorage.setItem(JOBS_KEY, JSON.stringify(updatedJobs));
-      setDeleteDialogOpen(false);
-      setJobToDelete(null);
+      try {
+        console.log("Deleting job:", jobToDelete);
+        await jobService.delete(jobToDelete._id);
+        setJobs(jobs.filter((job) => job._id !== jobToDelete._id));
+        setDeleteDialogOpen(false);
+        setJobToDelete(null);
+      } catch (error) {
+        console.error("Error deleting job:", error);
+        setError("Failed to delete job. Please try again.");
+      }
     }
   };
 
@@ -232,29 +295,93 @@ const AirMonitoring = () => {
   };
 
   const columns = [
-    { field: "name", headerName: "Job Name", flex: 1 },
-    { field: "status", headerName: "Status", flex: 1 },
-    { field: "location", headerName: "Location", flex: 1 },
     {
-      field: "startDate",
-      headerName: "Start Date",
+      field: "projectID",
+      headerName: "Project ID",
       flex: 1,
       valueGetter: (params) => {
-        if (!params || !params.row) return "Not set";
-        return params.row.startDate
-          ? new Date(params.row.startDate).toLocaleDateString()
-          : "Not set";
+        console.log("Project ID valueGetter - full params:", params);
+        if (typeof params === "string") return params;
+        return params?.row?.projectID || "Unknown";
       },
     },
     {
-      field: "endDate",
-      headerName: "End Date",
+      field: "projectName",
+      headerName: "Project",
       flex: 1,
       valueGetter: (params) => {
-        if (!params || !params.row) return "Not set";
-        return params.row.endDate
-          ? new Date(params.row.endDate).toLocaleDateString()
-          : "Ongoing";
+        console.log("Project Name valueGetter - full params:", params);
+        if (typeof params === "string") return params;
+        return params?.row?.projectName || "Unknown Project";
+      },
+    },
+    {
+      field: "asbestosRemovalist",
+      headerName: "Asbestos Removalist",
+      flex: 1,
+      valueGetter: (params) => {
+        if (typeof params === "string") return params;
+        return params?.row?.asbestosRemovalist || "Not assigned";
+      },
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      flex: 1,
+      valueGetter: (params) => {
+        if (typeof params === "string") return params;
+        return params?.row?.status || "pending";
+      },
+      renderCell: (params) => {
+        if (!params?.row) return null;
+
+        const status = params.row.status || "pending";
+        const getStatusColor = (status) => {
+          switch (status) {
+            case "completed":
+              return colors.secondary[500];
+            case "in_progress":
+              return colors.primary[700];
+            case "pending":
+              return colors.neutral[700];
+            case "cancelled":
+              return colors.error[500];
+            default:
+              return colors.neutral[700];
+          }
+        };
+
+        return (
+          <Box
+            width="60%"
+            m="0"
+            p="0"
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            backgroundColor={getStatusColor(status)}
+            borderRadius="4px"
+            height="28px"
+            mb={0}
+          >
+            <Typography
+              color={colors.grey[100]}
+              sx={{
+                px: "8px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                fontSize: "1rem",
+                lineHeight: 1,
+                m: 0,
+                p: 0,
+              }}
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </Typography>
+          </Box>
+        );
       },
     },
     {
@@ -262,17 +389,40 @@ const AirMonitoring = () => {
       headerName: "Actions",
       flex: 1,
       renderCell: (params) => {
-        if (!params || !params.row) return null;
+        if (!params?.row) return null;
+
         return (
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() =>
-              navigate(`/air-monitoring/jobs/${params.row._id}/shifts`)
-            }
-          >
-            View Details
-          </Button>
+          <Box display="flex" alignItems="center" gap={1}>
+            <IconButton
+              onClick={() => handleEditJob(params.row)}
+              sx={{ color: colors.grey[100] }}
+            >
+              <EditIcon />
+            </IconButton>
+            <IconButton
+              onClick={(e) => handleDeleteClick(e, params.row)}
+              sx={{ color: colors.grey[100] }}
+            >
+              <DeleteIcon />
+            </IconButton>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => handleViewShifts(params.row._id)}
+              sx={{
+                backgroundColor: colors.primary[700],
+                color: colors.grey[100],
+                fontSize: "0.75rem",
+                padding: "4px 8px",
+                minWidth: "80px",
+                "&:hover": {
+                  backgroundColor: colors.primary[800],
+                },
+              }}
+            >
+              Reports
+            </Button>
+          </Box>
         );
       },
     },
@@ -283,43 +433,237 @@ const AirMonitoring = () => {
 
   return (
     <Box m="20px">
-      <Header title="AIR MONITORING" subtitle="Managing your monitoring jobs" />
+      <Header
+        title="Air Monitoring"
+        subtitle="Manage air monitoring jobs and samples"
+      />
+
+      {/* Add New Job Button */}
+      <Box display="flex" justifyContent="flex-end" mb="20px">
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setOpenDialog(true)}
+          sx={{
+            backgroundColor: colors.primary[700],
+            color: colors.grey[100],
+            fontSize: "14px",
+            fontWeight: "bold",
+            padding: "10px 20px",
+            "&:hover": {
+              backgroundColor: colors.primary[800],
+            },
+          }}
+        >
+          Add New Job
+        </Button>
+      </Box>
+
+      {/* Jobs Table */}
       <Box
         m="40px 0 0 0"
         height="75vh"
         sx={{
-          "& .MuiDataGrid-root": {
-            border: "none",
-          },
+          "& .MuiDataGrid-root": { border: "none" },
           "& .MuiDataGrid-cell": {
             borderBottom: "none",
+            display: "flex",
+            alignItems: "center",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: colors.primary[600],
+            backgroundColor: theme.palette.primary.dark,
             borderBottom: "none",
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: colors.primary[400],
+            backgroundColor: theme.palette.background.default,
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: colors.primary[600],
+            backgroundColor: theme.palette.primary.dark,
           },
           "& .MuiCheckbox-root": {
-            color: `${colors.secondary[500]} !important`,
+            color: `${theme.palette.secondary.main} !important`,
           },
         }}
       >
-        <DataGrid
-          rows={filteredJobs}
-          columns={columns}
-          getRowId={(row) => row._id}
-          pageSize={10}
-          rowsPerPageOptions={[10]}
-          checkboxSelection
-          disableSelectionOnClick
-        />
+        {loading ? (
+          <Typography>Loading jobs...</Typography>
+        ) : error ? (
+          <Typography color="error">{error}</Typography>
+        ) : (
+          <DataGrid
+            rows={jobs}
+            columns={columns}
+            getRowId={(row) => row.id || row._id}
+            pageSize={10}
+            rowsPerPageOptions={[10]}
+            autoHeight
+            disableSelectionOnClick
+            components={{ Toolbar: GridToolbar }}
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  id: false,
+                  _id: false,
+                },
+              },
+            }}
+          />
+        )}
       </Box>
+
+      {/* Add New Job Dialog */}
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Add New Air Monitoring Job</Typography>
+            <IconButton onClick={() => setOpenDialog(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box component="form" onSubmit={handleAddJob} sx={{ mt: 2 }}>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <Autocomplete
+                options={projects}
+                getOptionLabel={(option) =>
+                  `${option.projectID} - ${option.name}`
+                }
+                value={selectedProject}
+                onChange={(event, newValue) => {
+                  setSelectedProject(newValue);
+                  if (newValue) {
+                    setForm({
+                      ...form,
+                      projectId: newValue._id,
+                      projectName: newValue.name,
+                      client: newValue.client?.name || "Not specified",
+                    });
+                  }
+                }}
+                renderInput={(params) => (
+                  <TextField {...params} label="Select Project" required />
+                )}
+                renderOption={(props, option) => (
+                  <li {...props}>
+                    <Box>
+                      <Typography variant="body1">
+                        {option.projectID} - {option.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Client: {option.client?.name || "Not specified"}
+                      </Typography>
+                    </Box>
+                  </li>
+                )}
+              />
+            </FormControl>
+
+            {selectedProject && (
+              <>
+                <TextField
+                  fullWidth
+                  label="Project ID"
+                  value={selectedProject.projectID}
+                  disabled
+                  sx={{ mb: 2 }}
+                />
+                <TextField
+                  fullWidth
+                  label="Project Name"
+                  value={form.projectName}
+                  disabled
+                  sx={{ mb: 2 }}
+                />
+                <TextField
+                  fullWidth
+                  label="Client"
+                  value={form.client}
+                  disabled
+                  sx={{ mb: 2 }}
+                />
+              </>
+            )}
+
+            <TextField
+              fullWidth
+              label="Asbestos Removalist"
+              name="asbestosRemovalist"
+              value={form.asbestosRemovalist}
+              onChange={handleChange}
+              required
+              sx={{ mb: 2 }}
+            />
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                name="status"
+                value={form.status}
+                onChange={handleChange}
+                label="Status"
+                required
+              >
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="in_progress">In Progress</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+          <Button
+            onClick={handleAddJob}
+            variant="contained"
+            disabled={!selectedProject || !form.asbestosRemovalist}
+            sx={{
+              backgroundColor: colors.primary[700],
+              color: colors.grey[100],
+              "&:hover": {
+                backgroundColor: colors.primary[800],
+              },
+            }}
+          >
+            Add Job
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this job? This action cannot be
+            undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
+            variant="contained"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

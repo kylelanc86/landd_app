@@ -15,15 +15,11 @@ const jobSchema = new mongoose.Schema({
     enum: ['pending', 'in_progress', 'completed', 'cancelled'],
     default: 'pending'
   },
-  startDate: {
-    type: Date,
+  asbestosRemovalist: {
+    type: String,
     required: true
   },
-  endDate: {
-    type: Date
-  },
   description: String,
-  location: String,
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -36,6 +32,14 @@ const jobSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, {
+  collection: 'air_monitoring_jobs' // Explicitly set the collection name
 });
 
-module.exports = mongoose.model('Job', jobSchema); 
+// Update the updatedAt timestamp before saving
+jobSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
+});
+
+module.exports = mongoose.model('AirMonitoringJob', jobSchema); 
