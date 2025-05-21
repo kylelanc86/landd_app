@@ -9,7 +9,20 @@ router.get('/', async (req, res) => {
       .populate('job')
       .populate('collectedBy')
       .populate('analyzedBy')
-      .sort({ dateCollected: -1 });
+      .sort({ createdAt: -1 });
+    res.json(samples);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get samples by shift
+router.get('/shift/:shiftId', async (req, res) => {
+  try {
+    const samples = await Sample.find({ shift: req.params.shiftId })
+      .populate('collectedBy')
+      .populate('analyzedBy')
+      .sort({ createdAt: -1 });
     res.json(samples);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -34,24 +47,34 @@ router.get('/:id', async (req, res) => {
 
 // Create sample
 router.post('/', async (req, res) => {
-  const sample = new Sample({
-    job: req.body.job,
-    sampleNumber: req.body.sampleNumber,
-    type: req.body.type,
-    location: req.body.location,
-    dateCollected: req.body.dateCollected,
-    dateAnalyzed: req.body.dateAnalyzed,
-    status: req.body.status,
-    results: req.body.results,
-    notes: req.body.notes,
-    collectedBy: req.body.collectedBy,
-    analyzedBy: req.body.analyzedBy
-  });
-
   try {
+    console.log('Creating sample with data:', req.body);
+    
+    const sample = new Sample({
+      shift: req.body.shift,
+      job: req.body.job,
+      sampleNumber: req.body.sampleNumber,
+      fullSampleID: req.body.fullSampleID,
+      type: req.body.type,
+      location: req.body.location,
+      pumpNo: req.body.pumpNo,
+      cowlNo: req.body.cowlNo,
+      filterSize: req.body.filterSize,
+      startTime: req.body.startTime,
+      endTime: req.body.endTime,
+      initialFlowrate: req.body.initialFlowrate,
+      finalFlowrate: req.body.finalFlowrate,
+      averageFlowrate: req.body.averageFlowrate,
+      status: req.body.status || 'pending',
+      notes: req.body.notes,
+      collectedBy: req.body.collectedBy
+    });
+
     const newSample = await sample.save();
+    console.log('Sample created successfully:', newSample);
     res.status(201).json(newSample);
   } catch (err) {
+    console.error('Error creating sample:', err);
     res.status(400).json({ message: err.message });
   }
 });

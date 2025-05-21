@@ -6,19 +6,41 @@ const sampleSchema = new mongoose.Schema({
     ref: 'Shift',
     required: true
   },
+  job: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AirMonitoringJob',
+    required: true
+  },
   sampleNumber: {
     type: String,
+    required: true
+  },
+  fullSampleID: {
+    type: String,
     required: true,
-    unique: true
+    unique: true,
+    index: true
   },
   type: {
     type: String,
-    enum: ['personal', 'area'],
+    enum: ['Background', 'Clearance', 'Exposure'],
     required: true
   },
   location: {
     type: String,
     required: true
+  },
+  pumpNo: {
+    type: String,
+    required: false
+  },
+  cowlNo: {
+    type: String,
+    required: false
+  },
+  filterSize: {
+    type: String,
+    required: false
   },
   startTime: {
     type: String,
@@ -26,9 +48,17 @@ const sampleSchema = new mongoose.Schema({
   },
   endTime: {
     type: String,
+    required: false
+  },
+  initialFlowrate: {
+    type: Number,
     required: true
   },
-  flowRate: {
+  finalFlowrate: {
+    type: Number,
+    required: false
+  },
+  averageFlowrate: {
     type: Number,
     required: true
   },
@@ -59,6 +89,12 @@ const sampleSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+// Update the updatedAt timestamp before saving
+sampleSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
 });
 
 module.exports = mongoose.model('Sample', sampleSchema); 

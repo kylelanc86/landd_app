@@ -29,8 +29,8 @@ const shiftSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'completed', 'cancelled'],
-    default: 'pending'
+    enum: ['ongoing', 'sampling_complete', 'analysis_complete', 'shift_complete'],
+    default: 'ongoing'
   },
   notes: {
     type: String

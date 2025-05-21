@@ -47,7 +47,12 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
+    // Generate a unique jobID
+    const jobID = `AMJ-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substr(2, 4)}`;
+    console.log('Generated jobID:', jobID);
+
     const job = new AirMonitoringJob({
+      jobID: jobID,
       name: req.body.name || 'Air Monitoring Job',
       project: req.body.project,
       status: req.body.status || 'pending',
@@ -98,12 +103,10 @@ router.put('/:id', auth, async (req, res) => {
 // Delete an air monitoring job
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const job = await AirMonitoringJob.findById(req.params.id);
+    const job = await AirMonitoringJob.findByIdAndDelete(req.params.id);
     if (!job) {
       return res.status(404).json({ message: 'Air monitoring job not found' });
     }
-
-    await job.remove();
     res.json({ message: 'Air monitoring job deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

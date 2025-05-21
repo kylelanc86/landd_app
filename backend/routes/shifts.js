@@ -54,6 +54,7 @@ router.get('/:id', auth, async (req, res) => {
     const shift = await Shift.findById(req.params.id)
       .populate({
         path: 'job',
+        select: 'jobID name project status asbestosRemovalist description',
         populate: {
           path: 'project',
           select: 'projectID name'
@@ -64,7 +65,8 @@ router.get('/:id', auth, async (req, res) => {
       console.log(`Shift ${req.params.id} not found`);
       return res.status(404).json({ message: 'Shift not found' });
     }
-    console.log(`Found shift ${req.params.id}`);
+    console.log(`Found shift ${req.params.id} with job data:`, shift.job);
+    console.log(`Job ID from populated data:`, shift.job?.jobID);
     res.json(shift);
   } catch (err) {
     console.error('Error fetching shift:', err);
