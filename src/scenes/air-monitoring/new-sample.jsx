@@ -15,6 +15,14 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import {
+  sampleService,
+  shiftService,
+  jobService,
+  userService,
+} from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+import { formatDateForInput } from "../../utils/dateUtils";
 
 const SAMPLES_KEY = "ldc_samples";
 const SHIFTS_KEY = "ldc_shifts";
@@ -24,73 +32,95 @@ const NewSample = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
-    sampleNo: "",
-    type: "Background",
+    sampler: "",
+    sampleNumber: "",
+    type: "",
     location: "",
     pumpNo: "",
     cowlNo: "",
-    filterSize: "25mm",
+    filterSize: "",
     startTime: "",
     endTime: "",
-    minutes: "",
     initialFlowrate: "",
     finalFlowrate: "",
     averageFlowrate: "",
     notes: "",
+    date: formatDateForInput(new Date()),
   });
-  const [jobId, setJobId] = useState(null);
+  const [projectID, setProjectID] = useState(null);
+  const [job, setJob] = useState(null);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get job ID from shift
+  // Fetch users when component mounts
   useEffect(() => {
-    const storedShifts = localStorage.getItem(SHIFTS_KEY);
-    if (storedShifts) {
-      const shifts = JSON.parse(storedShifts);
-      const foundShift = shifts.find((s) => s.id === parseInt(shiftId));
-      if (foundShift) {
-        setJobId(foundShift.jobId);
-        // Calculate sample number based on job ID and existing samples
-        const storedSamples = localStorage.getItem(SAMPLES_KEY);
-        if (storedSamples) {
-          const samples = JSON.parse(storedSamples);
-          const jobSamples = samples.filter(
-            (s) => s.jobId === foundShift.jobId
-          );
-          const nextNumber = jobSamples.length + 1;
-          setForm((prev) => ({
-            ...prev,
-            sampleNo: `${foundShift.jobId}-${nextNumber}`,
-          }));
-        } else {
-          setForm((prev) => ({ ...prev, sampleNo: `${foundShift.jobId}-1` }));
-        }
+    const fetchUsers = async () => {
+      try {
+        const response = await userService.getAll();
+        setUsers(response.data);
+      } catch (error) {
+        console.error("Error fetching users:", error);
       }
-    }
+    };
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    const fetchShiftDetails = async () => {
+      if (!shiftId) {
+        setError("No shift ID provided");
+        return;
+      }
+
+      try {
+        console.log("Fetching shift details for shiftId:", shiftId);
+        const response = await shiftService.getById(shiftId);
+        console.log("Full shift response:", response);
+        const shift = response.data;
+
+        // Get project ID from the job's project
+        if (shift.job && shift.job.project) {
+          setProjectID(shift.job.project.projectID);
+          console.log("Project ID set to:", shift.job.project.projectID);
+        } else {
+          console.error("No project data found in job");
+          setError("No project data found for this job");
+          return;
+        }
+
+        // Fetch job details
+        const jobResponse = await jobService.getById(shift.job._id);
+        setJob(jobResponse.data);
+      } catch (error) {
+        console.error("Error fetching shift details:", error);
+        setError("Failed to fetch shift details");
+      }
+    };
+
+    fetchShiftDetails();
   }, [shiftId]);
-
-  // Calculate minutes when start or end time changes
-  useEffect(() => {
-    if (form.startTime && form.endTime) {
-      const start = new Date(`2000-01-01T${form.startTime}`);
-      const end = new Date(`2000-01-01T${form.endTime}`);
-      const diffMs = end - start;
-      const diffMins = Math.round(diffMs / 60000);
-      setForm((prev) => ({ ...prev, minutes: diffMins }));
-    }
-  }, [form.startTime, form.endTime]);
-
-  // Calculate average flowrate when initial or final flowrate changes
-  useEffect(() => {
-    if (form.initialFlowrate && form.finalFlowrate) {
-      const avg =
-        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
-      setForm((prev) => ({ ...prev, averageFlowrate: avg.toFixed(2) }));
-    }
-  }, [form.initialFlowrate, form.finalFlowrate]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
+
+  // Calculate average flowrate when initial or final flowrate changes
+  useEffect(() => {
+    if (form.initialFlowrate) {
+      if (form.finalFlowrate) {
+        const avg =
+          (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) /
+          2;
+        setForm((prev) => ({ ...prev, averageFlowrate: avg.toFixed(2) }));
+      } else {
+        // If no final flowrate, use initial flowrate as average
+        setForm((prev) => ({ ...prev, averageFlowrate: form.initialFlowrate }));
+      }
+    }
+  }, [form.initialFlowrate, form.finalFlowrate]);
 
   const setCurrentTime = (field) => {
     const now = new Date();
@@ -100,28 +130,111 @@ const NewSample = () => {
     setForm((prev) => ({ ...prev, [field]: timeString }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newSample = {
-      id: Date.now(),
-      shiftId: parseInt(shiftId),
-      jobId: jobId,
-      ...form,
-    };
+    setIsSubmitting(true);
+    setError("");
 
-    // Get existing samples
-    const storedSamples = localStorage.getItem(SAMPLES_KEY);
-    const samples = storedSamples ? JSON.parse(storedSamples) : [];
+    try {
+      console.log("Starting sample submission...");
+      console.log("Current user:", user);
+      console.log("Form data:", form);
+      console.log("Project ID:", projectID);
+      console.log("Job:", job);
 
-    // Add new sample
-    samples.push(newSample);
+      if (!projectID) {
+        throw new Error("Project ID is required");
+      }
 
-    // Save to localStorage
-    localStorage.setItem(SAMPLES_KEY, JSON.stringify(samples));
+      if (!job?._id) {
+        throw new Error("Job ID is required");
+      }
 
-    // Navigate back to samples list
-    navigate(`/air-monitoring/shift/${shiftId}/samples`);
+      if (!shiftId) {
+        throw new Error("Shift ID is required");
+      }
+
+      if (!form.sampler) {
+        throw new Error("Sampler is required");
+      }
+
+      if (!form.location) {
+        throw new Error("Location is required");
+      }
+
+      // Generate sample number in the format: projectID-number
+      const sampleNumber = `${projectID}-${form.sampleNumber}`;
+      console.log("Generated sample number:", sampleNumber);
+
+      // Map sample type to match backend enum
+      const sampleType = form.type;
+
+      // Format times to include seconds
+      const formatTime = (time) => {
+        if (!time) return "";
+        return time.includes(":") ? time : `${time}:00`;
+      };
+
+      const sampleData = {
+        shift: shiftId,
+        job: job._id,
+        sampleNumber: sampleNumber,
+        fullSampleID: sampleNumber,
+        type: sampleType,
+        location: form.location,
+        pumpNo: form.pumpNo || undefined,
+        cowlNo: form.cowlNo || undefined,
+        filterSize: form.filterSize || undefined,
+        startTime: formatTime(form.startTime),
+        endTime: form.endTime ? formatTime(form.endTime) : undefined,
+        initialFlowrate: parseFloat(form.initialFlowrate) || 0,
+        finalFlowrate: form.finalFlowrate
+          ? parseFloat(form.finalFlowrate)
+          : undefined,
+        averageFlowrate: parseFloat(form.averageFlowrate) || 0,
+        status: "pending",
+        notes: form.notes || undefined,
+        collectedBy: form.sampler,
+      };
+
+      // Validate required fields
+      if (!sampleData.startTime) {
+        throw new Error("Start time is required");
+      }
+      if (!sampleData.initialFlowrate) {
+        throw new Error("Initial flowrate is required");
+      }
+      if (!sampleData.averageFlowrate) {
+        throw new Error("Average flowrate is required");
+      }
+
+      console.log("Submitting sample data:", sampleData);
+      const response = await sampleService.create(sampleData);
+      console.log("Sample created successfully:", response);
+
+      // Add a small delay before navigation to ensure the sample is saved
+      setTimeout(() => {
+        navigate(`/air-monitoring/shift/${shiftId}/samples`);
+      }, 500);
+    } catch (error) {
+      console.error("Error creating sample:", error);
+      setError(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to create sample"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (isSubmitting) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Typography>Submitting...</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
@@ -146,16 +259,45 @@ const NewSample = () => {
         Add New Sample
       </Typography>
 
-      <Box component="form" onSubmit={handleSubmit}>
+      {error && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
+
+      <Box component="form" onSubmit={handleSubmit} noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
+          <FormControl fullWidth required>
+            <InputLabel>Sampler</InputLabel>
+            <Select
+              name="sampler"
+              value={form.sampler}
+              onChange={handleChange}
+              label="Sampler"
+            >
+              {users.map((user) => (
+                <MenuItem key={user._id} value={user._id}>
+                  {user.firstName} {user.lastName}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
-            name="sampleNo"
+            name="sampleNumber"
             label="Sample Number"
-            value={form.sampleNo}
-            disabled
+            value={form.sampleNumber}
+            onChange={handleChange}
+            required
             fullWidth
+            helperText={
+              projectID
+                ? `Full Sample ID will be: ${projectID}-${
+                    form.sampleNumber || "XXX"
+                  }`
+                : "Loading job details..."
+            }
           />
-          <FormControl fullWidth>
+          <FormControl fullWidth required>
             <InputLabel>Type</InputLabel>
             <Select
               name="type"
@@ -164,8 +306,8 @@ const NewSample = () => {
               label="Type"
             >
               <MenuItem value="Background">Background</MenuItem>
-              <MenuItem value="Personal">Personal</MenuItem>
-              <MenuItem value="Area">Area</MenuItem>
+              <MenuItem value="Clearance">Clearance</MenuItem>
+              <MenuItem value="Exposure">Exposure</MenuItem>
             </Select>
           </FormControl>
           <TextField
@@ -173,6 +315,7 @@ const NewSample = () => {
             label="Location"
             value={form.location}
             onChange={handleChange}
+            required
             fullWidth
           />
           <TextField
@@ -208,8 +351,10 @@ const NewSample = () => {
               type="time"
               value={form.startTime}
               onChange={handleChange}
+              required
               fullWidth
               InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 1 }}
             />
             <IconButton
               onClick={() => setCurrentTime("startTime")}
@@ -227,6 +372,7 @@ const NewSample = () => {
               onChange={handleChange}
               fullWidth
               InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 1 }}
             />
             <IconButton
               onClick={() => setCurrentTime("endTime")}
@@ -236,19 +382,14 @@ const NewSample = () => {
             </IconButton>
           </Box>
           <TextField
-            name="minutes"
-            label="Minutes"
-            value={form.minutes}
-            disabled
-            fullWidth
-          />
-          <TextField
             name="initialFlowrate"
             label="Initial Flowrate"
             type="number"
             value={form.initialFlowrate}
             onChange={handleChange}
+            required
             fullWidth
+            inputProps={{ step: "0.1" }}
           />
           <TextField
             name="finalFlowrate"
@@ -257,12 +398,14 @@ const NewSample = () => {
             value={form.finalFlowrate}
             onChange={handleChange}
             fullWidth
+            inputProps={{ step: "0.1" }}
           />
           <TextField
             name="averageFlowrate"
             label="Average Flowrate"
             value={form.averageFlowrate}
             disabled
+            required
             fullWidth
           />
           <TextField
@@ -281,10 +424,11 @@ const NewSample = () => {
             <Button
               type="submit"
               variant="contained"
+              onClick={() => console.log("Submit button clicked")}
               sx={{
-                backgroundColor: theme.palette.primary[500],
+                backgroundColor: theme.palette.primary.main,
                 "&:hover": {
-                  backgroundColor: theme.palette.primary[600],
+                  backgroundColor: theme.palette.primary.dark,
                 },
               }}
             >

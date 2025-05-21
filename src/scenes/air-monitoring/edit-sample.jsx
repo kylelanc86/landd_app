@@ -15,77 +15,130 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-
-const SAMPLES_KEY = "ldc_samples";
-const SHIFTS_KEY = "ldc_shifts";
+import {
+  sampleService,
+  shiftService,
+  jobService,
+  userService,
+} from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+import { formatDateForInput } from "../../utils/dateUtils";
 
 const EditSample = () => {
   const theme = useTheme();
   const { shiftId, sampleId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
-    sampleNo: "",
-    type: "Background",
+    sampler: "",
+    sampleNumber: "",
+    type: "",
     location: "",
     pumpNo: "",
     cowlNo: "",
-    filterSize: "25mm",
+    filterSize: "",
     startTime: "",
     endTime: "",
-    minutes: "",
     initialFlowrate: "",
     finalFlowrate: "",
     averageFlowrate: "",
     notes: "",
+    date: formatDateForInput(new Date()),
   });
-  const [jobId, setJobId] = useState(null);
+  const [projectID, setProjectID] = useState(null);
+  const [job, setJob] = useState(null);
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load sample and job data
+  // Fetch users when component mounts
   useEffect(() => {
-    const storedSamples = localStorage.getItem(SAMPLES_KEY);
-    const storedShifts = localStorage.getItem(SHIFTS_KEY);
-
-    if (storedSamples && storedShifts) {
-      const samples = JSON.parse(storedSamples);
-      const shifts = JSON.parse(storedShifts);
-
-      // Find the sample
-      const sample = samples.find((s) => s.id === parseInt(sampleId));
-      if (sample) {
-        setForm(sample);
+    const fetchUsers = async () => {
+      try {
+        const response = await userService.getAll();
+        setUsers(response.data);
+      } catch (error) {
+        console.error("Error fetching users:", error);
       }
+    };
+    fetchUsers();
+  }, []);
 
-      // Get job ID from shift
-      const shift = shifts.find((s) => s.id === parseInt(shiftId));
-      if (shift) {
-        setJobId(shift.jobId);
+  // Fetch sample data
+  useEffect(() => {
+    const fetchSampleData = async () => {
+      try {
+        setIsLoading(true);
+        // Fetch sample details
+        const sampleResponse = await sampleService.getById(sampleId);
+        const sample = sampleResponse.data;
+        console.log("Fetched sample data:", sample); // Debug log
+
+        // Fetch shift details to get project ID
+        const shiftResponse = await shiftService.getById(shiftId);
+        const shift = shiftResponse.data;
+
+        if (shift.job && shift.job.project) {
+          setProjectID(shift.job.project.projectID);
+        }
+
+        // Fetch job details
+        const jobResponse = await jobService.getById(shift.job._id);
+        setJob(jobResponse.data);
+
+        // Pre-fill form with sample data
+        setForm({
+          sampler: sample.collectedBy?._id || sample.collectedBy || "", // Handle both populated and unpopulated cases
+          sampleNumber: sample.sampleNumber?.split("-")[1] || "", // Extract number part after hyphen
+          type: sample.type || "",
+          location: sample.location || "",
+          pumpNo: sample.pumpNo || "",
+          cowlNo: sample.cowlNo || "",
+          filterSize: sample.filterSize || "",
+          startTime: sample.startTime || "",
+          endTime: sample.endTime || "",
+          initialFlowrate: sample.initialFlowrate || "",
+          finalFlowrate: sample.finalFlowrate || "",
+          averageFlowrate: sample.averageFlowrate || "",
+          notes: sample.notes || "",
+          date: sample.date
+            ? formatDateForInput(new Date(sample.date))
+            : formatDateForInput(new Date()),
+        });
+
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching sample data:", err);
+        setError("Failed to load sample data. Please try again later.");
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [shiftId, sampleId]);
+    };
 
-  // Calculate minutes when start or end time changes
-  useEffect(() => {
-    if (form.startTime && form.endTime) {
-      const start = new Date(`2000-01-01T${form.startTime}`);
-      const end = new Date(`2000-01-01T${form.endTime}`);
-      const diffMs = end - start;
-      const diffMins = Math.round(diffMs / 60000);
-      setForm((prev) => ({ ...prev, minutes: diffMins }));
+    if (sampleId && shiftId) {
+      fetchSampleData();
     }
-  }, [form.startTime, form.endTime]);
-
-  // Calculate average flowrate when initial or final flowrate changes
-  useEffect(() => {
-    if (form.initialFlowrate && form.finalFlowrate) {
-      const avg =
-        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
-      setForm((prev) => ({ ...prev, averageFlowrate: avg.toFixed(2) }));
-    }
-  }, [form.initialFlowrate, form.finalFlowrate]);
+  }, [sampleId, shiftId]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
+
+  // Calculate average flowrate when initial or final flowrate changes
+  useEffect(() => {
+    if (form.initialFlowrate) {
+      if (form.finalFlowrate) {
+        const avg =
+          (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) /
+          2;
+        setForm((prev) => ({ ...prev, averageFlowrate: avg.toFixed(2) }));
+      } else {
+        // If no final flowrate, use initial flowrate as average
+        setForm((prev) => ({ ...prev, averageFlowrate: form.initialFlowrate }));
+      }
+    }
+  }, [form.initialFlowrate, form.finalFlowrate]);
 
   const setCurrentTime = (field) => {
     const now = new Date();
@@ -95,26 +148,103 @@ const EditSample = () => {
     setForm((prev) => ({ ...prev, [field]: timeString }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setError("");
 
-    // Get existing samples
-    const storedSamples = localStorage.getItem(SAMPLES_KEY);
-    if (storedSamples) {
-      const samples = JSON.parse(storedSamples);
+    try {
+      if (!projectID) {
+        throw new Error("Project ID is required");
+      }
 
-      // Update the sample
-      const updatedSamples = samples.map((s) =>
-        s.id === parseInt(sampleId) ? { ...form, id: parseInt(sampleId) } : s
+      if (!job?._id) {
+        throw new Error("Job ID is required");
+      }
+
+      if (!shiftId) {
+        throw new Error("Shift ID is required");
+      }
+
+      if (!form.sampler) {
+        throw new Error("Sampler is required");
+      }
+
+      if (!form.location) {
+        throw new Error("Location is required");
+      }
+
+      // Generate sample number in the format: projectID-number
+      const sampleNumber = `${projectID}-${form.sampleNumber}`;
+
+      // Format times to include seconds
+      const formatTime = (time) => {
+        if (!time) return "";
+        return time.includes(":") ? time : `${time}:00`;
+      };
+
+      const sampleData = {
+        shift: shiftId,
+        job: job._id,
+        sampleNumber: sampleNumber,
+        fullSampleID: sampleNumber,
+        type: form.type,
+        location: form.location,
+        pumpNo: form.pumpNo || undefined,
+        cowlNo: form.cowlNo || undefined,
+        filterSize: form.filterSize || undefined,
+        startTime: formatTime(form.startTime),
+        endTime: form.endTime ? formatTime(form.endTime) : undefined,
+        initialFlowrate: parseFloat(form.initialFlowrate) || 0,
+        finalFlowrate: form.finalFlowrate
+          ? parseFloat(form.finalFlowrate)
+          : undefined,
+        averageFlowrate: parseFloat(form.averageFlowrate) || 0,
+        status: "pending",
+        notes: form.notes || undefined,
+        collectedBy: form.sampler,
+      };
+
+      // Validate required fields
+      if (!sampleData.startTime) {
+        throw new Error("Start time is required");
+      }
+      if (!sampleData.initialFlowrate) {
+        throw new Error("Initial flowrate is required");
+      }
+      if (!sampleData.averageFlowrate) {
+        throw new Error("Average flowrate is required");
+      }
+
+      await sampleService.update(sampleId, sampleData);
+      navigate(`/air-monitoring/shift/${shiftId}/samples`);
+    } catch (error) {
+      console.error("Error updating sample:", error);
+      setError(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to update sample"
       );
-
-      // Save to localStorage
-      localStorage.setItem(SAMPLES_KEY, JSON.stringify(updatedSamples));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Navigate back to samples list
-    navigate(`/air-monitoring/shift/${shiftId}/samples`);
   };
+
+  if (isLoading) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    );
+  }
+
+  if (isSubmitting) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Typography>Updating...</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
@@ -139,14 +269,43 @@ const EditSample = () => {
         Edit Sample
       </Typography>
 
-      <Box component="form" onSubmit={handleSubmit}>
+      {error && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
+
+      <Box component="form" onSubmit={handleSubmit} noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
+          <FormControl fullWidth required>
+            <InputLabel>Sampler</InputLabel>
+            <Select
+              name="sampler"
+              value={form.sampler}
+              onChange={handleChange}
+              label="Sampler"
+            >
+              {users.map((user) => (
+                <MenuItem key={user._id} value={user._id}>
+                  {user.firstName} {user.lastName}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
-            name="sampleNo"
+            name="sampleNumber"
             label="Sample Number"
-            value={form.sampleNo}
-            disabled
+            value={form.sampleNumber}
+            onChange={handleChange}
+            required
             fullWidth
+            helperText={
+              projectID
+                ? `Full Sample ID will be: ${projectID}-${
+                    form.sampleNumber || "XXX"
+                  }`
+                : "Loading job details..."
+            }
           />
           <FormControl fullWidth required>
             <InputLabel>Type</InputLabel>
@@ -157,8 +316,8 @@ const EditSample = () => {
               label="Type"
             >
               <MenuItem value="Background">Background</MenuItem>
-              <MenuItem value="Personal">Personal</MenuItem>
-              <MenuItem value="Area">Area</MenuItem>
+              <MenuItem value="Clearance">Clearance</MenuItem>
+              <MenuItem value="Exposure">Exposure</MenuItem>
             </Select>
           </FormControl>
           <TextField
@@ -174,7 +333,6 @@ const EditSample = () => {
             label="Pump No."
             value={form.pumpNo}
             onChange={handleChange}
-            required
             fullWidth
           />
           <TextField
@@ -182,10 +340,9 @@ const EditSample = () => {
             label="Cowl No."
             value={form.cowlNo}
             onChange={handleChange}
-            required
             fullWidth
           />
-          <FormControl fullWidth required>
+          <FormControl fullWidth>
             <InputLabel>Filter Size</InputLabel>
             <Select
               name="filterSize"
@@ -207,6 +364,7 @@ const EditSample = () => {
               required
               fullWidth
               InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 1 }}
             />
             <IconButton
               onClick={() => setCurrentTime("startTime")}
@@ -222,9 +380,9 @@ const EditSample = () => {
               type="time"
               value={form.endTime}
               onChange={handleChange}
-              required
               fullWidth
               InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 1 }}
             />
             <IconButton
               onClick={() => setCurrentTime("endTime")}
@@ -234,13 +392,6 @@ const EditSample = () => {
             </IconButton>
           </Box>
           <TextField
-            name="minutes"
-            label="Minutes"
-            value={form.minutes}
-            disabled
-            fullWidth
-          />
-          <TextField
             name="initialFlowrate"
             label="Initial Flowrate"
             type="number"
@@ -248,6 +399,7 @@ const EditSample = () => {
             onChange={handleChange}
             required
             fullWidth
+            inputProps={{ step: "0.1" }}
           />
           <TextField
             name="finalFlowrate"
@@ -255,14 +407,15 @@ const EditSample = () => {
             type="number"
             value={form.finalFlowrate}
             onChange={handleChange}
-            required
             fullWidth
+            inputProps={{ step: "0.1" }}
           />
           <TextField
             name="averageFlowrate"
             label="Average Flowrate"
             value={form.averageFlowrate}
             disabled
+            required
             fullWidth
           />
           <TextField
@@ -282,9 +435,9 @@ const EditSample = () => {
               type="submit"
               variant="contained"
               sx={{
-                backgroundColor: theme.palette.primary[500],
+                backgroundColor: theme.palette.primary.main,
                 "&:hover": {
-                  backgroundColor: theme.palette.primary[600],
+                  backgroundColor: theme.palette.primary.dark,
                 },
               }}
             >

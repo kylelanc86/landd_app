@@ -43,6 +43,12 @@ api.interceptors.request.use(
 // Add response interceptor
 api.interceptors.response.use(
   (response) => {
+    // Check for new token in response headers
+    const newToken = response.headers['new-token'];
+    if (newToken) {
+      console.log('Received new token from server');
+      localStorage.setItem('token', newToken);
+    }
     return response;
   },
   (error) => {
@@ -51,7 +57,6 @@ api.interceptors.response.use(
       if (error.config.url.includes('/xero/')) {
         const errorMessage = error.response?.data?.message || 'Not connected to Xero';
         console.log('Xero auth error:', errorMessage);
-        // Don't reject the promise, return a custom error response
         return Promise.resolve({
           data: {
             error: 'XERO_AUTH_REQUIRED',
@@ -66,7 +71,6 @@ api.interceptors.response.use(
         console.log('Auth error, clearing session and redirecting to login');
         localStorage.removeItem("token");
         localStorage.removeItem('currentUser');
-        // Use replace instead of href to prevent back button issues
         window.location.replace('/login');
       }
     }
@@ -129,8 +133,9 @@ export const jobService = {
 export const sampleService = {
   getAll: () => api.get('/samples'),
   getById: (id) => api.get(`/samples/${id}`),
+  getByShift: (shiftId) => api.get(`/samples/shift/${shiftId}`),
   create: (data) => api.post('/samples', data),
-  update: (id, data) => api.put(`/samples/${id}`, data),
+  update: (id, data) => api.patch(`/samples/${id}`, data),
   delete: (id) => api.delete(`/samples/${id}`)
 };
 

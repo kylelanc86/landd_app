@@ -5,17 +5,22 @@ import {
   IconButton,
   Typography,
   useTheme,
-  useMediaQuery,
-  Grid,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
 import Header from "../../components/Header";
 import { useNavigate, useParams } from "react-router-dom";
-import { shiftService, jobService } from "../../services/api";
+import { shiftService, jobService, sampleService } from "../../services/api";
 import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import { useAuth } from "../../context/AuthContext";
+import { formatDate } from "../../utils/dateUtils";
+import { generateShiftReport } from "../../utils/generateShiftReport";
 
 const Shifts = () => {
   const theme = useTheme();
@@ -26,25 +31,78 @@ const Shifts = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [projectDetails, setProjectDetails] = useState(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [newDate, setNewDate] = useState("");
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-
-        // First, get the job details to get project information
         const jobResponse = await jobService.getById(jobId);
-        console.log("Job response:", jobResponse.data);
-
         if (jobResponse.data && jobResponse.data.project) {
           setProjectDetails(jobResponse.data.project);
         }
-
-        // Then get the shifts
         const shiftsResponse = await shiftService.getByJob(jobId);
-        console.log("Shifts response:", shiftsResponse.data);
-        setShifts(shiftsResponse.data || []);
+        const formattedShifts = (shiftsResponse.data || []).map((shift) => ({
+          ...shift,
+          id: shift._id,
+          // Normalize status to handle variants
+          status: (() => {
+            const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
+            if (s === "pending") return "ongoing";
+            if (
+              [
+                "ongoing",
+                "sampling_complete",
+                "analysis_complete",
+                "shift_complete",
+              ].includes(s)
+            )
+              return s;
+            return "ongoing";
+          })(),
+        }));
 
+        // Fetch samples for each shift
+        const shiftsWithSamples = await Promise.all(
+          formattedShifts.map(async (shift) => {
+            try {
+              const samplesResponse = await sampleService.getByShift(shift._id);
+              console.log(
+                `Samples for shift ${shift._id}:`,
+                samplesResponse.data
+              );
+              const sampleNumbers = (samplesResponse.data || [])
+                .map((sample) => {
+                  // Extract just the number part after the hyphen
+                  const match = sample.sampleNumber?.match(/-(\d+)$/);
+                  return match ? match[1] : null;
+                })
+                .filter(Boolean)
+                .sort((a, b) => parseInt(a) - parseInt(b));
+
+              console.log(
+                `Processed sample numbers for shift ${shift._id}:`,
+                sampleNumbers
+              );
+              return {
+                ...shift,
+                sampleNumbers,
+              };
+            } catch (error) {
+              console.error(
+                `Error fetching samples for shift ${shift._id}:`,
+                error
+              );
+              return {
+                ...shift,
+                sampleNumbers: [],
+              };
+            }
+          })
+        );
+        setShifts(shiftsWithSamples);
         setError(null);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -58,11 +116,64 @@ const Shifts = () => {
   }, [jobId]);
 
   const handleAddShift = () => {
-    navigate(`/air-monitoring-shifts/new/${jobId}`);
+    setOpenDialog(true);
   };
 
-  const handleEditShift = (id) => {
-    navigate(`/air-monitoring-shifts/edit/${id}`);
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setNewDate("");
+  };
+
+  const handleSetToday = () => {
+    const today = new Date().toISOString().split("T")[0];
+    setNewDate(today);
+  };
+
+  const handleSubmit = async () => {
+    try {
+      console.log("Submit clicked - User state:", user);
+
+      if (!newDate) {
+        setError("Please select a date");
+        return;
+      }
+
+      if (!user || !user.id) {
+        console.log("User validation failed:", { user });
+        setError("Please log in to create a shift");
+        return;
+      }
+
+      const newShift = {
+        job: jobId,
+        name: `Shift ${new Date(newDate).toLocaleDateString()}`,
+        date: new Date(newDate).toISOString(),
+        startTime: "08:00",
+        endTime: "16:00",
+        supervisor: user.id,
+        status: "ongoing",
+        notes: "",
+      };
+
+      console.log("Creating shift with data:", newShift);
+      const response = await shiftService.create(newShift);
+
+      // Ensure the response data has the correct structure
+      const createdShift = {
+        ...response.data,
+        date: response.data.date || newShift.date, // Ensure date is present
+        _id: response.data._id, // Ensure _id is present
+      };
+
+      setShifts((prevShifts) => [...prevShifts, createdShift]);
+      handleCloseDialog();
+    } catch (err) {
+      console.error("Error creating shift:", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to create shift. Please try again."
+      );
+    }
   };
 
   const handleDeleteShift = async (id) => {
@@ -79,80 +190,127 @@ const Shifts = () => {
 
   const columns = [
     {
-      field: "name",
-      headerName: "Shift Name",
-      flex: 1,
-    },
-    {
       field: "date",
       headerName: "Date",
       flex: 1,
-      valueGetter: (params) => {
-        return new Date(params.row.date).toLocaleDateString();
-      },
-    },
-    {
-      field: "startTime",
-      headerName: "Start Time",
-      flex: 1,
-    },
-    {
-      field: "endTime",
-      headerName: "End Time",
-      flex: 1,
-    },
-    {
-      field: "supervisor",
-      headerName: "Supervisor",
-      flex: 1,
-      valueGetter: (params) => {
-        return params.row.supervisor
-          ? `${params.row.supervisor.firstName} ${params.row.supervisor.lastName}`
-          : "Unknown";
+      renderCell: (params) => {
+        return formatDate(params.row.date);
       },
     },
     {
       field: "status",
       headerName: "Status",
       flex: 1,
-      renderCell: ({ row: { status } }) => {
+      renderCell: (params) => {
+        const statusColors = {
+          ongoing: theme.palette.primary.main,
+          sampling_complete: theme.palette.info.main,
+          analysis_complete: theme.palette.success.main,
+          shift_complete: theme.palette.success.dark,
+        };
+
+        const statusLabels = {
+          ongoing: "Ongoing",
+          sampling_complete: "Sampling Complete",
+          analysis_complete: "Analysis Complete",
+          shift_complete: "Shift Complete",
+        };
+
         return (
           <Box
-            width="60%"
-            m="0 auto"
-            p="5px"
-            display="flex"
-            justifyContent="center"
-            backgroundColor={
-              status === "completed"
-                ? colors.secondary[500]
-                : status === "in_progress"
-                ? colors.primary[500]
-                : status === "cancelled"
-                ? colors.neutral[700]
-                : colors.grey[700]
-            }
-            borderRadius="4px"
+            sx={{
+              backgroundColor:
+                statusColors[params.row.status] || theme.palette.grey[500],
+              color: theme.palette.common.white,
+              padding: "4px 8px",
+              borderRadius: "4px",
+              fontSize: "0.875rem",
+            }}
           >
-            <Typography color={colors.grey[0]} sx={{ ml: "5px" }}>
-              {status.charAt(0).toUpperCase() +
-                status.slice(1).replace("_", " ")}
-            </Typography>
+            {statusLabels[params.row.status] || params.row.status}
           </Box>
         );
+      },
+    },
+    {
+      field: "sampleNumbers",
+      headerName: "Sample Numbers",
+      flex: 1,
+      renderCell: (params) => {
+        const numbers = params.row.sampleNumbers || [];
+        return numbers.length > 0 ? numbers.join(", ") : "No samples";
       },
     },
     {
       field: "actions",
       headerName: "Actions",
       flex: 1,
-      renderCell: ({ row: { _id } }) => {
+      renderCell: ({ row }) => {
+        const handleSamplesClick = () => {
+          console.log("Samples button clicked for shift:", row._id);
+          const path = `/air-monitoring/shift/${row._id}/samples`;
+          console.log("Attempting to navigate to:", path);
+          try {
+            navigate(path, { replace: false });
+          } catch (error) {
+            console.error("Navigation error:", error);
+          }
+        };
+
+        const handleViewReport = async () => {
+          try {
+            // Fetch job and samples for this shift
+            const jobResponse = await jobService.getById(
+              row.job?._id || row.job
+            );
+            const samplesResponse = await sampleService.getByShift(row._id);
+            generateShiftReport({
+              shift: row,
+              job: jobResponse.data,
+              samples: samplesResponse.data,
+            });
+          } catch (err) {
+            console.error("Error generating report:", err);
+            alert("Failed to generate report.");
+          }
+        };
+
         return (
           <Box>
-            <IconButton onClick={() => handleEditShift(_id)}>
-              <EditIcon />
-            </IconButton>
-            <IconButton onClick={() => handleDeleteShift(_id)}>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleSamplesClick}
+              sx={{
+                mr: 1,
+                backgroundColor: colors.primary[500],
+                color: colors.grey[0],
+                "&:hover": {
+                  backgroundColor: colors.primary[600],
+                },
+              }}
+            >
+              Samples
+            </Button>
+            {row.status === "analysis_complete" && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleViewReport}
+                sx={{
+                  mr: 1,
+                  borderColor: colors.success[500],
+                  color: colors.success[700],
+                  "&:hover": {
+                    borderColor: colors.success[700],
+                    backgroundColor: colors.success[50],
+                  },
+                }}
+              >
+                View Report
+              </Button>
+            )}
+            <IconButton onClick={() => handleDeleteShift(row._id)}>
               <DeleteIcon />
             </IconButton>
           </Box>
@@ -209,9 +367,6 @@ const Shifts = () => {
           "& .MuiDataGrid-cell": {
             borderBottom: "none",
           },
-          "& .name-column--cell": {
-            color: colors.secondary[500],
-          },
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: colors.primary[500],
             borderBottom: "none",
@@ -223,9 +378,6 @@ const Shifts = () => {
             borderTop: "none",
             backgroundColor: colors.primary[500],
           },
-          "& .MuiCheckbox-root": {
-            color: `${colors.secondary[500]} !important`,
-          },
         }}
       >
         <DataGrid
@@ -234,8 +386,52 @@ const Shifts = () => {
           getRowId={(row) => row._id}
           loading={loading}
           disableRowSelectionOnClick
+          error={error}
+          components={{
+            NoRowsOverlay: () => (
+              <Box sx={{ p: 2, textAlign: "center" }}>No shifts found</Box>
+            ),
+            ErrorOverlay: () => (
+              <Box sx={{ p: 2, textAlign: "center", color: "error.main" }}>
+                {error || "An error occurred"}
+              </Box>
+            ),
+          }}
         />
       </Box>
+
+      <Dialog open={openDialog} onClose={handleCloseDialog}>
+        <DialogTitle>Add New Shift</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2 }}>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Date"
+              type="date"
+              fullWidth
+              value={newDate}
+              onChange={(e) => setNewDate(e.target.value)}
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+            <Button
+              variant="outlined"
+              onClick={handleSetToday}
+              sx={{ height: "56px" }}
+            >
+              Today
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained">
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

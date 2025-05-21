@@ -23,8 +23,8 @@ import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AssessmentIcon from "@mui/icons-material/Assessment";
-
-const SAMPLES_KEY = "ldc_samples";
+import { sampleService, shiftService } from "../../services/api";
+import { formatDate, formatTime } from "../../utils/dateUtils";
 
 const SampleList = () => {
   const theme = useTheme();
@@ -32,72 +32,44 @@ const SampleList = () => {
   const navigate = useNavigate();
   const [samples, setSamples] = useState([]);
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState("sampleNo");
+  const [sortField, setSortField] = useState("sampleNumber");
   const [sortAsc, setSortAsc] = useState(true);
   const [shift, setShift] = useState(null);
-  const [allSamplesComplete, setAllSamplesComplete] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isCompleteDisabled, setIsCompleteDisabled] = useState(true);
 
   // Load shift and samples data
   useEffect(() => {
-    // Load shift data
-    const storedShifts = localStorage.getItem("ldc_shifts");
-    if (storedShifts) {
-      const shifts = JSON.parse(storedShifts);
-      const foundShift = shifts.find((s) => s.id === parseInt(shiftId));
-      if (foundShift) {
-        setShift(foundShift);
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        // Fetch shift details
+        const shiftResponse = await shiftService.getById(shiftId);
+        setShift(shiftResponse.data);
+
+        // Fetch samples for this shift
+        const samplesResponse = await sampleService.getByShift(shiftId);
+        setSamples(samplesResponse.data);
+        setIsCompleteDisabled(!validateSamplesComplete(samplesResponse.data));
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        setError("Failed to load data. Please try again later.");
+      } finally {
+        setLoading(false);
       }
-    }
-
-    // Load samples data
-    const storedSamples = localStorage.getItem(SAMPLES_KEY);
-    if (storedSamples) {
-      const allSamples = JSON.parse(storedSamples);
-      const shiftSamples = allSamples.filter(
-        (s) => s.shiftId === parseInt(shiftId)
-      );
-      setSamples(shiftSamples);
-    }
-  }, [shiftId]);
-
-  // Check if all samples are complete
-  useEffect(() => {
-    const isSampleComplete = (sample) => {
-      return (
-        sample.type &&
-        sample.location &&
-        sample.pumpNo &&
-        sample.cowlNo &&
-        sample.filterSize &&
-        sample.startTime &&
-        sample.endTime &&
-        sample.initialFlowrate &&
-        sample.finalFlowrate
-      );
     };
 
-    const allComplete = samples.length > 0 && samples.every(isSampleComplete);
-    setAllSamplesComplete(allComplete);
-  }, [samples]);
+    fetchData();
+  }, [shiftId]);
 
-  // Filtering and sorting
-  const filteredSamples = samples.filter((s) => {
-    const q = search.toLowerCase();
-    return (
-      s.sampleNo.toLowerCase().includes(q) ||
-      s.location.toLowerCase().includes(q) ||
-      s.type.toLowerCase().includes(q)
-    );
-  });
-
-  const sortedSamples = [...filteredSamples].sort((a, b) => {
-    if (a[sortField] < b[sortField]) return sortAsc ? -1 : 1;
-    if (a[sortField] > b[sortField]) return sortAsc ? 1 : -1;
-    return 0;
-  });
+  const handleSearch = (event) => {
+    setSearch(event.target.value);
+  };
 
   const handleSort = (field) => {
-    if (sortField === field) {
+    if (field === sortField) {
       setSortAsc(!sortAsc);
     } else {
       setSortField(field);
@@ -105,286 +77,234 @@ const SampleList = () => {
     }
   };
 
-  const handleDeleteSample = (sampleId) => {
-    const updatedSamples = samples.filter((s) => s.id !== sampleId);
-    setSamples(updatedSamples);
-    localStorage.setItem(SAMPLES_KEY, JSON.stringify(updatedSamples));
+  const handleDelete = async (sampleId) => {
+    if (window.confirm("Are you sure you want to delete this sample?")) {
+      try {
+        await sampleService.delete(sampleId);
+        setSamples(samples.filter((sample) => sample._id !== sampleId));
+      } catch (err) {
+        console.error("Error deleting sample:", err);
+        setError("Failed to delete sample. Please try again.");
+      }
+    }
   };
 
-  // PDF generation placeholder
-  const handlePrintPDF = () => {
-    // TODO: Implement PDF generation logic
-    alert("PDF generation coming soon!");
+  const filteredSamples = samples.filter((sample) =>
+    Object.values(sample).some(
+      (value) =>
+        value && value.toString().toLowerCase().includes(search.toLowerCase())
+    )
+  );
+
+  const sortedSamples = [...filteredSamples].sort((a, b) => {
+    const aValue = a[sortField];
+    const bValue = b[sortField];
+    if (aValue < bValue) return sortAsc ? -1 : 1;
+    if (aValue > bValue) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  // Add validation function
+  const validateSamplesComplete = (samples) => {
+    return samples.every((sample) => {
+      return (
+        sample.sampleNumber &&
+        sample.type &&
+        sample.location &&
+        sample.startTime &&
+        sample.endTime &&
+        sample.initialFlowrate &&
+        sample.finalFlowrate &&
+        sample.averageFlowrate
+      );
+    });
   };
 
-  if (!shift) {
-    return (
-      <Box sx={{ p: 4 }}>
-        <Typography>Shift not found</Typography>
-        <Button onClick={() => navigate(-1)}>Back to Shifts</Button>
-      </Box>
-    );
+  // Add handleSampleComplete function
+  const handleSampleComplete = async () => {
+    try {
+      await shiftService.update(shiftId, { status: "sampling_complete" });
+      // Navigate to shifts page with project ID
+      if (shift?.job?.project?.projectID) {
+        navigate(
+          `/air-monitoring/project/${shift.job.project.projectID}/shifts`
+        );
+      } else {
+        navigate("/air-monitoring/shifts");
+      }
+    } catch (error) {
+      console.error("Error updating shift status:", error);
+      setError("Failed to update shift status. Please try again.");
+    }
+  };
+
+  if (loading) {
+    return <Typography>Loading...</Typography>;
+  }
+
+  if (error) {
+    return <Typography color="error">{error}</Typography>;
   }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      {/* Analysis Complete Banner and Print Button */}
-      {shift?.status === "Analysis Complete" && (
-        <Box sx={{ mb: 3, display: "flex", alignItems: "center", gap: 2 }}>
-          <Typography
-            sx={{ color: "success.main", fontWeight: "bold", fontSize: 20 }}
-          >
-            Analysis complete
-          </Typography>
-          <Button variant="contained" color="success" onClick={handlePrintPDF}>
-            Print Report PDF
-          </Button>
-        </Box>
-      )}
-      <Box
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate(-1)}
+        sx={{ mb: 4 }}
+      >
+        Back to Shifts
+      </Button>
+
+      <Typography
+        variant="h4"
         sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          color:
+            theme.palette.mode === "dark"
+              ? "#fff"
+              : theme.palette.secondary[200],
           mb: 4,
         }}
       >
-        <Box>
-          <Button
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate(-1)}
-            sx={{ mb: 2 }}
-          >
-            Back to Shifts
-          </Button>
-          <Typography
-            variant="h4"
-            sx={{
-              color:
-                theme.palette.mode === "dark"
-                  ? "#fff"
-                  : theme.palette.secondary[200],
-              fontSize: { xs: "1.5rem", sm: "2rem", md: "2.5rem" },
-            }}
-          >
-            Shift Date: {shift.date}
-          </Typography>
-          <Typography
-            variant="subtitle1"
-            sx={{
-              color:
-                theme.palette.mode === "dark"
-                  ? theme.palette.grey[300]
-                  : theme.palette.secondary[300],
-            }}
-          >
-            Supervisor: {shift.supervisor}
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={2}>
-          {allSamplesComplete && (
-            <Button
-              variant="contained"
-              startIcon={<AssessmentIcon />}
-              onClick={() =>
-                navigate(`/air-monitoring/shift/${shiftId}/analysis`)
-              }
-              sx={{
-                backgroundColor: theme.palette.success[500],
-                "&:hover": {
-                  backgroundColor: theme.palette.success[600],
-                },
-              }}
-            >
-              Complete Analysis
-            </Button>
-          )}
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() =>
-              navigate(`/air-monitoring/shift/${shiftId}/samples/new`)
-            }
-            sx={{
-              backgroundColor: theme.palette.primary[500],
-              "&:hover": {
-                backgroundColor: theme.palette.primary[600],
-              },
-            }}
-          >
-            Add Sample
-          </Button>
-        </Stack>
-      </Box>
+        Samples for{" "}
+        {shift?.name ? `Shift ${formatDate(shift.date)}` : "Loading..."}
+      </Typography>
 
-      <Box sx={{ mb: 3 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        sx={{ mb: 4 }}
+        justifyContent="space-between"
+        alignItems="center"
+      >
         <TextField
           label="Search"
+          variant="outlined"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={handleSearch}
+          sx={{ width: { xs: "100%", sm: "300px" } }}
           InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <SearchIcon
-                  sx={{
-                    color:
-                      theme.palette.mode === "dark"
-                        ? "#fff"
-                        : theme.palette.secondary[200],
-                  }}
-                />
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
               </InputAdornment>
             ),
           }}
+        />
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() =>
+            navigate(`/air-monitoring/shift/${shiftId}/samples/new`)
+          }
           sx={{
-            width: 300,
-            "& .MuiInputLabel-root": {
-              color:
-                theme.palette.mode === "dark"
-                  ? "#fff"
-                  : theme.palette.secondary[200],
-            },
-            "& .MuiOutlinedInput-root": {
-              color:
-                theme.palette.mode === "dark"
-                  ? "#fff"
-                  : theme.palette.secondary[200],
-              "& fieldset": {
-                borderColor:
-                  theme.palette.mode === "dark"
-                    ? "#fff"
-                    : theme.palette.secondary[200],
-              },
+            backgroundColor: theme.palette.primary.main,
+            "&:hover": {
+              backgroundColor: theme.palette.primary.dark,
             },
           }}
-        />
-      </Box>
+        >
+          Add Sample
+        </Button>
+      </Stack>
 
-      <TableContainer component={Paper} sx={{ borderRadius: "8px" }}>
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell
-                onClick={() => handleSort("sampleNo")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Sample No{" "}
-                {sortField === "sampleNo" ? (sortAsc ? "▲" : "▼") : ""}
+              <TableCell onClick={() => handleSort("sampleNumber")}>
+                Sample Number
               </TableCell>
-              <TableCell
-                onClick={() => handleSort("type")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Type {sortField === "type" ? (sortAsc ? "▲" : "▼") : ""}
+              <TableCell onClick={() => handleSort("type")}>Type</TableCell>
+              <TableCell onClick={() => handleSort("location")}>
+                Location
               </TableCell>
-              <TableCell
-                onClick={() => handleSort("location")}
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                  cursor: "pointer",
-                }}
-              >
-                Location {sortField === "location" ? (sortAsc ? "▲" : "▼") : ""}
+              <TableCell onClick={() => handleSort("startTime")}>
+                Start Time
               </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Time
+              <TableCell onClick={() => handleSort("endTime")}>
+                End Time
               </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Minutes
+              <TableCell onClick={() => handleSort("averageFlowrate")}>
+                Flow Rate (L/min)
               </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Average Flowrate
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: "bold",
-                  color:
-                    theme.palette.mode === "dark"
-                      ? "#fff"
-                      : theme.palette.secondary[200],
-                }}
-              >
-                Actions
-              </TableCell>
+              <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedSamples.map((sample) => (
-              <TableRow key={sample.id}>
-                <TableCell>{sample.sampleNo}</TableCell>
+              <TableRow key={sample._id}>
+                <TableCell>{sample.sampleNumber}</TableCell>
                 <TableCell>{sample.type}</TableCell>
                 <TableCell>{sample.location}</TableCell>
-                <TableCell>{`${sample.startTime} - ${sample.endTime}`}</TableCell>
-                <TableCell>{sample.minutes}</TableCell>
+                <TableCell>{formatTime(sample.startTime)}</TableCell>
+                <TableCell>
+                  {sample.endTime ? formatTime(sample.endTime) : "-"}
+                </TableCell>
                 <TableCell>{sample.averageFlowrate}</TableCell>
                 <TableCell>
-                  <Stack direction="row" spacing={1}>
-                    <IconButton
-                      onClick={() =>
-                        navigate(
-                          `/air-monitoring/shift/${shiftId}/samples/edit/${sample.id}`
-                        )
-                      }
-                      size="small"
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      onClick={() => handleDeleteSample(sample.id)}
-                      size="small"
-                      sx={{ color: theme.palette.error.main }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Stack>
+                  <IconButton
+                    onClick={() =>
+                      navigate(
+                        `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
+                      )
+                    }
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton onClick={() => handleDelete(sample._id)}>
+                    <DeleteIcon />
+                  </IconButton>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "flex-end",
+          mt: 2,
+          gap: 2,
+        }}
+      >
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleSampleComplete}
+          disabled={isCompleteDisabled}
+          sx={{
+            backgroundColor: theme.palette.primary.main,
+            color: theme.palette.primary.contrastText,
+            "&:hover": {
+              backgroundColor: theme.palette.primary.dark,
+            },
+            "&.Mui-disabled": {
+              backgroundColor: theme.palette.grey[700],
+              color: theme.palette.grey[500],
+            },
+          }}
+        >
+          Sampling Complete
+        </Button>
+      </Box>
+
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
+        <Button
+          variant="contained"
+          onClick={() => navigate(`/air-monitoring/shift/${shiftId}/analysis`)}
+          sx={{
+            backgroundColor: theme.palette.primary.main,
+            "&:hover": {
+              backgroundColor: theme.palette.primary.dark,
+            },
+          }}
+        >
+          Analysis
+        </Button>
+      </Box>
     </Box>
   );
 };

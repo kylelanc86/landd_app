@@ -25,6 +25,7 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
+import { sampleService, shiftService } from "../../services/api";
 
 const SAMPLES_KEY = "ldc_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_analysis_progress";
@@ -45,42 +46,68 @@ const Analysis = () => {
   const inputRefs = useRef({});
   const [isAnalysisComplete, setIsAnalysisComplete] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Load samples and in-progress analysis data
   useEffect(() => {
-    const storedSamples = localStorage.getItem(SAMPLES_KEY);
-    let shiftSamples = [];
-    if (storedSamples) {
-      const allSamples = JSON.parse(storedSamples);
-      shiftSamples = allSamples.filter((s) => s.shiftId === parseInt(shiftId));
-      setSamples(shiftSamples);
-    }
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        // Fetch samples for this shift
+        const samplesResponse = await sampleService.getByShift(shiftId);
+        // Sort samples by the number after the hyphen
+        const sortedSamples = samplesResponse.data.sort((a, b) => {
+          const aNum = parseInt(a.sampleNumber.split("-")[1]);
+          const bNum = parseInt(b.sampleNumber.split("-")[1]);
+          return aNum - bNum;
+        });
+        setSamples(sortedSamples);
 
-    // Load in-progress analysis data if present
-    const progressData = localStorage.getItem(ANALYSIS_PROGRESS_KEY);
-    if (progressData) {
-      const parsed = JSON.parse(progressData);
-      if (parsed.shiftId === parseInt(shiftId)) {
-        setAnalysisDetails(parsed.analysisDetails);
-        setSampleAnalyses(parsed.sampleAnalyses);
-        return;
+        // Initialize analyses for each sample
+        const initialAnalyses = {};
+        sortedSamples.forEach((sample) => {
+          initialAnalyses[sample._id] = {
+            edgesDistribution: "",
+            backgroundDust: "",
+            fibreCounts: Array(5)
+              .fill()
+              .map(() => Array(20).fill("")),
+            fibresCounted: 0,
+            fieldsCounted: 0,
+          };
+        });
+
+        // Load in-progress analysis data if present
+        const progressData = localStorage.getItem(ANALYSIS_PROGRESS_KEY);
+        if (progressData) {
+          const parsed = JSON.parse(progressData);
+          if (parsed.shiftId === shiftId) {
+            setAnalysisDetails(parsed.analysisDetails);
+            // Merge saved analyses with new samples
+            const mergedAnalyses = { ...initialAnalyses };
+            Object.keys(parsed.sampleAnalyses).forEach((sampleId) => {
+              if (mergedAnalyses[sampleId]) {
+                mergedAnalyses[sampleId] = parsed.sampleAnalyses[sampleId];
+              }
+            });
+            setSampleAnalyses(mergedAnalyses);
+          } else {
+            setSampleAnalyses(initialAnalyses);
+          }
+        } else {
+          setSampleAnalyses(initialAnalyses);
+        }
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        setError("Failed to load data. Please try again later.");
+      } finally {
+        setLoading(false);
       }
-    }
+    };
 
-    // If no progress data, initialize as before
-    const initialAnalyses = {};
-    shiftSamples.forEach((sample) => {
-      initialAnalyses[sample.id] = {
-        edgesDistribution: "",
-        backgroundDust: "",
-        fibreCounts: Array(5)
-          .fill()
-          .map(() => Array(20).fill("")),
-        fibresCounted: 0,
-        fieldsCounted: 0,
-      };
-    });
-    setSampleAnalyses(initialAnalyses);
+    fetchData();
   }, [shiftId]);
 
   const handleAnalysisDetailsChange = (e) => {
@@ -241,9 +268,23 @@ const Analysis = () => {
     }
   };
 
+  const calculateDuration = (startTime, endTime) => {
+    if (!startTime || !endTime) return 0;
+
+    const start = new Date(`2000-01-01T${startTime}`);
+    const end = new Date(`2000-01-01T${endTime}`);
+
+    // Handle case where end time is on the next day
+    if (end < start) {
+      end.setDate(end.getDate() + 1);
+    }
+
+    return Math.round((end - start) / (1000 * 60));
+  };
+
   const calculateConcentration = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
-    const sample = samples.find((s) => s.id === sampleId);
+    const sample = samples.find((s) => s._id === sampleId);
 
     if (!analysis || !sample) return null;
 
@@ -251,7 +292,7 @@ const Analysis = () => {
     const fibresCounted = analysis.fibresCounted || 0;
     const fieldsCounted = analysis.fieldsCounted || 0;
     const averageFlowrate = parseFloat(sample.averageFlowrate) || 0;
-    const minutes = parseFloat(sample.minutes) || 0;
+    const minutes = calculateDuration(sample.startTime, sample.endTime);
 
     if (fieldsCounted === 0 || averageFlowrate === 0 || minutes === 0)
       return null;
@@ -260,7 +301,7 @@ const Analysis = () => {
     const concentration =
       microscopeConstant *
       (fibresForCalculation / fieldsCounted) *
-      (1 / (averageFlowrate * minutes));
+      (1 / (averageFlowrate * 1000 * minutes));
 
     return concentration.toFixed(3);
   };
@@ -290,7 +331,7 @@ const Analysis = () => {
 
     // Check if any sample analyses have data
     return samples.some((sample) => {
-      const analysis = sampleAnalyses[sample.id];
+      const analysis = sampleAnalyses[sample._id];
       if (!analysis) return false;
 
       // Check if any fields are filled
@@ -308,43 +349,70 @@ const Analysis = () => {
   };
 
   const handleSaveAnalysis = () => {
+    console.log("Save Analysis button clicked");
+    console.log("Current analysis details:", analysisDetails);
+    console.log("Current sample analyses:", sampleAnalyses);
+
     // Save in-progress data
     const progressData = {
-      shiftId: parseInt(shiftId),
+      shiftId: shiftId,
       analysisDetails,
       sampleAnalyses,
       timestamp: new Date().toISOString(),
     };
-    localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(progressData));
+    console.log("Saving progress data:", progressData);
+
+    try {
+      localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(progressData));
+      console.log("Progress data saved successfully");
+    } catch (error) {
+      console.error("Error saving progress data:", error);
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Save analysis data to localStorage (finalized)
-    const analysisData = {
-      shiftId: parseInt(shiftId),
+  const handleSaveAndClose = () => {
+    console.log("Save and Close button clicked");
+    // Save in-progress data
+    const progressData = {
+      shiftId: shiftId,
       analysisDetails,
       sampleAnalyses,
       timestamp: new Date().toISOString(),
     };
-    const storedAnalyses = localStorage.getItem("ldc_analyses");
-    const analyses = storedAnalyses ? JSON.parse(storedAnalyses) : [];
-    analyses.push(analysisData);
-    localStorage.setItem("ldc_analyses", JSON.stringify(analyses));
-    // Also save as in-progress (so reopening loads latest)
-    localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(analysisData));
-
-    // Update shift status to 'Analysis Complete'
-    const storedShifts = localStorage.getItem("ldc_shifts");
-    if (storedShifts) {
-      const shifts = JSON.parse(storedShifts);
-      const updatedShifts = shifts.map((s) =>
-        s.id === parseInt(shiftId) ? { ...s, status: "Analysis Complete" } : s
-      );
-      localStorage.setItem("ldc_shifts", JSON.stringify(updatedShifts));
+    try {
+      localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(progressData));
+      console.log("Progress data saved successfully");
+      // Navigate back to samples page
+      navigate(-1);
+    } catch (error) {
+      console.error("Error saving progress data:", error);
     }
+  };
 
-    setIsAnalysisComplete(true);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      // Save analysis data
+      await handleSaveAnalysis();
+
+      // Get shift data to get job ID
+      const shiftResponse = await shiftService.getById(shiftId);
+      const shift = shiftResponse.data;
+      const jobId = shift?.job?._id;
+
+      // Update shift status to analysis_complete
+      await shiftService.update(shiftId, { status: "analysis_complete" });
+
+      // Navigate back to shifts page
+      if (jobId) {
+        navigate(`/air-monitoring/jobs/${jobId}/shifts`);
+      } else {
+        navigate("/air-monitoring/shifts");
+      }
+    } catch (error) {
+      console.error("Error finalizing analysis:", error);
+      setError("Failed to finalize analysis. Please try again.");
+    }
   };
 
   const handleCancel = () => {
@@ -367,7 +435,7 @@ const Analysis = () => {
     }
     // Check all samples
     return samples.every((sample) => {
-      const analysis = sampleAnalyses[sample.id];
+      const analysis = sampleAnalyses[sample._id];
       if (!analysis) return false;
       if (!analysis.edgesDistribution || !analysis.backgroundDust) return false;
       // If filter is uncountable, skip fibre counts
@@ -386,6 +454,14 @@ const Analysis = () => {
       return true;
     });
   };
+
+  if (loading) {
+    return <Typography>Loading...</Typography>;
+  }
+
+  if (error) {
+    return <Typography color="error">{error}</Typography>;
+  }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
@@ -459,19 +535,21 @@ const Analysis = () => {
 
           {/* Sample Analysis Forms */}
           {samples.map((sample) => (
-            <Paper key={sample.id} sx={{ p: 3 }}>
+            <Paper key={sample._id} sx={{ p: 3 }}>
               <Stack spacing={3}>
                 <Typography variant="h3">
-                  Sample {sample.sampleNo} - Cowl {sample.cowlNo}
+                  {sample.sampleNumber} : Cowl {sample.cowlNo}
                 </Typography>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
                   <FormControl fullWidth>
                     <InputLabel>Edges/Distribution</InputLabel>
                     <Select
-                      value={sampleAnalyses[sample.id]?.edgesDistribution || ""}
+                      value={
+                        sampleAnalyses[sample._id]?.edgesDistribution || ""
+                      }
                       onChange={(e) =>
                         handleSampleAnalysisChange(
-                          sample.id,
+                          sample._id,
                           "edgesDistribution",
                           e.target.value
                         )
@@ -485,10 +563,10 @@ const Analysis = () => {
                   <FormControl fullWidth>
                     <InputLabel>Background Dust</InputLabel>
                     <Select
-                      value={sampleAnalyses[sample.id]?.backgroundDust || ""}
+                      value={sampleAnalyses[sample._id]?.backgroundDust || ""}
                       onChange={(e) =>
                         handleSampleAnalysisChange(
-                          sample.id,
+                          sample._id,
                           "backgroundDust",
                           e.target.value
                         )
@@ -516,15 +594,15 @@ const Analysis = () => {
                     <Typography variant="subtitle1">Fibre Counts</Typography>
                     <Button
                       startIcon={<ClearIcon />}
-                      onClick={() => handleClearTable(sample.id)}
-                      disabled={isFilterUncountable(sample.id)}
+                      onClick={() => handleClearTable(sample._id)}
+                      disabled={isFilterUncountable(sample._id)}
                       size="small"
                       color="error"
                     >
                       Clear
                     </Button>
                   </Box>
-                  {isFilterUncountable(sample.id) && (
+                  {isFilterUncountable(sample._id) && (
                     <Box
                       sx={{
                         position: "absolute",
@@ -564,7 +642,7 @@ const Analysis = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {sampleAnalyses[sample.id]?.fibreCounts.map(
+                        {sampleAnalyses[sample._id]?.fibreCounts.map(
                           (row, rowIndex) => (
                             <TableRow key={rowIndex}>
                               <TableCell sx={{ p: 0.5 }}>
@@ -581,7 +659,7 @@ const Analysis = () => {
                                     value={cell}
                                     onChange={(e) =>
                                       handleFibreCountChange(
-                                        sample.id,
+                                        sample._id,
                                         rowIndex,
                                         colIndex,
                                         e.target.value
@@ -590,16 +668,16 @@ const Analysis = () => {
                                     onKeyDown={(e) =>
                                       handleKeyDown(
                                         e,
-                                        sample.id,
+                                        sample._id,
                                         rowIndex,
                                         colIndex
                                       )
                                     }
                                     size="small"
-                                    disabled={isFilterUncountable(sample.id)}
+                                    disabled={isFilterUncountable(sample._id)}
                                     inputRef={(el) => {
                                       inputRefs.current[
-                                        `${sample.id}-${rowIndex}-${colIndex}`
+                                        `${sample._id}-${rowIndex}-${colIndex}`
                                       ] = el;
                                     }}
                                     sx={{
@@ -628,11 +706,11 @@ const Analysis = () => {
                             >
                               <Typography>
                                 Fibres Counted:{" "}
-                                {sampleAnalyses[sample.id]?.fibresCounted || 0}
+                                {sampleAnalyses[sample._id]?.fibresCounted || 0}
                               </Typography>
                               <Typography>
                                 Fields Counted:{" "}
-                                {sampleAnalyses[sample.id]?.fieldsCounted || 0}
+                                {sampleAnalyses[sample._id]?.fieldsCounted || 0}
                               </Typography>
                             </Stack>
                           </TableCell>
@@ -653,7 +731,7 @@ const Analysis = () => {
                                   Calculated Concentration
                                 </Typography>
                                 <Typography variant="h4">
-                                  {calculateConcentration(sample.id) || "N/A"}{" "}
+                                  {calculateConcentration(sample._id) || "N/A"}{" "}
                                   fibres/mL
                                 </Typography>
                               </Box>
@@ -665,7 +743,7 @@ const Analysis = () => {
                                   Reported Concentration
                                 </Typography>
                                 <Typography variant="h4">
-                                  {getReportedConcentration(sample.id)}{" "}
+                                  {getReportedConcentration(sample._id)}{" "}
                                   fibres/mL
                                 </Typography>
                               </Box>
@@ -702,35 +780,50 @@ const Analysis = () => {
             </Paper>
           ))}
 
-          <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-            <Button variant="outlined" onClick={handleCancel}>
+          <Box
+            sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}
+          >
+            <Button
+              variant="outlined"
+              onClick={handleCancel}
+              sx={{
+                color: theme.palette.primary.main,
+                borderColor: theme.palette.primary.main,
+                "&:hover": {
+                  borderColor: theme.palette.primary.dark,
+                },
+              }}
+            >
               Cancel
             </Button>
             <Button
-              type="button"
               variant="contained"
-              onClick={handleSaveAnalysis}
+              onClick={handleSaveAndClose}
               sx={{
-                backgroundColor: theme.palette.primary[300],
+                backgroundColor: theme.palette.primary[400],
                 "&:hover": {
-                  backgroundColor: theme.palette.primary[400],
+                  backgroundColor: theme.palette.primary[500],
                 },
               }}
             >
-              Save Analysis
+              Save & Close
             </Button>
             <Button
-              type="submit"
               variant="contained"
+              onClick={handleSubmit}
               disabled={!isAllAnalysisComplete()}
               sx={{
-                backgroundColor: theme.palette.primary[500],
+                backgroundColor: theme.palette.primary.main,
                 "&:hover": {
-                  backgroundColor: theme.palette.primary[600],
+                  backgroundColor: theme.palette.primary.dark,
+                },
+                "&.Mui-disabled": {
+                  backgroundColor: theme.palette.grey[700],
+                  color: theme.palette.grey[500],
                 },
               }}
             >
-              Finalize & Complete
+              Finalise Analysis
             </Button>
           </Box>
 

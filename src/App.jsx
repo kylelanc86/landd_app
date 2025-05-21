@@ -12,7 +12,6 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./scenes/login";
 import AirMonitoring from "./scenes/air-monitoring";
 import Shifts from "./scenes/air-monitoring/shifts";
-import Samples from "./scenes/air-monitoring/samples";
 import Projects from "./scenes/projects";
 import SampleList from "./scenes/air-monitoring/air-monitoring-sample-list";
 import NewSample from "./scenes/air-monitoring/new-sample";
