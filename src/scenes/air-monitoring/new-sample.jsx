@@ -11,8 +11,10 @@ import {
   Select,
   MenuItem,
   IconButton,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import {
@@ -32,10 +34,10 @@ const NewSample = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
-    sampler: "",
     sampleNumber: "",
     type: "",
     location: "",
@@ -48,12 +50,14 @@ const NewSample = () => {
     finalFlowrate: "",
     averageFlowrate: "",
     notes: "",
-    date: formatDateForInput(new Date()),
+    isFieldBlank: false,
   });
   const [projectID, setProjectID] = useState(null);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [shift, setShift] = useState(null);
 
   // Fetch users when component mounts
   useEffect(() => {
@@ -67,6 +71,36 @@ const NewSample = () => {
     };
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    const fetchShift = async () => {
+      try {
+        const response = await shiftService.getById(shiftId);
+        setShift(response.data);
+
+        // Get the next sample number from location state
+        const nextNumber = location.state?.nextSampleNumber;
+        if (nextNumber) {
+          // Get the project ID from the shift's job
+          const projectID = response.data.job?.project?.projectID;
+          if (projectID) {
+            // Set just the number part as the sample number
+            setForm((prev) => ({
+              ...prev,
+              sampleNumber: nextNumber.toString(),
+            }));
+            // Store the project ID for later use in fullSampleID
+            setProjectID(projectID);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching shift:", err);
+        setError("Failed to load shift details");
+      }
+    };
+
+    fetchShift();
+  }, [shiftId, location.state]);
 
   useEffect(() => {
     const fetchShiftDetails = async () => {
@@ -104,7 +138,17 @@ const NewSample = () => {
   }, [shiftId]);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, checked } = e.target;
+    if (name === "isFieldBlank") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+        // If field blank is checked, set location to 'Field blank'
+        location: checked ? "Field blank" : prev.location,
+      }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   // Calculate average flowrate when initial or final flowrate changes
@@ -154,17 +198,13 @@ const NewSample = () => {
         throw new Error("Shift ID is required");
       }
 
-      if (!form.sampler) {
-        throw new Error("Sampler is required");
+      if (!form.sampleNumber) {
+        throw new Error("Sample number is required");
       }
 
-      if (!form.location) {
-        throw new Error("Location is required");
-      }
-
-      // Generate sample number in the format: projectID-number
-      const sampleNumber = `${projectID}-${form.sampleNumber}`;
-      console.log("Generated sample number:", sampleNumber);
+      // Generate full sample ID in the format: {projectID}-{sampleNumber}
+      const fullSampleID = `${projectID}-${form.sampleNumber}`;
+      console.log("Generated full sample ID:", fullSampleID);
 
       // Map sample type to match backend enum
       const sampleType = form.type;
@@ -178,35 +218,28 @@ const NewSample = () => {
       const sampleData = {
         shift: shiftId,
         job: job._id,
-        sampleNumber: sampleNumber,
-        fullSampleID: sampleNumber,
-        type: sampleType,
-        location: form.location,
+        sampleNumber: form.sampleNumber,
+        fullSampleID: fullSampleID,
+        type: sampleType || undefined,
+        location: form.location || undefined,
         pumpNo: form.pumpNo || undefined,
         cowlNo: form.cowlNo || undefined,
         filterSize: form.filterSize || undefined,
-        startTime: formatTime(form.startTime),
+        startTime: form.startTime ? formatTime(form.startTime) : undefined,
         endTime: form.endTime ? formatTime(form.endTime) : undefined,
-        initialFlowrate: parseFloat(form.initialFlowrate) || 0,
+        initialFlowrate: form.initialFlowrate
+          ? parseFloat(form.initialFlowrate)
+          : undefined,
         finalFlowrate: form.finalFlowrate
           ? parseFloat(form.finalFlowrate)
           : undefined,
-        averageFlowrate: parseFloat(form.averageFlowrate) || 0,
+        averageFlowrate: form.averageFlowrate
+          ? parseFloat(form.averageFlowrate)
+          : undefined,
         status: "pending",
         notes: form.notes || undefined,
-        collectedBy: form.sampler,
+        collectedBy: form.sampler || undefined,
       };
-
-      // Validate required fields
-      if (!sampleData.startTime) {
-        throw new Error("Start time is required");
-      }
-      if (!sampleData.initialFlowrate) {
-        throw new Error("Initial flowrate is required");
-      }
-      if (!sampleData.averageFlowrate) {
-        throw new Error("Average flowrate is required");
-      }
 
       console.log("Submitting sample data:", sampleData);
       const response = await sampleService.create(sampleData);
@@ -297,117 +330,150 @@ const NewSample = () => {
                 : "Loading job details..."
             }
           />
-          <FormControl fullWidth required>
-            <InputLabel>Type</InputLabel>
-            <Select
-              name="type"
-              value={form.type}
-              onChange={handleChange}
-              label="Type"
-            >
-              <MenuItem value="Background">Background</MenuItem>
-              <MenuItem value="Clearance">Clearance</MenuItem>
-              <MenuItem value="Exposure">Exposure</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            name="location"
-            label="Location"
-            value={form.location}
-            onChange={handleChange}
-            required
-            fullWidth
+          <FormControlLabel
+            control={
+              <Checkbox
+                name="isFieldBlank"
+                checked={form.isFieldBlank}
+                onChange={handleChange}
+              />
+            }
+            label="Field Blank"
           />
-          <TextField
-            name="pumpNo"
-            label="Pump No."
-            value={form.pumpNo}
-            onChange={handleChange}
-            fullWidth
-          />
+          {!form.isFieldBlank && (
+            <>
+              <FormControl fullWidth required>
+                <InputLabel>Type</InputLabel>
+                <Select
+                  name="type"
+                  value={form.type}
+                  onChange={handleChange}
+                  label="Type"
+                >
+                  <MenuItem value="Background">Background</MenuItem>
+                  <MenuItem value="Clearance">Clearance</MenuItem>
+                  <MenuItem value="Exposure">Exposure</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                name="location"
+                label="Location"
+                value={form.location}
+                onChange={handleChange}
+                required
+                fullWidth
+              />
+            </>
+          )}
+          {form.isFieldBlank && (
+            <TextField
+              name="location"
+              label="Location"
+              value="Field blank"
+              disabled
+              required
+              fullWidth
+            />
+          )}
+          {!form.isFieldBlank && (
+            <>
+              <TextField
+                name="pumpNo"
+                label="Pump No."
+                value={form.pumpNo}
+                onChange={handleChange}
+                fullWidth
+              />
+            </>
+          )}
           <TextField
             name="cowlNo"
             label="Cowl No."
             value={form.cowlNo}
             onChange={handleChange}
-            fullWidth
-          />
-          <FormControl fullWidth>
-            <InputLabel>Filter Size</InputLabel>
-            <Select
-              name="filterSize"
-              value={form.filterSize}
-              onChange={handleChange}
-              label="Filter Size"
-            >
-              <MenuItem value="25mm">25mm</MenuItem>
-              <MenuItem value="13mm">13mm</MenuItem>
-            </Select>
-          </FormControl>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField
-              name="startTime"
-              label="Start Time"
-              type="time"
-              value={form.startTime}
-              onChange={handleChange}
-              required
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              inputProps={{ step: 1 }}
-            />
-            <IconButton
-              onClick={() => setCurrentTime("startTime")}
-              sx={{ alignSelf: "flex-end", mb: 1 }}
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          </Box>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField
-              name="endTime"
-              label="End Time"
-              type="time"
-              value={form.endTime}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              inputProps={{ step: 1 }}
-            />
-            <IconButton
-              onClick={() => setCurrentTime("endTime")}
-              sx={{ alignSelf: "flex-end", mb: 1 }}
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          </Box>
-          <TextField
-            name="initialFlowrate"
-            label="Initial Flowrate"
-            type="number"
-            value={form.initialFlowrate}
-            onChange={handleChange}
-            required
-            fullWidth
-            inputProps={{ step: "0.1" }}
-          />
-          <TextField
-            name="finalFlowrate"
-            label="Final Flowrate"
-            type="number"
-            value={form.finalFlowrate}
-            onChange={handleChange}
-            fullWidth
-            inputProps={{ step: "0.1" }}
-          />
-          <TextField
-            name="averageFlowrate"
-            label="Average Flowrate"
-            value={form.averageFlowrate}
-            disabled
             required
             fullWidth
           />
+          {!form.isFieldBlank && (
+            <>
+              <FormControl fullWidth>
+                <InputLabel>Filter Size</InputLabel>
+                <Select
+                  name="filterSize"
+                  value={form.filterSize}
+                  onChange={handleChange}
+                  label="Filter Size"
+                >
+                  <MenuItem value="25mm">25mm</MenuItem>
+                  <MenuItem value="13mm">13mm</MenuItem>
+                </Select>
+              </FormControl>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  name="startTime"
+                  label="Start Time"
+                  type="time"
+                  value={form.startTime}
+                  onChange={handleChange}
+                  required
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 1 }}
+                />
+                <IconButton
+                  onClick={() => setCurrentTime("startTime")}
+                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                >
+                  <AccessTimeIcon />
+                </IconButton>
+              </Box>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  name="endTime"
+                  label="End Time"
+                  type="time"
+                  value={form.endTime}
+                  onChange={handleChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 1 }}
+                />
+                <IconButton
+                  onClick={() => setCurrentTime("endTime")}
+                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                >
+                  <AccessTimeIcon />
+                </IconButton>
+              </Box>
+              <TextField
+                name="initialFlowrate"
+                label="Initial Flowrate"
+                type="number"
+                value={form.initialFlowrate}
+                onChange={handleChange}
+                required
+                fullWidth
+                inputProps={{ step: "0.1" }}
+              />
+              <TextField
+                name="finalFlowrate"
+                label="Final Flowrate"
+                type="number"
+                value={form.finalFlowrate}
+                onChange={handleChange}
+                fullWidth
+                inputProps={{ step: "0.1" }}
+              />
+              <TextField
+                name="averageFlowrate"
+                label="Average Flowrate"
+                value={form.averageFlowrate}
+                disabled
+                required
+                fullWidth
+              />
+            </>
+          )}
           <TextField
             name="notes"
             label="Notes"
@@ -424,7 +490,6 @@ const NewSample = () => {
             <Button
               type="submit"
               variant="contained"
-              onClick={() => console.log("Submit button clicked")}
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 "&:hover": {
@@ -432,7 +497,7 @@ const NewSample = () => {
                 },
               }}
             >
-              Add Sample
+              Save Sample
             </Button>
           </Box>
         </Stack>

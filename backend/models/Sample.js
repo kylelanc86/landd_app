@@ -24,11 +24,11 @@ const sampleSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: ['Background', 'Clearance', 'Exposure'],
-    required: true
+    required: false
   },
   location: {
     type: String,
-    required: true
+    required: false
   },
   pumpNo: {
     type: String,
@@ -44,7 +44,7 @@ const sampleSchema = new mongoose.Schema({
   },
   startTime: {
     type: String,
-    required: true
+    required: false
   },
   endTime: {
     type: String,
@@ -52,7 +52,7 @@ const sampleSchema = new mongoose.Schema({
   },
   initialFlowrate: {
     type: Number,
-    required: true
+    required: false
   },
   finalFlowrate: {
     type: Number,
@@ -60,7 +60,7 @@ const sampleSchema = new mongoose.Schema({
   },
   averageFlowrate: {
     type: Number,
-    required: true
+    required: false
   },
   status: {
     type: String,
@@ -71,11 +71,17 @@ const sampleSchema = new mongoose.Schema({
   collectedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
-  results: {
-    type: Map,
-    of: Number
+  analysis: {
+    microscope: String,
+    testSlide: String,
+    testSlideLines: String,
+    edgesDistribution: String,
+    backgroundDust: String,
+    fibresCounted: Number,
+    fieldsCounted: Number,
+    reportedConcentration: Number
   },
   analyzedBy: {
     type: mongoose.Schema.Types.ObjectId,

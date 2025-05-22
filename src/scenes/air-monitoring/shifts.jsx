@@ -21,6 +21,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateUtils";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 const Shifts = () => {
   const theme = useTheme();
@@ -47,7 +48,6 @@ const Shifts = () => {
         const formattedShifts = (shiftsResponse.data || []).map((shift) => ({
           ...shift,
           id: shift._id,
-          // Normalize status to handle variants
           status: (() => {
             const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
             if (s === "pending") return "ongoing";
@@ -69,32 +69,19 @@ const Shifts = () => {
           formattedShifts.map(async (shift) => {
             try {
               const samplesResponse = await sampleService.getByShift(shift._id);
-              console.log(
-                `Samples for shift ${shift._id}:`,
-                samplesResponse.data
-              );
               const sampleNumbers = (samplesResponse.data || [])
                 .map((sample) => {
-                  // Extract just the number part after the hyphen
-                  const match = sample.sampleNumber?.match(/-(\d+)$/);
+                  const match = sample.fullSampleID?.match(/-(\d+)$/);
                   return match ? match[1] : null;
                 })
                 .filter(Boolean)
                 .sort((a, b) => parseInt(a) - parseInt(b));
 
-              console.log(
-                `Processed sample numbers for shift ${shift._id}:`,
-                sampleNumbers
-              );
               return {
                 ...shift,
                 sampleNumbers,
               };
             } catch (error) {
-              console.error(
-                `Error fetching samples for shift ${shift._id}:`,
-                error
-              );
               return {
                 ...shift,
                 sampleNumbers: [],
@@ -125,8 +112,12 @@ const Shifts = () => {
   };
 
   const handleSetToday = () => {
-    const today = new Date().toISOString().split("T")[0];
-    setNewDate(today);
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const formattedDate = `${year}-${month}-${day}`;
+    setNewDate(formattedDate);
   };
 
   const handleSubmit = async () => {
@@ -264,10 +255,25 @@ const Shifts = () => {
               row.job?._id || row.job
             );
             const samplesResponse = await sampleService.getByShift(row._id);
+
+            // Ensure we have the complete sample data including analysis
+            const samplesWithAnalysis = await Promise.all(
+              samplesResponse.data.map(async (sample) => {
+                if (!sample.analysis) {
+                  // If analysis data is missing, fetch the complete sample data
+                  const completeSample = await sampleService.getById(
+                    sample._id
+                  );
+                  return completeSample.data;
+                }
+                return sample;
+              })
+            );
+
             generateShiftReport({
               shift: row,
               job: jobResponse.data,
-              samples: samplesResponse.data,
+              samples: samplesWithAnalysis,
             });
           } catch (err) {
             console.error("Error generating report:", err);
@@ -283,15 +289,34 @@ const Shifts = () => {
               onClick={handleSamplesClick}
               sx={{
                 mr: 1,
-                backgroundColor: colors.primary[500],
-                color: colors.grey[0],
+                backgroundColor: theme.palette.primary.main,
+                color: theme.palette.common.white,
                 "&:hover": {
-                  backgroundColor: colors.primary[600],
+                  backgroundColor: theme.palette.primary.dark,
                 },
               }}
             >
               Samples
             </Button>
+            {row.status === "sampling_complete" && (
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() =>
+                  navigate(`/air-monitoring/shift/${row._id}/analysis`)
+                }
+                sx={{
+                  mr: 1,
+                  backgroundColor: theme.palette.success.main,
+                  color: theme.palette.common.white,
+                  "&:hover": {
+                    backgroundColor: theme.palette.success.dark,
+                  },
+                }}
+              >
+                Analysis
+              </Button>
+            )}
             {row.status === "analysis_complete" && (
               <Button
                 variant="outlined"
@@ -299,11 +324,11 @@ const Shifts = () => {
                 onClick={handleViewReport}
                 sx={{
                   mr: 1,
-                  borderColor: colors.success[500],
-                  color: colors.success[700],
+                  borderColor: theme.palette.success.main,
+                  color: theme.palette.success.main,
                   "&:hover": {
-                    borderColor: colors.success[700],
-                    backgroundColor: colors.success[50],
+                    borderColor: theme.palette.success.dark,
+                    backgroundColor: theme.palette.success.light,
                   },
                 }}
               >
@@ -320,7 +345,15 @@ const Shifts = () => {
   ];
 
   return (
-    <Box m="20px">
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate("/air-monitoring")}
+        sx={{ mb: 4 }}
+      >
+        Back to Jobs
+      </Button>
+
       <Box
         display="flex"
         justifyContent="space-between"
@@ -368,15 +401,15 @@ const Shifts = () => {
             borderBottom: "none",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: colors.primary[500],
+            backgroundColor: theme.palette.primary.main,
             borderBottom: "none",
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: colors.primary[400],
+            backgroundColor: theme.palette.background.default,
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: colors.primary[500],
+            backgroundColor: theme.palette.primary.main,
           },
         }}
       >

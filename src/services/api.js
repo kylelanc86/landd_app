@@ -1,41 +1,23 @@
 import axios from 'axios';
 
-// Create axios instance with default config
+// Create axios instance
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: process.env.REACT_APP_API_URL || "http://localhost:5000/api",
   headers: {
-    'Content-Type': 'application/json'
+    "Content-Type": "application/json",
   },
-  withCredentials: false
 });
 
-// Add request interceptor to add auth token
+// Add request interceptor
 api.interceptors.request.use(
   (config) => {
-    console.log("API Request:", {
-      url: config.url,
-      method: config.method,
-      headers: config.headers,
-      data: config.data
-    });
-
-    // Skip auth check for login and register endpoints
-    if (config.url === '/auth/login' || config.url === '/auth/register') {
-      return config;
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-
-    const token = localStorage.getItem('token');
-    if (!token) {
-      // Don't reject the promise, just return the config without the token
-      // This allows the request to fail naturally with a 401
-      return config;
-    }
-
-    config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
   (error) => {
-    console.error("API Request Error:", error);
     return Promise.reject(error);
   }
 );
@@ -43,36 +25,21 @@ api.interceptors.request.use(
 // Add response interceptor
 api.interceptors.response.use(
   (response) => {
-    // Check for new token in response headers
+    // If a new token is provided, update it in localStorage
     const newToken = response.headers['new-token'];
     if (newToken) {
-      console.log('Received new token from server');
+      console.log('Received new token from backend, updating localStorage.');
       localStorage.setItem('token', newToken);
     }
     return response;
   },
   (error) => {
-    if (error.response?.status === 401) {
-      // For Xero-related endpoints, just reject the error without redirecting
-      if (error.config.url.includes('/xero/')) {
-        const errorMessage = error.response?.data?.message || 'Not connected to Xero';
-        console.log('Xero auth error:', errorMessage);
-        return Promise.resolve({
-          data: {
-            error: 'XERO_AUTH_REQUIRED',
-            message: errorMessage,
-            connected: false
-          }
-        });
-      }
-      
-      // For other endpoints, clear auth data and redirect if not on login page
-      if (!window.location.pathname.includes('/login')) {
-        console.log('Auth error, clearing session and redirecting to login');
-        localStorage.removeItem("token");
-        localStorage.removeItem('currentUser');
-        window.location.replace('/login');
-      }
+    // Only remove token/redirect if the 401 is NOT from a Xero endpoint
+    const isXero = error.config && error.config.url && error.config.url.includes('/xero/');
+    if (error.response?.status === 401 && !isXero) {
+      console.error('401 Unauthorized error:', error, error.response);
+      localStorage.removeItem("token");
+      // window.location.href = "/login"; // Keep this commented for now
     }
     return Promise.reject(error);
   }
@@ -134,6 +101,7 @@ export const sampleService = {
   getAll: () => api.get('/samples'),
   getById: (id) => api.get(`/samples/${id}`),
   getByShift: (shiftId) => api.get(`/samples/shift/${shiftId}`),
+  getByProject: (projectId) => api.get(`/samples/project/${projectId}`),
   create: (data) => api.post('/samples', data),
   update: (id, data) => api.patch(`/samples/${id}`, data),
   delete: (id) => api.delete(`/samples/${id}`)
@@ -144,7 +112,7 @@ export const shiftService = {
   getById: (id) => api.get(`/air-monitoring-shifts/${id}`),
   getByJob: (jobId) => api.get(`/air-monitoring-shifts/job/${jobId}`),
   create: (data) => api.post('/air-monitoring-shifts', data),
-  update: (id, data) => api.put(`/air-monitoring-shifts/${id}`, data),
+  update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
   delete: (id) => api.delete(`/air-monitoring-shifts/${id}`)
 };
 

@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   Box,
   Typography,
@@ -26,9 +32,236 @@ import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import { sampleService, shiftService } from "../../services/api";
+import { FixedSizeList as List } from "react-window";
+import AutoSizer from "react-virtualized-auto-sizer";
 
 const SAMPLES_KEY = "ldc_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_analysis_progress";
+
+// Memoized Sample Form Component
+const SampleForm = React.memo(
+  ({
+    sample,
+    analysis,
+    onAnalysisChange,
+    onFibreCountChange,
+    onKeyDown,
+    onClearTable,
+    isFilterUncountable,
+    calculateConcentration,
+    getReportedConcentration,
+    inputRefs,
+  }) => {
+    const theme = useTheme();
+
+    // Memoize the fibre counts table to prevent unnecessary re-renders
+    const fibreCountsTable = useMemo(
+      () => (
+        <TableContainer>
+          <Table size="small" sx={{ tableLayout: "fixed" }}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: "80px" }}>Range</TableCell>
+                {Array.from({ length: 20 }, (_, i) => (
+                  <TableCell
+                    key={i}
+                    align="center"
+                    sx={{ width: "40px", p: 0.5 }}
+                  >
+                    {i + 1}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {analysis.fibreCounts.map((row, rowIndex) => (
+                <TableRow key={rowIndex}>
+                  <TableCell sx={{ p: 0.5 }}>
+                    {`${rowIndex * 20 + 1}-${(rowIndex + 1) * 20}`}
+                  </TableCell>
+                  {row.map((cell, colIndex) => (
+                    <TableCell key={colIndex} align="center" sx={{ p: 0.5 }}>
+                      <TextField
+                        type="text"
+                        value={cell}
+                        onChange={(e) =>
+                          onFibreCountChange(
+                            sample._id,
+                            rowIndex,
+                            colIndex,
+                            e.target.value
+                          )
+                        }
+                        onKeyDown={(e) =>
+                          onKeyDown(e, sample._id, rowIndex, colIndex)
+                        }
+                        size="small"
+                        disabled={isFilterUncountable(sample._id)}
+                        inputRef={(el) => {
+                          inputRefs.current[
+                            `${sample._id}-${rowIndex}-${colIndex}`
+                          ] = el;
+                        }}
+                        sx={{
+                          width: "40px",
+                          "& .MuiInputBase-input": {
+                            p: 0.5,
+                            textAlign: "center",
+                          },
+                          "& .MuiInputBase-input.Mui-disabled": {
+                            WebkitTextFillColor: "rgba(0, 0, 0, 0.6)",
+                          },
+                        }}
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+              <TableRow>
+                <TableCell colSpan={21}>
+                  <Stack direction="row" spacing={4} justifyContent="center">
+                    <Typography>
+                      Fibres Counted: {analysis.fibresCounted || 0}
+                    </Typography>
+                    <Typography>
+                      Fields Counted: {analysis.fieldsCounted || 0}
+                    </Typography>
+                  </Stack>
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell colSpan={21}>
+                  <Stack
+                    direction="row"
+                    spacing={4}
+                    justifyContent="center"
+                    sx={{ mt: 2 }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Calculated Concentration
+                      </Typography>
+                      <Typography variant="h4">
+                        {calculateConcentration(sample._id) || "N/A"} fibres/mL
+                      </Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Reported Concentration
+                      </Typography>
+                      <Typography variant="h4">
+                        {getReportedConcentration(sample._id)} fibres/mL
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ),
+      [
+        analysis,
+        sample._id,
+        onFibreCountChange,
+        onKeyDown,
+        isFilterUncountable,
+        calculateConcentration,
+        getReportedConcentration,
+      ]
+    );
+
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Stack spacing={3}>
+          <Typography variant="h3">
+            {sample.fullSampleID} : Cowl {sample.cowlNo}
+          </Typography>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Edges/Distribution</InputLabel>
+              <Select
+                value={analysis.edgesDistribution || ""}
+                onChange={(e) =>
+                  onAnalysisChange(
+                    sample._id,
+                    "edgesDistribution",
+                    e.target.value
+                  )
+                }
+                label="Edges/Distribution"
+              >
+                <MenuItem value="pass">Pass</MenuItem>
+                <MenuItem value="fail">Fail</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel>Background Dust</InputLabel>
+              <Select
+                value={analysis.backgroundDust || ""}
+                onChange={(e) =>
+                  onAnalysisChange(sample._id, "backgroundDust", e.target.value)
+                }
+                label="Background Dust"
+              >
+                <MenuItem value="low">Low</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="high">High</MenuItem>
+                <MenuItem value="fail">Fail</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+
+          <Box sx={{ position: "relative" }}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 2,
+              }}
+            >
+              <Typography variant="subtitle1">Fibre Counts</Typography>
+              <Button
+                startIcon={<ClearIcon />}
+                onClick={() => onClearTable(sample._id)}
+                disabled={isFilterUncountable(sample._id)}
+                size="small"
+                color="error"
+              >
+                Clear
+              </Button>
+            </Box>
+            {isFilterUncountable(sample._id) && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  zIndex: 1,
+                  pointerEvents: "none",
+                }}
+              >
+                <Typography
+                  variant="h4"
+                  sx={{
+                    color: "error.main",
+                    fontWeight: "bold",
+                    textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  Filter Uncountable
+                </Typography>
+              </Box>
+            )}
+            {fibreCountsTable}
+          </Box>
+        </Stack>
+      </Paper>
+    );
+  }
+);
 
 const Analysis = () => {
   const theme = useTheme();
@@ -48,22 +281,58 @@ const Analysis = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isRendered, setIsRendered] = useState(false);
+
+  // Monitor initial render time
+  useEffect(() => {
+    const renderStart = performance.now();
+    setIsRendered(true);
+    console.log(`Initial render took ${performance.now() - renderStart}ms`);
+  }, []);
 
   // Load samples and in-progress analysis data
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
+      const startTime = performance.now();
       try {
         setLoading(true);
-        // Fetch samples for this shift
-        const samplesResponse = await sampleService.getByShift(shiftId);
+
+        console.log("Starting data fetch...");
+        const fetchStart = performance.now();
+
+        // Check if we have cached data for this shift
+        const cachedData = sessionStorage.getItem(`samples_${shiftId}`);
+        let samplesResponse;
+
+        if (cachedData) {
+          console.log("Using cached data");
+          samplesResponse = { data: JSON.parse(cachedData) };
+        } else {
+          console.log("Fetching fresh data");
+          samplesResponse = await sampleService.getByShift(shiftId);
+          // Cache the response
+          sessionStorage.setItem(
+            `samples_${shiftId}`,
+            JSON.stringify(samplesResponse.data)
+          );
+        }
+
+        if (!isMounted) return;
+
+        console.log(`API fetch took ${performance.now() - fetchStart}ms`);
+        console.log("Sample count:", samplesResponse.data.length);
+
+        const sortStart = performance.now();
         // Sort samples by the number after the hyphen
         const sortedSamples = samplesResponse.data.sort((a, b) => {
-          const aNum = parseInt(a.sampleNumber.split("-")[1]);
-          const bNum = parseInt(b.sampleNumber.split("-")[1]);
+          const aNum = parseInt(a.fullSampleID.split("-")[1]);
+          const bNum = parseInt(b.fullSampleID.split("-")[1]);
           return aNum - bNum;
         });
-        setSamples(sortedSamples);
+        console.log(`Sorting took ${performance.now() - sortStart}ms`);
 
+        const initStart = performance.now();
         // Initialize analyses for each sample
         const initialAnalyses = {};
         sortedSamples.forEach((sample) => {
@@ -77,7 +346,9 @@ const Analysis = () => {
             fieldsCounted: 0,
           };
         });
+        console.log(`Initialization took ${performance.now() - initStart}ms`);
 
+        const storageStart = performance.now();
         // Load in-progress analysis data if present
         const progressData = localStorage.getItem(ANALYSIS_PROGRESS_KEY);
         if (progressData) {
@@ -98,17 +369,44 @@ const Analysis = () => {
         } else {
           setSampleAnalyses(initialAnalyses);
         }
+        console.log(
+          `Storage operations took ${performance.now() - storageStart}ms`
+        );
+
+        setSamples(sortedSamples);
         setError(null);
+
+        console.log(
+          `Total data operations took ${performance.now() - startTime}ms`
+        );
       } catch (err) {
+        if (!isMounted) return;
         console.error("Error fetching data:", err);
         setError("Failed to load data. Please try again later.");
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchData();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
   }, [shiftId]);
+
+  // Monitor render time when samples change
+  useEffect(() => {
+    if (samples.length > 0) {
+      const renderStart = performance.now();
+      requestAnimationFrame(() => {
+        console.log(`Samples render took ${performance.now() - renderStart}ms`);
+      });
+    }
+  }, [samples]);
 
   const handleAnalysisDetailsChange = (e) => {
     setAnalysisDetails({
@@ -117,7 +415,8 @@ const Analysis = () => {
     });
   };
 
-  const handleSampleAnalysisChange = (sampleId, field, value) => {
+  // Memoize handlers to prevent unnecessary re-renders
+  const handleSampleAnalysisChange = useCallback((sampleId, field, value) => {
     setSampleAnalyses((prev) => ({
       ...prev,
       [sampleId]: {
@@ -125,9 +424,9 @@ const Analysis = () => {
         [field]: value,
       },
     }));
-  };
+  }, []);
 
-  const handleFibreCountChange = (sampleId, row, col, value) => {
+  const handleFibreCountChange = useCallback((sampleId, row, col, value) => {
     const newValue = value === "" ? "" : parseInt(value);
     if (isNaN(newValue) && value !== "") return;
 
@@ -170,12 +469,81 @@ const Analysis = () => {
         nextInput.focus();
       }
     }
-  };
+  }, []);
 
-  const handleClearTable = (sampleId) => {
+  const handleKeyDown = useCallback(
+    (e, sampleId, row, col) => {
+      if (e.key === " ") {
+        e.preventDefault();
+        const newAnalyses = { ...sampleAnalyses };
+        const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
+
+        // Fill next 10 cells with 0
+        let lastFilledRow = row;
+        let lastFilledCol = col;
+        for (let i = 0; i < 10; i++) {
+          const nextCol = col + i;
+          if (nextCol < 20) {
+            newFibreCounts[row][nextCol] = 0;
+            lastFilledRow = row;
+            lastFilledCol = nextCol;
+          } else {
+            const nextRow = row + 1;
+            if (nextRow < 5) {
+              newFibreCounts[nextRow][nextCol - 20] = 0;
+              lastFilledRow = nextRow;
+              lastFilledCol = nextCol - 20;
+            }
+          }
+        }
+
+        // Calculate new totals
+        const fibresCounted = newFibreCounts
+          .flat()
+          .reduce((sum, val) => sum + (val || 0), 0);
+        const fieldsCounted = newFibreCounts
+          .flat()
+          .filter((val) => val !== "").length;
+
+        newAnalyses[sampleId] = {
+          ...newAnalyses[sampleId],
+          fibreCounts: newFibreCounts,
+          fibresCounted,
+          fieldsCounted,
+        };
+
+        setSampleAnalyses(newAnalyses);
+
+        // Find next empty cell
+        let nextEmptyRow = lastFilledRow;
+        let nextEmptyCol = lastFilledCol + 1;
+
+        while (nextEmptyRow < 5) {
+          while (nextEmptyCol < 20) {
+            if (newFibreCounts[nextEmptyRow][nextEmptyCol] === "") {
+              const nextInput =
+                inputRefs.current[
+                  `${sampleId}-${nextEmptyRow}-${nextEmptyCol}`
+                ];
+              if (nextInput) {
+                nextInput.focus();
+                return;
+              }
+            }
+            nextEmptyCol++;
+          }
+          nextEmptyRow++;
+          nextEmptyCol = 0;
+        }
+      }
+    },
+    [sampleAnalyses]
+  );
+
+  const handleClearTable = useCallback((sampleId) => {
     setSelectedSampleId(sampleId);
     setConfirmDialogOpen(true);
-  };
+  }, []);
 
   const confirmClearTable = () => {
     if (selectedSampleId) {
@@ -202,70 +570,6 @@ const Analysis = () => {
       analysis?.edgesDistribution === "fail" ||
       analysis?.backgroundDust === "fail"
     );
-  };
-
-  const handleKeyDown = (e, sampleId, row, col) => {
-    if (e.key === " ") {
-      e.preventDefault();
-      const newAnalyses = { ...sampleAnalyses };
-      const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
-
-      // Fill next 10 cells with 0
-      let lastFilledRow = row;
-      let lastFilledCol = col;
-      for (let i = 0; i < 10; i++) {
-        const nextCol = col + i;
-        if (nextCol < 20) {
-          newFibreCounts[row][nextCol] = 0;
-          lastFilledRow = row;
-          lastFilledCol = nextCol;
-        } else {
-          const nextRow = row + 1;
-          if (nextRow < 5) {
-            newFibreCounts[nextRow][nextCol - 20] = 0;
-            lastFilledRow = nextRow;
-            lastFilledCol = nextCol - 20;
-          }
-        }
-      }
-
-      // Calculate new totals
-      const fibresCounted = newFibreCounts
-        .flat()
-        .reduce((sum, val) => sum + (val || 0), 0);
-      const fieldsCounted = newFibreCounts
-        .flat()
-        .filter((val) => val !== "").length;
-
-      newAnalyses[sampleId] = {
-        ...newAnalyses[sampleId],
-        fibreCounts: newFibreCounts,
-        fibresCounted,
-        fieldsCounted,
-      };
-
-      setSampleAnalyses(newAnalyses);
-
-      // Find next empty cell
-      let nextEmptyRow = lastFilledRow;
-      let nextEmptyCol = lastFilledCol + 1;
-
-      while (nextEmptyRow < 5) {
-        while (nextEmptyCol < 20) {
-          if (newFibreCounts[nextEmptyRow][nextEmptyCol] === "") {
-            const nextInput =
-              inputRefs.current[`${sampleId}-${nextEmptyRow}-${nextEmptyCol}`];
-            if (nextInput) {
-              nextInput.focus();
-              return;
-            }
-          }
-          nextEmptyCol++;
-        }
-        nextEmptyRow++;
-        nextEmptyCol = 0;
-      }
-    }
   };
 
   const calculateDuration = (startTime, endTime) => {
@@ -392,8 +696,54 @@ const Analysis = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Save analysis data
-      await handleSaveAnalysis();
+      console.log("Starting analysis submission...");
+      console.log("Analysis Details:", analysisDetails);
+      console.log("Sample Analyses:", sampleAnalyses);
+
+      // Update each sample with its analysis data
+      const updatePromises = samples.map(async (sample) => {
+        const analysis = sampleAnalyses[sample._id];
+        if (analysis) {
+          const analysisData = {
+            analysis: {
+              microscope: analysisDetails.microscope,
+              testSlide: analysisDetails.testSlide,
+              testSlideLines: analysisDetails.testSlideLines,
+              edgesDistribution: analysis.edgesDistribution,
+              backgroundDust: analysis.backgroundDust,
+              fibreCounts: analysis.fibreCounts,
+              fibresCounted: analysis.fibresCounted,
+              fieldsCounted: analysis.fieldsCounted,
+              reportedConcentration: getReportedConcentration(sample._id),
+            },
+          };
+          console.log(
+            `Updating sample ${sample.fullSampleID} with data:`,
+            JSON.stringify(analysisData, null, 2)
+          );
+          try {
+            const response = await sampleService.update(
+              sample._id,
+              analysisData
+            );
+            console.log(
+              `Update response for ${sample.fullSampleID}:`,
+              response
+            );
+            return response;
+          } catch (error) {
+            console.error(
+              `Error updating sample ${sample.fullSampleID}:`,
+              error.response?.data || error
+            );
+            throw error;
+          }
+        }
+      });
+
+      // Wait for all sample updates to complete
+      const results = await Promise.all(updatePromises);
+      console.log("All sample updates completed:", results);
 
       // Get shift data to get job ID
       const shiftResponse = await shiftService.getById(shiftId);
@@ -425,49 +775,187 @@ const Analysis = () => {
 
   // Helper to check if all required fields are filled
   const isAllAnalysisComplete = () => {
+    console.log("Checking analysis completion...");
+
     // Check analysis details
     if (
       !analysisDetails.microscope ||
       !analysisDetails.testSlide ||
       !analysisDetails.testSlideLines
     ) {
+      console.log("Analysis details incomplete:", {
+        microscope: analysisDetails.microscope,
+        testSlide: analysisDetails.testSlide,
+        testSlideLines: analysisDetails.testSlideLines,
+      });
       return false;
     }
+
     // Check all samples
-    return samples.every((sample) => {
+    const incompleteSamples = samples.filter((sample) => {
       const analysis = sampleAnalyses[sample._id];
-      if (!analysis) return false;
-      if (!analysis.edgesDistribution || !analysis.backgroundDust) return false;
+      if (!analysis) {
+        console.log(`No analysis found for sample ${sample.fullSampleID}`);
+        return true;
+      }
+
+      if (!analysis.edgesDistribution || !analysis.backgroundDust) {
+        console.log(
+          `Sample ${sample.fullSampleID} missing edges/distribution or background dust:`,
+          {
+            edgesDistribution: analysis.edgesDistribution,
+            backgroundDust: analysis.backgroundDust,
+          }
+        );
+        return true;
+      }
+
       // If filter is uncountable, skip fibre counts
       if (
         analysis.edgesDistribution === "fail" ||
         analysis.backgroundDust === "fail"
-      )
-        return true;
-      // All fibre count cells must be filled
-      for (let row of analysis.fibreCounts) {
-        for (let cell of row) {
-          if (cell === "" || cell === null || typeof cell === "undefined")
-            return false;
-        }
+      ) {
+        console.log(
+          `Sample ${sample.fullSampleID} is uncountable, skipping fibre counts`
+        );
+        return false;
       }
-      return true;
+
+      // Check fibre counts
+      const hasEmptyCells = analysis.fibreCounts.some((row, rowIndex) => {
+        const emptyCells = row.filter(
+          (cell) => cell === "" || cell === null || typeof cell === "undefined"
+        );
+        if (emptyCells.length > 0) {
+          console.log(
+            `Sample ${sample.fullSampleID} has empty cells in row ${
+              rowIndex + 1
+            }:`,
+            emptyCells
+          );
+        }
+        return emptyCells.length > 0;
+      });
+
+      if (hasEmptyCells) {
+        console.log(
+          `Sample ${sample.fullSampleID} has empty fibre count cells`
+        );
+        return true;
+      }
+
+      return false;
     });
+
+    if (incompleteSamples.length > 0) {
+      console.log(
+        "Incomplete samples:",
+        incompleteSamples.map((s) => s.fullSampleID)
+      );
+      return false;
+    }
+
+    console.log("All samples are complete!");
+    return true;
+  };
+
+  // Render a single sample form
+  const renderSampleForm = useCallback(
+    ({ index, style }) => {
+      const sample = samples[index];
+      return (
+        <div style={style}>
+          <SampleForm
+            key={sample._id}
+            sample={sample}
+            analysis={sampleAnalyses[sample._id]}
+            onAnalysisChange={handleSampleAnalysisChange}
+            onFibreCountChange={handleFibreCountChange}
+            onKeyDown={handleKeyDown}
+            onClearTable={handleClearTable}
+            isFilterUncountable={isFilterUncountable}
+            calculateConcentration={calculateConcentration}
+            getReportedConcentration={getReportedConcentration}
+            inputRefs={inputRefs}
+          />
+        </div>
+      );
+    },
+    [
+      samples,
+      sampleAnalyses,
+      handleSampleAnalysisChange,
+      handleFibreCountChange,
+      handleKeyDown,
+      handleClearTable,
+      isFilterUncountable,
+      calculateConcentration,
+      getReportedConcentration,
+    ]
+  );
+
+  // Render sample forms based on count
+  const renderSampleForms = () => {
+    if (samples.length <= 5) {
+      // For small sample counts, render directly without virtualization
+      return samples.map((sample) => (
+        <SampleForm
+          key={sample._id}
+          sample={sample}
+          analysis={sampleAnalyses[sample._id]}
+          onAnalysisChange={handleSampleAnalysisChange}
+          onFibreCountChange={handleFibreCountChange}
+          onKeyDown={handleKeyDown}
+          onClearTable={handleClearTable}
+          isFilterUncountable={isFilterUncountable}
+          calculateConcentration={calculateConcentration}
+          getReportedConcentration={getReportedConcentration}
+          inputRefs={inputRefs}
+        />
+      ));
+    }
+
+    // For larger sample counts, use virtual scrolling
+    return (
+      <Box sx={{ height: "calc(100vh - 300px)", minHeight: "500px" }}>
+        <AutoSizer>
+          {({ height, width }) => (
+            <List
+              height={height}
+              width={width}
+              itemCount={samples.length}
+              itemSize={400}
+              overscanCount={2}
+            >
+              {renderSampleForm}
+            </List>
+          )}
+        </AutoSizer>
+      </Box>
+    );
   };
 
   if (loading) {
-    return <Typography>Loading...</Typography>;
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    );
   }
 
   if (error) {
-    return <Typography color="error">{error}</Typography>;
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
   }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate(-1)}
+        onClick={() => navigate(`/air-monitoring/shift/${shiftId}/samples`)}
         sx={{ mb: 4 }}
       >
         Back to Samples
@@ -533,252 +1021,8 @@ const Analysis = () => {
             </Stack>
           </Paper>
 
-          {/* Sample Analysis Forms */}
-          {samples.map((sample) => (
-            <Paper key={sample._id} sx={{ p: 3 }}>
-              <Stack spacing={3}>
-                <Typography variant="h3">
-                  {sample.sampleNumber} : Cowl {sample.cowlNo}
-                </Typography>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-                  <FormControl fullWidth>
-                    <InputLabel>Edges/Distribution</InputLabel>
-                    <Select
-                      value={
-                        sampleAnalyses[sample._id]?.edgesDistribution || ""
-                      }
-                      onChange={(e) =>
-                        handleSampleAnalysisChange(
-                          sample._id,
-                          "edgesDistribution",
-                          e.target.value
-                        )
-                      }
-                      label="Edges/Distribution"
-                    >
-                      <MenuItem value="pass">Pass</MenuItem>
-                      <MenuItem value="fail">Fail</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl fullWidth>
-                    <InputLabel>Background Dust</InputLabel>
-                    <Select
-                      value={sampleAnalyses[sample._id]?.backgroundDust || ""}
-                      onChange={(e) =>
-                        handleSampleAnalysisChange(
-                          sample._id,
-                          "backgroundDust",
-                          e.target.value
-                        )
-                      }
-                      label="Background Dust"
-                    >
-                      <MenuItem value="low">Low</MenuItem>
-                      <MenuItem value="medium">Medium</MenuItem>
-                      <MenuItem value="high">High</MenuItem>
-                      <MenuItem value="fail">Fail</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Stack>
-
-                {/* Fibre Counts Table */}
-                <Box sx={{ position: "relative" }}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      mb: 2,
-                    }}
-                  >
-                    <Typography variant="subtitle1">Fibre Counts</Typography>
-                    <Button
-                      startIcon={<ClearIcon />}
-                      onClick={() => handleClearTable(sample._id)}
-                      disabled={isFilterUncountable(sample._id)}
-                      size="small"
-                      color="error"
-                    >
-                      Clear
-                    </Button>
-                  </Box>
-                  {isFilterUncountable(sample._id) && (
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        transform: "translate(-50%, -50%)",
-                        zIndex: 1,
-                        pointerEvents: "none",
-                      }}
-                    >
-                      <Typography
-                        variant="h4"
-                        sx={{
-                          color: "error.main",
-                          fontWeight: "bold",
-                          textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
-                        }}
-                      >
-                        Filter Uncountable
-                      </Typography>
-                    </Box>
-                  )}
-                  <TableContainer>
-                    <Table size="small" sx={{ tableLayout: "fixed" }}>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ width: "80px" }}>Range</TableCell>
-                          {Array.from({ length: 20 }, (_, i) => (
-                            <TableCell
-                              key={i}
-                              align="center"
-                              sx={{ width: "40px", p: 0.5 }}
-                            >
-                              {i + 1}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {sampleAnalyses[sample._id]?.fibreCounts.map(
-                          (row, rowIndex) => (
-                            <TableRow key={rowIndex}>
-                              <TableCell sx={{ p: 0.5 }}>
-                                {`${rowIndex * 20 + 1}-${(rowIndex + 1) * 20}`}
-                              </TableCell>
-                              {row.map((cell, colIndex) => (
-                                <TableCell
-                                  key={colIndex}
-                                  align="center"
-                                  sx={{ p: 0.5 }}
-                                >
-                                  <TextField
-                                    type="text"
-                                    value={cell}
-                                    onChange={(e) =>
-                                      handleFibreCountChange(
-                                        sample._id,
-                                        rowIndex,
-                                        colIndex,
-                                        e.target.value
-                                      )
-                                    }
-                                    onKeyDown={(e) =>
-                                      handleKeyDown(
-                                        e,
-                                        sample._id,
-                                        rowIndex,
-                                        colIndex
-                                      )
-                                    }
-                                    size="small"
-                                    disabled={isFilterUncountable(sample._id)}
-                                    inputRef={(el) => {
-                                      inputRefs.current[
-                                        `${sample._id}-${rowIndex}-${colIndex}`
-                                      ] = el;
-                                    }}
-                                    sx={{
-                                      width: "40px",
-                                      "& .MuiInputBase-input": {
-                                        p: 0.5,
-                                        textAlign: "center",
-                                      },
-                                      "& .MuiInputBase-input.Mui-disabled": {
-                                        WebkitTextFillColor:
-                                          "rgba(0, 0, 0, 0.6)",
-                                      },
-                                    }}
-                                  />
-                                </TableCell>
-                              ))}
-                            </TableRow>
-                          )
-                        )}
-                        <TableRow>
-                          <TableCell colSpan={21}>
-                            <Stack
-                              direction="row"
-                              spacing={4}
-                              justifyContent="center"
-                            >
-                              <Typography>
-                                Fibres Counted:{" "}
-                                {sampleAnalyses[sample._id]?.fibresCounted || 0}
-                              </Typography>
-                              <Typography>
-                                Fields Counted:{" "}
-                                {sampleAnalyses[sample._id]?.fieldsCounted || 0}
-                              </Typography>
-                            </Stack>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell colSpan={21}>
-                            <Stack
-                              direction="row"
-                              spacing={4}
-                              justifyContent="center"
-                              sx={{ mt: 2 }}
-                            >
-                              <Box>
-                                <Typography
-                                  variant="subtitle2"
-                                  color="text.secondary"
-                                >
-                                  Calculated Concentration
-                                </Typography>
-                                <Typography variant="h4">
-                                  {calculateConcentration(sample._id) || "N/A"}{" "}
-                                  fibres/mL
-                                </Typography>
-                              </Box>
-                              <Box>
-                                <Typography
-                                  variant="subtitle2"
-                                  color="text.secondary"
-                                >
-                                  Reported Concentration
-                                </Typography>
-                                <Typography variant="h4">
-                                  {getReportedConcentration(sample._id)}{" "}
-                                  fibres/mL
-                                </Typography>
-                              </Box>
-                            </Stack>
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-
-                {/* Confirmation Dialog */}
-                <Dialog
-                  open={confirmDialogOpen}
-                  onClose={() => setConfirmDialogOpen(false)}
-                >
-                  <DialogTitle>Clear Fibre Counts</DialogTitle>
-                  <DialogContent>
-                    <Typography>
-                      Are you sure you want to clear all fibre counts for this
-                      sample?
-                    </Typography>
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={() => setConfirmDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={confirmClearTable} color="error" autoFocus>
-                      Clear
-                    </Button>
-                  </DialogActions>
-                </Dialog>
-              </Stack>
-            </Paper>
-          ))}
+          {/* Sample Forms */}
+          {renderSampleForms()}
 
           <Box
             sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}

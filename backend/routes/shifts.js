@@ -110,7 +110,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update shift
-router.put('/:id', auth, async (req, res) => {
+router.patch('/:id', auth, async (req, res) => {
   try {
     console.log(`Updating shift ${req.params.id} with data:`, req.body);
     const shift = await Shift.findById(req.params.id);

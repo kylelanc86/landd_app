@@ -38,20 +38,75 @@ const SampleList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isCompleteDisabled, setIsCompleteDisabled] = useState(true);
+  const [nextSampleNumber, setNextSampleNumber] = useState(null);
+
+  // Function to extract the numeric part from a sample number
+  const extractSampleNumber = (sampleNumber) => {
+    const match = sampleNumber?.match(/-(\d+)$/);
+    return match ? parseInt(match[1]) : 0;
+  };
+
+  // Function to generate the next sample number
+  const generateNextSampleNumber = async (samples, projectID) => {
+    if (!projectID) return 1;
+
+    try {
+      // Get all samples for the project
+      const allSamplesResponse = await sampleService.getByProject(projectID);
+      const allSamples = allSamplesResponse.data;
+      console.log("All samples for project:", allSamples);
+
+      // Get the highest sample number from all samples in the project
+      const highestNumber = Math.max(
+        ...allSamples.map((sample) => {
+          const number = extractSampleNumber(sample.fullSampleID);
+          console.log(`Sample ${sample.fullSampleID} has number ${number}`);
+          return number;
+        })
+      );
+      console.log("Highest sample number found:", highestNumber);
+
+      const nextNumber = highestNumber + 1;
+      console.log("Next sample number will be:", nextNumber);
+      return nextNumber;
+    } catch (err) {
+      console.error("Error generating next sample number:", err);
+      return 1;
+    }
+  };
 
   // Load shift and samples data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch shift details
         const shiftResponse = await shiftService.getById(shiftId);
         setShift(shiftResponse.data);
 
-        // Fetch samples for this shift
         const samplesResponse = await sampleService.getByShift(shiftId);
-        setSamples(samplesResponse.data);
-        setIsCompleteDisabled(!validateSamplesComplete(samplesResponse.data));
+        setSamples(samplesResponse.data || []);
+
+        // Get project ID from shift data
+        const projectId = shiftResponse.data?.job?.project?.projectID;
+        if (projectId) {
+          // Fetch all samples for the project to determine next sample number
+          const projectSamplesResponse = await sampleService.getByProject(
+            projectId
+          );
+          const allProjectSamples = projectSamplesResponse.data || [];
+
+          // Find the highest sample number
+          const highestNumber = allProjectSamples.reduce((max, sample) => {
+            const match = sample.fullSampleID?.match(/-(\d+)$/);
+            const number = match ? parseInt(match[1]) : 0;
+            return Math.max(max, number);
+          }, 0);
+
+          // Set next sample number
+          setNextSampleNumber(highestNumber + 1);
+        }
+
+        setIsCompleteDisabled(!validateSamplesComplete(samples));
         setError(null);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -107,6 +162,12 @@ const SampleList = () => {
   // Add validation function
   const validateSamplesComplete = (samples) => {
     return samples.every((sample) => {
+      // If it's a field blank sample, skip validation
+      if (sample.location === "Field blank") {
+        return true;
+      }
+
+      // For non-field blank samples, validate all required fields
       return (
         sample.sampleNumber &&
         sample.type &&
@@ -123,12 +184,12 @@ const SampleList = () => {
   // Add handleSampleComplete function
   const handleSampleComplete = async () => {
     try {
+      // Update shift status
       await shiftService.update(shiftId, { status: "sampling_complete" });
-      // Navigate to shifts page with project ID
-      if (shift?.job?.project?.projectID) {
-        navigate(
-          `/air-monitoring/project/${shift.job.project.projectID}/shifts`
-        );
+
+      // Navigate back to the job's shifts page
+      if (shift?.job?._id) {
+        navigate(`/air-monitoring/jobs/${shift.job._id}/shifts`);
       } else {
         navigate("/air-monitoring/shifts");
       }
@@ -150,7 +211,9 @@ const SampleList = () => {
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate(-1)}
+        onClick={() =>
+          navigate(`/air-monitoring/jobs/${shift?.job?._id}/shifts`)
+        }
         sx={{ mb: 4 }}
       >
         Back to Shifts
@@ -195,7 +258,9 @@ const SampleList = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() =>
-            navigate(`/air-monitoring/shift/${shiftId}/samples/new`)
+            navigate(`/air-monitoring/shift/${shiftId}/samples/new`, {
+              state: { nextSampleNumber },
+            })
           }
           sx={{
             backgroundColor: theme.palette.primary.main,
@@ -234,7 +299,7 @@ const SampleList = () => {
           <TableBody>
             {sortedSamples.map((sample) => (
               <TableRow key={sample._id}>
-                <TableCell>{sample.sampleNumber}</TableCell>
+                <TableCell>{sample.fullSampleID}</TableCell>
                 <TableCell>{sample.type}</TableCell>
                 <TableCell>{sample.location}</TableCell>
                 <TableCell>{formatTime(sample.startTime)}</TableCell>
@@ -276,10 +341,10 @@ const SampleList = () => {
           onClick={handleSampleComplete}
           disabled={isCompleteDisabled}
           sx={{
-            backgroundColor: theme.palette.primary.main,
-            color: theme.palette.primary.contrastText,
+            backgroundColor: theme.palette.info.main,
+            color: theme.palette.info.contrastText,
             "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
+              backgroundColor: theme.palette.info.dark,
             },
             "&.Mui-disabled": {
               backgroundColor: theme.palette.grey[700],
@@ -296,9 +361,10 @@ const SampleList = () => {
           variant="contained"
           onClick={() => navigate(`/air-monitoring/shift/${shiftId}/analysis`)}
           sx={{
-            backgroundColor: theme.palette.primary.main,
+            backgroundColor: theme.palette.success.main,
+            color: theme.palette.success.contrastText,
             "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
+              backgroundColor: theme.palette.success.dark,
             },
           }}
         >

@@ -30,6 +30,8 @@ import {
   FormControl,
   InputLabel,
   Autocomplete,
+  Menu,
+  Switch,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -77,6 +79,8 @@ const AirMonitoring = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [projects, setProjects] = useState([]);
+  const [statusMenu, setStatusMenu] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -97,17 +101,11 @@ const AirMonitoring = () => {
 
         // Process jobs to include project details
         const processedJobs = jobsResponse.data.map((job) => {
-          console.log("Processing job:", job);
-          console.log("Job project object:", job.project);
-          console.log("Project ID from job:", job.project?.projectID);
-          console.log("Project name from job:", job.project?.name);
-
           const projectData = job.project;
+          console.log("Processing job:", job);
           console.log("Project data:", projectData);
-          console.log("Project ID:", projectData?.projectID);
-          console.log("Project name:", projectData?.name);
 
-          const processedJob = {
+          return {
             id: job._id,
             _id: job._id,
             projectID: projectData?.projectID || "Unknown",
@@ -115,9 +113,6 @@ const AirMonitoring = () => {
             status: job.status,
             asbestosRemovalist: job.asbestosRemovalist,
           };
-
-          console.log("Processed job:", processedJob);
-          return processedJob;
         });
 
         console.log("Final processed jobs:", processedJobs);
@@ -171,8 +166,18 @@ const AirMonitoring = () => {
         throw new Error("No data received from server");
       }
 
+      // Process the new job to include project details
+      const processedJob = {
+        id: response.data._id,
+        _id: response.data._id,
+        projectID: selectedProject.projectID,
+        projectName: selectedProject.name,
+        status: response.data.status,
+        asbestosRemovalist: response.data.asbestosRemovalist,
+      };
+
       // Add the new job to the list
-      setJobs((prevJobs) => [response.data, ...prevJobs]);
+      setJobs((prevJobs) => [processedJob, ...prevJobs]);
       setOpenDialog(false);
       setSelectedProject(null);
       setForm(emptyForm);
@@ -239,13 +244,18 @@ const AirMonitoring = () => {
   const filteredJobs = jobs.filter((j) => {
     const q = search.toLowerCase();
     const project = projects.find((p) => p._id === j.projectId);
-
-    return (
+    const matchesSearch =
       (j.projectId?.toString() || "").toLowerCase().includes(q) ||
       (project?.name || "").toLowerCase().includes(q) ||
       (j.status || "").toLowerCase().includes(q) ||
-      (j.startDate || "").toLowerCase().includes(q)
-    );
+      (j.startDate || "").toLowerCase().includes(q);
+
+    // If showCompleted is false, filter out completed jobs
+    if (!showCompleted && j.status === "completed") {
+      return false;
+    }
+
+    return matchesSearch;
   });
 
   const sortedJobs = [...filteredJobs].sort((a, b) => {
@@ -294,6 +304,33 @@ const AirMonitoring = () => {
     console.log("Print report for job:", jobId);
   };
 
+  const handleStatusClick = (event, job) => {
+    setStatusMenu(event.currentTarget);
+    setSelectedJob(job);
+  };
+
+  const handleStatusClose = () => {
+    setStatusMenu(null);
+    setSelectedJob(null);
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    try {
+      if (selectedJob) {
+        await jobService.update(selectedJob._id, { status: newStatus });
+        setJobs(
+          jobs.map((job) =>
+            job._id === selectedJob._id ? { ...job, status: newStatus } : job
+          )
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      handleStatusClose();
+    }
+  };
+
   const columns = [
     {
       field: "projectID",
@@ -328,61 +365,31 @@ const AirMonitoring = () => {
       field: "status",
       headerName: "Status",
       flex: 1,
-      valueGetter: (params) => {
-        if (typeof params === "string") return params;
-        return params?.row?.status || "pending";
-      },
-      renderCell: (params) => {
-        if (!params?.row) return null;
-
-        const status = params.row.status || "pending";
-        const getStatusColor = (status) => {
-          switch (status) {
-            case "completed":
-              return colors.secondary[500];
-            case "in_progress":
-              return colors.primary[700];
-            case "pending":
-              return colors.neutral[700];
-            case "cancelled":
-              return colors.error[500];
-            default:
-              return colors.neutral[700];
-          }
-        };
-
-        return (
-          <Box
-            width="60%"
-            m="0"
-            p="0"
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            backgroundColor={getStatusColor(status)}
-            borderRadius="4px"
-            height="28px"
-            mb={0}
-          >
-            <Typography
-              color={colors.grey[100]}
-              sx={{
-                px: "8px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                fontSize: "1rem",
-                lineHeight: 1,
-                m: 0,
-                p: 0,
-              }}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
-            </Typography>
-          </Box>
-        );
-      },
+      renderCell: (params) => (
+        <Box
+          onClick={(e) => handleStatusClick(e, params.row)}
+          sx={{
+            cursor: "pointer",
+            padding: "4px 8px",
+            borderRadius: "4px",
+            backgroundColor:
+              params.row.status === "completed"
+                ? theme.palette.success.main
+                : params.row.status === "in_progress"
+                ? theme.palette.info.main
+                : params.row.status === "pending"
+                ? theme.palette.warning.main
+                : theme.palette.grey[500],
+            color: theme.palette.common.white,
+            "&:hover": {
+              opacity: 0.8,
+            },
+          }}
+        >
+          {params.row.status.charAt(0).toUpperCase() +
+            params.row.status.slice(1).replace("_", " ")}
+        </Box>
+      ),
     },
     {
       field: "actions",
@@ -420,7 +427,7 @@ const AirMonitoring = () => {
                 },
               }}
             >
-              Reports
+              Shifts
             </Button>
           </Box>
         );
@@ -438,8 +445,29 @@ const AirMonitoring = () => {
         subtitle="Manage air monitoring jobs and samples"
       />
 
-      {/* Add New Job Button */}
-      <Box display="flex" justifyContent="flex-end" mb="20px">
+      {/* Add New Job Button and Show Completed Toggle */}
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb="20px"
+      >
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              color="primary"
+            />
+          }
+          label="Show Completed Jobs"
+          sx={{
+            color: theme.palette.text.primary,
+            "& .MuiFormControlLabel-label": {
+              fontSize: "0.9rem",
+            },
+          }}
+        />
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -492,7 +520,7 @@ const AirMonitoring = () => {
           <Typography color="error">{error}</Typography>
         ) : (
           <DataGrid
-            rows={jobs}
+            rows={filteredJobs}
             columns={columns}
             getRowId={(row) => row.id || row._id}
             pageSize={10}
@@ -664,6 +692,22 @@ const AirMonitoring = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Menu
+        anchorEl={statusMenu}
+        open={Boolean(statusMenu)}
+        onClose={handleStatusClose}
+      >
+        <MenuItem onClick={() => handleStatusChange("pending")}>
+          Pending
+        </MenuItem>
+        <MenuItem onClick={() => handleStatusChange("in_progress")}>
+          In Progress
+        </MenuItem>
+        <MenuItem onClick={() => handleStatusChange("completed")}>
+          Completed
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };

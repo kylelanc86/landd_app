@@ -9,9 +9,53 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-GB');
 }
 
-export function generateShiftReport({ shift, job, samples }) {
-  // Placeholder logo (can be replaced with base64 image)
-  const logo = '';
+// Helper to format time as HH:mm
+function formatTime(timeStr) {
+  if (!timeStr) return '';
+  // Remove seconds if present
+  return timeStr.split(':').slice(0, 2).join(':');
+}
+
+// Helper to extract number from sample ID
+function getSampleNumber(sampleID) {
+  if (!sampleID) return 0;
+  const match = sampleID.match(/\d+$/);
+  return match ? parseInt(match[0]) : 0;
+}
+
+// Helper to load image as base64
+async function loadImageAsBase64(imagePath) {
+  try {
+    const response = await fetch(imagePath);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Error loading image:', error);
+    return null;
+  }
+}
+
+export async function generateShiftReport({ shift, job, samples }) {
+  // Load logos
+  const companyLogo = await loadImageAsBase64('/logo.png');
+  const nataLogo = await loadImageAsBase64('/NATA_logo.png');
+
+  if (!companyLogo || !nataLogo) {
+    console.error('Failed to load one or more logos');
+    return;
+  }
+
+  // Sort samples by number (lowest to highest)
+  const sortedSamples = [...samples].sort((a, b) => {
+    const aNum = getSampleNumber(a.fullSampleID);
+    const bNum = getSampleNumber(b.fullSampleID);
+    return aNum - bNum;
+  });
 
   // Build the document definition
   const docDefinition = {
@@ -19,9 +63,7 @@ export function generateShiftReport({ shift, job, samples }) {
       // Header
       {
         columns: [
-          logo
-            ? { image: logo, width: 100 }
-            : { text: 'LANCASTER AND DICKENSON CONSULTING', style: 'header' },
+          { image: companyLogo, width: 150 },
           {
             stack: [
               { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
@@ -67,7 +109,13 @@ export function generateShiftReport({ shift, job, samples }) {
           body: [
             [
               { text: 'L&D Job Reference:', bold: true },
-              job?.jobID || ''
+              job?.projectID ||
+                (sortedSamples[0]?.fullSampleID
+                  ? sortedSamples[0].fullSampleID.substring(0, 8)
+                  : '') ||
+                job?.jobID ||
+                job?.id ||
+                ''
             ],
             [
               { text: 'Description of works:', bold: true },
@@ -76,10 +124,6 @@ export function generateShiftReport({ shift, job, samples }) {
             [
               { text: 'Asbestos Removalist:', bold: true },
               job?.asbestosRemovalist || ''
-            ],
-            [
-              { text: 'Monitoring Type:', bold: true },
-              shift?.monitoringType || ''
             ],
           ],
         },
@@ -93,7 +137,7 @@ export function generateShiftReport({ shift, job, samples }) {
           body: [
             [
               { text: 'No. of Samples', bold: true },
-              samples.length,
+              sortedSamples.length,
               { text: 'Samples Received', bold: true },
               formatDate(shift?.samplesReceivedDate)
             ],
@@ -123,31 +167,56 @@ export function generateShiftReport({ shift, job, samples }) {
       {
         table: {
           headerRows: 1,
-          widths: [80, '*', 60, 60, 60, 60, 60],
+          widths: [50, 40, '20%', 40, 40, 50, 40, 40, 60],
+          heights: 24,
           body: [
             [
               { text: 'Sample Ref.', style: 'tableHeader' },
+              { text: 'Type', style: 'tableHeader' },
               { text: 'Sample Location', style: 'tableHeader' },
               { text: 'Time on', style: 'tableHeader' },
               { text: 'Time off', style: 'tableHeader' },
               { text: 'Ave. flow rate (mL/min)', style: 'tableHeader' },
               { text: 'Fields Counted', style: 'tableHeader' },
               { text: 'Fibres Counted', style: 'tableHeader' },
-              { text: 'Reported AFC (fibres/ml)', style: 'tableHeader' },
+              { text: 'Reported AFC (fibres/mL)', style: 'tableHeader' },
             ],
-            ...samples.map((s) => [
-              s.fullSampleID || s.sampleNumber || '',
-              s.location || '',
-              s.startTime || '',
-              s.endTime || '',
-              s.averageFlowrate || '',
-              s.fieldsCounted || '',
-              s.fibresCounted || '',
-              s.reportedAFC || '',
-            ]),
+            ...sortedSamples.map((s) => {
+              const isFieldBlank = s.location === 'Field blank';
+              const isUncountable = s.analysis?.edgesDistribution === 'fail' || s.analysis?.backgroundDust === 'fail';
+              const dash = '-';
+              // Type initial
+              const typeInitial = s.type ? s.type[0].toUpperCase() : dash;
+              // Calculate flow rate (multiply by 1000)
+              const flowRate = s.averageFlowrate ? (s.averageFlowrate * 1000).toFixed(0) : null;
+              return [
+                s.fullSampleID || s.sampleNumber || dash,
+                typeInitial,
+                s.location || dash,
+                isFieldBlank ? dash : formatTime(s.startTime) || dash,
+                isFieldBlank ? dash : formatTime(s.endTime) || dash,
+                isFieldBlank ? dash : (flowRate ?? dash),
+                isUncountable ? 'N/A' : (s.analysis?.fieldsCounted ?? dash),
+                isUncountable ? 'N/A' : (typeof s.analysis?.fibresCounted === 'number' ? s.analysis.fibresCounted : dash),
+                isUncountable 
+                  ? { text: 'Sample uncountable', color: 'red' }
+                  : (isFieldBlank ? dash : (typeof s.analysis?.reportedConcentration === 'number' ? s.analysis.reportedConcentration : dash)),
+              ];
+            }),
           ],
         },
+        layout: {
+          hLineWidth: function(i, node) { return 1; },
+          vLineWidth: function(i, node) { return 1; },
+          hLineColor: function(i, node) { return '#aaa'; },
+          vLineColor: function(i, node) { return '#aaa'; },
+          paddingLeft: function(i, node) { return 4; },
+          paddingRight: function(i, node) { return 4; },
+          paddingTop: function(i, node) { return 2; },
+          paddingBottom: function(i, node) { return 2; },
+        },
         margin: [0, 0, 0, 10],
+        fontSize: 8,
       },
       // Notes and footer
       { text: 'Notes', style: 'tableHeader', margin: [0, 10, 0, 2] },
@@ -157,15 +226,15 @@ export function generateShiftReport({ shift, job, samples }) {
           'The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL.',
           'Safe Work Australias recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL.',
           'AFC = air fibre concentration',
+          'Field blank samples are used to verify the cleanliness of the sampling equipment and laboratory procedures.',
         ],
       },
       { text: 'Accredited for compliance with ISO/IEC 17025 – Testing', italics: true, margin: [0, 10, 0, 0] },
       { text: 'Accreditation no: 19512', italics: true },
-      // Footer
+      // Remove the previous NATA logo columns footer
       {
         columns: [
-          { text: `Job Reference: ${job?.jobID || ''}`, alignment: 'left' },
-          { text: 'NATA', alignment: 'right', bold: true },
+          { text: `Job Reference: ${job?.projectID || ''}`, alignment: 'left' }
         ],
         margin: [0, 20, 0, 0],
       },
@@ -179,8 +248,18 @@ export function generateShiftReport({ shift, job, samples }) {
     defaultStyle: {
       fontSize: 10,
     },
-    pageMargins: [30, 30, 30, 30],
+    pageMargins: [30, 30, 30, 80],
+    footer: function(currentPage, pageCount) {
+      return {
+        columns: [
+          { width: '*', text: '' },
+          { image: nataLogo, width: 50, alignment: 'center', margin: [0, 0, 0, 0] },
+          { width: '*', text: '' }
+        ],
+        margin: [0, 0, 0, 0]
+      };
+    }
   };
 
-  pdfMake.createPdf(docDefinition).download(`LDC_Report_${job?.jobID || ''}.pdf`);
+  pdfMake.createPdf(docDefinition).download(`LDC_Report_${job?.projectID || ''}.pdf`);
 } 

@@ -12,14 +12,15 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.log('No token found in localStorage');
-        setLoading(false);
-        return;
-      }
+    const token = localStorage.getItem('token');
+    console.log('AuthContext useEffect token:', token); // DEBUG LOG
+    if (!token) {
+      console.log('No token found in localStorage');
+      setLoading(false);
+      return;
+    }
 
+    const checkAuth = async () => {
       try {
         const response = await authService.getCurrentUser();
         console.log("Auth check response:", response);
@@ -48,7 +49,7 @@ export const AuthProvider = ({ children }) => {
       const { token, user } = response.data;
       localStorage.setItem('token', token);
       localStorage.setItem('currentUser', JSON.stringify(user));
-      
+      console.log('Token set in localStorage:', localStorage.getItem('token')); // DEBUG LOG
       setUser(user);
       return response.data;
     } catch (error) {

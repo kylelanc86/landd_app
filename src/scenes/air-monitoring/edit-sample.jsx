@@ -67,59 +67,54 @@ const EditSample = () => {
 
   // Fetch sample data
   useEffect(() => {
-    const fetchSampleData = async () => {
+    const fetchSample = async () => {
       try {
         setIsLoading(true);
-        // Fetch sample details
-        const sampleResponse = await sampleService.getById(sampleId);
-        const sample = sampleResponse.data;
-        console.log("Fetched sample data:", sample); // Debug log
+        const response = await sampleService.getById(sampleId);
+        const sampleData = response.data;
+        console.log("Fetched sample data:", sampleData);
 
-        // Fetch shift details to get project ID
-        const shiftResponse = await shiftService.getById(shiftId);
-        const shift = shiftResponse.data;
+        // Extract the sample number from fullSampleID
+        const sampleNumber = sampleData.fullSampleID.split("-")[1];
 
-        if (shift.job && shift.job.project) {
-          setProjectID(shift.job.project.projectID);
+        // Get project ID from the job's project
+        if (sampleData.job && sampleData.job.project) {
+          setProjectID(sampleData.job.project.projectID);
+        } else {
+          // If project is not populated, fetch the job to get project details
+          const jobResponse = await jobService.getById(sampleData.job);
+          if (jobResponse.data && jobResponse.data.project) {
+            setProjectID(jobResponse.data.project.projectID);
+          }
         }
 
-        // Fetch job details
-        const jobResponse = await jobService.getById(shift.job._id);
-        setJob(jobResponse.data);
-
-        // Pre-fill form with sample data
         setForm({
-          sampler: sample.collectedBy?._id || sample.collectedBy || "", // Handle both populated and unpopulated cases
-          sampleNumber: sample.sampleNumber?.split("-")[1] || "", // Extract number part after hyphen
-          type: sample.type || "",
-          location: sample.location || "",
-          pumpNo: sample.pumpNo || "",
-          cowlNo: sample.cowlNo || "",
-          filterSize: sample.filterSize || "",
-          startTime: sample.startTime || "",
-          endTime: sample.endTime || "",
-          initialFlowrate: sample.initialFlowrate || "",
-          finalFlowrate: sample.finalFlowrate || "",
-          averageFlowrate: sample.averageFlowrate || "",
-          notes: sample.notes || "",
-          date: sample.date
-            ? formatDateForInput(new Date(sample.date))
-            : formatDateForInput(new Date()),
+          sampleNumber: sampleNumber,
+          type: sampleData.type,
+          location: sampleData.location,
+          pumpNo: sampleData.pumpNo || "",
+          cowlNo: sampleData.cowlNo || "",
+          filterSize: sampleData.filterSize || "",
+          startTime: sampleData.startTime || "",
+          endTime: sampleData.endTime || "",
+          initialFlowrate: sampleData.initialFlowrate || "",
+          finalFlowrate: sampleData.finalFlowrate || "",
+          averageFlowrate: sampleData.averageFlowrate || "",
+          notes: sampleData.notes || "",
+          sampler: sampleData.collectedBy?._id || sampleData.collectedBy || "",
         });
-
+        setJob(sampleData.job);
         setError(null);
       } catch (err) {
-        console.error("Error fetching sample data:", err);
-        setError("Failed to load sample data. Please try again later.");
+        console.error("Error fetching sample:", err);
+        setError("Failed to load sample details");
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (sampleId && shiftId) {
-      fetchSampleData();
-    }
-  }, [sampleId, shiftId]);
+    fetchSample();
+  }, [sampleId]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -154,6 +149,12 @@ const EditSample = () => {
     setError("");
 
     try {
+      console.log("Starting sample update...");
+      console.log("Current user:", user);
+      console.log("Form data:", form);
+      console.log("Project ID:", projectID);
+      console.log("Job:", job);
+
       if (!projectID) {
         throw new Error("Project ID is required");
       }
@@ -166,16 +167,16 @@ const EditSample = () => {
         throw new Error("Shift ID is required");
       }
 
-      if (!form.sampler) {
-        throw new Error("Sampler is required");
+      if (!form.sampleNumber) {
+        throw new Error("Sample number is required");
       }
 
-      if (!form.location) {
-        throw new Error("Location is required");
-      }
+      // Generate full sample ID in the format: {projectID}-{sampleNumber}
+      const fullSampleID = `${projectID}-${form.sampleNumber}`;
+      console.log("Generated full sample ID:", fullSampleID);
 
-      // Generate sample number in the format: projectID-number
-      const sampleNumber = `${projectID}-${form.sampleNumber}`;
+      // Map sample type to match backend enum
+      const sampleType = form.type;
 
       // Format times to include seconds
       const formatTime = (time) => {
@@ -186,35 +187,28 @@ const EditSample = () => {
       const sampleData = {
         shift: shiftId,
         job: job._id,
-        sampleNumber: sampleNumber,
-        fullSampleID: sampleNumber,
-        type: form.type,
-        location: form.location,
+        sampleNumber: form.sampleNumber,
+        fullSampleID: fullSampleID,
+        type: sampleType || undefined,
+        location: form.location || undefined,
         pumpNo: form.pumpNo || undefined,
         cowlNo: form.cowlNo || undefined,
         filterSize: form.filterSize || undefined,
-        startTime: formatTime(form.startTime),
+        startTime: form.startTime ? formatTime(form.startTime) : undefined,
         endTime: form.endTime ? formatTime(form.endTime) : undefined,
-        initialFlowrate: parseFloat(form.initialFlowrate) || 0,
+        initialFlowrate: form.initialFlowrate
+          ? parseFloat(form.initialFlowrate)
+          : undefined,
         finalFlowrate: form.finalFlowrate
           ? parseFloat(form.finalFlowrate)
           : undefined,
-        averageFlowrate: parseFloat(form.averageFlowrate) || 0,
+        averageFlowrate: form.averageFlowrate
+          ? parseFloat(form.averageFlowrate)
+          : undefined,
         status: "pending",
         notes: form.notes || undefined,
-        collectedBy: form.sampler,
+        collectedBy: form.sampler || undefined,
       };
-
-      // Validate required fields
-      if (!sampleData.startTime) {
-        throw new Error("Start time is required");
-      }
-      if (!sampleData.initialFlowrate) {
-        throw new Error("Initial flowrate is required");
-      }
-      if (!sampleData.averageFlowrate) {
-        throw new Error("Average flowrate is required");
-      }
 
       await sampleService.update(sampleId, sampleData);
       navigate(`/air-monitoring/shift/${shiftId}/samples`);
@@ -233,7 +227,22 @@ const EditSample = () => {
   if (isLoading) {
     return (
       <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-        <Typography>Loading...</Typography>
+        <Typography>Loading sample details...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Typography color="error">{error}</Typography>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate(-1)}
+          sx={{ mt: 2 }}
+        >
+          Back to Samples
+        </Button>
       </Box>
     );
   }
@@ -241,7 +250,7 @@ const EditSample = () => {
   if (isSubmitting) {
     return (
       <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-        <Typography>Updating...</Typography>
+        <Typography>Updating sample...</Typography>
       </Box>
     );
   }
@@ -268,12 +277,6 @@ const EditSample = () => {
       >
         Edit Sample
       </Typography>
-
-      {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
-          {error}
-        </Typography>
-      )}
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
