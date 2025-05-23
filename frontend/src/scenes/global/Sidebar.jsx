@@ -180,7 +180,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         top: 0 !important;
         left: 0 !important;
         height: 100vh !important;
-        z-index: 999 !important;
+        z-index: 1300 !important;
       }
       .pro-sidebar-inner {
         background: ${
@@ -243,26 +243,19 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   maxHeight: "62.5px",
                   width: "auto",
                   display: "block",
+                  margin: "0 auto",
                 }}
                 onError={(e) => {
                   e.target.onerror = null;
                   e.target.style.display = "none";
                   const parent = e.target.parentNode;
-                  if (parent && !parent.querySelector(".logo-error")) {
-                    const msg = document.createElement("div");
-                    msg.className = "logo-error";
-                    msg.style.color =
-                      theme.palette.mode === "dark"
-                        ? tokens.grey[100]
-                        : tokens.grey[700];
-                    msg.style.fontSize = "12px";
-                    msg.style.position = "absolute";
-                    msg.style.top = "50%";
-                    msg.style.left = "50%";
-                    msg.style.transform = "translate(-50%, -50%)";
-                    msg.innerText = "Logo not found";
-                    parent.appendChild(msg);
-                  }
+                  const text = document.createElement("span");
+                  text.textContent = "L&D";
+                  text.style.fontSize = "24px";
+                  text.style.fontWeight = "bold";
+                  text.style.color =
+                    theme.palette.mode === "dark" ? "#fff" : "#000";
+                  parent.appendChild(text);
                 }}
               />
             </Box>

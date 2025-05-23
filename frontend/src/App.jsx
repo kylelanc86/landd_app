@@ -22,6 +22,8 @@ import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
 import Users from "./scenes/users";
 import Profile from "./scenes/profile";
 import Layout from "./components/Layout";
+import ResetPassword from "./scenes/auth/ResetPassword";
+import ProjectInformation from "./scenes/projects/ProjectInformation";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -35,6 +37,7 @@ function App() {
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
               {/* Protected routes */}
               <Route
@@ -72,6 +75,14 @@ function App() {
                           element={<Analysis />}
                         />
                         <Route path="/projects" element={<Projects />} />
+                        <Route
+                          path="/projects/:id"
+                          element={<ProjectInformation />}
+                        />
+                        <Route
+                          path="/projects/new"
+                          element={<ProjectInformation />}
+                        />
                         <Route path="/clients" element={<Clients />} />
                         <Route path="/invoices" element={<Invoices />} />
                         <Route path="/calendar" element={<Calendar />} />

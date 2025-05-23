@@ -17,10 +17,27 @@ const projectSchema = new mongoose.Schema({
     ref: 'Client',
     required: true
   },
-  type: {
+  department: {
     type: String,
     required: true,
-    enum: ['air_quality', 'water_quality', 'soil_analysis', 'other']
+    enum: ['Asbestos & HAZMAT', 'Mould']
+  },
+  category: {
+    type: String,
+    required: false,
+    enum: [
+      'Asbestos Materials Assessment',
+      'Asbestos & Lead Paint Assessment',
+      'Lead Paint/Dust Assessment',
+      'Air Monitoring and Clearance',
+      'Clearance Certificate',
+      'Commercial Asbestos Management Plan',
+      'Hazardous Materials Management Plan',
+      'Residential Asbestos Survey',
+      'Silica Air Monitoring',
+      'Mould/Moisture Assessment',
+      'Other'
+    ]
   },
   status: {
     type: String,
@@ -41,14 +58,6 @@ const projectSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: false
-  },
-  startDate: {
-    type: Date,
-    required: true
-  },
-  endDate: {
-    type: Date,
     required: false
   },
   description: String,

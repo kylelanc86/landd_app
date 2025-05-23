@@ -126,59 +126,59 @@ export const themeSettings = (mode) => {
           }),
     },
     typography: {
-      fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+      fontFamily: '"Poppins", sans-serif',
       h1: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "2.5rem",
         fontWeight: 600,
       },
       h2: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "2rem",
         fontWeight: 600,
       },
       h3: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "1.75rem",
         fontWeight: 600,
       },
       h4: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "1.5rem",
         fontWeight: 600,
       },
       h5: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "1.25rem",
         fontWeight: 500,
       },
       h6: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "1rem",
         fontWeight: 500,
       },
       subtitle1: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "1rem",
         fontWeight: 500,
       },
       subtitle2: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 500,
       },
       body1: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "1rem",
         fontWeight: 400,
       },
       body2: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 400,
       },
       button: {
-        fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Poppins", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 500,
         textTransform: "none",
@@ -190,15 +190,24 @@ export const themeSettings = (mode) => {
           root: {
             textTransform: "none",
             borderRadius: 8,
-            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontFamily: '"Poppins", sans-serif',
             fontWeight: 500,
+            padding: "8px 16px",
           },
         },
       },
       MuiPaper: {
         styleOverrides: {
           root: {
+            fontFamily: '"Poppins", sans-serif',
             borderRadius: 8,
+          },
+        },
+      },
+      MuiTypography: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", sans-serif',
           },
         },
       },
@@ -206,27 +215,89 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           root: {
             borderRadius: 8,
+            boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
           },
         },
       },
       MuiTableCell: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontFamily: '"Poppins", sans-serif',
+            padding: "12px 16px",
+            borderBottom: "1px solid rgba(224, 224, 224, 0.2)",
+          },
+          head: {
+            backgroundColor: (theme) =>
+              theme.palette.mode === "dark"
+                ? tokens.background.paper
+                : tokens.primary[50],
+            color: (theme) =>
+              theme.palette.mode === "dark"
+                ? tokens.grey[100]
+                : tokens.primary[700],
+            fontWeight: 600,
+          },
+          body: {
+            backgroundColor: (theme) =>
+              theme.palette.mode === "dark"
+                ? tokens.background.dark
+                : tokens.grey[0],
+            color: (theme) =>
+              theme.palette.mode === "dark"
+                ? tokens.grey[100]
+                : tokens.grey[700],
           },
         },
       },
       MuiInputLabel: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontFamily: '"Poppins", sans-serif',
           },
         },
       },
       MuiMenuItem: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontFamily: '"Poppins", sans-serif',
+          },
+        },
+      },
+      MuiTextField: {
+        styleOverrides: {
+          root: {
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 8,
+            },
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            borderRadius: 12,
+          },
+        },
+      },
+      MuiDialogTitle: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", sans-serif',
+            fontWeight: 600,
+          },
+        },
+      },
+      MuiDialogContent: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", sans-serif',
+          },
+        },
+      },
+      MuiDialogActions: {
+        styleOverrides: {
+          root: {
+            padding: '16px 24px',
           },
         },
       },

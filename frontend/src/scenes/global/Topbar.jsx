@@ -47,7 +47,8 @@ const Topbar = ({ toggleColorMode }) => {
         backgroundColor: theme.palette.background.paper,
         boxShadow: 1,
         width: "100%",
-        zIndex: (theme) => theme.zIndex.drawer - 1,
+        zIndex: (theme) => theme.zIndex.drawer + 1,
+        height: "80px",
       }}
     >
       <Toolbar>

@@ -6,7 +6,7 @@ const Project = require('../models/Project');
 router.get('/', async (req, res) => {
   try {
     const projects = await Project.find()
-      .select('projectID name client type status address startDate endDate description users createdAt updatedAt')
+      .select('projectID name client department category status address startDate endDate description users createdAt updatedAt')
       .populate('client')
       .populate('users')
       .sort({ createdAt: -1 });
@@ -48,7 +48,8 @@ router.post('/', async (req, res) => {
     const project = new Project({
       name: req.body.name,
       client: req.body.client,
-      type: req.body.type,
+      department: req.body.department,
+      category: req.body.category,
       status: req.body.status,
       address: req.body.address,
       startDate: req.body.startDate,
@@ -94,7 +95,8 @@ router.patch('/:id', async (req, res) => {
 
     // Update fields
     if (req.body.name) project.name = req.body.name;
-    if (req.body.type) project.type = req.body.type;
+    if (req.body.department) project.department = req.body.department;
+    if (req.body.category) project.category = req.body.category;
     if (req.body.status) project.status = req.body.status;
     if (req.body.address) project.address = req.body.address;
     if (req.body.startDate) project.startDate = req.body.startDate;
