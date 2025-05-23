@@ -26,7 +26,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     // If a new token is provided, update it in localStorage
-    const newToken = response.headers['new-token'];
+    const newToken = response.headers['new-token'] || response.headers['New-Token'];
     if (newToken) {
       console.log('Received new token from backend, updating localStorage.');
       localStorage.setItem('token', newToken);
@@ -38,8 +38,21 @@ api.interceptors.response.use(
     const isXero = error.config && error.config.url && error.config.url.includes('/xero/');
     if (error.response?.status === 401 && !isXero) {
       console.error('401 Unauthorized error:', error, error.response);
-      localStorage.removeItem("token");
-      // window.location.href = "/login"; // Keep this commented for now
+      // Check if we got a new token in the response
+      const newToken = error.response?.headers?.['new-token'] || error.response?.headers?.['New-Token'];
+      if (newToken) {
+        console.log('Received new token in error response, updating localStorage.');
+        localStorage.setItem('token', newToken);
+        // Retry the original request
+        const config = error.config;
+        config.headers.Authorization = `Bearer ${newToken}`;
+        return api(config);
+      } else {
+        // No new token, clear storage and redirect to login
+        localStorage.removeItem("token");
+        localStorage.removeItem("currentUser"); // Also clear the user data
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }

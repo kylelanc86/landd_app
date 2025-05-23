@@ -28,7 +28,7 @@ const EditSample = () => {
   const theme = useTheme();
   const { shiftId, sampleId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
     sampler: "",
@@ -150,7 +150,7 @@ const EditSample = () => {
 
     try {
       console.log("Starting sample update...");
-      console.log("Current user:", user);
+      console.log("Current user:", currentUser);
       console.log("Form data:", form);
       console.log("Project ID:", projectID);
       console.log("Job:", job);

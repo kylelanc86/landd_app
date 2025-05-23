@@ -15,13 +15,20 @@ import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
 import Header from "../../components/Header";
 import { useNavigate, useParams } from "react-router-dom";
-import { shiftService, jobService, sampleService } from "../../services/api";
+import {
+  shiftService,
+  jobService,
+  sampleService,
+  projectService,
+  clientService,
+} from "../../services/api";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateUtils";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CloseIcon from "@mui/icons-material/Close";
 
 const Shifts = () => {
   const theme = useTheme();
@@ -34,62 +41,82 @@ const Shifts = () => {
   const [projectDetails, setProjectDetails] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [newDate, setNewDate] = useState("");
-  const { user } = useAuth();
+  const { currentUser, restoreUserState } = useAuth();
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetShiftId, setResetShiftId] = useState(null);
+  const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
+
+  // Reusable function to fetch shifts and their sampleNumbers
+  const fetchShiftsWithSamples = async () => {
+    const shiftsResponse = await shiftService.getByJob(jobId);
+    const formattedShifts = await Promise.all(
+      (shiftsResponse.data || []).map(async (shift) => {
+        // Fetch samples for this shift
+        try {
+          const samplesResponse = await sampleService.getByShift(shift._id);
+          const sampleNumbers = (samplesResponse.data || [])
+            .map((sample) => {
+              const match = sample.fullSampleID?.match(/-(\d+)$/);
+              return match ? match[1] : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => parseInt(a) - parseInt(b));
+          return {
+            ...shift,
+            id: shift._id,
+            sampleNumbers,
+            status: (() => {
+              const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
+              if (s === "pending") return "ongoing";
+              if (
+                [
+                  "ongoing",
+                  "sampling_complete",
+                  "samples_submitted_to_lab",
+                  "analysis_complete",
+                  "shift_complete",
+                ].includes(s)
+              )
+                return s;
+              return "ongoing";
+            })(),
+          };
+        } catch (error) {
+          return {
+            ...shift,
+            id: shift._id,
+            sampleNumbers: [],
+            status: (() => {
+              const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
+              if (s === "pending") return "ongoing";
+              if (
+                [
+                  "ongoing",
+                  "sampling_complete",
+                  "samples_submitted_to_lab",
+                  "analysis_complete",
+                  "shift_complete",
+                ].includes(s)
+              )
+                return s;
+              return "ongoing";
+            })(),
+          };
+        }
+      })
+    );
+    setShifts(formattedShifts);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAll = async () => {
       try {
         setLoading(true);
         const jobResponse = await jobService.getById(jobId);
         if (jobResponse.data && jobResponse.data.project) {
           setProjectDetails(jobResponse.data.project);
         }
-        const shiftsResponse = await shiftService.getByJob(jobId);
-        const formattedShifts = (shiftsResponse.data || []).map((shift) => ({
-          ...shift,
-          id: shift._id,
-          status: (() => {
-            const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
-            if (s === "pending") return "ongoing";
-            if (
-              [
-                "ongoing",
-                "sampling_complete",
-                "analysis_complete",
-                "shift_complete",
-              ].includes(s)
-            )
-              return s;
-            return "ongoing";
-          })(),
-        }));
-
-        // Fetch samples for each shift
-        const shiftsWithSamples = await Promise.all(
-          formattedShifts.map(async (shift) => {
-            try {
-              const samplesResponse = await sampleService.getByShift(shift._id);
-              const sampleNumbers = (samplesResponse.data || [])
-                .map((sample) => {
-                  const match = sample.fullSampleID?.match(/-(\d+)$/);
-                  return match ? match[1] : null;
-                })
-                .filter(Boolean)
-                .sort((a, b) => parseInt(a) - parseInt(b));
-
-              return {
-                ...shift,
-                sampleNumbers,
-              };
-            } catch (error) {
-              return {
-                ...shift,
-                sampleNumbers: [],
-              };
-            }
-          })
-        );
-        setShifts(shiftsWithSamples);
+        await fetchShiftsWithSamples();
         setError(null);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -98,8 +125,7 @@ const Shifts = () => {
         setLoading(false);
       }
     };
-
-    fetchData();
+    fetchAll();
   }, [jobId]);
 
   const handleAddShift = () => {
@@ -122,17 +148,50 @@ const Shifts = () => {
 
   const handleSubmit = async () => {
     try {
-      console.log("Submit clicked - User state:", user);
+      console.log("Submit clicked - User state:", currentUser);
 
       if (!newDate) {
         setError("Please select a date");
         return;
       }
 
-      if (!user || !user.id) {
-        console.log("User validation failed:", { user });
-        setError("Please log in to create a shift");
-        return;
+      let userToUse = currentUser;
+      if (!userToUse || !userToUse.id) {
+        console.log("User validation failed (before restore):", {
+          currentUser,
+        });
+        console.log("About to enter try/catch for restoreUserState");
+        // Try to restore user state before giving up
+        try {
+          try {
+            console.log(
+              "restoreUserState function reference:",
+              restoreUserState
+            );
+            await restoreUserState();
+            console.log("restoreUserState() called");
+          } catch (err) {
+            console.error("Error when calling restoreUserState:", err);
+          }
+          // Wait a tick to ensure localStorage is updated
+          await new Promise((res) => setTimeout(res, 100));
+          userToUse = JSON.parse(localStorage.getItem("currentUser"));
+          console.log("User after restoreUserState:", userToUse);
+          if (!userToUse || !userToUse.id) {
+            console.log("userToUse before redirect:", userToUse);
+            alert(
+              "User is not valid. See console for details. (No redirect for debugging)"
+            );
+            setError("Please log in to create a shift");
+            // window.location.href = "/login"; // TEMPORARILY DISABLED FOR DEBUGGING
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to restore user state:", error);
+          setError("Please log in to create a shift");
+          // window.location.href = "/login"; // TEMPORARILY DISABLED FOR DEBUGGING
+          return;
+        }
       }
 
       const newShift = {
@@ -141,7 +200,7 @@ const Shifts = () => {
         date: new Date(newDate).toISOString(),
         startTime: "08:00",
         endTime: "16:00",
-        supervisor: user.id,
+        supervisor: userToUse.id,
         status: "ongoing",
         notes: "",
       };
@@ -179,11 +238,46 @@ const Shifts = () => {
     }
   };
 
+  const handleResetStatus = async (id) => {
+    setResetShiftId(id);
+    setResetDialogOpen(true);
+  };
+
+  const confirmResetStatus = async () => {
+    if (!resetShiftId) return;
+    try {
+      // Get the current shift data first
+      const currentShift = await shiftService.getById(resetShiftId);
+
+      // Update shift status while preserving analysis data
+      await shiftService.update(resetShiftId, {
+        status: "ongoing",
+        analysedBy: currentShift.data.analysedBy,
+        analysisDate: currentShift.data.analysisDate,
+      });
+
+      // Refetch shifts to update UI
+      await fetchShiftsWithSamples();
+      setResetDialogOpen(false);
+      setResetShiftId(null);
+    } catch (err) {
+      console.error("Error resetting shift status:", err);
+      alert("Failed to reset shift status.");
+      setResetDialogOpen(false);
+      setResetShiftId(null);
+    }
+  };
+
+  const cancelResetStatus = () => {
+    setResetDialogOpen(false);
+    setResetShiftId(null);
+  };
+
   const columns = [
     {
       field: "date",
       headerName: "Date",
-      flex: 1,
+      flex: 0.5,
       renderCell: (params) => {
         return formatDate(params.row.date);
       },
@@ -191,7 +285,7 @@ const Shifts = () => {
     {
       field: "status",
       headerName: "Status",
-      flex: 1,
+      flex: 0.5,
       renderCell: (params) => {
         const statusColors = {
           ongoing: theme.palette.primary.main,
@@ -203,6 +297,7 @@ const Shifts = () => {
         const statusLabels = {
           ongoing: "Ongoing",
           sampling_complete: "Sampling Complete",
+          samples_submitted_to_lab: "Samples Submitted to Lab",
           analysis_complete: "Analysis Complete",
           shift_complete: "Shift Complete",
         };
@@ -235,7 +330,7 @@ const Shifts = () => {
     {
       field: "actions",
       headerName: "Actions",
-      flex: 1,
+      flex: 1.5,
       renderCell: ({ row }) => {
         const handleSamplesClick = () => {
           console.log("Samples button clicked for shift:", row._id);
@@ -250,11 +345,17 @@ const Shifts = () => {
 
         const handleViewReport = async () => {
           try {
+            // Fetch the latest shift data
+            const shiftResponse = await shiftService.getById(row._id);
+            const latestShift = shiftResponse.data;
+
             // Fetch job and samples for this shift
             const jobResponse = await jobService.getById(
-              row.job?._id || row.job
+              latestShift.job?._id || latestShift.job
             );
-            const samplesResponse = await sampleService.getByShift(row._id);
+            const samplesResponse = await sampleService.getByShift(
+              latestShift._id
+            );
 
             // Ensure we have the complete sample data including analysis
             const samplesWithAnalysis = await Promise.all(
@@ -270,19 +371,58 @@ const Shifts = () => {
               })
             );
 
+            // Ensure project and client are fully populated
+            let project = jobResponse.data.project;
+            if (project && typeof project === "string") {
+              const projectResponse = await projectService.getById(project);
+              project = projectResponse.data;
+            }
+            if (
+              project &&
+              project.client &&
+              typeof project.client === "string"
+            ) {
+              const clientResponse = await clientService.getById(
+                project.client
+              );
+              project.client = clientResponse.data;
+            }
+
             generateShiftReport({
-              shift: row,
+              shift: latestShift,
               job: jobResponse.data,
               samples: samplesWithAnalysis,
+              project,
+              openInNewTab: true,
             });
+            setReportViewedShiftIds((prev) => new Set(prev).add(row._id));
           } catch (err) {
             console.error("Error generating report:", err);
             alert("Failed to generate report.");
           }
         };
 
+        const handleAuthoriseReport = async () => {
+          try {
+            const now = new Date().toISOString();
+            const approver =
+              currentUser?.firstName && currentUser?.lastName
+                ? `${currentUser.firstName} ${currentUser.lastName}`
+                : currentUser?.name || currentUser?.email || "Unknown";
+            await shiftService.update(row._id, {
+              reportApprovedBy: approver,
+              reportIssueDate: now,
+            });
+            // Refetch shifts and their sampleNumbers to update UI
+            await fetchShiftsWithSamples();
+            alert("Report has been authorised.");
+          } catch (err) {
+            alert("Failed to authorise report.");
+          }
+        };
+
         return (
-          <Box>
+          <Box display="flex" alignItems="center">
             <Button
               variant="contained"
               size="small"
@@ -298,46 +438,71 @@ const Shifts = () => {
             >
               Samples
             </Button>
-            {row.status === "sampling_complete" && (
-              <Button
-                variant="contained"
-                size="small"
-                onClick={() =>
-                  navigate(`/air-monitoring/shift/${row._id}/analysis`)
-                }
-                sx={{
-                  mr: 1,
-                  backgroundColor: theme.palette.success.main,
-                  color: theme.palette.common.white,
-                  "&:hover": {
-                    backgroundColor: theme.palette.success.dark,
-                  },
-                }}
-              >
-                Analysis
-              </Button>
-            )}
             {row.status === "analysis_complete" && (
-              <Button
-                variant="outlined"
+              <>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleViewReport}
+                  sx={{
+                    mr: 1,
+                    borderColor: theme.palette.success.main,
+                    color: theme.palette.success.main,
+                    "&:hover": {
+                      borderColor: theme.palette.success.dark,
+                      backgroundColor: theme.palette.success.light,
+                    },
+                  }}
+                >
+                  View Report
+                </Button>
+                {!row.reportApprovedBy && reportViewedShiftIds.has(row._id) && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    color="success"
+                    onClick={handleAuthoriseReport}
+                    sx={{
+                      mr: 1,
+                      backgroundColor: theme.palette.success.main,
+                      color: theme.palette.common.white,
+                      "&:hover": {
+                        backgroundColor: theme.palette.success.dark,
+                      },
+                    }}
+                  >
+                    Authorise Report
+                  </Button>
+                )}
+              </>
+            )}
+            {[
+              "sampling_complete",
+              "samples_submitted_to_lab",
+              "analysis_complete",
+              "shift_complete",
+            ].includes(row.status) && (
+              <IconButton
                 size="small"
-                onClick={handleViewReport}
-                sx={{
-                  mr: 1,
-                  borderColor: theme.palette.success.main,
-                  color: theme.palette.success.main,
-                  "&:hover": {
-                    borderColor: theme.palette.success.dark,
-                    backgroundColor: theme.palette.success.light,
-                  },
-                }}
+                onClick={() => handleResetStatus(row._id)}
+                title="Reset status to Ongoing"
+                sx={{ color: theme.palette.error.main, mr: 1 }}
               >
-                View Report
-              </Button>
+                <CloseIcon fontSize="small" />
+              </IconButton>
             )}
             <IconButton onClick={() => handleDeleteShift(row._id)}>
               <DeleteIcon />
             </IconButton>
+            {row.reportApprovedBy && (
+              <Typography
+                variant="body2"
+                color="error.main"
+                sx={{ ml: 2, fontStyle: "italic", fontWeight: 500 }}
+              >
+                Report Authorised
+              </Typography>
+            )}
           </Box>
         );
       },
@@ -462,6 +627,27 @@ const Shifts = () => {
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button onClick={handleSubmit} variant="contained">
             Add
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={resetDialogOpen} onClose={cancelResetStatus}>
+        <DialogTitle>Reset Shift Status?</DialogTitle>
+        <DialogContent>
+          Are you sure you want to reset this shift's status to <b>Ongoing</b>?
+          This will allow editing of analysis data. No data will be deleted or
+          cleared.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelResetStatus} color="primary">
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmResetStatus}
+            color="error"
+            variant="contained"
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>

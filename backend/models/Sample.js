@@ -79,6 +79,7 @@ const sampleSchema = new mongoose.Schema({
     testSlideLines: String,
     edgesDistribution: String,
     backgroundDust: String,
+    fibreCounts: [[Number]],
     fibresCounted: Number,
     fieldsCounted: Number,
     reportedConcentration: Number

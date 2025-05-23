@@ -67,6 +67,7 @@ router.get('/:id', auth, async (req, res) => {
     }
     console.log(`Found shift ${req.params.id} with job data:`, shift.job);
     console.log(`Job ID from populated data:`, shift.job?.jobID);
+    console.log('Shift returned from DB:', shift); // Debug log
     res.json(shift);
   } catch (err) {
     console.error('Error fetching shift:', err);
@@ -111,6 +112,7 @@ router.post('/', auth, async (req, res) => {
 
 // Update shift
 router.patch('/:id', auth, async (req, res) => {
+  console.log('Raw PATCH body:', req.body); // Debug log
   try {
     console.log(`Updating shift ${req.params.id} with data:`, req.body);
     const shift = await Shift.findById(req.params.id);

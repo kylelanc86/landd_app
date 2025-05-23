@@ -21,15 +21,15 @@ const Login = () => {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const { login, user, loading } = useAuth();
+  const { login, currentUser, loading } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
+    if (currentUser) {
       console.log("User logged in, redirecting to home");
       navigate("/");
     }
-  }, [user, navigate]);
+  }, [currentUser, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -27,11 +27,15 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import { sampleService, shiftService } from "../../services/api";
+import { userService } from "../../services/api";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 
@@ -51,6 +55,7 @@ const SampleForm = React.memo(
     calculateConcentration,
     getReportedConcentration,
     inputRefs,
+    isReadOnly,
   }) => {
     const theme = useTheme();
 
@@ -96,7 +101,7 @@ const SampleForm = React.memo(
                           onKeyDown(e, sample._id, rowIndex, colIndex)
                         }
                         size="small"
-                        disabled={isFilterUncountable(sample._id)}
+                        disabled={isFilterUncountable(sample._id) || isReadOnly}
                         inputRef={(el) => {
                           inputRefs.current[
                             `${sample._id}-${rowIndex}-${colIndex}`
@@ -178,38 +183,80 @@ const SampleForm = React.memo(
             {sample.fullSampleID} : Cowl {sample.cowlNo}
           </Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-            <FormControl fullWidth>
-              <InputLabel>Edges/Distribution</InputLabel>
-              <Select
-                value={analysis.edgesDistribution || ""}
-                onChange={(e) =>
-                  onAnalysisChange(
-                    sample._id,
-                    "edgesDistribution",
-                    e.target.value
-                  )
-                }
-                label="Edges/Distribution"
-              >
-                <MenuItem value="pass">Pass</MenuItem>
-                <MenuItem value="fail">Fail</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Background Dust</InputLabel>
-              <Select
-                value={analysis.backgroundDust || ""}
-                onChange={(e) =>
-                  onAnalysisChange(sample._id, "backgroundDust", e.target.value)
-                }
-                label="Background Dust"
-              >
-                <MenuItem value="low">Low</MenuItem>
-                <MenuItem value="medium">Medium</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="fail">Fail</MenuItem>
-              </Select>
-            </FormControl>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
+              {/* Edges/Distribution and Background Dust only */}
+              <FormControl component="fieldset">
+                <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                  Edges/Distribution
+                </Typography>
+                <RadioGroup
+                  row
+                  value={analysis.edgesDistribution || ""}
+                  onChange={(e) =>
+                    onAnalysisChange(
+                      sample._id,
+                      "edgesDistribution",
+                      e.target.value
+                    )
+                  }
+                >
+                  <FormControlLabel
+                    value="pass"
+                    control={<Radio />}
+                    label="Pass"
+                    disabled={isReadOnly}
+                  />
+                  <FormControlLabel
+                    value="fail"
+                    control={<Radio />}
+                    label={<span style={{ color: "red" }}>Fail</span>}
+                    disabled={isReadOnly}
+                  />
+                </RadioGroup>
+              </FormControl>
+              <Box sx={{ width: 24 }} />
+              <FormControl component="fieldset">
+                <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                  Background Dust
+                </Typography>
+                <RadioGroup
+                  row
+                  value={analysis.backgroundDust || ""}
+                  onChange={(e) =>
+                    onAnalysisChange(
+                      sample._id,
+                      "backgroundDust",
+                      e.target.value
+                    )
+                  }
+                >
+                  <FormControlLabel
+                    value="low"
+                    control={<Radio />}
+                    label="Low"
+                    disabled={isReadOnly}
+                  />
+                  <FormControlLabel
+                    value="medium"
+                    control={<Radio />}
+                    label="Medium"
+                    disabled={isReadOnly}
+                  />
+                  <FormControlLabel
+                    value="high"
+                    control={<Radio />}
+                    label="High"
+                    disabled={isReadOnly}
+                  />
+                  <FormControlLabel
+                    value="fail"
+                    control={<Radio />}
+                    label={<span style={{ color: "red" }}>Fail</span>}
+                    disabled={isReadOnly}
+                  />
+                </RadioGroup>
+              </FormControl>
+            </Stack>
           </Stack>
 
           <Box sx={{ position: "relative" }}>
@@ -222,15 +269,17 @@ const SampleForm = React.memo(
               }}
             >
               <Typography variant="subtitle1">Fibre Counts</Typography>
-              <Button
-                startIcon={<ClearIcon />}
-                onClick={() => onClearTable(sample._id)}
-                disabled={isFilterUncountable(sample._id)}
-                size="small"
-                color="error"
-              >
-                Clear
-              </Button>
+              {!isReadOnly && (
+                <Button
+                  startIcon={<ClearIcon />}
+                  onClick={() => onClearTable(sample._id)}
+                  disabled={isFilterUncountable(sample._id)}
+                  size="small"
+                  color="error"
+                >
+                  Clear
+                </Button>
+              )}
             </Box>
             {isFilterUncountable(sample._id) && (
               <Box
@@ -282,6 +331,9 @@ const Analysis = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isRendered, setIsRendered] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [analysedBy, setAnalysedBy] = useState("");
+  const [shiftStatus, setShiftStatus] = useState("");
 
   // Monitor initial render time
   useEffect(() => {
@@ -301,33 +353,25 @@ const Analysis = () => {
         console.log("Starting data fetch...");
         const fetchStart = performance.now();
 
-        // Check if we have cached data for this shift
-        const cachedData = sessionStorage.getItem(`samples_${shiftId}`);
-        let samplesResponse;
-
-        if (cachedData) {
-          console.log("Using cached data");
-          samplesResponse = { data: JSON.parse(cachedData) };
-        } else {
-          console.log("Fetching fresh data");
-          samplesResponse = await sampleService.getByShift(shiftId);
-          // Cache the response
-          sessionStorage.setItem(
-            `samples_${shiftId}`,
-            JSON.stringify(samplesResponse.data)
-          );
-        }
+        // Always fetch fresh data
+        const samplesResponse = await sampleService.getByShift(shiftId);
+        const shiftResponse = await shiftService.getById(shiftId);
 
         if (!isMounted) return;
+
+        // Set shift status
+        setShiftStatus(shiftResponse.data.status);
 
         console.log(`API fetch took ${performance.now() - fetchStart}ms`);
         console.log("Sample count:", samplesResponse.data.length);
 
         const sortStart = performance.now();
-        // Sort samples by the number after the hyphen
+        // Sort samples by the numeric part after the last hyphen
         const sortedSamples = samplesResponse.data.sort((a, b) => {
-          const aNum = parseInt(a.fullSampleID.split("-")[1]);
-          const bNum = parseInt(b.fullSampleID.split("-")[1]);
+          const aMatch = a.fullSampleID.match(/-(\d+)$/);
+          const bMatch = b.fullSampleID.match(/-(\d+)$/);
+          const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
+          const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
           return aNum - bNum;
         });
         console.log(`Sorting took ${performance.now() - sortStart}ms`);
@@ -336,16 +380,61 @@ const Analysis = () => {
         // Initialize analyses for each sample
         const initialAnalyses = {};
         sortedSamples.forEach((sample) => {
-          initialAnalyses[sample._id] = {
-            edgesDistribution: "",
-            backgroundDust: "",
-            fibreCounts: Array(5)
-              .fill()
-              .map(() => Array(20).fill("")),
-            fibresCounted: 0,
-            fieldsCounted: 0,
-          };
+          if (sample.analysis) {
+            initialAnalyses[sample._id] = {
+              microscope: sample.analysis.microscope || "",
+              testSlide: sample.analysis.testSlide || "",
+              testSlideLines: sample.analysis.testSlideLines || "",
+              edgesDistribution: sample.analysis.edgesDistribution || "",
+              backgroundDust: sample.analysis.backgroundDust || "",
+              fibreCounts:
+                Array.isArray(sample.analysis.fibreCounts) &&
+                sample.analysis.fibreCounts.length === 5
+                  ? sample.analysis.fibreCounts.map((row) =>
+                      Array.isArray(row) && row.length === 20
+                        ? row
+                        : Array(20).fill("")
+                    )
+                  : Array(5)
+                      .fill()
+                      .map(() => Array(20).fill("")),
+              fibresCounted: sample.analysis.fibresCounted || 0,
+              fieldsCounted: sample.analysis.fieldsCounted || 0,
+            };
+          } else {
+            initialAnalyses[sample._id] = {
+              microscope: "",
+              testSlide: "",
+              testSlideLines: "",
+              edgesDistribution: "",
+              backgroundDust: "",
+              fibreCounts: Array(5)
+                .fill()
+                .map(() => Array(20).fill("")),
+              fibresCounted: 0,
+              fieldsCounted: 0,
+            };
+          }
         });
+
+        // Set analysis details from the first sample that has them
+        const firstSampleWithAnalysis = sortedSamples.find(
+          (s) => s.analysis?.microscope
+        );
+        if (firstSampleWithAnalysis?.analysis) {
+          setAnalysisDetails({
+            microscope: firstSampleWithAnalysis.analysis.microscope || "",
+            testSlide: firstSampleWithAnalysis.analysis.testSlide || "",
+            testSlideLines:
+              firstSampleWithAnalysis.analysis.testSlideLines || "",
+          });
+        }
+
+        // Set analyst from shift data
+        if (shiftResponse.data?.analysedBy) {
+          setAnalysedBy(shiftResponse.data.analysedBy);
+        }
+
         console.log(`Initialization took ${performance.now() - initStart}ms`);
 
         const storageStart = performance.now();
@@ -354,12 +443,18 @@ const Analysis = () => {
         if (progressData) {
           const parsed = JSON.parse(progressData);
           if (parsed.shiftId === shiftId) {
-            setAnalysisDetails(parsed.analysisDetails);
-            // Merge saved analyses with new samples
+            // Only merge if we don't have existing data
+            if (!firstSampleWithAnalysis?.analysis) {
+              setAnalysisDetails(parsed.analysisDetails);
+            }
+            // Merge saved analyses with all samples (preserve backend, add new)
             const mergedAnalyses = { ...initialAnalyses };
             Object.keys(parsed.sampleAnalyses).forEach((sampleId) => {
               if (mergedAnalyses[sampleId]) {
-                mergedAnalyses[sampleId] = parsed.sampleAnalyses[sampleId];
+                mergedAnalyses[sampleId] = {
+                  ...mergedAnalyses[sampleId],
+                  ...parsed.sampleAnalyses[sampleId],
+                };
               }
             });
             setSampleAnalyses(mergedAnalyses);
@@ -407,6 +502,13 @@ const Analysis = () => {
       });
     }
   }, [samples]);
+
+  // Fetch users for analyst dropdown
+  useEffect(() => {
+    userService.getAll().then((res) => {
+      setUsers(res.data || []);
+    });
+  }, []);
 
   const handleAnalysisDetailsChange = (e) => {
     setAnalysisDetails({
@@ -751,7 +853,11 @@ const Analysis = () => {
       const jobId = shift?.job?._id;
 
       // Update shift status to analysis_complete
-      await shiftService.update(shiftId, { status: "analysis_complete" });
+      await shiftService.update(shiftId, {
+        status: "analysis_complete",
+        analysedBy,
+        analysisDate: new Date().toISOString(),
+      });
 
       // Navigate back to shifts page
       if (jobId) {
@@ -877,6 +983,7 @@ const Analysis = () => {
             calculateConcentration={calculateConcentration}
             getReportedConcentration={getReportedConcentration}
             inputRefs={inputRefs}
+            isReadOnly={shiftStatus === "analysis_complete"}
           />
         </div>
       );
@@ -891,6 +998,7 @@ const Analysis = () => {
       isFilterUncountable,
       calculateConcentration,
       getReportedConcentration,
+      shiftStatus,
     ]
   );
 
@@ -911,6 +1019,7 @@ const Analysis = () => {
           calculateConcentration={calculateConcentration}
           getReportedConcentration={getReportedConcentration}
           inputRefs={inputRefs}
+          isReadOnly={shiftStatus === "analysis_complete"}
         />
       ));
     }
@@ -971,51 +1080,116 @@ const Analysis = () => {
           mb: 4,
         }}
       >
-        Analysis Details
+        Microscope Calibration
       </Typography>
+
+      {/* Analyst Dropdown - moved to top */}
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        alignItems="center"
+        mb={3}
+      >
+        <FormControl fullWidth sx={{ maxWidth: 300 }}>
+          <InputLabel>Analyst</InputLabel>
+          <Select
+            value={analysedBy}
+            label="Analyst"
+            onChange={(e) => setAnalysedBy(e.target.value)}
+            disabled={shiftStatus === "analysis_complete"}
+          >
+            {users.map((user) => (
+              <MenuItem
+                key={user._id}
+                value={user.firstName + " " + user.lastName}
+              >
+                {user.firstName} {user.lastName}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Stack>
 
       <Box component="form" onSubmit={handleSubmit}>
         <Stack spacing={4}>
           {/* Analysis Details Section */}
           <Paper sx={{ p: 3 }}>
             <Stack spacing={3}>
-              <Typography variant="h3">Analysis Details</Typography>
+              <Typography variant="h3">Microscope Calibration</Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-                <FormControl fullWidth>
-                  <InputLabel>Microscope</InputLabel>
-                  <Select
+                <FormControl component="fieldset">
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Microscope
+                  </Typography>
+                  <RadioGroup
+                    row
                     name="microscope"
                     value={analysisDetails.microscope}
                     onChange={handleAnalysisDetailsChange}
-                    label="Microscope"
                   >
-                    <MenuItem value="PCM1">PCM1</MenuItem>
-                    <MenuItem value="PCM2">PCM2</MenuItem>
-                  </Select>
+                    <FormControlLabel
+                      value="PCM1"
+                      control={<Radio />}
+                      label="PCM1"
+                      disabled={shiftStatus === "analysis_complete"}
+                    />
+                    <FormControlLabel
+                      value="PCM2"
+                      control={<Radio />}
+                      label="PCM2"
+                      disabled={shiftStatus === "analysis_complete"}
+                    />
+                  </RadioGroup>
                 </FormControl>
-                <FormControl fullWidth>
-                  <InputLabel>Test Slide</InputLabel>
-                  <Select
+                <Box sx={{ width: 24 }} />
+                <FormControl component="fieldset">
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Test Slide
+                  </Typography>
+                  <RadioGroup
+                    row
                     name="testSlide"
                     value={analysisDetails.testSlide}
                     onChange={handleAnalysisDetailsChange}
-                    label="Test Slide"
                   >
-                    <MenuItem value="LD-TS1">LD-TS1</MenuItem>
-                    <MenuItem value="LD-TS2">LD-TS2</MenuItem>
-                  </Select>
+                    <FormControlLabel
+                      value="LD-TS1"
+                      control={<Radio />}
+                      label="LD-TS1"
+                      disabled={shiftStatus === "analysis_complete"}
+                    />
+                    <FormControlLabel
+                      value="LD-TS2"
+                      control={<Radio />}
+                      label="LD-TS2"
+                      disabled={shiftStatus === "analysis_complete"}
+                    />
+                  </RadioGroup>
                 </FormControl>
-                <FormControl fullWidth>
-                  <InputLabel>Test Slide Lines</InputLabel>
-                  <Select
+                <Box sx={{ width: 24 }} />
+                <FormControl component="fieldset">
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Test Slide Lines
+                  </Typography>
+                  <RadioGroup
+                    row
                     name="testSlideLines"
                     value={analysisDetails.testSlideLines}
                     onChange={handleAnalysisDetailsChange}
-                    label="Test Slide Lines"
                   >
-                    <MenuItem value="partial 5">Partial 5</MenuItem>
-                    <MenuItem value="6">6</MenuItem>
-                  </Select>
+                    <FormControlLabel
+                      value="partial 5"
+                      control={<Radio />}
+                      label="Partial 5"
+                      disabled={shiftStatus === "analysis_complete"}
+                    />
+                    <FormControlLabel
+                      value="6"
+                      control={<Radio />}
+                      label="6"
+                      disabled={shiftStatus === "analysis_complete"}
+                    />
+                  </RadioGroup>
                 </FormControl>
               </Stack>
             </Stack>
@@ -1040,35 +1214,39 @@ const Analysis = () => {
             >
               Cancel
             </Button>
-            <Button
-              variant="contained"
-              onClick={handleSaveAndClose}
-              sx={{
-                backgroundColor: theme.palette.primary[400],
-                "&:hover": {
-                  backgroundColor: theme.palette.primary[500],
-                },
-              }}
-            >
-              Save & Close
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              disabled={!isAllAnalysisComplete()}
-              sx={{
-                backgroundColor: theme.palette.primary.main,
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.dark,
-                },
-                "&.Mui-disabled": {
-                  backgroundColor: theme.palette.grey[700],
-                  color: theme.palette.grey[500],
-                },
-              }}
-            >
-              Finalise Analysis
-            </Button>
+            {shiftStatus !== "analysis_complete" && (
+              <>
+                <Button
+                  variant="contained"
+                  onClick={handleSaveAndClose}
+                  sx={{
+                    backgroundColor: theme.palette.primary[400],
+                    "&:hover": {
+                      backgroundColor: theme.palette.primary[500],
+                    },
+                  }}
+                >
+                  Save & Close
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleSubmit}
+                  disabled={!isAllAnalysisComplete()}
+                  sx={{
+                    backgroundColor: theme.palette.primary.main,
+                    "&:hover": {
+                      backgroundColor: theme.palette.primary.dark,
+                    },
+                    "&.Mui-disabled": {
+                      backgroundColor: theme.palette.grey[700],
+                      color: theme.palette.grey[500],
+                    },
+                  }}
+                >
+                  Finalise Analysis
+                </Button>
+              </>
+            )}
           </Box>
 
           {/* Cancel Confirmation Dialog */}

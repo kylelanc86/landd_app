@@ -40,7 +40,11 @@ async function loadImageAsBase64(imagePath) {
   }
 }
 
-export async function generateShiftReport({ shift, job, samples }) {
+export async function generateShiftReport({ shift, job, samples, project, openInNewTab }) {
+  // Add debug logging
+  console.log('Shift data in report generation:', shift);
+  console.log('Samples received date:', shift?.samplesReceivedDate);
+  
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
   const nataLogo = await loadImageAsBase64('/NATA_logo.png');
@@ -56,6 +60,15 @@ export async function generateShiftReport({ shift, job, samples }) {
     const bNum = getSampleNumber(b.fullSampleID);
     return aNum - bNum;
   });
+
+  // Before docDefinition, extract unique samplers and sample dates from samples
+  const uniqueSamplers = Array.from(new Set(samples.map(s => {
+    if (s.collectedBy && typeof s.collectedBy === 'object') {
+      return (s.collectedBy.firstName || '') + (s.collectedBy.lastName ? ' ' + s.collectedBy.lastName : '');
+    }
+    return s.collectedBy || '';
+  }).filter(Boolean)));
+  const uniqueSampleDates = Array.from(new Set(samples.map(s => s.date ? formatDate(s.date) : '').filter(Boolean)));
 
   // Build the document definition
   const docDefinition = {
@@ -84,90 +97,71 @@ export async function generateShiftReport({ shift, job, samples }) {
             width: '50%',
             stack: [
               { text: 'CLIENT DETAILS', style: 'tableHeader' },
-              { text: `Client Name: ${job?.clientName || ''}` },
-              { text: `Client Contact: ${job?.clientContact || ''}` },
-              { text: `Email: ${job?.clientEmail || ''}` },
-              { text: `Site Name: ${job?.siteName || ''}` },
+              { text: [ { text: 'Client Name: ', bold: true }, { text: project?.client?.name || '' } ], margin: [0, 0, 0, 2] },
+              { text: [ { text: 'Client Contact: ', bold: true }, { text: project?.client?.contact1Name || '' } ], margin: [0, 0, 0, 2] },
+              { text: [ { text: 'Email: ', bold: true }, { text: project?.client?.contact1Email || '' } ], margin: [0, 0, 0, 2] },
             ],
           },
           {
             width: '50%',
             stack: [
               { text: 'LABORATORY DETAILS', style: 'tableHeader' },
-              { text: `Address: 4/6 Dacre Street, Mitchell ACT 2911` },
-              { text: `Email: laboratory@landd.com.au` },
-              { text: `Lab Manager: Jordan Smith` },
+              { text: [
+                { text: 'Address: ', bold: true },
+                { text: '4/6 Dacre Street, Mitchell ACT 2911' }
+              ], margin: [0, 0, 0, 2] },
+              { text: [
+                { text: 'Email: ', bold: true },
+                { text: 'laboratory@landd.com.au' }
+              ], margin: [0, 0, 0, 2] },
+              { text: [
+                { text: 'Lab Manager: ', bold: true },
+                { text: 'Jordan Smith' }
+              ], margin: [0, 0, 0, 2] },
             ],
           },
         ],
         margin: [0, 0, 0, 10],
       },
-      // Report details
+      // Add JOB DETAILS header
+      { text: 'JOB DETAILS', style: 'tableHeader', margin: [0, 10, 0, 2] },
       {
-        table: {
-          widths: ['*', '*'],
-          body: [
-            [
-              { text: 'L&D Job Reference:', bold: true },
-              job?.projectID ||
-                (sortedSamples[0]?.fullSampleID
-                  ? sortedSamples[0].fullSampleID.substring(0, 8)
-                  : '') ||
-                job?.jobID ||
-                job?.id ||
-                ''
-            ],
-            [
-              { text: 'Description of works:', bold: true },
-              job?.description || ''
-            ],
-            [
-              { text: 'Asbestos Removalist:', bold: true },
-              job?.asbestosRemovalist || ''
-            ],
-          ],
-        },
-        layout: 'noBorders',
+        stack: [
+          { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '' } ], margin: [0, 0, 0, 2] },
+          { text: [ { text: 'Site Name: ', bold: true }, { text: project?.name || '' } ], margin: [0, 0, 0, 2] },
+          { text: [ { text: 'Description of works: ', bold: true }, { text: shift?.descriptionOfWorks || '' } ], margin: [0, 0, 0, 2] },
+          { text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || '' } ], margin: [0, 0, 0, 2] },
+        ],
         margin: [0, 0, 0, 10],
       },
-      // Summary table
+      // Replace summary section with two-column layout for sampling and analysis details
       {
-        table: {
-          widths: ['*', '*', '*', '*'],
-          body: [
-            [
-              { text: 'No. of Samples', bold: true },
-              sortedSamples.length,
-              { text: 'Samples Received', bold: true },
-              formatDate(shift?.samplesReceivedDate)
-            ],
-            [
-              { text: 'Sampling Date', bold: true },
-              formatDate(shift?.samplingDate),
-              { text: 'Sampled by', bold: true },
-              shift?.sampledBy || ''
-            ],
-            [
-              { text: 'Analysis Date', bold: true },
-              formatDate(shift?.analysisDate),
-              { text: 'Analysed by', bold: true },
-              shift?.analysedBy || ''
-            ],
-            [
-              { text: 'Report Issue Date', bold: true },
-              formatDate(shift?.reportIssueDate),
-              { text: 'Report approved by', bold: true },
-              shift?.reportApprovedBy || ''
-            ],
-          ],
-        },
+        columns: [
+          {
+            width: '50%',
+            stack: [
+              { text: 'SAMPLING DETAILS', style: 'tableHeader', margin: [0, 10, 0, 2] },
+              { text: [ { text: 'Sampled by: ', bold: true }, { text: uniqueSamplers.join(', ') } ], margin: [0, 0, 0, 2] },
+              { text: [ { text: 'Sampling Date: ', bold: true }, { text: formatDate(shift?.date) } ], margin: [0, 0, 0, 2] },
+              { text: [ { text: 'Samples Received: ', bold: true }, { text: formatDate(shift?.samplesReceivedDate) } ], margin: [0, 0, 0, 2] },
+            ]
+          },
+          {
+            width: '50%',
+            stack: [
+              { text: 'ANALYSIS DETAILS', style: 'tableHeader', margin: [0, 10, 0, 2] },
+              { text: [ { text: 'Analysis Date: ', bold: true }, { text: formatDate(shift?.analysisDate) } ], margin: [0, 0, 0, 2] },
+              { text: [ { text: 'Analysed by: ', bold: true }, { text: shift?.analysedBy || '' } ], margin: [0, 0, 0, 2] },
+            ]
+          }
+        ],
         margin: [0, 0, 0, 10],
       },
       // Results table
       {
         table: {
           headerRows: 1,
-          widths: [50, 40, '20%', 40, 40, 50, 40, 40, 60],
+          widths: ['12%', '6%', '23%', '8%', '8%', '12%', '8%', '8%', '15%'],
           heights: 24,
           body: [
             [
@@ -222,6 +216,7 @@ export async function generateShiftReport({ shift, job, samples }) {
       { text: 'Notes', style: 'tableHeader', margin: [0, 10, 0, 2] },
       {
         ul: [
+          'Monitoring types: B = Background, C = Clearance, E = Exposure.',
           'Samples taken from the direct flow of negative air units are reported as a fibre count only.',
           'The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL.',
           'Safe Work Australias recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL.',
@@ -229,14 +224,13 @@ export async function generateShiftReport({ shift, job, samples }) {
           'Field blank samples are used to verify the cleanliness of the sampling equipment and laboratory procedures.',
         ],
       },
-      { text: 'Accredited for compliance with ISO/IEC 17025 – Testing', italics: true, margin: [0, 10, 0, 0] },
-      { text: 'Accreditation no: 19512', italics: true },
-      // Remove the previous NATA logo columns footer
+      { text: ' ', margin: [0, 0, 0, 16] },
       {
-        columns: [
-          { text: `Job Reference: ${job?.projectID || ''}`, alignment: 'left' }
+        stack: [
+          { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(shift?.reportIssueDate) } ], margin: [0, 2, 0, 0] },
+          { text: [ { text: 'Report approved by: ', bold: true }, { text: shift?.reportApprovedBy || '' } ], margin: [0, 0, 0, 0] },
         ],
-        margin: [0, 20, 0, 0],
+        margin: [0, 0, 0, 10],
       },
     ],
     styles: {
@@ -246,14 +240,22 @@ export async function generateShiftReport({ shift, job, samples }) {
       tableHeader: { bold: true, fillColor: '#eeeeee' },
     },
     defaultStyle: {
+      font: 'Roboto',
       fontSize: 10,
     },
-    pageMargins: [30, 30, 30, 80],
+    pageMargins: [42.5, 30, 42.5, 100],
     footer: function(currentPage, pageCount) {
       return {
         columns: [
           { width: '*', text: '' },
-          { image: nataLogo, width: 50, alignment: 'center', margin: [0, 0, 0, 0] },
+          {
+            stack: [
+              { image: nataLogo, width: 50, alignment: 'center', margin: [0, 0, 0, 2] },
+              { text: 'Accredited for compliance with ISO/IEC 17025 – Testing', italics: true, fontSize: 7, alignment: 'center', margin: [0, 2, 0, 0] },
+              { text: 'Accreditation no: 19512', italics: true, fontSize: 7, alignment: 'center' }
+            ],
+            alignment: 'center',
+          },
           { width: '*', text: '' }
         ],
         margin: [0, 0, 0, 0]
@@ -261,5 +263,15 @@ export async function generateShiftReport({ shift, job, samples }) {
     }
   };
 
-  pdfMake.createPdf(docDefinition).download(`LDC_Report_${job?.projectID || ''}.pdf`);
+  // Build filename: {projectID} - Air Monitoring Report ({Sampling Date})
+  const projectID = job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
+  const samplingDate = shift?.date ? formatDate(shift.date) : '';
+  const filename = `${projectID} - Air Monitoring Report${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
+
+  const pdfDoc = pdfMake.createPdf(docDefinition);
+  if (openInNewTab) {
+    pdfDoc.open({}, undefined, filename);
+  } else {
+    pdfDoc.download(filename);
+  }
 } 

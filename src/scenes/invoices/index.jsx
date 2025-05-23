@@ -70,7 +70,7 @@ const Invoices = () => {
   const colors = tokens;
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { currentUser, loading: authLoading } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
@@ -93,12 +93,7 @@ const Invoices = () => {
   const [showXeroAlert, setShowXeroAlert] = useState(false);
 
   useEffect(() => {
-    // Don't fetch data if auth is still loading
-    if (authLoading) return;
-
-    // If no user after auth loading, redirect to login
-    if (!user) {
-      navigate("/login");
+    if (authLoading || !currentUser) {
       return;
     }
 
@@ -128,12 +123,12 @@ const Invoices = () => {
     };
 
     fetchData();
-  }, [user, authLoading, navigate]);
+  }, [authLoading, currentUser]);
 
   // Add this effect to check Xero connection status
   useEffect(() => {
     // Don't check Xero connection if auth is still loading or no user
-    if (authLoading || !user) return;
+    if (authLoading || !currentUser) return;
 
     const checkXeroConnection = async () => {
       try {
@@ -169,7 +164,7 @@ const Invoices = () => {
     };
 
     checkXeroConnection();
-  }, [user, authLoading]);
+  }, [authLoading, currentUser]);
 
   // Update the URL parameters effect
   useEffect(() => {
@@ -545,10 +540,10 @@ const Invoices = () => {
 
   const handleConnectXero = async () => {
     console.log("handleConnectXero called");
-    console.log("Current user:", user);
+    console.log("Current user:", currentUser);
     console.log("Token in localStorage:", localStorage.getItem("token"));
 
-    if (!user) {
+    if (!currentUser) {
       console.log("No user found, redirecting to login");
       setError("Please log in to connect to Xero");
       alert("Please log in to connect to Xero");
@@ -659,7 +654,7 @@ const Invoices = () => {
     );
   }
 
-  if (!user) {
+  if (!currentUser) {
     return null; // Will be redirected by the useEffect
   }
 

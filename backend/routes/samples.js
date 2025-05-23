@@ -140,9 +140,6 @@ router.patch('/:id', async (req, res) => {
         req.body.analysis.fibresCounted = parseInt(req.body.analysis.fibresCounted) || 0;
         req.body.analysis.fieldsCounted = parseInt(req.body.analysis.fieldsCounted) || 0;
 
-        // Remove fibreCounts field as we don't need to store it
-        delete req.body.analysis.fibreCounts;
-
         console.log('Processed analysis data:', JSON.stringify(req.body.analysis, null, 2));
         sample.analysis = req.body.analysis;
       } catch (err) {

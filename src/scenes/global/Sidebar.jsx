@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import 'react-pro-sidebar/dist/css/styles.css';
-import { ProSidebar, Menu, MenuItem, SubMenu } from 'react-pro-sidebar';
+import "react-pro-sidebar/dist/css/styles.css";
+import { ProSidebar, Menu, MenuItem, SubMenu } from "react-pro-sidebar";
 import {
   Box,
   IconButton,
@@ -170,7 +170,7 @@ const SectionDivider = ({ isCollapsed }) => {
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const theme = useTheme();
   const [selected, setSelected] = useState("Dashboard");
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -277,7 +277,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   width: 100,
                   height: 100,
                   borderRadius: "50%",
-                  backgroundColor: user ? getRandomColor(user) : "#757575",
+                  backgroundColor: currentUser
+                    ? getRandomColor(currentUser)
+                    : "#757575",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -287,7 +289,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
                 }}
               >
-                {user ? getInitials(user) : "?"}
+                {currentUser ? getInitials(currentUser) : "?"}
               </Box>
             </Box>
             <Box textAlign="center">
@@ -297,14 +299,16 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 fontWeight="bold"
                 sx={{ m: "10px 0 0 0" }}
               >
-                {user ? `${user.firstName} ${user.lastName}` : "Unknown User"}
+                {currentUser
+                  ? `${currentUser.firstName} ${currentUser.lastName}`
+                  : "Unknown User"}
               </Typography>
               <Typography
                 variant="h5"
                 color={theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32"}
                 sx={{ textTransform: "capitalize" }}
               >
-                {user ? user.role : "Guest"}
+                {currentUser ? currentUser.role : "Guest"}
               </Typography>
             </Box>
           </Box>

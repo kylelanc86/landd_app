@@ -29,8 +29,32 @@ const shiftSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['ongoing', 'sampling_complete', 'analysis_complete', 'shift_complete'],
+    enum: ['ongoing', 'sampling_complete', 'samples_submitted_to_lab', 'analysis_complete', 'shift_complete'],
     default: 'ongoing'
+  },
+  samplesReceivedDate: {
+    type: Date,
+    required: false
+  },
+  analysedBy: {
+    type: String,
+    required: false
+  },
+  analysisDate: {
+    type: Date,
+    required: false
+  },
+  reportApprovedBy: {
+    type: String,
+    required: false
+  },
+  reportIssueDate: {
+    type: Date,
+    required: false
+  },
+  descriptionOfWorks: {
+    type: String,
+    required: false
   },
   notes: {
     type: String

@@ -35,7 +35,7 @@ const NewSample = () => {
   const { shiftId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
     sampleNumber: "",
@@ -181,7 +181,7 @@ const NewSample = () => {
 
     try {
       console.log("Starting sample submission...");
-      console.log("Current user:", user);
+      console.log("Current user:", currentUser);
       console.log("Form data:", form);
       console.log("Project ID:", projectID);
       console.log("Job:", job);

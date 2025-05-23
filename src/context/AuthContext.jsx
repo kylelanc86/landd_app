@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { authService } from "../services/api";
 
 const AuthContext = createContext(null);
@@ -10,6 +10,37 @@ export const AuthProvider = ({ children }) => {
     return storedUser ? JSON.parse(storedUser) : null;
   });
   const [loading, setLoading] = useState(false);
+
+  // Function to restore user state from backend
+  const restoreUserState = async () => {
+    console.log("restoreUserState: called");
+    const token = localStorage.getItem("token");
+    if (token && !currentUser) {
+      try {
+        const response = await authService.getCurrentUser();
+        const user = response.data;
+        localStorage.setItem("currentUser", JSON.stringify(user));
+        setCurrentUser(user);
+        console.log("restoreUserState: user restored", user);
+      } catch (error) {
+        console.error("restoreUserState: failed to restore user state", error);
+        // If we can't restore the user state, clear everything
+        localStorage.removeItem("token");
+        localStorage.removeItem("currentUser");
+        setCurrentUser(null);
+      }
+    } else {
+      console.log("restoreUserState: no token or user already set", {
+        token,
+        currentUser,
+      });
+    }
+  };
+
+  // Check and restore user state when the app loads
+  useEffect(() => {
+    restoreUserState();
+  }, []);
 
   const login = async (email, password) => {
     setLoading(true);
@@ -39,6 +70,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     loading,
+    restoreUserState, // Expose this function to components
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

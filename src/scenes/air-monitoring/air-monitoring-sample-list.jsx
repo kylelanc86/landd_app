@@ -39,6 +39,8 @@ const SampleList = () => {
   const [error, setError] = useState(null);
   const [isCompleteDisabled, setIsCompleteDisabled] = useState(true);
   const [nextSampleNumber, setNextSampleNumber] = useState(null);
+  const [descriptionOfWorks, setDescriptionOfWorks] = useState("");
+  const [descSaveStatus, setDescSaveStatus] = useState("");
 
   // Function to extract the numeric part from a sample number
   const extractSampleNumber = (sampleNumber) => {
@@ -106,6 +108,10 @@ const SampleList = () => {
           setNextSampleNumber(highestNumber + 1);
         }
 
+        if (shiftResponse.data?.descriptionOfWorks) {
+          setDescriptionOfWorks(shiftResponse.data.descriptionOfWorks);
+        }
+
         setIsCompleteDisabled(!validateSamplesComplete(samples));
         setError(null);
       } catch (err) {
@@ -152,11 +158,19 @@ const SampleList = () => {
   );
 
   const sortedSamples = [...filteredSamples].sort((a, b) => {
-    const aValue = a[sortField];
-    const bValue = b[sortField];
-    if (aValue < bValue) return sortAsc ? -1 : 1;
-    if (aValue > bValue) return sortAsc ? 1 : -1;
-    return 0;
+    if (sortField === "sampleNumber" || sortField === "fullSampleID") {
+      const aMatch = a.fullSampleID?.match(/-(\d+)$/);
+      const bMatch = b.fullSampleID?.match(/-(\d+)$/);
+      const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
+      const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
+      return sortAsc ? aNum - bNum : bNum - aNum;
+    } else {
+      const aValue = a[sortField];
+      const bValue = b[sortField];
+      if (aValue < bValue) return sortAsc ? -1 : 1;
+      if (aValue > bValue) return sortAsc ? 1 : -1;
+      return 0;
+    }
   });
 
   // Add validation function
@@ -186,16 +200,61 @@ const SampleList = () => {
     try {
       // Update shift status
       await shiftService.update(shiftId, { status: "sampling_complete" });
-
-      // Navigate back to the job's shifts page
-      if (shift?.job?._id) {
-        navigate(`/air-monitoring/jobs/${shift.job._id}/shifts`);
-      } else {
-        navigate("/air-monitoring/shifts");
-      }
+      // Refetch shift to update UI
+      const shiftResponse = await shiftService.getById(shiftId);
+      setShift(shiftResponse.data);
     } catch (error) {
       console.error("Error updating shift status:", error);
       setError("Failed to update shift status. Please try again.");
+    }
+  };
+
+  // Add handler for Samples Submitted to Lab
+  const handleSamplesSubmittedToLab = async () => {
+    try {
+      const currentDate = new Date().toISOString();
+      await shiftService.update(shiftId, {
+        status: "samples_submitted_to_lab",
+        samplesReceivedDate: currentDate,
+      });
+      // Refetch shift to update UI
+      const shiftResponse = await shiftService.getById(shiftId);
+      setShift(shiftResponse.data);
+    } catch (error) {
+      setError("Failed to update shift status to 'Samples Submitted to Lab'.");
+    }
+  };
+
+  const handleAddSample = () => {
+    // Reset shift status to ongoing when adding a new sample
+    shiftService.update(shiftId, { status: "ongoing" });
+    navigate(`/air-monitoring/shift/${shiftId}/samples/new`, {
+      state: { nextSampleNumber },
+    });
+  };
+
+  const handleDescriptionChange = (e) => {
+    setDescriptionOfWorks(e.target.value);
+    setDescSaveStatus("");
+  };
+
+  const saveDescriptionOfWorks = async () => {
+    try {
+      await shiftService.update(shiftId, { descriptionOfWorks });
+      setDescSaveStatus("Saved");
+    } catch (err) {
+      setDescSaveStatus("Error");
+    }
+  };
+
+  const handleDescriptionBlur = () => {
+    saveDescriptionOfWorks();
+  };
+
+  const handleDescriptionKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      saveDescriptionOfWorks();
     }
   };
 
@@ -218,6 +277,34 @@ const SampleList = () => {
       >
         Back to Shifts
       </Button>
+
+      {/* Description of Works Field */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Description of Works
+        </Typography>
+        <TextField
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={6}
+          value={descriptionOfWorks}
+          onChange={handleDescriptionChange}
+          onBlur={handleDescriptionBlur}
+          onKeyDown={handleDescriptionKeyDown}
+          placeholder="Enter a description of works for this shift..."
+        />
+        {descSaveStatus === "Saved" && (
+          <Typography variant="caption" color="success.main">
+            Description saved
+          </Typography>
+        )}
+        {descSaveStatus === "Error" && (
+          <Typography variant="caption" color="error.main">
+            Error saving description
+          </Typography>
+        )}
+      </Box>
 
       <Typography
         variant="h4"
@@ -257,11 +344,7 @@ const SampleList = () => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() =>
-            navigate(`/air-monitoring/shift/${shiftId}/samples/new`, {
-              state: { nextSampleNumber },
-            })
-          }
+          onClick={handleAddSample}
           sx={{
             backgroundColor: theme.palette.primary.main,
             "&:hover": {
@@ -335,42 +418,76 @@ const SampleList = () => {
           gap: 2,
         }}
       >
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSampleComplete}
-          disabled={isCompleteDisabled}
-          sx={{
-            backgroundColor: theme.palette.info.main,
-            color: theme.palette.info.contrastText,
-            "&:hover": {
-              backgroundColor: theme.palette.info.dark,
-            },
-            "&.Mui-disabled": {
-              backgroundColor: theme.palette.grey[700],
-              color: theme.palette.grey[500],
-            },
-          }}
-        >
-          Sampling Complete
-        </Button>
+        {![
+          "sampling_complete",
+          "samples_submitted_to_lab",
+          "analysis_complete",
+          "shift_complete",
+        ].includes(shift?.status) && (
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSampleComplete}
+            disabled={isCompleteDisabled || shift?.status !== "ongoing"}
+            sx={{
+              backgroundColor: theme.palette.info.main,
+              color: theme.palette.info.contrastText,
+              "&:hover": {
+                backgroundColor: theme.palette.info.dark,
+              },
+              "&.Mui-disabled": {
+                backgroundColor: theme.palette.grey[700],
+                color: theme.palette.grey[500],
+              },
+            }}
+          >
+            Sampling Complete
+          </Button>
+        )}
+        {![
+          "samples_submitted_to_lab",
+          "analysis_complete",
+          "shift_complete",
+        ].includes(shift?.status) &&
+          shift?.status === "sampling_complete" && (
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleSamplesSubmittedToLab}
+              sx={{
+                backgroundColor: theme.palette.warning.main,
+                color: theme.palette.warning.contrastText,
+                "&:hover": {
+                  backgroundColor: theme.palette.warning.dark,
+                },
+              }}
+            >
+              Samples Submitted to Lab
+            </Button>
+          )}
       </Box>
 
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
-        <Button
-          variant="contained"
-          onClick={() => navigate(`/air-monitoring/shift/${shiftId}/analysis`)}
-          sx={{
-            backgroundColor: theme.palette.success.main,
-            color: theme.palette.success.contrastText,
-            "&:hover": {
-              backgroundColor: theme.palette.success.dark,
-            },
-          }}
-        >
-          Analysis
-        </Button>
-      </Box>
+      {["samples_submitted_to_lab", "analysis_complete"].includes(
+        shift?.status
+      ) && (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
+          <Button
+            variant="contained"
+            onClick={() =>
+              navigate(`/air-monitoring/shift/${shiftId}/analysis`)
+            }
+            sx={{
+              backgroundColor: theme.palette.success.main,
+              color: theme.palette.success.contrastText,
+              "&:hover": {
+                backgroundColor: theme.palette.success.dark,
+              },
+            }}
+          >
+            Analysis
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 };

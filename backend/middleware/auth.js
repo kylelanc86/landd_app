@@ -6,6 +6,7 @@ const auth = async (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
     if (!token) {
+      console.log('No token provided in request');
       return res.status(401).json({ message: 'No authentication token, access denied' });
     }
 
@@ -23,8 +24,11 @@ const auth = async (req, res, next) => {
           if (user) {
             console.log('User found, generating new token...');
             const newToken = user.generateAuthToken();
+            // Set both cases of the header to ensure compatibility
+            res.setHeader('new-token', newToken);
             res.setHeader('New-Token', newToken);
             req.user = decoded;
+            console.log('New token generated and set in headers');
             next();
             return;
           } else {
