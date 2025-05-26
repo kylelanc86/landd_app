@@ -17,7 +17,7 @@ import {
   DialogContentText,
   InputAdornment,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
+import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
@@ -244,25 +244,21 @@ const Clients = () => {
         m="40px 0 0 0"
         height="75vh"
         sx={{
-          "& .MuiDataGrid-root": {
-            border: "none",
-          },
-          "& .MuiDataGrid-cell": {
-            borderBottom: "none",
-          },
+          "& .MuiDataGrid-root": { border: "none" },
+          "& .MuiDataGrid-cell": { borderBottom: "none" },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: colors.primary[600],
+            backgroundColor: theme.palette.primary.dark,
             borderBottom: "none",
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: colors.primary[400],
+            backgroundColor: theme.palette.background.default,
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: colors.primary[600],
+            backgroundColor: theme.palette.primary.dark,
           },
           "& .MuiCheckbox-root": {
-            color: `${colors.secondary[500]} !important`,
+            color: `${theme.palette.secondary.main} !important`,
           },
         }}
       >
@@ -272,8 +268,9 @@ const Clients = () => {
           getRowId={(row) => row._id}
           pageSize={10}
           rowsPerPageOptions={[10]}
-          checkboxSelection
+          autoHeight
           disableSelectionOnClick
+          components={{ Toolbar: GridToolbar }}
         />
       </Box>
 

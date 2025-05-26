@@ -388,7 +388,10 @@ const Invoices = () => {
       field: "invoiceID",
       headerName: "Invoice ID",
       flex: 1,
-      valueGetter: (params) => params || "N/A",
+      valueGetter: (params) => {
+        const invoiceID = params?.row?.invoiceID || params;
+        return invoiceID || "N/A";
+      },
     },
     {
       field: "client",
@@ -406,7 +409,10 @@ const Invoices = () => {
       valueGetter: (params) => {
         const amount = params?.row?.amount || params;
         if (amount !== undefined && amount !== null) {
-          return `$${Number(amount).toLocaleString()}`;
+          return `$${Number(amount).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
         }
         return "N/A";
       },
@@ -814,25 +820,21 @@ const Invoices = () => {
         m="40px 0 0 0"
         height="75vh"
         sx={{
-          "& .MuiDataGrid-root": {
-            border: "none",
-          },
-          "& .MuiDataGrid-cell": {
-            borderBottom: "none",
-          },
+          "& .MuiDataGrid-root": { border: "none" },
+          "& .MuiDataGrid-cell": { borderBottom: "none" },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: colors.primary[600],
+            backgroundColor: theme.palette.primary.dark,
             borderBottom: "none",
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: colors.primary[400],
+            backgroundColor: theme.palette.background.default,
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: colors.primary[600],
+            backgroundColor: theme.palette.primary.dark,
           },
           "& .MuiCheckbox-root": {
-            color: `${colors.secondary[500]} !important`,
+            color: `${theme.palette.secondary.main} !important`,
           },
         }}
       >
