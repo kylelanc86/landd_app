@@ -33,18 +33,49 @@ const checkXeroConnection = async (req, res, next) => {
 // Get Xero connection status
 router.get('/status', auth, async (req, res) => {
   try {
+    console.log('Checking Xero connection status...');
+    
+    // Check if tokens directory exists
+    const tokensDir = path.join(__dirname, '../tokens');
+    console.log('Tokens directory path:', tokensDir);
+    console.log('Tokens directory exists:', fs.existsSync(tokensDir));
+    
+    // List files in tokens directory if it exists
+    if (fs.existsSync(tokensDir)) {
+      const files = fs.readdirSync(tokensDir);
+      console.log('Files in tokens directory:', files);
+    }
+    
     const tokenSet = await xero.readTokenSet();
+    console.log('Token set read result:', {
+      exists: !!tokenSet,
+      hasAccessToken: !!(tokenSet && tokenSet.access_token),
+      hasRefreshToken: !!(tokenSet && tokenSet.refresh_token),
+      expiresAt: tokenSet?.expires_at ? new Date(tokenSet.expires_at).toISOString() : null
+    });
+    
     const tenantId = xero.getTenantId();
+    console.log('Tenant ID:', tenantId);
+    
+    const connected = !!(tokenSet && tokenSet.access_token);
+    console.log('Connection status:', connected);
     
     res.json({
-      connected: !!(tokenSet && tokenSet.access_token),
-      tenantId: tenantId
+      connected,
+      tenantId,
+      details: {
+        hasToken: !!tokenSet,
+        hasAccessToken: !!(tokenSet && tokenSet.access_token),
+        hasTenantId: !!tenantId,
+        tokenExpiry: tokenSet?.expires_at ? new Date(tokenSet.expires_at).toISOString() : null
+      }
     });
   } catch (error) {
     console.error('Error getting Xero status:', error);
     res.status(500).json({ 
       error: 'Failed to get Xero status',
-      message: error.message
+      message: error.message,
+      connected: false
     });
   }
 });
@@ -79,24 +110,78 @@ router.get('/auth-url', auth, async (req, res) => {
 });
 
 // Handle Xero callback
-router.get('/callback', auth, async (req, res) => {
+router.get('/callback', async (req, res) => {
   try {
     const { code, state } = req.query;
+    console.log('Received callback with code and state:', { code: !!code, state });
     
     if (!xero.verifyState(state)) {
+      console.error('State verification failed:', { received: state, expected: xero.currentState });
       return res.redirect('http://localhost:3000/invoices?xero_error=Invalid state parameter');
     }
 
+    console.log('State verified, getting token set...');
     const tokenSet = await xero.apiCallback(code);
-    await xero.setTokenSet(tokenSet);
+    console.log('Raw token set received:', JSON.stringify(tokenSet, null, 2));
+
+    if (!tokenSet) {
+      throw new Error('No token set received from Xero');
+    }
+
+    // Ensure we have all required token properties
+    if (!tokenSet.access_token) {
+      console.error('Token set missing access_token:', tokenSet);
+      throw new Error('Invalid token set: missing access_token');
+    }
+
+    if (!tokenSet.refresh_token) {
+      console.error('Token set missing refresh_token:', tokenSet);
+      throw new Error('Invalid token set: missing refresh_token');
+    }
+
+    // Add expiration timestamp if not present
+    if (!tokenSet.expires_at && tokenSet.expires_in) {
+      tokenSet.expires_at = Date.now() + (tokenSet.expires_in * 1000);
+    }
+
+    console.log('Setting token set...');
+    try {
+      await xero.setTokenSet(tokenSet);
+      console.log('Token set saved successfully');
+    } catch (saveError) {
+      console.error('Error saving token set:', saveError);
+      throw new Error('Failed to save token set: ' + saveError.message);
+    }
+    
+    // Verify token was saved
+    const savedToken = await xero.readTokenSet();
+    if (!savedToken || !savedToken.access_token) {
+      console.error('Failed to verify saved token:', savedToken);
+      throw new Error('Failed to verify saved token');
+    }
+    console.log('Token set saved and verified successfully');
 
     // Get and store the first tenant
+    console.log('Getting tenants...');
     const tenants = await xero.updateTenants();
+    console.log('Received tenants:', tenants?.length || 0);
+    
     if (tenants && tenants.length > 0) {
+      console.log('Setting tenant ID:', tenants[0].tenantId);
       xero.setTenantId(tenants[0].tenantId);
+      
+      // Verify tenant ID was saved
+      const savedTenantId = xero.getTenantId();
+      if (!savedTenantId) {
+        throw new Error('Failed to verify saved tenant ID');
+      }
+      console.log('Tenant ID saved and verified successfully');
+    } else {
+      console.warn('No tenants found');
     }
 
     // Redirect back to the frontend with success status
+    console.log('Redirecting to frontend with success status');
     res.redirect('http://localhost:3000/invoices?xero_connected=true');
   } catch (error) {
     console.error('Error in Xero callback:', error);

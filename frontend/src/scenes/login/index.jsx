@@ -9,17 +9,28 @@ import {
   CircularProgress,
   InputAdornment,
   IconButton,
+  Link,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { authService } from "../../services/api";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [forgotPasswordError, setForgotPasswordError] = useState("");
+  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const navigate = useNavigate();
   const { login, currentUser, loading } = useAuth();
 
@@ -53,6 +64,27 @@ const Login = () => {
 
   const handleClickShowPassword = () => {
     setShowPassword(!showPassword);
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotPasswordError("");
+    setForgotPasswordSuccess(false);
+    setForgotPasswordLoading(true);
+
+    try {
+      await authService.forgotPassword(forgotPasswordEmail);
+      setForgotPasswordSuccess(true);
+      setForgotPasswordEmail("");
+    } catch (err) {
+      setForgotPasswordError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to send reset email"
+      );
+    } finally {
+      setForgotPasswordLoading(false);
+    }
   };
 
   return (
@@ -136,9 +168,77 @@ const Login = () => {
           align="center"
           sx={{ mt: 2 }}
         >
+          <Link
+            component="button"
+            variant="body2"
+            onClick={() => setForgotPasswordOpen(true)}
+            sx={{ textDecoration: "none" }}
+          >
+            Forgot Password?
+          </Link>
+        </Typography>
+
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          align="center"
+          sx={{ mt: 2 }}
+        >
           For demo purposes, use your email domain as the password
         </Typography>
       </Paper>
+
+      {/* Forgot Password Dialog */}
+      <Dialog
+        open={forgotPasswordOpen}
+        onClose={() => setForgotPasswordOpen(false)}
+      >
+        <DialogTitle>Reset Password</DialogTitle>
+        <DialogContent>
+          {forgotPasswordSuccess ? (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              If an account exists with that email, you will receive password
+              reset instructions.
+            </Alert>
+          ) : (
+            <form onSubmit={handleForgotPassword}>
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Email Address"
+                type="email"
+                fullWidth
+                value={forgotPasswordEmail}
+                onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                required
+                sx={{ mt: 2 }}
+              />
+              {forgotPasswordError && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {forgotPasswordError}
+                </Alert>
+              )}
+            </form>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setForgotPasswordOpen(false)}>
+            {forgotPasswordSuccess ? "Close" : "Cancel"}
+          </Button>
+          {!forgotPasswordSuccess && (
+            <Button
+              onClick={handleForgotPassword}
+              disabled={forgotPasswordLoading || !forgotPasswordEmail}
+            >
+              {forgotPasswordLoading ? (
+                <CircularProgress size={24} />
+              ) : (
+                "Send Reset Link"
+              )}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

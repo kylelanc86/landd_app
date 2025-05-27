@@ -132,19 +132,40 @@ const Invoices = () => {
 
     const checkXeroConnection = async () => {
       try {
-        // Try to get contacts as a way to verify connection
-        const response = await xeroService.getContacts();
+        // Check Xero connection status
+        const response = await xeroService.checkStatus();
+        console.log("Xero status response:", response);
+
         if (response && response.data) {
-          setXeroConnected(true);
-          setXeroError(null);
-          console.log("Xero connection verified");
+          const { connected, details } = response.data;
+          console.log("Xero connection details:", details);
+
+          if (connected) {
+            setXeroConnected(true);
+            setXeroError(null);
+            console.log("Xero connection verified");
+          } else {
+            setXeroConnected(false);
+            setXeroError("Not connected to Xero");
+            console.log("Xero connection not verified - not connected");
+
+            // Log detailed status for debugging
+            if (details) {
+              console.log("Connection details:", {
+                hasToken: details.hasToken,
+                hasAccessToken: details.hasAccessToken,
+                hasTenantId: details.hasTenantId,
+                tokenExpiry: details.tokenExpiry,
+              });
+            }
+          }
         } else {
           setXeroConnected(false);
-          setXeroError("No data received from Xero");
-          console.log("Xero connection not verified - no data received");
+          setXeroError("Failed to verify Xero connection");
+          console.log("Xero connection not verified - invalid response");
         }
       } catch (error) {
-        console.log("Xero not connected:", error);
+        console.log("Xero connection check error:", error);
         setXeroConnected(false);
 
         // Handle different types of errors
@@ -163,7 +184,12 @@ const Invoices = () => {
       }
     };
 
-    checkXeroConnection();
+    // Add a small delay before checking connection
+    const timer = setTimeout(() => {
+      checkXeroConnection();
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, [authLoading, currentUser]);
 
   // Update the URL parameters effect
@@ -178,12 +204,39 @@ const Invoices = () => {
     }
 
     if (xeroStatus === "true") {
-      setXeroConnected(true);
-      setXeroError(null);
-      setShowXeroAlert(true);
+      // Clear the URL parameters
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+
+      // Add a small delay before checking connection
+      setTimeout(() => {
+        const checkConnection = async () => {
+          try {
+            const response = await xeroService.checkStatus();
+            console.log("Post-callback Xero status:", response);
+            if (response && response.data && response.data.connected) {
+              setXeroConnected(true);
+              setXeroError(null);
+              setShowXeroAlert(true);
+            }
+          } catch (error) {
+            console.error(
+              "Error checking Xero connection after callback:",
+              error
+            );
+            setXeroError("Failed to verify Xero connection");
+            setShowXeroAlert(true);
+          }
+        };
+
+        checkConnection();
+      }, 2000); // Wait 2 seconds after callback
     } else if (xeroError) {
       setXeroError(decodeURIComponent(xeroError));
       setShowXeroAlert(true);
+      // Clear the URL parameters
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
     }
   }, [location.search]);
 

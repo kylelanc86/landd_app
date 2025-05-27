@@ -71,7 +71,9 @@ export const authService = {
       return Promise.reject(new Error('No token available'));
     }
     return api.get('/auth/me');
-  }
+  },
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password, email) => api.post('/auth/reset-password', { token, password, email })
 };
 
 // Client service

@@ -47,34 +47,31 @@ class XeroService {
     try {
       console.log('Starting invoice sync from Xero...');
       
-      // Check if we have a valid token set
+      // Get the token set
       const tokenSet = await xero.readTokenSet();
-      console.log('Token set retrieved:', tokenSet ? 'Token exists' : 'No token found');
+      console.log('Token set retrieved:', tokenSet ? 'Token exists' : 'No token');
       
       if (!tokenSet || !tokenSet.access_token) {
-        console.log('No valid Xero token set found');
-        throw new Error('Not connected to Xero. Please connect first.');
+        throw new Error('No valid token set available');
       }
 
-      // Get tenant ID
-      const tenantId = xero.getTenantId();
-      console.log('Tenant ID retrieved:', tenantId ? 'ID exists' : 'No tenant ID found');
+      // Get the tenant ID
+      const tenantId = await xero.getTenantId();
+      console.log('Tenant ID retrieved:', tenantId ? 'ID exists' : 'No ID');
       
       if (!tenantId) {
-        console.log('No Xero tenant ID found');
-        throw new Error('No Xero organization selected. Please connect to Xero first.');
+        throw new Error('No tenant ID available');
       }
 
       console.log('Getting invoices from Xero...');
-      // Get all invoices from Xero
+      
+      // Get invoices from Xero using the accounting API
       const response = await xero.accountingApi.getInvoices(
         tenantId,
         undefined,
         'Type=="ACCREC"'
       );
 
-      console.log('Xero API response received:', response ? 'Response exists' : 'No response');
-      
       if (!response || !response.body || !response.body.Invoices) {
         console.error('Invalid response from Xero:', response);
         throw new Error('Invalid response from Xero');

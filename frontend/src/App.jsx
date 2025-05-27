@@ -10,6 +10,7 @@ import Calendar from "./scenes/calendar";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./scenes/login";
+import ResetPassword from "./scenes/login/ResetPassword";
 import AirMonitoring from "./scenes/air-monitoring";
 import Shifts from "./scenes/air-monitoring/shifts";
 import Projects from "./scenes/projects";
@@ -22,7 +23,6 @@ import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
 import Users from "./scenes/users";
 import Profile from "./scenes/profile";
 import Layout from "./components/Layout";
-import ResetPassword from "./scenes/auth/ResetPassword";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
 
 function App() {

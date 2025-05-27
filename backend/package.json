@@ -16,6 +16,7 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^7.0.3",
+    "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.3",
     "xero-node": "^11.1.0"
   },
