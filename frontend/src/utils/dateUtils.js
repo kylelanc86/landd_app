@@ -26,6 +26,10 @@ export const formatTime = (time) => {
     const parsedTime = typeof time === 'string' ? parseISO(time) : time;
     return format(parsedTime, 'HH:mm');
   } catch (error) {
+    // If parsing fails, try to remove seconds from the time string
+    if (typeof time === 'string' && time.includes(':')) {
+      return time.split(':').slice(0, 2).join(':');
+    }
     console.error('Error formatting time:', error);
     return time; // Return original value if parsing fails
   }

@@ -263,10 +263,13 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     }
   };
 
-  // Build filename: {projectID} - Air Monitoring Report ({Sampling Date})
+  // Build filename: ProjectID: Air Monitoring Report - ProjectName (Date).pdf
   const projectID = job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
+  const projectNameRaw = project?.name || '';
+  // Sanitize project name for filename (remove/replace unsafe characters)
+  const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
   const samplingDate = shift?.date ? formatDate(shift.date) : '';
-  const filename = `${projectID} - Air Monitoring Report${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
+  const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
   if (openInNewTab) {

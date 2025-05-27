@@ -72,6 +72,13 @@ export const authService = {
     }
     return api.get('/auth/me');
   },
+  updateUser: (userData) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return Promise.reject(new Error('No token available'));
+    }
+    return api.patch('/auth/update-profile', userData);
+  },
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, password, email) => api.post('/auth/reset-password', { token, password, email })
 };

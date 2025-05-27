@@ -59,6 +59,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUser = async (userData) => {
+    setLoading(true);
+    try {
+      const response = await authService.updateUser(userData);
+      const updatedUser = response.data;
+      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
+      return updatedUser;
+    } catch (error) {
+      console.error("Update user failed:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem("token");
@@ -70,7 +86,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     loading,
-    restoreUserState, // Expose this function to components
+    updateUser,
+    restoreUserState,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

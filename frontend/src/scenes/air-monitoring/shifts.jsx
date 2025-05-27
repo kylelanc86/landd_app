@@ -29,6 +29,7 @@ import { formatDate } from "../../utils/dateUtils";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
+import DownloadIcon from "@mui/icons-material/Download";
 
 const Shifts = () => {
   const theme = useTheme();
@@ -249,11 +250,13 @@ const Shifts = () => {
       // Get the current shift data first
       const currentShift = await shiftService.getById(resetShiftId);
 
-      // Update shift status while preserving analysis data
+      // Update shift status while preserving analysis data but clearing report authorization
       await shiftService.update(resetShiftId, {
         status: "ongoing",
         analysedBy: currentShift.data.analysedBy,
         analysisDate: currentShift.data.analysisDate,
+        reportApprovedBy: null,
+        reportIssueDate: null,
       });
 
       // Refetch shifts to update UI
@@ -285,7 +288,7 @@ const Shifts = () => {
     {
       field: "status",
       headerName: "Status",
-      flex: 0.5,
+      flex: 0.8,
       renderCell: (params) => {
         const statusColors = {
           ongoing: theme.palette.primary.main,
@@ -302,18 +305,27 @@ const Shifts = () => {
           shift_complete: "Shift Complete",
         };
 
+        // If report is authorized, use red background and set status to shift_complete
+        const backgroundColor = params.row.reportApprovedBy
+          ? theme.palette.error.main
+          : statusColors[params.row.status] || theme.palette.grey[500];
+
+        // If report is authorized, always show as Shift Complete
+        const statusLabel = params.row.reportApprovedBy
+          ? "Shift Complete"
+          : statusLabels[params.row.status] || params.row.status;
+
         return (
           <Box
             sx={{
-              backgroundColor:
-                statusColors[params.row.status] || theme.palette.grey[500],
+              backgroundColor,
               color: theme.palette.common.white,
               padding: "4px 8px",
               borderRadius: "4px",
               fontSize: "0.875rem",
             }}
           >
-            {statusLabels[params.row.status] || params.row.status}
+            {statusLabel}
           </Box>
         );
       },
@@ -321,7 +333,7 @@ const Shifts = () => {
     {
       field: "sampleNumbers",
       headerName: "Sample Numbers",
-      flex: 1,
+      flex: 0.6,
       renderCell: (params) => {
         const numbers = params.row.sampleNumbers || [];
         return numbers.length > 0 ? numbers.join(", ") : "No samples";
@@ -333,6 +345,13 @@ const Shifts = () => {
       flex: 1.5,
       renderCell: ({ row }) => {
         const handleSamplesClick = () => {
+          // Don't allow access to samples if report is authorized
+          if (row.reportApprovedBy) {
+            alert(
+              "Cannot access samples while report is authorized. Please reset the shift status to access samples."
+            );
+            return;
+          }
           console.log("Samples button clicked for shift:", row._id);
           const path = `/air-monitoring/shift/${row._id}/samples`;
           console.log("Attempting to navigate to:", path);
@@ -393,7 +412,7 @@ const Shifts = () => {
               job: jobResponse.data,
               samples: samplesWithAnalysis,
               project,
-              openInNewTab: true,
+              openInNewTab: !row.reportApprovedBy, // download if authorised, open if not
             });
             setReportViewedShiftIds((prev) => new Set(prev).add(row._id));
           } catch (err) {
@@ -409,15 +428,165 @@ const Shifts = () => {
               currentUser?.firstName && currentUser?.lastName
                 ? `${currentUser.firstName} ${currentUser.lastName}`
                 : currentUser?.name || currentUser?.email || "Unknown";
-            await shiftService.update(row._id, {
+
+            // First get the current shift data
+            const currentShift = await shiftService.getById(row._id);
+
+            // Create the updated shift data - only update report approval fields
+            const updatedShiftData = {
+              ...currentShift.data,
               reportApprovedBy: approver,
               reportIssueDate: now,
-            });
+            };
+
+            // Log the data being sent
+            console.log("Updating shift with data:", updatedShiftData);
+
+            // Update shift with report approval
+            const response = await shiftService.update(
+              row._id,
+              updatedShiftData
+            );
+
+            // Log the response
+            console.log("Update response:", response.data);
+
+            // Generate and download the report
+            try {
+              // Fetch job and samples for this shift
+              const jobResponse = await jobService.getById(
+                currentShift.data.job?._id || currentShift.data.job
+              );
+              const samplesResponse = await sampleService.getByShift(
+                currentShift.data._id
+              );
+
+              // Ensure we have the complete sample data including analysis
+              const samplesWithAnalysis = await Promise.all(
+                samplesResponse.data.map(async (sample) => {
+                  if (!sample.analysis) {
+                    // If analysis data is missing, fetch the complete sample data
+                    const completeSample = await sampleService.getById(
+                      sample._id
+                    );
+                    return completeSample.data;
+                  }
+                  return sample;
+                })
+              );
+
+              // Ensure project and client are fully populated
+              let project = jobResponse.data.project;
+              if (project && typeof project === "string") {
+                const projectResponse = await projectService.getById(project);
+                project = projectResponse.data;
+              }
+              if (
+                project &&
+                project.client &&
+                typeof project.client === "string"
+              ) {
+                const clientResponse = await clientService.getById(
+                  project.client
+                );
+                project.client = clientResponse.data;
+              }
+
+              // Generate and download the report
+              generateShiftReport({
+                shift: currentShift.data,
+                job: jobResponse.data,
+                samples: samplesWithAnalysis,
+                project,
+                openInNewTab: false, // Changed to false to trigger download
+              });
+            } catch (reportError) {
+              console.error("Error generating report:", reportError);
+              // Don't throw the error - we still want to complete the authorization
+            }
+
             // Refetch shifts and their sampleNumbers to update UI
             await fetchShiftsWithSamples();
-            alert("Report has been authorised.");
           } catch (err) {
+            console.error("Error authorizing report:", err);
             alert("Failed to authorise report.");
+          }
+        };
+
+        const handleDownloadCSV = async () => {
+          try {
+            // Fetch all samples for this shift
+            const samplesResponse = await sampleService.getByShift(row._id);
+            const samples = await Promise.all(
+              (samplesResponse.data || []).map(async (sample) => {
+                if (!sample.analysis) {
+                  // Fetch full sample if analysis is missing
+                  const fullSample = await sampleService.getById(sample._id);
+                  return fullSample.data;
+                }
+                return sample;
+              })
+            );
+
+            // Prepare CSV headers
+            const headers = [
+              ...Object.keys(samples[0] || {}),
+              ...(samples[0]?.analysis ? Object.keys(samples[0].analysis) : []),
+              ...(samples[0]?.analysis?.fibreCounts
+                ? samples[0].analysis.fibreCounts.map(
+                    (_, i) => `fibreCount_${i + 1}`
+                  )
+                : []),
+            ];
+
+            // Prepare CSV rows
+            const rows = samples.map((sample) => {
+              const base = { ...sample };
+              const analysis = sample.analysis || {};
+              // Flatten fibreCounts if present
+              let fibreCounts = {};
+              if (Array.isArray(analysis.fibreCounts)) {
+                analysis.fibreCounts.forEach((val, i) => {
+                  fibreCounts[`fibreCount_${i + 1}`] = Array.isArray(val)
+                    ? val.join("|")
+                    : val;
+                });
+              }
+              // Merge all fields
+              return {
+                ...base,
+                ...analysis,
+                ...fibreCounts,
+              };
+            });
+
+            // Convert to CSV string
+            const csv = [
+              headers.join(","),
+              ...rows.map((row) =>
+                headers
+                  .map((field) =>
+                    row[field] !== undefined && row[field] !== null
+                      ? `"${String(row[field]).replace(/"/g, '""')}"`
+                      : ""
+                  )
+                  .join(",")
+              ),
+            ].join("\r\n");
+
+            // Download CSV
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${row.name || row._id}_samples.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          } catch (err) {
+            console.error("Error downloading CSV:", err);
+            alert("Failed to download CSV.");
           }
         };
 
@@ -427,12 +596,17 @@ const Shifts = () => {
               variant="contained"
               size="small"
               onClick={handleSamplesClick}
+              disabled={row.reportApprovedBy}
               sx={{
                 mr: 1,
                 backgroundColor: theme.palette.primary.main,
                 color: theme.palette.common.white,
                 "&:hover": {
                   backgroundColor: theme.palette.primary.dark,
+                },
+                "&.Mui-disabled": {
+                  backgroundColor: theme.palette.grey[700],
+                  color: theme.palette.grey[500],
                 },
               }}
             >
@@ -491,6 +665,12 @@ const Shifts = () => {
                 <CloseIcon fontSize="small" />
               </IconButton>
             )}
+            <IconButton
+              onClick={handleDownloadCSV}
+              title="Download raw sample & analysis data"
+            >
+              <DownloadIcon />
+            </IconButton>
             <IconButton onClick={() => handleDeleteShift(row._id)}>
               <DeleteIcon />
             </IconButton>

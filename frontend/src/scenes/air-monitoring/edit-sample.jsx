@@ -11,6 +11,8 @@ import {
   Select,
   MenuItem,
   IconButton,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -45,6 +47,7 @@ const EditSample = () => {
     averageFlowrate: "",
     notes: "",
     date: formatDateForInput(new Date()),
+    isFieldBlank: false,
   });
   const [projectID, setProjectID] = useState(null);
   const [job, setJob] = useState(null);
@@ -102,6 +105,10 @@ const EditSample = () => {
           averageFlowrate: sampleData.averageFlowrate || "",
           notes: sampleData.notes || "",
           sampler: sampleData.collectedBy?._id || sampleData.collectedBy || "",
+          isFieldBlank:
+            sampleData.isFieldBlank || sampleData.location === "Field blank"
+              ? true
+              : false,
         });
         setJob(sampleData.job);
         setError(null);
@@ -117,7 +124,16 @@ const EditSample = () => {
   }, [sampleId]);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, checked } = e.target;
+    if (name === "isFieldBlank") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+        location: checked ? "Field blank" : prev.location,
+      }));
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   // Calculate average flowrate when initial or final flowrate changes
@@ -127,10 +143,18 @@ const EditSample = () => {
         const avg =
           (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) /
           2;
-        setForm((prev) => ({ ...prev, averageFlowrate: avg.toFixed(2) }));
+        setForm((prev) => ({
+          ...prev,
+          averageFlowrate: Math.round(avg).toString(),
+        }));
       } else {
         // If no final flowrate, use initial flowrate as average
-        setForm((prev) => ({ ...prev, averageFlowrate: form.initialFlowrate }));
+        setForm((prev) => ({
+          ...prev,
+          averageFlowrate: Math.round(
+            parseFloat(form.initialFlowrate)
+          ).toString(),
+        }));
       }
     }
   }, [form.initialFlowrate, form.finalFlowrate]);
@@ -310,117 +334,148 @@ const EditSample = () => {
                 : "Loading job details..."
             }
           />
-          <FormControl fullWidth required>
-            <InputLabel>Type</InputLabel>
-            <Select
-              name="type"
-              value={form.type}
+          <FormControlLabel
+            control={
+              <Checkbox
+                name="isFieldBlank"
+                checked={form.isFieldBlank}
+                onChange={handleChange}
+              />
+            }
+            label="Field Blank"
+          />
+          {!form.isFieldBlank && (
+            <>
+              <FormControl fullWidth required>
+                <InputLabel>Type</InputLabel>
+                <Select
+                  name="type"
+                  value={form.type}
+                  onChange={handleChange}
+                  label="Type"
+                >
+                  <MenuItem value="Background">Background</MenuItem>
+                  <MenuItem value="Clearance">Clearance</MenuItem>
+                  <MenuItem value="Exposure">Exposure</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                name="location"
+                label="Location"
+                value={form.location}
+                onChange={handleChange}
+                required
+                fullWidth
+              />
+            </>
+          )}
+          {form.isFieldBlank && (
+            <TextField
+              name="location"
+              label="Location"
+              value="Field blank"
+              disabled
+              required
+              fullWidth
+            />
+          )}
+          {!form.isFieldBlank && (
+            <TextField
+              name="pumpNo"
+              label="Pump No."
+              value={form.pumpNo}
               onChange={handleChange}
-              label="Type"
-            >
-              <MenuItem value="Background">Background</MenuItem>
-              <MenuItem value="Clearance">Clearance</MenuItem>
-              <MenuItem value="Exposure">Exposure</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            name="location"
-            label="Location"
-            value={form.location}
-            onChange={handleChange}
-            required
-            fullWidth
-          />
-          <TextField
-            name="pumpNo"
-            label="Pump No."
-            value={form.pumpNo}
-            onChange={handleChange}
-            fullWidth
-          />
+              fullWidth
+            />
+          )}
           <TextField
             name="cowlNo"
             label="Cowl No."
             value={form.cowlNo}
             onChange={handleChange}
-            fullWidth
-          />
-          <FormControl fullWidth>
-            <InputLabel>Filter Size</InputLabel>
-            <Select
-              name="filterSize"
-              value={form.filterSize}
-              onChange={handleChange}
-              label="Filter Size"
-            >
-              <MenuItem value="25mm">25mm</MenuItem>
-              <MenuItem value="13mm">13mm</MenuItem>
-            </Select>
-          </FormControl>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField
-              name="startTime"
-              label="Start Time"
-              type="time"
-              value={form.startTime}
-              onChange={handleChange}
-              required
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              inputProps={{ step: 1 }}
-            />
-            <IconButton
-              onClick={() => setCurrentTime("startTime")}
-              sx={{ alignSelf: "flex-end", mb: 1 }}
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          </Box>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField
-              name="endTime"
-              label="End Time"
-              type="time"
-              value={form.endTime}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              inputProps={{ step: 1 }}
-            />
-            <IconButton
-              onClick={() => setCurrentTime("endTime")}
-              sx={{ alignSelf: "flex-end", mb: 1 }}
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          </Box>
-          <TextField
-            name="initialFlowrate"
-            label="Initial Flowrate"
-            type="number"
-            value={form.initialFlowrate}
-            onChange={handleChange}
-            required
-            fullWidth
-            inputProps={{ step: "0.1" }}
-          />
-          <TextField
-            name="finalFlowrate"
-            label="Final Flowrate"
-            type="number"
-            value={form.finalFlowrate}
-            onChange={handleChange}
-            fullWidth
-            inputProps={{ step: "0.1" }}
-          />
-          <TextField
-            name="averageFlowrate"
-            label="Average Flowrate"
-            value={form.averageFlowrate}
-            disabled
             required
             fullWidth
           />
+          {!form.isFieldBlank && (
+            <>
+              <FormControl fullWidth>
+                <InputLabel>Filter Size</InputLabel>
+                <Select
+                  name="filterSize"
+                  value={form.filterSize}
+                  onChange={handleChange}
+                  label="Filter Size"
+                >
+                  <MenuItem value="25mm">25mm</MenuItem>
+                  <MenuItem value="13mm">13mm</MenuItem>
+                </Select>
+              </FormControl>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  name="startTime"
+                  label="Start Time"
+                  type="time"
+                  value={form.startTime}
+                  onChange={handleChange}
+                  required
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 1 }}
+                />
+                <IconButton
+                  onClick={() => setCurrentTime("startTime")}
+                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                >
+                  <AccessTimeIcon />
+                </IconButton>
+              </Box>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  name="endTime"
+                  label="End Time"
+                  type="time"
+                  value={form.endTime}
+                  onChange={handleChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 1 }}
+                />
+                <IconButton
+                  onClick={() => setCurrentTime("endTime")}
+                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                >
+                  <AccessTimeIcon />
+                </IconButton>
+              </Box>
+              <TextField
+                name="initialFlowrate"
+                label="Initial Flowrate (L/min)"
+                type="number"
+                value={form.initialFlowrate}
+                onChange={handleChange}
+                required
+                fullWidth
+                inputProps={{ step: "0.1" }}
+              />
+              <TextField
+                name="finalFlowrate"
+                label="Final Flowrate (L/min)"
+                type="number"
+                value={form.finalFlowrate}
+                onChange={handleChange}
+                fullWidth
+                inputProps={{ step: "0.1" }}
+              />
+              <TextField
+                name="averageFlowrate"
+                label="Average Flowrate"
+                value={form.averageFlowrate}
+                disabled
+                required
+                fullWidth
+              />
+            </>
+          )}
           <TextField
             name="notes"
             label="Notes"

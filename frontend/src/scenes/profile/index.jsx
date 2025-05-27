@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Paper,
@@ -22,15 +22,30 @@ const Profile = () => {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
-    phone: currentUser?.phone || "",
+    phone: "",
     password: "",
     confirmPassword: "",
     notifications: {
-      email: currentUser?.notifications?.email || false,
-      sms: currentUser?.notifications?.sms || false,
-      systemUpdates: currentUser?.notifications?.systemUpdates || false,
+      email: false,
+      sms: false,
+      systemUpdates: false,
     },
   });
+
+  // Initialize form data when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      setFormData((prev) => ({
+        ...prev,
+        phone: currentUser.phone || "",
+        notifications: {
+          email: currentUser.notifications?.email || false,
+          sms: currentUser.notifications?.sms || false,
+          systemUpdates: currentUser.notifications?.systemUpdates || false,
+        },
+      }));
+    }
+  }, [currentUser]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -65,6 +80,17 @@ const Profile = () => {
         if (formData.password.length < 6) {
           throw new Error("Password must be at least 6 characters long");
         }
+        // Add password complexity validation
+        const hasUpperCase = /[A-Z]/.test(formData.password);
+        const hasLowerCase = /[a-z]/.test(formData.password);
+        const hasNumbers = /\d/.test(formData.password);
+        const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password);
+
+        if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
+          throw new Error(
+            "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+          );
+        }
       }
 
       // Update user data
@@ -80,9 +106,10 @@ const Profile = () => {
 
       await updateUser(updatedUser);
       setSuccess("Profile updated successfully");
+      // Clear password fields after successful update
       setFormData((prev) => ({ ...prev, password: "", confirmPassword: "" }));
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to update profile");
     } finally {
       setLoading(false);
     }
@@ -151,6 +178,7 @@ const Profile = () => {
                 value={formData.phone}
                 onChange={handleChange}
                 variant="outlined"
+                autoComplete="off"
               />
             </Grid>
             <Divider sx={{ my: 3 }} />
@@ -170,6 +198,7 @@ const Profile = () => {
                 value={formData.password}
                 onChange={handleChange}
                 variant="outlined"
+                autoComplete="new-password"
               />
             </Grid>
 
@@ -182,6 +211,7 @@ const Profile = () => {
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 variant="outlined"
+                autoComplete="new-password"
               />
             </Grid>
 

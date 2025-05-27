@@ -391,15 +391,18 @@ const SampleList = () => {
                 </TableCell>
                 <TableCell>{sample.averageFlowrate}</TableCell>
                 <TableCell>
-                  <IconButton
+                  <Button
+                    variant="outlined"
+                    size="small"
                     onClick={() =>
                       navigate(
                         `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
                       )
                     }
+                    sx={{ mr: 1 }}
                   >
-                    <EditIcon />
-                  </IconButton>
+                    Edit Sample
+                  </Button>
                   <IconButton onClick={() => handleDelete(sample._id)}>
                     <DeleteIcon />
                   </IconButton>
@@ -484,7 +487,7 @@ const SampleList = () => {
               },
             }}
           >
-            Analysis
+            COMPLETE ANALYSIS
           </Button>
         </Box>
       )}

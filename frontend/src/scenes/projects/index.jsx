@@ -62,10 +62,12 @@ const PROJECT_TYPES = [
   "other",
 ];
 
+const DEPARTMENTS = ["Asbestos & HAZMAT", "Mould", "Fibre ID"];
+
 const emptyForm = {
   name: "",
   client: "",
-  type: PROJECT_TYPES[0],
+  department: PROJECT_TYPES[0],
   address: "",
   users: [],
   status: ACTIVE_STATUSES[0],
@@ -367,8 +369,12 @@ const Projects = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [hideInactive, setHideInactive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("status") || "all";
+  });
+  const [showInactive, setShowInactive] = useState(false);
+  const [departmentFilter, setDepartmentFilter] = useState("all");
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -438,7 +444,7 @@ const Projects = () => {
             projectID: project.projectID,
             name: project.name,
             client: project.client,
-            type: project.type || "other",
+            department: project.department || "other",
             status: status,
             startDate: project.startDate,
             endDate: project.endDate,
@@ -533,7 +539,7 @@ const Projects = () => {
       // Create a clean update object with only the necessary fields
       const formattedData = {
         name: editForm.name,
-        type: editForm.type,
+        department: editForm.department,
         status: editForm.status,
         address: editForm.address,
         startDate: editForm.startDate
@@ -635,18 +641,18 @@ const Projects = () => {
       flex: 1,
     },
     {
-      field: "type",
-      headerName: "Type",
+      field: "department",
+      headerName: "Department",
       flex: 1,
       renderCell: (params) => {
-        const type = params.row.type;
-        if (!type) return "Other";
+        const department = params.row.department;
+        if (!department) return "Other";
 
         // Handle air_quality specifically
-        if (type === "air_quality") return "Air Quality";
+        if (department === "air_quality") return "Air Quality";
 
         // Handle other types
-        return type
+        return department
           .split("_")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(" ");
@@ -669,21 +675,6 @@ const Projects = () => {
         />
       ),
       editable: false,
-    },
-    {
-      field: "startDate",
-      headerName: "Start Date",
-      flex: 1,
-      renderCell: (params) => {
-        const date = params.row.startDate;
-        if (!date) return "";
-        try {
-          return new Date(date).toLocaleDateString();
-        } catch (error) {
-          console.warn("Error formatting date:", error);
-          return "";
-        }
-      },
     },
     {
       field: "users",
@@ -745,7 +736,7 @@ const Projects = () => {
       setForm({
         name: "",
         client: "",
-        type: PROJECT_TYPES[0],
+        department: PROJECT_TYPES[0],
         status: ACTIVE_STATUSES[0],
         address: "",
         startDate: "",
@@ -822,15 +813,20 @@ const Projects = () => {
       (project.client?.name || "")
         .toLowerCase()
         .includes(search.toLowerCase()) ||
-      project.type.toLowerCase().includes(search.toLowerCase());
+      project.department.toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus =
       statusFilter === "all" || project.status === statusFilter;
 
     const matchesActiveFilter =
-      !hideInactive || ACTIVE_STATUSES.includes(project.status);
+      showInactive || ACTIVE_STATUSES.includes(project.status);
 
-    return matchesSearch && matchesStatus && matchesActiveFilter;
+    const matchesDepartment =
+      departmentFilter === "all" || project.department === departmentFilter;
+
+    return (
+      matchesDepartment && matchesSearch && matchesStatus && matchesActiveFilter
+    );
   });
 
   // Update the UsersCell component
@@ -1071,14 +1067,58 @@ const Projects = () => {
           <FormControlLabel
             control={
               <Switch
-                checked={hideInactive}
-                onChange={(e) => setHideInactive(e.target.checked)}
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
                 color="primary"
               />
             }
-            label="Hide Inactive Jobs"
+            label="Show Inactive Projects"
           />
         </Stack>
+      </Box>
+
+      {/* Department Filter Buttons */}
+      <Box display="flex" gap={2} mb={2}>
+        <Button
+          variant={departmentFilter === "all" ? "contained" : "outlined"}
+          color="primary"
+          onClick={() => setDepartmentFilter("all")}
+        >
+          All Departments
+        </Button>
+        <Button
+          variant={
+            departmentFilter === "Asbestos & HAZMAT" ? "contained" : "outlined"
+          }
+          color="secondary"
+          onClick={() => setDepartmentFilter("Asbestos & HAZMAT")}
+        >
+          Asbestos & HAZMAT
+        </Button>
+        <Button
+          variant={departmentFilter === "Mould" ? "contained" : "outlined"}
+          onClick={() => setDepartmentFilter("Mould")}
+          sx={{
+            backgroundColor:
+              departmentFilter === "Mould" ? "#9c27b0" : "transparent",
+            color: departmentFilter === "Mould" ? "#fff" : "#9c27b0",
+            borderColor: "#9c27b0",
+            "&:hover": {
+              backgroundColor: "#7b1fa2",
+              color: "#fff",
+              borderColor: "#7b1fa2",
+            },
+          }}
+        >
+          Mould
+        </Button>
+        <Button
+          variant={departmentFilter === "Fibre ID" ? "contained" : "outlined"}
+          color="info"
+          onClick={() => setDepartmentFilter("Fibre ID")}
+        >
+          Fibre ID
+        </Button>
       </Box>
 
       <Box
@@ -1143,22 +1183,16 @@ const Projects = () => {
                   required
                 />
                 <FormControl fullWidth required>
-                  <InputLabel>Type</InputLabel>
+                  <InputLabel>Department</InputLabel>
                   <Select
-                    name="type"
-                    value={editForm?.type || ""}
+                    name="department"
+                    value={editForm?.department || ""}
                     onChange={handleEditChange}
-                    label="Type"
+                    label="Department"
                   >
-                    {PROJECT_TYPES.map((type) => (
+                    {DEPARTMENTS.map((type) => (
                       <MenuItem key={type} value={type}>
-                        {type
-                          .split("_")
-                          .map(
-                            (word) =>
-                              word.charAt(0).toUpperCase() + word.slice(1)
-                          )
-                          .join(" ")}
+                        {type}
                       </MenuItem>
                     ))}
                   </Select>
@@ -1173,33 +1207,6 @@ const Projects = () => {
                   value={editForm?.address || ""}
                   onChange={handleEditChange}
                   fullWidth
-                />
-                <TextField
-                  label="Start Date"
-                  name="startDate"
-                  type="date"
-                  value={
-                    editForm?.startDate
-                      ? new Date(editForm.startDate).toISOString().split("T")[0]
-                      : ""
-                  }
-                  onChange={handleEditChange}
-                  fullWidth
-                  required
-                  InputLabelProps={{ shrink: true }}
-                />
-                <TextField
-                  label="End Date"
-                  name="endDate"
-                  type="date"
-                  value={
-                    editForm?.endDate
-                      ? new Date(editForm.endDate).toISOString().split("T")[0]
-                      : ""
-                  }
-                  onChange={handleEditChange}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
                 />
                 <TextField
                   label="Client"
@@ -1276,16 +1283,16 @@ const Projects = () => {
                 </Select>
               </FormControl>
               <FormControl fullWidth required>
-                <InputLabel>Project Type</InputLabel>
+                <InputLabel>Department</InputLabel>
                 <Select
-                  name="type"
-                  value={form.type}
+                  name="department"
+                  value={form.department}
                   onChange={handleChange}
-                  label="Project Type"
+                  label="Department"
                 >
-                  {PROJECT_TYPES.map((type) => (
+                  {DEPARTMENTS.map((type) => (
                     <MenuItem key={type} value={type}>
-                      {type.replace("_", " ").toUpperCase()}
+                      {type}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1300,25 +1307,6 @@ const Projects = () => {
                 value={form.address}
                 onChange={handleChange}
                 fullWidth
-              />
-              <TextField
-                label="Start Date"
-                name="startDate"
-                type="date"
-                value={form.startDate}
-                onChange={handleChange}
-                required
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                label="End Date"
-                name="endDate"
-                type="date"
-                value={form.endDate}
-                onChange={handleChange}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
               />
               {renderUsersSelect(form.users, handleChange, "users")}
               <TextField

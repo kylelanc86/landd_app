@@ -39,11 +39,11 @@ const NewSample = () => {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({
     sampleNumber: "",
-    type: "",
+    type: "Background",
     location: "",
     pumpNo: "",
     cowlNo: "",
-    filterSize: "",
+    filterSize: "25mm",
     startTime: "",
     endTime: "",
     initialFlowrate: "",
@@ -51,6 +51,7 @@ const NewSample = () => {
     averageFlowrate: "",
     notes: "",
     isFieldBlank: false,
+    sampler: "",
   });
   const [projectID, setProjectID] = useState(null);
   const [job, setJob] = useState(null);
@@ -76,10 +77,13 @@ const NewSample = () => {
     const fetchShift = async () => {
       try {
         const response = await shiftService.getById(shiftId);
+        console.log("Full shift response:", response.data);
         setShift(response.data);
 
         // Get the next sample number from location state
         const nextNumber = location.state?.nextSampleNumber;
+        console.log("Next sample number from location:", nextNumber);
+
         if (nextNumber) {
           // Get the project ID from the shift's job
           const projectID = response.data.job?.project?.projectID;
@@ -92,6 +96,88 @@ const NewSample = () => {
             // Store the project ID for later use in fullSampleID
             setProjectID(projectID);
           }
+        }
+
+        // Get the number of samples in this shift by querying the samples
+        const samplesResponse = await sampleService.getByShift(shiftId);
+        const samplesInShift = samplesResponse.data || [];
+        const shiftSampleNumber = samplesInShift.length + 1;
+        console.log("Number of samples in shift:", samplesInShift.length);
+        console.log(
+          "This will be sample number:",
+          shiftSampleNumber,
+          "in this shift"
+        );
+
+        // Log the default sampler details
+        console.log(
+          "Default sampler from shift:",
+          response.data.defaultSampler
+        );
+        console.log(
+          "Default sampler type:",
+          typeof response.data.defaultSampler
+        );
+        console.log(
+          "Default sampler ID:",
+          response.data.defaultSampler?._id || response.data.defaultSampler
+        );
+
+        // If there's no default sampler but we have samples, check the first sample
+        if (!response.data.defaultSampler && samplesInShift.length > 0) {
+          const firstSample = samplesInShift[0];
+          console.log("First sample in shift:", firstSample);
+
+          if (firstSample.collectedBy) {
+            console.log(
+              "Setting default sampler from first sample:",
+              firstSample.collectedBy
+            );
+            try {
+              const shiftUpdateResponse = await shiftService.update(shiftId, {
+                defaultSampler: firstSample.collectedBy,
+              });
+              console.log(
+                "Shift updated with default sampler from first sample:",
+                shiftUpdateResponse
+              );
+
+              // Set the sampler in the form
+              setForm((prev) => ({
+                ...prev,
+                sampler: firstSample.collectedBy,
+              }));
+            } catch (error) {
+              console.error(
+                "Error setting default sampler from first sample:",
+                error
+              );
+            }
+          }
+        }
+        // Only set default sampler if this is not the first sample in the shift
+        else if (shiftSampleNumber > 1 && response.data.defaultSampler) {
+          console.log(
+            "Setting default sampler from shift:",
+            response.data.defaultSampler
+          );
+          const samplerId =
+            response.data.defaultSampler._id || response.data.defaultSampler;
+          console.log("Setting sampler ID to:", samplerId);
+          setForm((prev) => ({
+            ...prev,
+            sampler: samplerId,
+          }));
+        } else {
+          console.log(
+            "No default sampler set - this is the first sample in shift or no default exists"
+          );
+          console.log(
+            "Reason:",
+            !response.data.defaultSampler
+              ? "No default sampler in shift"
+              : "This is the first sample"
+          );
         }
       } catch (err) {
         console.error("Error fetching shift:", err);
@@ -139,6 +225,7 @@ const NewSample = () => {
 
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
+    console.log("Form field changed:", { name, value, checked });
     if (name === "isFieldBlank") {
       setForm((prev) => ({
         ...prev,
@@ -147,7 +234,11 @@ const NewSample = () => {
         location: checked ? "Field blank" : prev.location,
       }));
     } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
+      setForm((prev) => {
+        const newState = { ...prev, [name]: value };
+        console.log("New form state after change:", newState);
+        return newState;
+      });
     }
   };
 
@@ -244,6 +335,32 @@ const NewSample = () => {
       console.log("Submitting sample data:", sampleData);
       const response = await sampleService.create(sampleData);
       console.log("Sample created successfully:", response);
+
+      // Get the number of samples in this shift
+      const samplesResponse = await sampleService.getByShift(shiftId);
+      const samplesInShift = samplesResponse.data || [];
+      const shiftSampleNumber = samplesInShift.length;
+      console.log(
+        "This was sample number:",
+        shiftSampleNumber,
+        "in this shift"
+      );
+
+      // If this is the first sample in the shift and we have a sampler, set it as the default
+      if (shiftSampleNumber === 1 && form.sampler) {
+        console.log("Setting default sampler for shift:", form.sampler);
+        try {
+          const shiftUpdateResponse = await shiftService.update(shiftId, {
+            defaultSampler: form.sampler,
+          });
+          console.log(
+            "Shift updated with default sampler:",
+            shiftUpdateResponse
+          );
+        } catch (error) {
+          console.error("Error setting default sampler:", error);
+        }
+      }
 
       // Add a small delay before navigation to ensure the sample is saved
       setTimeout(() => {
@@ -447,7 +564,7 @@ const NewSample = () => {
               </Box>
               <TextField
                 name="initialFlowrate"
-                label="Initial Flowrate"
+                label="Initial Flowrate (L/min)"
                 type="number"
                 value={form.initialFlowrate}
                 onChange={handleChange}
@@ -457,7 +574,7 @@ const NewSample = () => {
               />
               <TextField
                 name="finalFlowrate"
-                label="Final Flowrate"
+                label="Final Flowrate (L/min)"
                 type="number"
                 value={form.finalFlowrate}
                 onChange={handleChange}

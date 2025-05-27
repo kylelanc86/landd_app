@@ -84,6 +84,8 @@ const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
         borderRadius: "8px",
         margin: isCollapsed ? "2px 4px" : "4px 4px",
         transition: "all 0.3s ease",
+        textAlign: "left",
+        paddingLeft: isCollapsed ? "4px" : "10px",
       }}
       onClick={() => setSelected(title)}
       icon={
@@ -115,6 +117,7 @@ const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
           width: "100%",
           display: "flex",
           alignItems: "center",
+          justifyContent: "flex-start",
           padding: isCollapsed ? "4px 0" : "8px 0",
         }}
       >
@@ -134,6 +137,7 @@ const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
               wordBreak: "break-word",
               fontSize: "0.9rem",
               lineHeight: 1.2,
+              textAlign: "left",
             }}
           >
             {title}
@@ -220,9 +224,34 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       <Menu iconShape="square">
         <MenuItem
           onClick={() => setIsCollapsed(!isCollapsed)}
-          icon={isCollapsed ? <MenuOutlinedIcon /> : undefined}
+          icon={
+            isCollapsed ? (
+              <img
+                src="/logo_small.png"
+                alt="L&D"
+                style={{
+                  height: "48px",
+                  width: "auto",
+                  display: "block",
+                  margin: "0 auto",
+                }}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.style.display = "none";
+                  const parent = e.target.parentNode;
+                  const text = document.createElement("span");
+                  text.textContent = "L&D";
+                  text.style.fontSize = "24px";
+                  text.style.fontWeight = "bold";
+                  text.style.color =
+                    theme.palette.mode === "dark" ? "#fff" : "#000";
+                  parent.appendChild(text);
+                }}
+              />
+            ) : undefined
+          }
           style={{
-            margin: "10px 0 20px 0",
+            margin: "10px 0 50px 0",
             color:
               theme.palette.mode === "dark"
                 ? tokens.grey[100]
@@ -307,7 +336,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           </Box>
         )}
 
-        <Box paddingLeft={isCollapsed ? undefined : "10%"}>
+        <Box paddingLeft={isCollapsed ? undefined : "5%"}>
           <Item
             title="Dashboard"
             to="/"
@@ -330,10 +359,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               variant="h3"
               color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
               sx={{
-                m: "15px 0 5px 20px",
+                m: "15px 0 5px 10px",
                 fontSize: "1.2rem",
                 fontWeight: "bold",
                 opacity: 0.8,
+                textAlign: "left",
+                paddingLeft: "10px",
               }}
             >
               Pages
@@ -380,10 +411,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               variant="h3"
               color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
               sx={{
-                m: "15px 0 5px 20px",
+                m: "15px 0 5px 10px",
                 fontSize: "1.2rem",
                 fontWeight: "bold",
                 opacity: 0.8,
+                textAlign: "left",
+                paddingLeft: "10px",
               }}
             >
               Site Work

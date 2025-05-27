@@ -44,19 +44,30 @@ const Topbar = ({ toggleColorMode }) => {
       position="fixed"
       className="topbar"
       sx={{
-        backgroundColor: theme.palette.background.paper,
+        backgroundColor:
+          theme.palette.mode === "dark"
+            ? theme.palette.background.dark
+            : theme.palette.background.light,
         boxShadow: 1,
         width: "100%",
         zIndex: (theme) => theme.zIndex.drawer + 1,
-        height: "80px",
+        height: "100px",
+        display: "flex",
+        alignItems: "center",
       }}
     >
-      <Toolbar>
-        <Box sx={{ flexGrow: 1 }} />
+      <Toolbar
+        sx={{
+          minHeight: "100px !important",
+          height: "100px",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 24px",
+          width: "100%",
+          justifyContent: "flex-end",
+        }}
+      >
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            {currentUser?.email}
-          </Typography>
           <Tooltip title="Toggle theme">
             <IconButton
               onClick={toggleColorMode}
