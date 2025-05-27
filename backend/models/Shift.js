@@ -27,6 +27,11 @@ const shiftSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  defaultSampler: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   status: {
     type: String,
     enum: ['ongoing', 'sampling_complete', 'samples_submitted_to_lab', 'analysis_complete', 'shift_complete'],

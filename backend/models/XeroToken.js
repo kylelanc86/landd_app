@@ -17,7 +17,7 @@ const xeroTokenSchema = new mongoose.Schema({
     required: true
   },
   expires_at: {
-    type: Number,
+    type: Date,
     required: true,
     index: true
   },
@@ -41,7 +41,8 @@ const xeroTokenSchema = new mongoose.Schema({
   },
   tenantId: {
     type: String,
-    sparse: true
+    required: false,
+    index: true
   }
 }, {
   timestamps: true,
@@ -49,8 +50,9 @@ const xeroTokenSchema = new mongoose.Schema({
 });
 
 // Add indexes for better query performance
-xeroTokenSchema.index({ createdAt: -1 });
+xeroTokenSchema.index({ createdAt: 1 });
 xeroTokenSchema.index({ expires_at: 1 });
+xeroTokenSchema.index({ tenantId: 1 });
 
 // Ensure only one token document exists
 xeroTokenSchema.statics.getToken = async function() {
@@ -64,26 +66,26 @@ xeroTokenSchema.statics.getToken = async function() {
     console.log('MongoDB: Current database:', mongoose.connection.db.databaseName);
     console.log('MongoDB: Current collection:', this.collection.name);
     
-    // List all documents in the collection
-    const allDocs = await this.find({});
-    console.log('MongoDB: All documents in collection:', allDocs.length);
+    const tokens = await this.find().sort({ createdAt: -1 }).limit(1);
+    console.log('MongoDB: All documents in collection:', tokens.length);
     
-    const token = await this.findOne().sort({ createdAt: -1 });
-    console.log('MongoDB: Token query result:', token ? 'Found token' : 'No token found');
-    
-    if (token) {
+    if (tokens.length > 0) {
+      console.log('MongoDB: Token query result: Found token');
       console.log('MongoDB: Token details:', {
-        id: token._id,
-        hasAccessToken: !!token.access_token,
-        hasRefreshToken: !!token.refresh_token,
-        expiresAt: token.expires_at ? new Date(token.expires_at).toISOString() : null,
-        tokenType: token.token_type,
-        scope: token.scope,
-        tenantId: token.tenantId,
-        createdAt: token.createdAt
+        id: tokens[0]._id,
+        hasAccessToken: !!tokens[0].access_token,
+        hasRefreshToken: !!tokens[0].refresh_token,
+        expiresAt: tokens[0].expires_at,
+        tokenType: tokens[0].token_type,
+        scope: tokens[0].scope,
+        tenantId: tokens[0].tenantId,
+        createdAt: tokens[0].createdAt
       });
+      return tokens[0];
     }
-    return token;
+    
+    console.log('MongoDB: Token query result: No token found');
+    return null;
   } catch (error) {
     console.error('MongoDB: Error getting token:', error);
     throw error;
@@ -107,22 +109,24 @@ xeroTokenSchema.statics.setToken = async function(tokenSet) {
       access_token: tokenSet.access_token,
       refresh_token: tokenSet.refresh_token,
       expires_in: tokenSet.expires_in,
-      expires_at: tokenSet.expires_at || (Date.now() + (tokenSet.expires_in * 1000)),
+      expires_at: tokenSet.expires_at || new Date(Date.now() + (tokenSet.expires_in * 1000)),
       token_type: tokenSet.token_type || 'Bearer',
       scope: tokenSet.scope,
       id_token: tokenSet.id_token,
-      session_state: tokenSet.session_state
+      session_state: tokenSet.session_state,
+      tenantId: tokenSet.tenantId
     };
 
     console.log('MongoDB: Formatted token data:', {
       hasAccessToken: !!tokenData.access_token,
       hasRefreshToken: !!tokenData.refresh_token,
       expiresIn: tokenData.expires_in,
-      expiresAt: new Date(tokenData.expires_at).toISOString(),
+      expiresAt: tokenData.expires_at,
       tokenType: tokenData.token_type,
       scope: tokenData.scope,
       hasIdToken: !!tokenData.id_token,
-      hasSessionState: !!tokenData.session_state
+      hasSessionState: !!tokenData.session_state,
+      tenantId: tokenData.tenantId
     });
 
     // Remove all existing tokens
@@ -159,7 +163,8 @@ xeroTokenSchema.statics.setToken = async function(tokenSet) {
     console.log('MongoDB: Token saved successfully:', {
       id: savedToken._id,
       createdAt: savedToken.createdAt,
-      expiresAt: new Date(savedToken.expires_at).toISOString()
+      expiresAt: savedToken.expires_at,
+      tenantId: savedToken.tenantId
     });
 
     // List all documents after save
@@ -170,7 +175,8 @@ xeroTokenSchema.statics.setToken = async function(tokenSet) {
         id: allDocsAfterSave[0]._id,
         hasAccessToken: !!allDocsAfterSave[0].access_token,
         hasRefreshToken: !!allDocsAfterSave[0].refresh_token,
-        createdAt: allDocsAfterSave[0].createdAt
+        createdAt: allDocsAfterSave[0].createdAt,
+        tenantId: allDocsAfterSave[0].tenantId
       });
     } else {
       console.error('MongoDB: No documents found after save operation');
@@ -198,6 +204,7 @@ xeroTokenSchema.statics.setToken = async function(tokenSet) {
       expiresAt: verifyToken.expires_at ? new Date(verifyToken.expires_at).toISOString() : null,
       tokenType: verifyToken.token_type,
       scope: verifyToken.scope,
+      tenantId: verifyToken.tenantId,
       createdAt: verifyToken.createdAt
     });
 

@@ -256,17 +256,21 @@ router.post('/disconnect', auth, async (req, res) => {
 router.post('/sync-invoices', auth, checkXeroConnection, async (req, res) => {
   try {
     console.log('Starting invoice sync request...');
-    const result = await XeroService.syncInvoicesFromXero();
-    console.log('Sync completed successfully:', result);
+    const invoices = await XeroService.syncInvoicesFromXero();
+    console.log('Sync completed successfully:', {
+      count: invoices.length,
+      firstInvoice: invoices[0] ? {
+        id: invoices[0].InvoiceID,
+        number: invoices[0].InvoiceNumber,
+        status: invoices[0].Status
+      } : null
+    });
     
-    if (!result.success) {
-      return res.status(500).json({
-        error: 'Sync failed',
-        message: result.message || 'Failed to sync invoices'
-      });
-    }
-    
-    res.json(result);
+    res.json({
+      success: true,
+      message: `Successfully synced ${invoices.length} invoices`,
+      invoices
+    });
   } catch (error) {
     console.error('Error syncing invoices from Xero:', error);
     
@@ -280,7 +284,8 @@ router.post('/sync-invoices', auth, checkXeroConnection, async (req, res) => {
     
     res.status(500).json({ 
       error: 'Failed to sync invoices from Xero',
-      message: error.message
+      message: error.message,
+      details: error.response?.body || error.stack
     });
   }
 });

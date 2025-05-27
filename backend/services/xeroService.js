@@ -47,115 +47,62 @@ class XeroService {
     try {
       console.log('Starting invoice sync from Xero...');
       
-      // Get the token set
-      const tokenSet = await xero.readTokenSet();
-      console.log('Token set retrieved:', tokenSet ? 'Token exists' : 'No token');
-      
-      if (!tokenSet || !tokenSet.access_token) {
-        throw new Error('No valid token set available');
+      // Check if Xero client is properly initialized
+      if (!xero.isInitialized()) {
+        console.log('Xero client not initialized, attempting to initialize...');
+        const tokenSet = await xero.readTokenSet();
+        if (!tokenSet || !tokenSet.access_token) {
+          throw new Error('No valid token set available');
+        }
+        await xero.setTokenSet(tokenSet);
+        
+        if (!xero.isInitialized()) {
+          throw new Error('Failed to initialize Xero client');
+        }
       }
-
+      
       // Get the tenant ID
       const tenantId = await xero.getTenantId();
-      console.log('Tenant ID retrieved:', tenantId ? 'ID exists' : 'No ID');
-      
       if (!tenantId) {
         throw new Error('No tenant ID available');
       }
-
-      console.log('Getting invoices from Xero...');
+      console.log('Tenant ID retrieved:', tenantId);
       
       // Get invoices from Xero using the accounting API
+      console.log('Getting invoices from Xero...');
+      
+      // Use the Xero client's built-in methods
       const response = await xero.accountingApi.getInvoices(
         tenantId,
         undefined,
         'Type=="ACCREC"'
       );
-
-      if (!response || !response.body || !response.body.Invoices) {
-        console.error('Invalid response from Xero:', response);
-        throw new Error('Invalid response from Xero');
+      
+      if (!response || !response.body || !response.body.invoices) {
+        throw new Error('Invalid response from Xero API');
       }
-
-      const xeroInvoices = response.body.Invoices;
-      console.log(`Found ${xeroInvoices.length} invoices in Xero`);
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      // Process each invoice
-      for (const xeroInvoice of xeroInvoices) {
-        try {
-          // Check if invoice already exists in our database
-          const existingInvoice = await Invoice.findOne({ 
-            xeroInvoiceId: xeroInvoice.InvoiceID 
-          });
-
-          if (existingInvoice) {
-            // Update existing invoice
-            existingInvoice.amount = xeroInvoice.Total;
-            existingInvoice.status = xeroInvoice.Status.toLowerCase();
-            existingInvoice.date = new Date(xeroInvoice.Date);
-            existingInvoice.dueDate = new Date(xeroInvoice.DueDate);
-            existingInvoice.description = xeroInvoice.LineItems?.[0]?.Description || '';
-            existingInvoice.lastSynced = new Date();
-            await existingInvoice.save();
-            console.log(`Updated invoice ${xeroInvoice.InvoiceNumber}`);
-            successCount++;
-          } else {
-            // Create new invoice
-            const newInvoice = new Invoice({
-              invoiceID: xeroInvoice.InvoiceNumber,
-              amount: xeroInvoice.Total,
-              status: xeroInvoice.Status.toLowerCase(),
-              date: new Date(xeroInvoice.Date),
-              dueDate: new Date(xeroInvoice.DueDate),
-              description: xeroInvoice.LineItems?.[0]?.Description || '',
-              xeroInvoiceId: xeroInvoice.InvoiceID,
-              xeroStatus: xeroInvoice.Status,
-              lastSynced: new Date()
-            });
-            await newInvoice.save();
-            console.log(`Created new invoice ${xeroInvoice.InvoiceNumber}`);
-            successCount++;
-          }
-        } catch (error) {
-          console.error(`Error processing invoice ${xeroInvoice.InvoiceNumber}:`, error);
-          errorCount++;
-          // Continue with next invoice even if one fails
-          continue;
-        }
+      
+      const invoices = response.body.invoices;
+      console.log(`Retrieved ${invoices.length} invoices from Xero`);
+      
+      // Process and save invoices
+      for (const invoice of invoices) {
+        await this.processAndSaveInvoice(invoice);
       }
-
-      console.log(`Invoice sync completed. Success: ${successCount}, Errors: ${errorCount}`);
-      return { 
-        success: true, 
-        message: `Successfully synced ${successCount} invoices${errorCount > 0 ? ` (${errorCount} errors)` : ''}` 
-      };
+      
+      return invoices;
     } catch (error) {
       console.error('Error syncing invoices from Xero:', error);
-      
-      // Handle specific error cases
-      if (error.statusCode === 401) {
-        throw new Error('Xero connection expired. Please reconnect to Xero.');
+      if (error.response) {
+        console.error('Detailed error information:', {
+          errorMessage: error.response.body?.Detail || 'Unknown error occurred',
+          errorDetails: error.response.body?.Message || 'No additional details available',
+          headers: error.response.headers,
+          request: error.response.request,
+          requestHeaders: error.response.request?.headers // Log request headers
+        });
       }
-      
-      // Add more detailed error information
-      const errorMessage = error.message || 'Unknown error occurred';
-      const errorDetails = error.response?.data || error.stack || 'No additional details available';
-      console.error('Detailed error information:', { errorMessage, errorDetails });
-      
-      // Check for specific Xero API errors
-      if (error.response?.data?.ErrorNumber) {
-        throw new Error(`Xero API Error: ${error.response.data.Message || errorMessage}`);
-      }
-      
-      // Check for token expiration
-      if (error.message?.includes('token') || error.message?.includes('expired')) {
-        throw new Error('Xero connection expired. Please reconnect to Xero.');
-      }
-      
-      throw new Error(`Failed to sync invoices: ${errorMessage}`);
+      throw new Error(`Failed to sync invoices: ${error.message}`);
     }
   }
 
@@ -246,6 +193,95 @@ class XeroService {
       if (error.statusCode === 401) {
         throw new Error('Xero connection expired. Please reconnect to Xero.');
       }
+      throw error;
+    }
+  }
+
+  // Process and save a single invoice from Xero
+  static async processAndSaveInvoice(xeroInvoice) {
+    try {
+      console.log('Processing Xero invoice:', {
+        id: xeroInvoice.InvoiceID,
+        number: xeroInvoice.InvoiceNumber,
+        status: xeroInvoice.Status
+      });
+
+      // Check if invoice already exists in our database
+      const existingInvoice = await Invoice.findOne({ xeroInvoiceId: xeroInvoice.InvoiceID });
+      
+      if (existingInvoice) {
+        console.log('Updating existing invoice:', existingInvoice.invoiceID);
+        // Update existing invoice
+        existingInvoice.amount = xeroInvoice.Total || 0;
+        existingInvoice.status = xeroInvoice.Status === 'PAID' ? 'paid' : 'unpaid';
+        existingInvoice.date = xeroInvoice.Date ? new Date(xeroInvoice.Date) : existingInvoice.date;
+        existingInvoice.dueDate = xeroInvoice.DueDate ? new Date(xeroInvoice.DueDate) : existingInvoice.dueDate;
+        existingInvoice.description = xeroInvoice.LineItems?.[0]?.Description || existingInvoice.description;
+        existingInvoice.xeroStatus = xeroInvoice.Status;
+        existingInvoice.xeroReference = xeroInvoice.Reference || existingInvoice.xeroReference;
+        existingInvoice.lastSynced = new Date();
+        await existingInvoice.save();
+        return existingInvoice;
+      }
+
+      // For new invoices, we need to handle required fields
+      if (!xeroInvoice.Date || !xeroInvoice.DueDate) {
+        console.error('Missing required date fields in Xero invoice:', xeroInvoice.InvoiceID);
+        throw new Error('Missing required date fields in Xero invoice');
+      }
+
+      // Find or create client based on Xero contact
+      let clientId = null;
+      if (xeroInvoice.Contact?.ContactID) {
+        try {
+          // Get contact details from Xero
+          const contact = await xero.accountingApi.getContact(
+            await xero.getTenantId(),
+            xeroInvoice.Contact.ContactID
+          );
+          
+          if (contact?.body?.Contacts?.[0]) {
+            const xeroContact = contact.body.Contacts[0];
+            // Find client by name or create new one
+            const Client = require('../models/Client');
+            let client = await Client.findOne({ name: xeroContact.Name });
+            
+            if (!client) {
+              client = await Client.create({
+                name: xeroContact.Name,
+                email: xeroContact.EmailAddress,
+                phone: xeroContact.Phones?.find(p => p.PhoneType === 'DEFAULT')?.PhoneNumber,
+                xeroContactId: xeroContact.ContactID
+              });
+            }
+            clientId = client._id;
+          }
+        } catch (error) {
+          console.error('Error finding/creating client:', error);
+        }
+      }
+
+      // Create new invoice
+      const newInvoice = new Invoice({
+        invoiceID: xeroInvoice.InvoiceNumber || `XERO-${xeroInvoice.InvoiceID}`,
+        client: clientId, // Set client if found/created
+        amount: xeroInvoice.Total || 0,
+        status: xeroInvoice.Status === 'PAID' ? 'paid' : 'unpaid',
+        date: new Date(xeroInvoice.Date),
+        dueDate: new Date(xeroInvoice.DueDate),
+        description: xeroInvoice.LineItems?.[0]?.Description || '',
+        xeroInvoiceId: xeroInvoice.InvoiceID,
+        xeroContactId: xeroInvoice.Contact?.ContactID,
+        xeroReference: xeroInvoice.Reference, // Store Xero's reference field
+        xeroStatus: xeroInvoice.Status,
+        lastSynced: new Date()
+      });
+
+      await newInvoice.save();
+      console.log('Saved new invoice:', newInvoice.invoiceID);
+      return newInvoice;
+    } catch (error) {
+      console.error('Error processing invoice:', error);
       throw error;
     }
   }

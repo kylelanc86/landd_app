@@ -10,12 +10,14 @@ const invoiceSchema = new mongoose.Schema({
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
-    required: true
+    required: false // Make project optional for all invoices
   },
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',
-    required: true
+    required: function() {
+      return !this.xeroInvoiceId; // Only required if not a Xero invoice
+    }
   },
   amount: {
     type: Number,
@@ -40,10 +42,15 @@ const invoiceSchema = new mongoose.Schema({
   },
   // Xero integration fields
   xeroInvoiceId: {
-    type: String
+    type: String,
+    unique: true,
+    sparse: true // Allows null values but ensures uniqueness when present
   },
   xeroContactId: {
     type: String
+  },
+  xeroReference: {
+    type: String // Store Xero's reference field for project mapping
   },
   xeroStatus: {
     type: String,

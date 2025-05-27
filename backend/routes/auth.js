@@ -37,7 +37,9 @@ router.post('/register', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        role: user.role
+        role: user.role,
+        phone: user.phone,
+        notifications: user.notifications
       }
     });
   } catch (err) {
@@ -84,7 +86,9 @@ router.post('/login', async (req, res) => {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          role: user.role
+          role: user.role,
+          phone: user.phone,
+          notifications: user.notifications
         }
       });
     } catch (tokenError) {
@@ -103,6 +107,43 @@ router.get('/me', auth, async (req, res) => {
     const user = await User.findById(req.user.id).select('-password');
     res.json(user);
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Update user profile
+router.patch('/update-profile', auth, async (req, res) => {
+  try {
+    const { phone, password, notifications } = req.body;
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update phone if provided
+    if (phone !== undefined) {
+      user.phone = phone;
+    }
+
+    // Update password if provided
+    if (password) {
+      user.password = password;
+    }
+
+    // Update notifications if provided
+    if (notifications) {
+      user.notifications = notifications;
+    }
+
+    await user.save();
+
+    // Return updated user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    res.json(userResponse);
+  } catch (err) {
+    console.error('Update profile error:', err);
     res.status(500).json({ message: err.message });
   }
 });
