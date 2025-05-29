@@ -55,8 +55,8 @@ import SyncIcon from "@mui/icons-material/Sync";
 const STATUS_OPTIONS = ["paid", "unpaid"];
 
 const emptyForm = {
-  invoiceID: "",
   projectID: "",
+  invoiceNumber: "",
   client: "",
   amount: "",
   status: "unpaid",
@@ -280,14 +280,29 @@ const Invoices = () => {
         (p) => p.projectID === form.projectID
       );
 
+      if (!selectedProject) {
+        console.error("Selected project not found");
+        return;
+      }
+
+      // Create the combined invoice ID
+      const invoiceID = `${selectedProject.projectID}-${form.invoiceNumber}`;
+
       const formattedForm = {
         ...form,
+        invoiceID,
+        projectID: selectedProject.projectID,
         date: form.date ? new Date(form.date).toISOString() : null,
         dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
         amount: parseFloat(form.amount),
-        project: selectedProject?._id || form.projectID, // Use project _id if found, otherwise use projectID
+        project: selectedProject._id,
         client: form.client,
+        status: form.status.toLowerCase(), // Ensure status is lowercase
       };
+
+      // Remove the invoiceNumber field as it's not needed in the database
+      delete formattedForm.invoiceNumber;
+
       console.log("Sending invoice data:", formattedForm);
       const response = await invoiceService.create(formattedForm);
       setInvoices([response.data, ...invoices]);
@@ -471,18 +486,32 @@ const Invoices = () => {
       },
     },
     {
+      field: "date",
+      headerName: "Invoice Date",
+      flex: 1,
+      valueGetter: (params) => {
+        const date = params?.row?.date || params;
+        return formatDate(date);
+      },
+    },
+    {
       field: "status",
       headerName: "Status",
       flex: 1,
-      valueGetter: (params) => params?.row?.status || params || "unpaid",
+      valueGetter: (params) => {
+        const status = params?.row?.status || params || "unpaid";
+        return status.charAt(0).toUpperCase() + status.slice(1);
+      },
       renderCell: (params) => {
         const status = params?.row?.status || params || "unpaid";
+        const capitalizedStatus =
+          status.charAt(0).toUpperCase() + status.slice(1);
         const isOverdue =
           params.row.dueDate && new Date(params.row.dueDate) < new Date();
 
         return (
           <Chip
-            label={status}
+            label={capitalizedStatus}
             color={status === "paid" ? "success" : "error"}
             sx={{
               color: "white",
@@ -496,29 +525,32 @@ const Invoices = () => {
       },
     },
     {
-      field: "date",
-      headerName: "Date",
-      flex: 1,
-      valueGetter: (params) => {
-        const date = params?.row?.date || params;
-        return formatDate(date);
-      },
-    },
-    {
       field: "dueDate",
-      headerName: "Due Date",
+      headerName: "Overdue",
       flex: 1,
       valueGetter: (params) => {
         const date = params?.row?.dueDate || params;
-        return formatDate(date);
+        if (!date) return "N/A";
+        try {
+          const dueDate = new Date(date);
+          const today = new Date();
+          const diffTime = today - dueDate;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return diffDays > 0 ? diffDays : "No";
+        } catch (error) {
+          return "Invalid Date";
+        }
       },
       renderCell: (params) => {
         const date = params?.row?.dueDate || params;
         if (!date) return "N/A";
         try {
           const dueDate = new Date(date);
-          const isOverdue =
-            dueDate < new Date() && params.row.status === "unpaid";
+          const today = new Date();
+          const diffTime = today - dueDate;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const isOverdue = diffDays > 0 && params.row.status === "unpaid";
+
           return (
             <Box
               sx={{
@@ -534,7 +566,7 @@ const Invoices = () => {
                   fontWeight: isOverdue ? "bold" : "normal",
                 }}
               >
-                {formatDate(dueDate)}
+                {isOverdue ? `${diffDays} days` : "No"}
               </Typography>
             </Box>
           );
@@ -902,6 +934,11 @@ const Invoices = () => {
             disableSelectionOnClick
             loading={loading}
             autoHeight
+            initialState={{
+              sorting: {
+                sortModel: [{ field: "date", sort: "desc" }],
+              },
+            }}
           />
         )}
       </Box>
@@ -917,14 +954,6 @@ const Invoices = () => {
         <form onSubmit={handleAddInvoice}>
           <DialogContent>
             <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-              <TextField
-                label="Invoice ID"
-                name="invoiceID"
-                value={form.invoiceID}
-                onChange={handleChange}
-                required
-                sx={{ flex: 1 }}
-              />
               <Autocomplete
                 freeSolo
                 options={filteredProjects()}
@@ -956,6 +985,19 @@ const Invoices = () => {
                 }}
                 sx={{ flex: 1 }}
               />
+              <TextField
+                label="Invoice Number"
+                name="invoiceNumber"
+                value={form.invoiceNumber}
+                onChange={handleChange}
+                type="number"
+                required
+                sx={{ flex: 1 }}
+                InputProps={{
+                  inputProps: { min: 1 },
+                }}
+                helperText="Enter a number (e.g., 1, 2, 3)"
+              />
               <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Client</InputLabel>
                 <Select
@@ -982,6 +1024,9 @@ const Invoices = () => {
                 type="number"
                 required
                 sx={{ flex: 1 }}
+                InputProps={{
+                  inputProps: { min: 0, step: "0.01" },
+                }}
               />
               <TextField
                 label="Date"
@@ -1013,7 +1058,7 @@ const Invoices = () => {
                 >
                   {STATUS_OPTIONS.map((status) => (
                     <MenuItem key={status} value={status}>
-                      {status}
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
                     </MenuItem>
                   ))}
                 </Select>

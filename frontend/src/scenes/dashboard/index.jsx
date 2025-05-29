@@ -32,12 +32,32 @@ import { projectService, invoiceService } from "../../services/api";
 import { ACTIVE_STATUSES } from "../../components/JobStatus";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import AllocatedJobsTable from "./AllocatedJobsTable";
+import ScienceIcon from "@mui/icons-material/Science";
+import SendIcon from "@mui/icons-material/Send";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
+
+  // Load widget order from localStorage or use defaults
+  const [widgetOrder, setWidgetOrder] = useState(() => {
+    const savedOrder = localStorage.getItem("dashboardWidgetOrder");
+    return savedOrder
+      ? JSON.parse(savedOrder)
+      : [
+          "active",
+          "review",
+          "invoice",
+          "outstanding",
+          "labComplete",
+          "samplesSubmitted",
+          "inProgress",
+        ];
+  });
 
   // Load widget preferences from localStorage or use defaults
   const [visibleWidgets, setVisibleWidgets] = useState(() => {
@@ -49,15 +69,10 @@ const Dashboard = () => {
           review: true,
           invoice: true,
           outstanding: true,
+          labComplete: true,
+          samplesSubmitted: true,
+          inProgress: true,
         };
-  });
-
-  // Load widget order from localStorage or use defaults
-  const [widgetOrder, setWidgetOrder] = useState(() => {
-    const savedOrder = localStorage.getItem("dashboardWidgetOrder");
-    return savedOrder
-      ? JSON.parse(savedOrder)
-      : ["active", "review", "invoice", "outstanding"];
   });
 
   const [stats, setStats] = useState({
@@ -65,6 +80,9 @@ const Dashboard = () => {
     reviewProjects: 0,
     invoiceProjects: 0,
     outstandingInvoices: 0,
+    labCompleteProjects: 0,
+    samplesSubmittedProjects: 0,
+    inProgressProjects: 0,
   });
 
   useEffect(() => {
@@ -88,6 +106,15 @@ const Dashboard = () => {
         const invoiceProjects = projects.filter(
           (p) => p.status === "Ready for invoicing"
         ).length;
+        const labCompleteProjects = projects.filter(
+          (p) => p.status === "Lab analysis complete"
+        ).length;
+        const samplesSubmittedProjects = projects.filter(
+          (p) => p.status === "Samples submitted"
+        ).length;
+        const inProgressProjects = projects.filter(
+          (p) => p.status === "In progress"
+        ).length;
 
         const outstandingInvoices = invoices.filter(
           (inv) => inv.status === "unpaid"
@@ -98,6 +125,9 @@ const Dashboard = () => {
           reviewProjects,
           invoiceProjects,
           outstandingInvoices,
+          labCompleteProjects,
+          samplesSubmittedProjects,
+          inProgressProjects,
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -145,6 +175,33 @@ const Dashboard = () => {
       bgcolor: tokens.primary[600],
       path: "/invoices",
       queryParams: { status: "unpaid" },
+    },
+    {
+      id: "labComplete",
+      title: "Lab Analysis Complete",
+      value: stats.labCompleteProjects.toString(),
+      icon: <ScienceIcon />,
+      bgcolor: tokens.secondary[600],
+      path: "/projects",
+      queryParams: { status: "Lab analysis complete" },
+    },
+    {
+      id: "samplesSubmitted",
+      title: "Samples Submitted",
+      value: stats.samplesSubmittedProjects.toString(),
+      icon: <SendIcon />,
+      bgcolor: tokens.primary[500],
+      path: "/projects",
+      queryParams: { status: "Samples submitted" },
+    },
+    {
+      id: "inProgress",
+      title: "In Progress",
+      value: stats.inProgressProjects.toString(),
+      icon: <PlayArrowIcon />,
+      bgcolor: tokens.neutral[600],
+      path: "/projects",
+      queryParams: { status: "In progress" },
     },
   ];
 
@@ -195,6 +252,9 @@ const Dashboard = () => {
     );
   }
 
+  console.log("Debug - gridItems:", gridItems);
+  console.log("Debug - visibleWidgets:", visibleWidgets);
+
   return (
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
@@ -212,140 +272,148 @@ const Dashboard = () => {
         </Button>
       </Box>
 
-      <Dialog open={widgetDialogOpen} onClose={handleWidgetDialogClose}>
-        <DialogTitle>Customize Dashboard Widgets</DialogTitle>
-        <DialogContent>
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="widgets">
-              {(provided) => (
-                <FormGroup {...provided.droppableProps} ref={provided.innerRef}>
-                  {gridItems.map((item, index) => (
+      {/* Widgets Grid */}
+      <Box mt="20px">
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="widgets" direction="horizontal">
+            {(provided) => (
+              <Box
+                display="grid"
+                gridTemplateColumns="repeat(12, 1fr)"
+                gridAutoRows="140px"
+                gap="20px"
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+              >
+                {gridItems
+                  .filter((item) => visibleWidgets[item.id])
+                  .map((item, index) => (
                     <Draggable
                       key={item.id}
                       draggableId={item.id}
                       index={index}
                     >
-                      {(provided) => (
+                      {(provided, snapshot) => (
                         <Box
                           ref={provided.innerRef}
                           {...provided.draggableProps}
+                          gridColumn="span 3"
+                          backgroundColor={item.bgcolor}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
                           sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            mb: 1,
-                            p: 1,
-                            backgroundColor: "background.paper",
-                            borderRadius: 1,
+                            cursor: "pointer",
                             "&:hover": {
-                              backgroundColor: "action.hover",
+                              opacity: 0.9,
                             },
+                            transform: snapshot.isDragging
+                              ? "scale(1.02)"
+                              : "none",
+                            transition: "transform 0.2s ease",
                           }}
+                          onClick={() => handleCardClick(item)}
                         >
-                          <Box
-                            {...provided.dragHandleProps}
-                            sx={{ mr: 1, cursor: "grab" }}
+                          <Card
+                            sx={{
+                              width: "100%",
+                              height: "100%",
+                              backgroundColor: "transparent",
+                              boxShadow: "none",
+                            }}
                           >
-                            <DragIndicatorIcon />
-                          </Box>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={visibleWidgets[item.id]}
-                                onChange={() => handleWidgetToggle(item.id)}
-                              />
-                            }
-                            label={item.title}
-                            sx={{ flex: 1 }}
-                          />
+                            <CardContent
+                              sx={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                height: "100%",
+                                position: "relative",
+                              }}
+                            >
+                              <Box
+                                {...provided.dragHandleProps}
+                                sx={{
+                                  position: "absolute",
+                                  top: 8,
+                                  right: 8,
+                                  color: "white",
+                                  opacity: 0.5,
+                                  "&:hover": {
+                                    opacity: 1,
+                                  },
+                                }}
+                              >
+                                <DragIndicatorIcon />
+                              </Box>
+                              <Box
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="center"
+                                mb={2}
+                              >
+                                {item.icon}
+                              </Box>
+                              <Typography
+                                variant="h5"
+                                component="div"
+                                sx={{ mb: 1, color: "white" }}
+                              >
+                                {item.value}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                sx={{ color: "white", textAlign: "center" }}
+                              >
+                                {item.title}
+                              </Typography>
+                            </CardContent>
+                          </Card>
                         </Box>
                       )}
                     </Draggable>
                   ))}
-                  {provided.placeholder}
-                </FormGroup>
-              )}
-            </Droppable>
-          </DragDropContext>
+                {provided.placeholder}
+              </Box>
+            )}
+          </Droppable>
+        </DragDropContext>
+      </Box>
+
+      {/* Allocated Jobs Table */}
+      <Box mt="40px">
+        <AllocatedJobsTable />
+      </Box>
+
+      {/* Widget Configuration Dialog */}
+      <Dialog
+        open={widgetDialogOpen}
+        onClose={() => setWidgetDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Configure Dashboard Widgets</DialogTitle>
+        <DialogContent>
+          <FormGroup>
+            {gridItems.map((item) => (
+              <FormControlLabel
+                key={item.id}
+                control={
+                  <Checkbox
+                    checked={visibleWidgets[item.id]}
+                    onChange={() => handleWidgetToggle(item.id)}
+                  />
+                }
+                label={item.title}
+              />
+            ))}
+          </FormGroup>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleWidgetDialogClose} color="primary">
-            Done
-          </Button>
+          <Button onClick={() => setWidgetDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-
-      <Box
-        mt="20px"
-        display="grid"
-        gridTemplateColumns="repeat(12, 1fr)"
-        gridAutoRows="140px"
-        gap="20px"
-      >
-        {gridItems
-          .filter((item) => visibleWidgets[item.id])
-          .map((item) => (
-            <Box
-              gridColumn="span 3"
-              gridRow="span 1"
-              key={item.id}
-              sx={{
-                backgroundColor: item.bgcolor,
-                borderRadius: "4px",
-                boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.1)",
-                cursor: "pointer",
-                "&:hover": {
-                  opacity: 0.9,
-                  transform: "translateY(-2px)",
-                  transition: "all 0.3s ease",
-                },
-              }}
-              onClick={() => handleCardClick(item)}
-            >
-              <Box
-                p="20px"
-                display="flex"
-                flexDirection="column"
-                justifyContent="space-between"
-                height="100%"
-              >
-                <Box
-                  display="flex"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
-                  <Box
-                    sx={{
-                      backgroundColor: "rgba(255, 255, 255, 0.2)",
-                      borderRadius: "8px",
-                      p: 1,
-                    }}
-                  >
-                    {item.icon}
-                  </Box>
-                  <Typography
-                    variant="h4"
-                    sx={{
-                      color: "white",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {item.value}
-                  </Typography>
-                </Box>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    color: "white",
-                    fontSize: "0.9rem",
-                    opacity: 0.9,
-                  }}
-                >
-                  {item.title}
-                </Typography>
-              </Box>
-            </Box>
-          ))}
-      </Box>
     </Box>
   );
 };

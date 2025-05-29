@@ -30,6 +30,7 @@ import {
   InputAdornment,
   Switch,
   FormControlLabel,
+  Autocomplete,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -62,12 +63,31 @@ const PROJECT_TYPES = [
   "other",
 ];
 
-const DEPARTMENTS = ["Asbestos & HAZMAT", "Mould", "Fibre ID"];
+const DEPARTMENTS = [
+  "Asbestos & HAZMAT",
+  "Occupational Hygiene",
+  "Client Supplied",
+];
+
+const CATEGORIES = [
+  "Asbestos Materials Assessment",
+  "Asbestos & Lead Paint Assessment",
+  "Lead Paint/Dust Assessment",
+  "Air Monitoring and Clearance",
+  "Clearance Certificate",
+  "Commercial Asbestos Management Plan",
+  "Hazardous Materials Management Plan",
+  "Residential Asbestos Survey",
+  "Silica Air Monitoring",
+  "Mould/Moisture Assessment",
+  "Other",
+];
 
 const emptyForm = {
   name: "",
   client: "",
   department: PROJECT_TYPES[0],
+  category: "",
   address: "",
   users: [],
   status: ACTIVE_STATUSES[0],
@@ -375,6 +395,20 @@ const Projects = () => {
   });
   const [showInactive, setShowInactive] = useState(false);
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [newClient, setNewClient] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    invoiceEmail: "",
+    contact1Name: "",
+    contact1Number: "",
+    contact1Email: "",
+    contact2Name: "",
+    contact2Number: "",
+    contact2Email: "",
+  });
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -445,9 +479,8 @@ const Projects = () => {
             name: project.name,
             client: project.client,
             department: project.department || "other",
+            category: project.category || "",
             status: status,
-            startDate: project.startDate,
-            endDate: project.endDate,
             address: project.address,
             description: project.description,
             users: transformedUsers,
@@ -540,15 +573,10 @@ const Projects = () => {
       const formattedData = {
         name: editForm.name,
         department: editForm.department,
+        category: editForm.category || "",
         status: editForm.status,
         address: editForm.address,
-        startDate: editForm.startDate
-          ? new Date(editForm.startDate).toISOString()
-          : null,
-        endDate: editForm.endDate
-          ? new Date(editForm.endDate).toISOString()
-          : null,
-        users: editForm.users || [], // This will be an array of user IDs from the Select component
+        users: editForm.users || [],
       };
 
       console.log("Sending update to backend:", formattedData);
@@ -567,8 +595,9 @@ const Projects = () => {
               const updatedProject = {
                 ...p,
                 ...response.data,
-                users: response.data.users || [], // Ensure users array is preserved
-                id: response.data._id, // Ensure id is set correctly
+                category: response.data.category || "",
+                users: response.data.users || [],
+                id: response.data._id,
               };
               console.log("Updated project in state:", updatedProject);
               return updatedProject;
@@ -633,7 +662,7 @@ const Projects = () => {
     {
       field: "projectID",
       headerName: "Project ID",
-      flex: 1,
+      flex: 0.6,
     },
     {
       field: "name",
@@ -659,6 +688,11 @@ const Projects = () => {
       },
     },
     {
+      field: "category",
+      headerName: "Category",
+      flex: 1.5,
+    },
+    {
       field: "status",
       headerName: "Status",
       flex: 1,
@@ -679,7 +713,7 @@ const Projects = () => {
     {
       field: "users",
       headerName: "Assigned Users",
-      flex: 1.5,
+      flex: 1,
       renderCell: (params) => {
         if (!params || !params.row) return null;
         const users = params.row.users || [];
@@ -694,7 +728,7 @@ const Projects = () => {
     {
       field: "actions",
       headerName: "Actions",
-      flex: 1,
+      flex: 0.5,
       renderCell: (params) => (
         <Button
           variant="contained"
@@ -708,7 +742,7 @@ const Projects = () => {
             setDetailsDialogOpen(true);
           }}
         >
-          View Details
+          Details
         </Button>
       ),
     },
@@ -723,11 +757,8 @@ const Projects = () => {
     try {
       const projectData = {
         ...form,
-        startDate: form.startDate
-          ? new Date(form.startDate).toISOString()
-          : null,
-        endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
-        users: form.users || [], // Ensure users is always an array
+        users: form.users || [],
+        category: form.category || "",
       };
 
       const response = await projectService.create(projectData);
@@ -737,12 +768,11 @@ const Projects = () => {
         name: "",
         client: "",
         department: PROJECT_TYPES[0],
+        category: "",
         status: ACTIVE_STATUSES[0],
         address: "",
-        startDate: "",
-        endDate: "",
         description: "",
-        users: [], // Reset users array
+        users: [],
       });
     } catch (err) {
       if (err.response) {
@@ -807,13 +837,16 @@ const Projects = () => {
 
   // Filter projects based on search, status, and inactive toggle
   const filteredProjects = projects.filter((project) => {
+    const searchTerm = search.toLowerCase();
+    const projectName = project.name?.toLowerCase() || "";
+    const projectAddress = project.address?.toLowerCase() || "";
+    const clientName = (project.client?.name || "").toLowerCase();
+
     const matchesSearch =
-      search.toLowerCase() === "" ||
-      project.name.toLowerCase().includes(search.toLowerCase()) ||
-      (project.client?.name || "")
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      project.department.toLowerCase().includes(search.toLowerCase());
+      searchTerm === "" ||
+      projectName.includes(searchTerm) ||
+      projectAddress.includes(searchTerm) ||
+      clientName.includes(searchTerm);
 
     const matchesStatus =
       statusFilter === "all" || project.status === statusFilter;
@@ -998,6 +1031,38 @@ const Projects = () => {
     );
   };
 
+  // Add function to handle new client creation
+  const handleNewClientSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await clientService.create(newClient);
+      setClients([...clients, response.data]);
+      setForm({ ...form, client: response.data._id });
+      setClientDialogOpen(false);
+      setNewClient({
+        name: "",
+        email: "",
+        phone: "",
+        address: "",
+        invoiceEmail: "",
+        contact1Name: "",
+        contact1Number: "",
+        contact1Email: "",
+        contact2Name: "",
+        contact2Number: "",
+        contact2Email: "",
+      });
+    } catch (err) {
+      if (err.response) {
+        alert(
+          `Error creating client: ${
+            err.response.data.message || "Unknown error"
+          }`
+        );
+      }
+    }
+  };
+
   if (loading) return <Typography>Loading projects...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -1096,28 +1161,47 @@ const Projects = () => {
           Asbestos & HAZMAT
         </Button>
         <Button
-          variant={departmentFilter === "Mould" ? "contained" : "outlined"}
-          onClick={() => setDepartmentFilter("Mould")}
+          variant={
+            departmentFilter === "Occupational Hygiene"
+              ? "contained"
+              : "outlined"
+          }
+          onClick={() => setDepartmentFilter("Occupational Hygiene")}
           sx={{
             backgroundColor:
-              departmentFilter === "Mould" ? "#9c27b0" : "transparent",
-            color: departmentFilter === "Mould" ? "#fff" : "#9c27b0",
-            borderColor: "#9c27b0",
+              departmentFilter === "Occupational Hygiene"
+                ? "#FF9800"
+                : "transparent",
+            color:
+              departmentFilter === "Occupational Hygiene" ? "#fff" : "#FF9800",
+            borderColor: "#FF9800",
             "&:hover": {
-              backgroundColor: "#7b1fa2",
+              backgroundColor: "#F57C00",
               color: "#fff",
-              borderColor: "#7b1fa2",
+              borderColor: "#F57C00",
             },
           }}
         >
-          Mould
+          Occupational Hygiene
         </Button>
         <Button
-          variant={departmentFilter === "Fibre ID" ? "contained" : "outlined"}
-          color="info"
-          onClick={() => setDepartmentFilter("Fibre ID")}
+          variant={
+            departmentFilter === "Client Supplied" ? "contained" : "outlined"
+          }
+          onClick={() => setDepartmentFilter("Client Supplied")}
+          sx={{
+            backgroundColor:
+              departmentFilter === "Client Supplied"
+                ? "#9c27b0"
+                : "transparent",
+            color: departmentFilter === "Client Supplied" ? "#fff" : "#9c27b0",
+            "&:hover": {
+              backgroundColor: "#9c27b0",
+              color: "#fff",
+            },
+          }}
         >
-          Fibre ID
+          Client Supplied
         </Button>
       </Box>
 
@@ -1197,6 +1281,21 @@ const Projects = () => {
                     ))}
                   </Select>
                 </FormControl>
+                <FormControl fullWidth>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    name="category"
+                    value={editForm?.category || ""}
+                    onChange={handleEditChange}
+                    label="Category"
+                  >
+                    {CATEGORIES.map((category) => (
+                      <MenuItem key={category} value={category}>
+                        {category}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <FormControl fullWidth required>
                   <InputLabel>Status</InputLabel>
                   {renderStatusSelect(editForm?.status, handleEditChange)}
@@ -1267,21 +1366,54 @@ const Projects = () => {
                 required
                 fullWidth
               />
-              <FormControl fullWidth required>
-                <InputLabel>Client</InputLabel>
-                <Select
-                  name="client"
-                  value={form.client}
-                  onChange={handleChange}
-                  label="Client"
+              <Box>
+                <Autocomplete
+                  options={clients}
+                  getOptionLabel={(option) => option.name || ""}
+                  value={
+                    clients.find((client) => client._id === form.client) || null
+                  }
+                  onChange={(event, newValue) => {
+                    setForm({
+                      ...form,
+                      client: newValue ? newValue._id : "",
+                    });
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="Client" required fullWidth />
+                  )}
+                  renderOption={(props, option) => (
+                    <li {...props}>
+                      <Box>
+                        <Typography variant="body1">{option.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.address}
+                        </Typography>
+                      </Box>
+                    </li>
+                  )}
+                  isOptionEqualToValue={(option, value) =>
+                    option._id === value._id
+                  }
+                  filterOptions={(options, { inputValue }) => {
+                    const searchTerm = inputValue.toLowerCase();
+                    return options.filter(
+                      (option) =>
+                        option.name.toLowerCase().includes(searchTerm) ||
+                        (option.address || "")
+                          .toLowerCase()
+                          .includes(searchTerm)
+                    );
+                  }}
+                />
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() => setClientDialogOpen(true)}
+                  sx={{ mt: 1 }}
                 >
-                  {clients.map((client) => (
-                    <MenuItem key={client._id} value={client._id}>
-                      {client.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  Add New Client
+                </Button>
+              </Box>
               <FormControl fullWidth required>
                 <InputLabel>Department</InputLabel>
                 <Select
@@ -1293,6 +1425,21 @@ const Projects = () => {
                   {DEPARTMENTS.map((type) => (
                     <MenuItem key={type} value={type}>
                       {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth>
+                <InputLabel>Category</InputLabel>
+                <Select
+                  name="category"
+                  value={form.category}
+                  onChange={handleChange}
+                  label="Category"
+                >
+                  {CATEGORIES.map((category) => (
+                    <MenuItem key={category} value={category}>
+                      {category}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1326,6 +1473,143 @@ const Projects = () => {
             </Button>
             <Button type="submit" variant="contained" color="primary">
               Create Project
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Add New Client Dialog */}
+      <Dialog
+        open={clientDialogOpen}
+        onClose={() => setClientDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add New Client</DialogTitle>
+        <form onSubmit={handleNewClientSubmit}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <TextField
+                label="Client Name"
+                name="name"
+                value={newClient.name}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, name: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <TextField
+                label="Invoice Email"
+                name="invoiceEmail"
+                type="email"
+                value={newClient.invoiceEmail}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, invoiceEmail: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <TextField
+                label="Phone"
+                name="phone"
+                value={newClient.phone}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, phone: e.target.value })
+                }
+                fullWidth
+              />
+              <TextField
+                label="Address"
+                name="address"
+                value={newClient.address}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, address: e.target.value })
+                }
+                fullWidth
+              />
+              <Typography
+                variant="subtitle1"
+                sx={{ mt: 2, fontWeight: "bold" }}
+              >
+                Primary Contact
+              </Typography>
+              <TextField
+                label="Contact Name"
+                name="contact1Name"
+                value={newClient.contact1Name}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, contact1Name: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <TextField
+                label="Contact Phone"
+                name="contact1Number"
+                value={newClient.contact1Number}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, contact1Number: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <TextField
+                label="Contact Email"
+                name="contact1Email"
+                type="email"
+                value={newClient.contact1Email}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, contact1Email: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <Typography
+                variant="subtitle1"
+                sx={{ mt: 2, fontWeight: "bold" }}
+              >
+                Secondary Contact (Optional)
+              </Typography>
+              <TextField
+                label="Contact Name"
+                name="contact2Name"
+                value={newClient.contact2Name}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, contact2Name: e.target.value })
+                }
+                fullWidth
+              />
+              <TextField
+                label="Contact Phone"
+                name="contact2Number"
+                value={newClient.contact2Number}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, contact2Number: e.target.value })
+                }
+                fullWidth
+              />
+              <TextField
+                label="Contact Email"
+                name="contact2Email"
+                type="email"
+                value={newClient.contact2Email}
+                onChange={(e) =>
+                  setNewClient({ ...newClient, contact2Email: e.target.value })
+                }
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setClientDialogOpen(false)}
+              color="secondary"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" color="primary">
+              Add Client
             </Button>
           </DialogActions>
         </form>

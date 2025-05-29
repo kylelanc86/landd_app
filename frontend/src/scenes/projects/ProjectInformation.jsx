@@ -31,7 +31,7 @@ import {
 } from "../../components/JobStatus";
 import debounce from "lodash/debounce";
 
-const DEPARTMENTS = ["Asbestos & HAZMAT", "Mould"];
+const DEPARTMENTS = ["Asbestos & HAZMAT", "Occupational Hygiene"];
 
 const CATEGORIES = [
   "Asbestos Materials Assessment",

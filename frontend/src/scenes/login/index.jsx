@@ -184,7 +184,7 @@ const Login = () => {
           align="center"
           sx={{ mt: 2 }}
         >
-          For demo purposes, use your email domain as the password
+          Email Admin for Access Issues
         </Typography>
       </Paper>
 
