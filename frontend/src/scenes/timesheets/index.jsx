@@ -399,8 +399,21 @@ const Timesheets = () => {
       )
     ) {
       try {
+        // Filter entries for the selected date only
+        const entriesForSelectedDate = timeEntries.filter((entry) => {
+          const entryDate = format(new Date(entry.date), "yyyy-MM-dd");
+          const selectedFormattedDate = format(selectedDate, "yyyy-MM-dd");
+          return entryDate === selectedFormattedDate;
+        });
+
+        console.log(
+          "Deleting entries for date:",
+          format(selectedDate, "yyyy-MM-dd"),
+          entriesForSelectedDate
+        );
+
         // Delete each entry for the selected date
-        const deletePromises = timeEntries.map((entry) =>
+        const deletePromises = entriesForSelectedDate.map((entry) =>
           api.delete(`/timesheets/${entry._id}`)
         );
 
