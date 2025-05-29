@@ -5,9 +5,13 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
-    // Only check localStorage on initial render
+    // Check both token and user data on initial render
+    const token = localStorage.getItem("token");
     const storedUser = localStorage.getItem("currentUser");
-    return storedUser ? JSON.parse(storedUser) : null;
+    if (token && storedUser) {
+      return { ...JSON.parse(storedUser), token };
+    }
+    return null;
   });
   const [loading, setLoading] = useState(false);
 
@@ -15,13 +19,14 @@ export const AuthProvider = ({ children }) => {
   const restoreUserState = async () => {
     console.log("restoreUserState: called");
     const token = localStorage.getItem("token");
-    if (token && !currentUser) {
+    if (token) {
       try {
         const response = await authService.getCurrentUser();
         const user = response.data;
-        localStorage.setItem("currentUser", JSON.stringify(user));
-        setCurrentUser(user);
-        console.log("restoreUserState: user restored", user);
+        const userWithToken = { ...user, token };
+        localStorage.setItem("currentUser", JSON.stringify(userWithToken));
+        setCurrentUser(userWithToken);
+        console.log("restoreUserState: user restored", userWithToken);
       } catch (error) {
         console.error("restoreUserState: failed to restore user state", error);
         // If we can't restore the user state, clear everything
@@ -30,10 +35,9 @@ export const AuthProvider = ({ children }) => {
         setCurrentUser(null);
       }
     } else {
-      console.log("restoreUserState: no token or user already set", {
-        token,
-        currentUser,
-      });
+      console.log("restoreUserState: no token found");
+      localStorage.removeItem("currentUser");
+      setCurrentUser(null);
     }
   };
 
@@ -42,52 +46,34 @@ export const AuthProvider = ({ children }) => {
     restoreUserState();
   }, []);
 
-  const login = async (email, password) => {
-    setLoading(true);
+  const login = async (credentials) => {
     try {
-      const response = await authService.login({ email, password });
+      const response = await authService.login(credentials);
       const { token, user } = response.data;
+      const userWithToken = { ...user, token };
       localStorage.setItem("token", token);
-      localStorage.setItem("currentUser", JSON.stringify(user));
-      setCurrentUser(user);
-      return user;
+      localStorage.setItem("currentUser", JSON.stringify(userWithToken));
+      setCurrentUser(userWithToken);
+      return userWithToken;
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("Login error:", error);
       throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateUser = async (userData) => {
-    setLoading(true);
-    try {
-      const response = await authService.updateUser(userData);
-      const updatedUser = response.data;
-      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
-      setCurrentUser(updatedUser);
-      return updatedUser;
-    } catch (error) {
-      console.error("Update user failed:", error);
-      throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
   const logout = () => {
-    setCurrentUser(null);
     localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
+    setCurrentUser(null);
   };
 
   const value = {
     currentUser,
     login,
     logout,
-    loading,
-    updateUser,
     restoreUserState,
+    loading,
+    setLoading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

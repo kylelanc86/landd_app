@@ -30,6 +30,10 @@ api.interceptors.response.use(
     if (newToken) {
       console.log('Received new token from backend, updating localStorage.');
       localStorage.setItem('token', newToken);
+      // Update the current user object with the new token
+      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      currentUser.token = newToken;
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
     }
     return response;
   },
@@ -43,6 +47,10 @@ api.interceptors.response.use(
       if (newToken) {
         console.log('Received new token in error response, updating localStorage.');
         localStorage.setItem('token', newToken);
+        // Update the current user object with the new token
+        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        currentUser.token = newToken;
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
         // Retry the original request
         const config = error.config;
         config.headers.Authorization = `Bearer ${newToken}`;
@@ -50,7 +58,7 @@ api.interceptors.response.use(
       } else {
         // No new token, clear storage and redirect to login
         localStorage.removeItem("token");
-        localStorage.removeItem("currentUser"); // Also clear the user data
+        localStorage.removeItem("currentUser");
         window.location.href = "/login";
       }
     }
@@ -62,7 +70,7 @@ api.interceptors.response.use(
 export const authService = {
   login: (credentials) => {
     console.log("AuthService: Login attempt with credentials:", credentials);
-    return api.post('/auth/login', { email: credentials.email, password: credentials.password });
+    return api.post('/auth/login', credentials);
   },
   register: (userData) => api.post('/auth/register', userData),
   getCurrentUser: () => {

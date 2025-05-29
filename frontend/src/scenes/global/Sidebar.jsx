@@ -21,6 +21,7 @@ import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AccessibilityIcon from "@mui/icons-material/Accessibility";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 
@@ -349,6 +350,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             title="User Management"
             to="/users"
             icon={<AccessibilityIcon />}
+            selected={selected}
+            setSelected={setSelected}
+            isCollapsed={isCollapsed}
+          />
+          <Item
+            title="Timesheets"
+            to="/timesheets"
+            icon={<AccessTimeIcon />}
             selected={selected}
             setSelected={setSelected}
             isCollapsed={isCollapsed}

@@ -24,6 +24,7 @@ import Users from "./scenes/users";
 import Profile from "./scenes/profile";
 import Layout from "./components/Layout";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
+import Timesheets from "./scenes/timesheets";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -96,6 +97,7 @@ function App() {
                           path="/asbestos-assessment/samples"
                           element={<AssessmentSamples />}
                         />
+                        <Route path="/timesheets" element={<Timesheets />} />
                       </Routes>
                     </Layout>
                   </ProtectedRoute>
