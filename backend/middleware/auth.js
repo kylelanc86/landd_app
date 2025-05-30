@@ -12,7 +12,12 @@ const auth = async (req, res, next) => {
 
     try {
       const verified = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = verified;
+      // Fetch the full user object from the database
+      const user = await User.findById(verified.id);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      req.user = user;
       next();
     } catch (verifyError) {
       if (verifyError.name === 'TokenExpiredError') {
@@ -27,7 +32,7 @@ const auth = async (req, res, next) => {
             // Set both cases of the header to ensure compatibility
             res.setHeader('new-token', newToken);
             res.setHeader('New-Token', newToken);
-            req.user = decoded;
+            req.user = user;
             console.log('New token generated and set in headers');
             next();
             return;

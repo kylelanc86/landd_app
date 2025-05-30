@@ -2,48 +2,42 @@ const express = require('express');
 const router = express.Router();
 const Shift = require('../models/Shift');
 const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 
 // Get all shifts
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    console.log('Fetching all shifts...');
     const shifts = await Shift.find()
-      .populate({
-        path: 'job',
-        populate: {
-          path: 'project',
-          select: 'projectID name'
-        }
-      })
-      .populate('supervisor', 'firstName lastName')
-      .sort({ date: -1 });
-    console.log(`Found ${shifts.length} shifts`);
+      .populate('job')
+      .populate('samples');
     res.json(shifts);
-  } catch (err) {
-    console.error('Error fetching shifts:', err);
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
 // Get shifts by job ID
-router.get('/job/:jobId', auth, async (req, res) => {
+router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    console.log(`Fetching shifts for job ${req.params.jobId}...`);
     const shifts = await Shift.find({ job: req.params.jobId })
-      .populate({
-        path: 'job',
-        populate: {
-          path: 'project',
-          select: 'projectID name'
-        }
-      })
-      .populate('supervisor', 'firstName lastName')
-      .sort({ date: -1 });
-    console.log(`Found ${shifts.length} shifts for job ${req.params.jobId}`);
+      .populate('job')
+      .populate('samples');
     res.json(shifts);
-  } catch (err) {
-    console.error('Error fetching shifts by job:', err);
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get shifts by multiple job IDs
+router.post('/jobs', auth, checkPermission(['jobs.view']), async (req, res) => {
+  try {
+    const { jobIds } = req.body;
+    const shifts = await Shift.find({ job: { $in: jobIds } })
+      .populate('job')
+      .populate('samples');
+    res.json(shifts);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
@@ -75,90 +69,49 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Create shift
-router.post('/', auth, async (req, res) => {
+// Create a new shift
+router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
   try {
-    console.log('Creating new shift with data:', req.body);
-    const shift = new Shift({
-      job: req.body.job,
-      name: req.body.name,
-      date: req.body.date,
-      startTime: req.body.startTime,
-      endTime: req.body.endTime,
-      supervisor: req.body.supervisor,
-      status: req.body.status || 'pending',
-      notes: req.body.notes
-    });
-
+    const shift = new Shift(req.body);
     const newShift = await shift.save();
-    console.log('Created shift:', newShift._id);
-    
-    const populatedShift = await Shift.findById(newShift._id)
-      .populate({
-        path: 'job',
-        populate: {
-          path: 'project',
-          select: 'projectID name'
-        }
-      })
-      .populate('supervisor', 'firstName lastName');
-    
-    res.status(201).json(populatedShift);
-  } catch (err) {
-    console.error('Error creating shift:', err);
-    res.status(400).json({ message: err.message });
+    res.status(201).json(newShift);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 });
 
-// Update shift
-router.patch('/:id', auth, async (req, res) => {
-  console.log('Raw PATCH body:', req.body); // Debug log
+// Update a shift
+router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
   try {
-    console.log(`Updating shift ${req.params.id} with data:`, req.body);
     const shift = await Shift.findById(req.params.id);
     if (!shift) {
-      console.log(`Shift ${req.params.id} not found`);
       return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    // Check for report authorization
+    if (req.body.reportApprovedBy && !req.user.permissions.includes('jobs.authorize_reports')) {
+      return res.status(403).json({ message: 'You do not have permission to authorize reports' });
     }
 
     Object.assign(shift, req.body);
     const updatedShift = await shift.save();
-    console.log(`Updated shift ${req.params.id}`);
-    
-    const populatedShift = await Shift.findById(updatedShift._id)
-      .populate({
-        path: 'job',
-        populate: {
-          path: 'project',
-          select: 'projectID name'
-        }
-      })
-      .populate('supervisor', 'firstName lastName');
-    
-    res.json(populatedShift);
-  } catch (err) {
-    console.error('Error updating shift:', err);
-    res.status(400).json({ message: err.message });
+    res.json(updatedShift);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
   }
 });
 
-// Delete shift
-router.delete('/:id', auth, async (req, res) => {
+// Delete a shift
+router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
-    console.log(`Deleting shift ${req.params.id}...`);
-    const shift = await Shift.findById(req.params.id);
+    const shift = await Shift.findByIdAndDelete(req.params.id);
     if (!shift) {
-      console.log(`Shift ${req.params.id} not found`);
       return res.status(404).json({ message: 'Shift not found' });
     }
-
-    await shift.deleteOne();
-    console.log(`Deleted shift ${req.params.id}`);
     res.json({ message: 'Shift deleted' });
-  } catch (err) {
-    console.error('Error deleting shift:', err);
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
-module.exports = router; 
+module.exports = router;

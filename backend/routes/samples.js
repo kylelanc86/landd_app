@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const Sample = require('../models/Sample');
+const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 
 // Get all samples
-router.get('/', async (req, res) => {
+router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const samples = await Sample.find()
       .populate('job')
@@ -17,7 +19,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get samples by shift
-router.get('/shift/:shiftId', async (req, res) => {
+router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const samples = await Sample.find({ shift: req.params.shiftId })
       .populate('collectedBy')
@@ -36,7 +38,7 @@ router.get('/shift/:shiftId', async (req, res) => {
 });
 
 // Get samples by project
-router.get('/project/:projectId', async (req, res) => {
+router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const samples = await Sample.find()
       .populate({
@@ -59,7 +61,7 @@ router.get('/project/:projectId', async (req, res) => {
 });
 
 // Get single sample
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const sample = await Sample.findById(req.params.id)
       .populate({
@@ -80,7 +82,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create sample
-router.post('/', async (req, res) => {
+router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
   try {
     console.log('Creating sample with data:', req.body);
     
@@ -114,7 +116,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update sample
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
   try {
     console.log('Updating sample with data:', JSON.stringify(req.body, null, 2));
     
@@ -179,7 +181,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Delete sample
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
     const sample = await Sample.findById(req.params.id);
     if (!sample) {

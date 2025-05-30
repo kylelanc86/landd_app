@@ -37,6 +37,13 @@ const users = [
     email: 'manager@example.com',
     password: 'manager123',
     role: 'manager'
+  },
+  {
+    firstName: 'Employee',
+    lastName: 'User',
+    email: 'employee@example.com',
+    password: 'employee',
+    role: 'employee'
   }
 ];
 
@@ -76,284 +83,185 @@ const clients = [
   }
 ];
 
+const projects = [
+  {
+    name: "Office Renovation",
+    client: "Acme Corporation Pty Ltd",
+    department: "Asbestos & HAZMAT",
+    type: "air_quality",
+    status: "Assigned",
+    address: "123 Business Rd",
+    startDate: new Date("2024-01-15"),
+    endDate: new Date("2024-02-28"),
+    description: "Air quality monitoring during office renovation",
+    projectManager: "admin@example.com"
+  },
+  {
+    name: "Factory Assessment",
+    client: "TechSolutions Inc",
+    department: "Occupational Hygiene",
+    type: "air_quality",
+    status: "In progress",
+    address: "456 Industrial Ave",
+    startDate: new Date("2024-02-01"),
+    endDate: new Date("2024-03-15"),
+    description: "Factory air quality assessment",
+    projectManager: "manager@example.com"
+  },
+  {
+    name: "Factory Compliance",
+    client: "Global Industries Ltd",
+    department: "Asbestos & HAZMAT",
+    type: "air_quality",
+    status: "Assigned",
+    address: "Brisbane",
+    startDate: new Date("2024-03-01"),
+    endDate: new Date("2024-05-31"),
+    description: "Factory compliance assessment and monitoring",
+    projectManager: "manager@example.com"
+  }
+];
+
+const jobs = [
+  {
+    name: "Level 1 Asbestos Removal",
+    project: "Office Renovation",
+    status: "Ongoing",
+    startDate: new Date("2024-01-20"),
+    endDate: new Date("2024-01-25"),
+    description: "Asbestos removal in Level 1 office space",
+    location: "Level 1, 123 Business Rd",
+    assignedTo: "admin@example.com",
+    asbestosRemovalist: "admin@example.com",
+    jobID: "AMJ001"
+  },
+  {
+    name: "Level 2 Air Quality Monitoring",
+    project: "Office Renovation",
+    status: "pending",
+    startDate: new Date("2024-02-01"),
+    endDate: new Date("2024-02-05"),
+    description: "Air quality monitoring during renovation",
+    location: "Level 2, 123 Business Rd",
+    assignedTo: "manager@example.com",
+    asbestosRemovalist: "manager@example.com",
+    jobID: "AMJ002"
+  },
+  {
+    name: "Building A Monitoring",
+    project: "Factory Compliance",
+    status: "Ongoing",
+    startDate: new Date("2024-02-15"),
+    endDate: new Date("2024-02-20"),
+    description: "Air quality monitoring in Building A",
+    location: "Building A, Tech Campus",
+    assignedTo: "admin@example.com",
+    asbestosRemovalist: "admin@example.com",
+    jobID: "AMJ003"
+  }
+];
+
 // Function to seed the database
 const seedDatabase = async () => {
   try {
-    // Clear existing data
-    await User.deleteMany({});
-    await Client.deleteMany({});
-    await Project.deleteMany({});
-    await Job.deleteMany({});
-    await Sample.deleteMany({});
-    await Shift.deleteMany({});
-    await Invoice.deleteMany({});
-
-    console.log('Cleared existing data');
-
-    // Create users
-    const createdUsers = await User.create(users);
-    console.log('Created users');
-
-    // Create clients
-    const createdClients = await Client.create(clients);
-    console.log('Created clients');
-
-    // Create projects
-    const projects = [
-      {
-        name: "Office Renovation",
-        client: createdClients[0]._id,
-        type: "air_quality",
-        status: "Assigned",
-        address: "123 Business Rd",
-        startDate: new Date("2024-01-15"),
-        endDate: new Date("2024-02-28"),
-        description: "Air quality monitoring during office renovation",
-        projectManager: createdUsers[0]._id
-      },
-      {
-        name: "Factory Assessment",
-        client: createdClients[1]._id,
-        type: "air_quality",
-        status: "In progress",
-        address: "456 Industrial Ave",
-        startDate: new Date("2024-02-01"),
-        endDate: new Date("2024-03-15"),
-        description: "Factory air quality assessment",
-        projectManager: createdUsers[1]._id
-      },
-      {
-        name: "Factory Compliance",
-        client: createdClients[2]._id,
-        type: "air_quality",
-        status: "Assigned",
-        address: "Brisbane",
-        startDate: new Date("2024-03-01"),
-        endDate: new Date("2024-05-31"),
-        description: "Factory compliance assessment and monitoring",
-        projectManager: createdUsers[1]._id
+    // Create users if they don't exist
+    for (const userData of users) {
+      const existingUser = await User.findOne({ email: userData.email });
+      if (!existingUser) {
+        await User.create(userData);
+        console.log(`Created user: ${userData.email}`);
+      } else {
+        console.log(`User already exists: ${userData.email}`);
       }
-    ];
+    }
 
-    const createdProjects = await Project.create(projects);
-    console.log('Created projects');
-
-    // Create jobs
-    const jobs = [
-      {
-        name: "Level 1 Asbestos Removal",
-        project: createdProjects[0]._id,
-        status: "in_progress",
-        startDate: new Date("2024-01-20"),
-        endDate: new Date("2024-01-25"),
-        description: "Asbestos removal in Level 1 office space",
-        location: "Level 1, 123 Business Rd",
-        assignedTo: createdUsers[0]._id
-      },
-      {
-        name: "Level 2 Air Quality Monitoring",
-        project: createdProjects[0]._id,
-        status: "pending",
-        startDate: new Date("2024-02-01"),
-        endDate: new Date("2024-02-05"),
-        description: "Air quality monitoring during renovation",
-        location: "Level 2, 123 Business Rd",
-        assignedTo: createdUsers[1]._id
-      },
-      {
-        name: "Building A Monitoring",
-        project: createdProjects[2]._id,
-        status: "in_progress",
-        startDate: new Date("2024-02-15"),
-        endDate: new Date("2024-02-20"),
-        description: "Air quality monitoring in Building A",
-        location: "Building A, Tech Campus",
-        assignedTo: createdUsers[0]._id
+    // Create clients if they don't exist
+    for (const clientData of clients) {
+      const existingClient = await Client.findOne({ name: clientData.name });
+      if (!existingClient) {
+        await Client.create(clientData);
+        console.log(`Created client: ${clientData.name}`);
+      } else {
+        console.log(`Client already exists: ${clientData.name}`);
       }
-    ];
+    }
 
-    const createdJobs = await Job.create(jobs);
-    console.log('Created jobs');
+    // Get all users and clients for project creation
+    const allUsers = await User.find();
+    const allClients = await Client.find();
 
-    // Create shifts
-    const shifts = [
-      {
-        job: createdJobs[0]._id,
-        name: "Morning Shift",
-        date: new Date("2024-01-20"),
-        startTime: "08:00",
-        endTime: "16:00",
-        supervisor: createdUsers[0]._id,
-        status: "completed",
-        notes: "Initial asbestos removal completed"
-      },
-      {
-        job: createdJobs[0]._id,
-        name: "Afternoon Shift",
-        date: new Date("2024-01-20"),
-        startTime: "16:00",
-        endTime: "00:00",
-        supervisor: createdUsers[1]._id,
-        status: "in_progress",
-        notes: "Continuation of removal work"
-      },
-      {
-        job: createdJobs[2]._id,
-        name: "Day Shift",
-        date: new Date("2024-02-15"),
-        startTime: "08:00",
-        endTime: "16:00",
-        supervisor: createdUsers[0]._id,
-        status: "in_progress",
-        notes: "Initial air quality monitoring"
+    // Create projects if they don't exist
+    for (const projectData of projects) {
+      const existingProject = await Project.findOne({ name: projectData.name });
+      if (!existingProject) {
+        // Find the client by name
+        const client = allClients.find(c => c.name === projectData.client);
+        if (!client) {
+          console.log(`Client not found for project: ${projectData.name}`);
+          continue;
+        }
+
+        // Find the project manager by email
+        const projectManager = allUsers.find(u => u.email === projectData.projectManager);
+        if (!projectManager) {
+          console.log(`Project manager not found for project: ${projectData.name}`);
+          continue;
+        }
+
+        await Project.create({
+          ...projectData,
+          client: client._id,
+          projectManager: projectManager._id
+        });
+        console.log(`Created project: ${projectData.name}`);
+      } else {
+        console.log(`Project already exists: ${projectData.name}`);
       }
-    ];
+    }
 
-    const createdShifts = await Shift.create(shifts);
-    console.log('Created shifts');
+    // Create jobs if they don't exist
+    for (const jobData of jobs) {
+      const existingJob = await Job.findOne({ name: jobData.name });
+      if (!existingJob) {
+        // Find the project by name
+        const project = await Project.findOne({ name: jobData.project });
+        if (!project) {
+          console.log(`Project not found for job: ${jobData.name}`);
+          continue;
+        }
 
-    // Create samples
-    const samples = [
-      {
-        shift: createdShifts[0]._id,
-        sampleNumber: "AM-001",
-        type: "personal",
-        location: "Level 1, Office A",
-        startTime: "09:00",
-        endTime: "11:00",
-        flowRate: 2.0,
-        status: "at_lab",
-        notes: "Personal sample for worker in Office A",
-        collectedBy: createdUsers[0]._id
-      },
-      {
-        shift: createdShifts[0]._id,
-        sampleNumber: "AM-002",
-        type: "area",
-        location: "Level 1, Corridor",
-        startTime: "09:00",
-        endTime: "11:00",
-        flowRate: 2.0,
-        status: "at_lab",
-        notes: "Area sample in main corridor",
-        collectedBy: createdUsers[0]._id
-      },
-      {
-        shift: createdShifts[1]._id,
-        sampleNumber: "AM-003",
-        type: "personal",
-        location: "Level 1, Office B",
-        startTime: "16:00",
-        endTime: "18:00",
-        flowRate: 2.0,
-        status: "in_progress",
-        notes: "Personal sample for worker in Office B",
-        collectedBy: createdUsers[1]._id
-      },
-      {
-        shift: createdShifts[2]._id,
-        sampleNumber: "AM-004",
-        type: "area",
-        location: "Building A, Level 1",
-        startTime: "09:00",
-        endTime: "11:00",
-        flowRate: 2.0,
-        status: "in_progress",
-        notes: "Area sample in Building A",
-        collectedBy: createdUsers[0]._id
+        // Find the assigned user by email
+        const assignedTo = allUsers.find(u => u.email === jobData.assignedTo);
+        if (!assignedTo) {
+          console.log(`Assigned user not found for job: ${jobData.name}`);
+          continue;
+        }
+
+        await Job.create({
+          ...jobData,
+          project: project._id,
+          assignedTo: assignedTo._id
+        });
+        console.log(`Created job: ${jobData.name}`);
+      } else {
+        console.log(`Job already exists: ${jobData.name}`);
       }
-    ];
+    }
 
-    await Sample.create(samples);
-    console.log('Created samples');
-
-    // Create invoices
-    const invoices = [
-      {
-        project: createdProjects[0]._id,
-        client: createdClients[0]._id,
-        amount: 25000,
-        status: "pending",
-        date: new Date("2024-02-01"),
-        dueDate: new Date("2024-03-01"),
-        description: "Office Renovation - Initial Assessment"
-      },
-      {
-        project: createdProjects[1]._id,
-        client: createdClients[0]._id,
-        amount: 15000,
-        status: "paid",
-        date: new Date("2023-12-01"),
-        dueDate: new Date("2024-01-01"),
-        description: "Warehouse Assessment - Final Report"
-      },
-      {
-        project: createdProjects[2]._id,
-        client: createdClients[1]._id,
-        amount: 35000,
-        status: "pending",
-        date: new Date("2024-02-15"),
-        dueDate: new Date("2024-03-15"),
-        description: "Tech Campus - Air Quality Monitoring Phase 1"
-      },
-      {
-        project: createdProjects[3]._id,
-        client: createdClients[2]._id,
-        amount: 20000,
-        status: "draft",
-        date: new Date("2024-02-20"),
-        dueDate: new Date("2024-03-20"),
-        description: "Factory Compliance - Initial Assessment"
-      }
-    ];
-
-    await Invoice.create(invoices);
-    console.log('Created invoices');
-
-    console.log('Database seeded successfully');
-    process.exit(0);
-  } catch (error) {
-    console.error('Error seeding database:', error);
+    console.log('Database seeding completed');
+  } catch (err) {
+    console.error('Error seeding database:', err);
     process.exit(1);
   }
 };
 
 // Run the seed function
-seedDatabase();
-
-const seedAdmin = async () => {
-  try {
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
-    console.log('Connected to MongoDB');
-
-    // Check if admin user already exists
-    const adminExists = await User.findOne({ email: 'admin@example.com' });
-    if (adminExists) {
-      console.log('Admin user already exists');
-      process.exit(0);
-    }
-
-    // Create admin user
-    const admin = new User({
-      firstName: 'Admin',
-      lastName: 'User',
-      email: 'admin@example.com',
-      password: 'admin123', // This will be hashed by the pre-save hook
-      role: 'admin',
-      isActive: true
-    });
-
-    await admin.save();
-    console.log('Admin user created successfully');
+seedDatabase()
+  .then(() => {
+    console.log('Seeding completed successfully');
     process.exit(0);
-  } catch (error) {
-    console.error('Error seeding admin user:', error);
+  })
+  .catch(err => {
+    console.error('Seeding failed:', err);
     process.exit(1);
-  }
-};
-
-seedAdmin(); 
+  }); 

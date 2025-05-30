@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const Project = require('../models/Project');
+const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
+const { ROLE_PERMISSIONS } = require('../config/permissions');
 
 // Get all projects
-router.get('/', async (req, res) => {
+router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const projects = await Project.find()
       .select('projectID name client department category status address startDate endDate description users createdAt updatedAt')
@@ -25,7 +28,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get single project
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
       .populate('client')
@@ -40,7 +43,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create project
-router.post('/', async (req, res) => {
+router.post('/', auth, checkPermission(['projects.create']), async (req, res) => {
   console.log('Received project creation request with data:', req.body);
   
   try {
@@ -84,13 +87,25 @@ router.post('/', async (req, res) => {
 });
 
 // Update project
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) => {
   try {
     console.log('Updating project with data:', req.body);
     
     const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Check if status is being changed
+    if (req.body.status && req.body.status !== project.status) {
+      // Require additional permission for status changes
+      const rolePermissions = ROLE_PERMISSIONS[req.user.role] || [];
+      if (!rolePermissions.includes('projects.change_status')) {
+        return res.status(403).json({ 
+          message: 'You do not have permission to change project status',
+          required: ['projects.change_status']
+        });
+      }
     }
 
     // Update fields
@@ -123,7 +138,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Delete project
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) {

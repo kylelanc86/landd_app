@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const AirMonitoringJob = require('../models/Job');
 const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 
 // Get all air monitoring jobs
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const jobs = await AirMonitoringJob.find()
       .populate('project')
@@ -16,7 +17,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get a single air monitoring job
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findById(req.params.id)
       .populate('project')
@@ -31,7 +32,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create a new air monitoring job
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
   try {
     console.log('Creating new air monitoring job with data:', req.body);
 
@@ -85,7 +86,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update an air monitoring job
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findById(req.params.id);
     if (!job) {
@@ -101,7 +102,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // Delete an air monitoring job
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findByIdAndDelete(req.params.id);
     if (!job) {
