@@ -52,6 +52,8 @@ import AddIcon from "@mui/icons-material/Add";
 import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
 import PersonIcon from "@mui/icons-material/Person";
+import { usePermissions } from "../../hooks/usePermissions";
+import TruncatedCell from "../../components/TruncatedCell";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -217,10 +219,12 @@ const resetProjectIds = (projects) => {
 
 const StatusCell = ({ params, onStatusChange }) => {
   const [anchorEl, setAnchorEl] = useState(null);
-  const open = Boolean(anchorEl);
+  const { can } = usePermissions();
 
   const handleClick = (event) => {
-    event.stopPropagation();
+    if (!can("projects.change_status")) {
+      return;
+    }
     setAnchorEl(event.currentTarget);
   };
 
@@ -229,36 +233,30 @@ const StatusCell = ({ params, onStatusChange }) => {
   };
 
   const handleStatusSelect = async (newStatus) => {
-    try {
-      const response = await projectService.update(params.row._id, {
-        status: newStatus,
-      });
-      if (response.data) {
-        onStatusChange(params.row._id, response.data.status);
-      }
-      handleClose();
-    } catch (error) {
-      console.error("Error updating status:", error);
-      alert("Failed to update status. Please try again.");
+    if (!can("projects.change_status")) {
+      return;
     }
+    await onStatusChange(params.row.id, newStatus);
+    handleClose();
   };
 
   return (
-    <Box>
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
       <Box
         onClick={handleClick}
         sx={{
-          cursor: "pointer",
+          cursor: can("projects.change_status") ? "pointer" : "default",
+          opacity: can("projects.change_status") ? 1 : 0.7,
           "&:hover": {
-            opacity: 0.8,
+            opacity: can("projects.change_status") ? 0.8 : 0.7,
           },
         }}
       >
-        <StatusChip status={params.value} />
+        <StatusChip status={params.row.status} />
       </Box>
       <Menu
         anchorEl={anchorEl}
-        open={open}
+        open={Boolean(anchorEl)}
         onClose={handleClose}
         PaperProps={{
           sx: {
@@ -276,7 +274,7 @@ const StatusCell = ({ params, onStatusChange }) => {
           <MenuItem
             key={status}
             onClick={() => handleStatusSelect(status)}
-            selected={params.value === status}
+            selected={params.row.status === status}
           >
             <StatusChip status={status} />
           </MenuItem>
@@ -291,7 +289,7 @@ const StatusCell = ({ params, onStatusChange }) => {
           <MenuItem
             key={status}
             onClick={() => handleStatusSelect(status)}
-            selected={params.value === status}
+            selected={params.row.status === status}
           >
             <StatusChip status={status} />
           </MenuItem>
@@ -663,11 +661,13 @@ const Projects = () => {
       field: "projectID",
       headerName: "Project ID",
       flex: 0.6,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
       field: "name",
       headerName: "Project Name",
       flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
       field: "department",
@@ -681,16 +681,18 @@ const Projects = () => {
         if (department === "air_quality") return "Air Quality";
 
         // Handle other types
-        return department
+        const formattedDepartment = department
           .split("_")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(" ");
+        return <TruncatedCell value={formattedDepartment} />;
       },
     },
     {
       field: "category",
       headerName: "Category",
       flex: 1.5,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
       field: "status",
@@ -888,7 +890,9 @@ const Projects = () => {
             justifyContent: "center",
           }}
         >
-          <Typography>No users assigned</Typography>
+          <Typography variant="body2" color="text.secondary">
+            No users assigned
+          </Typography>
         </Box>
       );
 

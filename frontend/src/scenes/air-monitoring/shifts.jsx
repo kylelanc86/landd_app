@@ -30,6 +30,9 @@ import { generateShiftReport } from "../../utils/generateShiftReport";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
+import { usePermissions } from "../../hooks/usePermissions";
+import TruncatedCell from "../../components/TruncatedCell";
+import EditIcon from "@mui/icons-material/Edit";
 
 const Shifts = () => {
   const theme = useTheme();
@@ -46,6 +49,7 @@ const Shifts = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetShiftId, setResetShiftId] = useState(null);
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
+  const { hasPermission } = usePermissions();
 
   // Reusable function to fetch shifts and their sampleNumbers
   const fetchShiftsWithSamples = async () => {
@@ -150,49 +154,15 @@ const Shifts = () => {
   const handleSubmit = async () => {
     try {
       console.log("Submit clicked - User state:", currentUser);
+      const userToUse = currentUser || (await restoreUserState());
+
+      if (!userToUse) {
+        throw new Error("No user found. Please log in again.");
+      }
 
       if (!newDate) {
         setError("Please select a date");
         return;
-      }
-
-      let userToUse = currentUser;
-      if (!userToUse || !userToUse.id) {
-        console.log("User validation failed (before restore):", {
-          currentUser,
-        });
-        console.log("About to enter try/catch for restoreUserState");
-        // Try to restore user state before giving up
-        try {
-          try {
-            console.log(
-              "restoreUserState function reference:",
-              restoreUserState
-            );
-            await restoreUserState();
-            console.log("restoreUserState() called");
-          } catch (err) {
-            console.error("Error when calling restoreUserState:", err);
-          }
-          // Wait a tick to ensure localStorage is updated
-          await new Promise((res) => setTimeout(res, 100));
-          userToUse = JSON.parse(localStorage.getItem("currentUser"));
-          console.log("User after restoreUserState:", userToUse);
-          if (!userToUse || !userToUse.id) {
-            console.log("userToUse before redirect:", userToUse);
-            alert(
-              "User is not valid. See console for details. (No redirect for debugging)"
-            );
-            setError("Please log in to create a shift");
-            // window.location.href = "/login"; // TEMPORARILY DISABLED FOR DEBUGGING
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to restore user state:", error);
-          setError("Please log in to create a shift");
-          // window.location.href = "/login"; // TEMPORARILY DISABLED FOR DEBUGGING
-          return;
-        }
       }
 
       const newShift = {
@@ -208,6 +178,9 @@ const Shifts = () => {
 
       console.log("Creating shift with data:", newShift);
       const response = await shiftService.create(newShift);
+
+      // Update the job status to ongoing
+      await jobService.update(jobId, { status: "ongoing" });
 
       // Ensure the response data has the correct structure
       const createdShift = {
@@ -227,7 +200,7 @@ const Shifts = () => {
     }
   };
 
-  const handleDeleteShift = async (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this shift?")) {
       try {
         await shiftService.delete(id);
@@ -237,6 +210,11 @@ const Shifts = () => {
         setError("Failed to delete shift. Please try again later.");
       }
     }
+  };
+
+  const handleEdit = (shift) => {
+    // TODO: Implement edit functionality
+    console.log("Edit shift:", shift);
   };
 
   const handleResetStatus = async (id) => {
@@ -278,414 +256,57 @@ const Shifts = () => {
 
   const columns = [
     {
+      field: "name",
+      headerName: "Shift Name",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
       field: "date",
       headerName: "Date",
-      flex: 0.5,
-      renderCell: (params) => {
-        return formatDate(params.row.date);
-      },
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
+      field: "startTime",
+      headerName: "Start Time",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
+      field: "endTime",
+      headerName: "End Time",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
       field: "status",
       headerName: "Status",
-      flex: 0.8,
-      renderCell: (params) => {
-        const statusColors = {
-          ongoing: theme.palette.primary.main,
-          sampling_complete: theme.palette.info.main,
-          analysis_complete: theme.palette.success.main,
-          shift_complete: theme.palette.success.dark,
-        };
-
-        const statusLabels = {
-          ongoing: "Ongoing",
-          sampling_complete: "Sampling Complete",
-          samples_submitted_to_lab: "Samples Submitted to Lab",
-          analysis_complete: "Analysis Complete",
-          shift_complete: "Shift Complete",
-        };
-
-        // If report is authorized, use red background and set status to shift_complete
-        const backgroundColor = params.row.reportApprovedBy
-          ? theme.palette.error.main
-          : statusColors[params.row.status] || theme.palette.grey[500];
-
-        // If report is authorized, always show as Shift Complete
-        const statusLabel = params.row.reportApprovedBy
-          ? "Shift Complete"
-          : statusLabels[params.row.status] || params.row.status;
-
-        return (
-          <Box
-            sx={{
-              backgroundColor,
-              color: theme.palette.common.white,
-              padding: "4px 8px",
-              borderRadius: "4px",
-              fontSize: "0.875rem",
-            }}
-          >
-            {statusLabel}
-          </Box>
-        );
-      },
-    },
-    {
-      field: "sampleNumbers",
-      headerName: "Sample Numbers",
-      flex: 0.6,
-      renderCell: (params) => {
-        const numbers = params.row.sampleNumbers || [];
-        return numbers.length > 0 ? numbers.join(", ") : "No samples";
-      },
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
       field: "actions",
       headerName: "Actions",
-      flex: 1.5,
-      renderCell: ({ row }) => {
-        const handleSamplesClick = () => {
-          // Don't allow access to samples if report is authorized
-          if (row.reportApprovedBy) {
-            alert(
-              "Cannot access samples while report is authorized. Please reset the shift status to access samples."
-            );
-            return;
-          }
-          console.log("Samples button clicked for shift:", row._id);
-          const path = `/air-monitoring/shift/${row._id}/samples`;
-          console.log("Attempting to navigate to:", path);
-          try {
-            navigate(path, { replace: false });
-          } catch (error) {
-            console.error("Navigation error:", error);
-          }
-        };
-
-        const handleViewReport = async () => {
-          try {
-            // Fetch the latest shift data
-            const shiftResponse = await shiftService.getById(row._id);
-            const latestShift = shiftResponse.data;
-
-            // Fetch job and samples for this shift
-            const jobResponse = await jobService.getById(
-              latestShift.job?._id || latestShift.job
-            );
-            const samplesResponse = await sampleService.getByShift(
-              latestShift._id
-            );
-
-            // Ensure we have the complete sample data including analysis
-            const samplesWithAnalysis = await Promise.all(
-              samplesResponse.data.map(async (sample) => {
-                if (!sample.analysis) {
-                  // If analysis data is missing, fetch the complete sample data
-                  const completeSample = await sampleService.getById(
-                    sample._id
-                  );
-                  return completeSample.data;
-                }
-                return sample;
-              })
-            );
-
-            // Ensure project and client are fully populated
-            let project = jobResponse.data.project;
-            if (project && typeof project === "string") {
-              const projectResponse = await projectService.getById(project);
-              project = projectResponse.data;
-            }
-            if (
-              project &&
-              project.client &&
-              typeof project.client === "string"
-            ) {
-              const clientResponse = await clientService.getById(
-                project.client
-              );
-              project.client = clientResponse.data;
-            }
-
-            generateShiftReport({
-              shift: latestShift,
-              job: jobResponse.data,
-              samples: samplesWithAnalysis,
-              project,
-              openInNewTab: !row.reportApprovedBy, // download if authorised, open if not
-            });
-            setReportViewedShiftIds((prev) => new Set(prev).add(row._id));
-          } catch (err) {
-            console.error("Error generating report:", err);
-            alert("Failed to generate report.");
-          }
-        };
-
-        const handleAuthoriseReport = async () => {
-          try {
-            const now = new Date().toISOString();
-            const approver =
-              currentUser?.firstName && currentUser?.lastName
-                ? `${currentUser.firstName} ${currentUser.lastName}`
-                : currentUser?.name || currentUser?.email || "Unknown";
-
-            // First get the current shift data
-            const currentShift = await shiftService.getById(row._id);
-
-            // Create the updated shift data - only update report approval fields
-            const updatedShiftData = {
-              ...currentShift.data,
-              reportApprovedBy: approver,
-              reportIssueDate: now,
-            };
-
-            // Log the data being sent
-            console.log("Updating shift with data:", updatedShiftData);
-
-            // Update shift with report approval
-            const response = await shiftService.update(
-              row._id,
-              updatedShiftData
-            );
-
-            // Log the response
-            console.log("Update response:", response.data);
-
-            // Generate and download the report
-            try {
-              // Fetch job and samples for this shift
-              const jobResponse = await jobService.getById(
-                currentShift.data.job?._id || currentShift.data.job
-              );
-              const samplesResponse = await sampleService.getByShift(
-                currentShift.data._id
-              );
-
-              // Ensure we have the complete sample data including analysis
-              const samplesWithAnalysis = await Promise.all(
-                samplesResponse.data.map(async (sample) => {
-                  if (!sample.analysis) {
-                    // If analysis data is missing, fetch the complete sample data
-                    const completeSample = await sampleService.getById(
-                      sample._id
-                    );
-                    return completeSample.data;
-                  }
-                  return sample;
-                })
-              );
-
-              // Ensure project and client are fully populated
-              let project = jobResponse.data.project;
-              if (project && typeof project === "string") {
-                const projectResponse = await projectService.getById(project);
-                project = projectResponse.data;
-              }
-              if (
-                project &&
-                project.client &&
-                typeof project.client === "string"
-              ) {
-                const clientResponse = await clientService.getById(
-                  project.client
-                );
-                project.client = clientResponse.data;
-              }
-
-              // Generate and download the report
-              generateShiftReport({
-                shift: currentShift.data,
-                job: jobResponse.data,
-                samples: samplesWithAnalysis,
-                project,
-                openInNewTab: false, // Changed to false to trigger download
-              });
-            } catch (reportError) {
-              console.error("Error generating report:", reportError);
-              // Don't throw the error - we still want to complete the authorization
-            }
-
-            // Refetch shifts and their sampleNumbers to update UI
-            await fetchShiftsWithSamples();
-          } catch (err) {
-            console.error("Error authorizing report:", err);
-            alert("Failed to authorise report.");
-          }
-        };
-
-        const handleDownloadCSV = async () => {
-          try {
-            // Fetch all samples for this shift
-            const samplesResponse = await sampleService.getByShift(row._id);
-            const samples = await Promise.all(
-              (samplesResponse.data || []).map(async (sample) => {
-                if (!sample.analysis) {
-                  // Fetch full sample if analysis is missing
-                  const fullSample = await sampleService.getById(sample._id);
-                  return fullSample.data;
-                }
-                return sample;
-              })
-            );
-
-            // Prepare CSV headers
-            const headers = [
-              ...Object.keys(samples[0] || {}),
-              ...(samples[0]?.analysis ? Object.keys(samples[0].analysis) : []),
-              ...(samples[0]?.analysis?.fibreCounts
-                ? samples[0].analysis.fibreCounts.map(
-                    (_, i) => `fibreCount_${i + 1}`
-                  )
-                : []),
-            ];
-
-            // Prepare CSV rows
-            const rows = samples.map((sample) => {
-              const base = { ...sample };
-              const analysis = sample.analysis || {};
-              // Flatten fibreCounts if present
-              let fibreCounts = {};
-              if (Array.isArray(analysis.fibreCounts)) {
-                analysis.fibreCounts.forEach((val, i) => {
-                  fibreCounts[`fibreCount_${i + 1}`] = Array.isArray(val)
-                    ? val.join("|")
-                    : val;
-                });
-              }
-              // Merge all fields
-              return {
-                ...base,
-                ...analysis,
-                ...fibreCounts,
-              };
-            });
-
-            // Convert to CSV string
-            const csv = [
-              headers.join(","),
-              ...rows.map((row) =>
-                headers
-                  .map((field) =>
-                    row[field] !== undefined && row[field] !== null
-                      ? `"${String(row[field]).replace(/"/g, '""')}"`
-                      : ""
-                  )
-                  .join(",")
-              ),
-            ].join("\r\n");
-
-            // Download CSV
-            const blob = new Blob([csv], { type: "text/csv" });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${row.name || row._id}_samples.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-          } catch (err) {
-            console.error("Error downloading CSV:", err);
-            alert("Failed to download CSV.");
-          }
-        };
-
-        return (
-          <Box display="flex" alignItems="center">
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleSamplesClick}
-              disabled={row.reportApprovedBy}
-              sx={{
-                mr: 1,
-                backgroundColor: theme.palette.primary.main,
-                color: theme.palette.common.white,
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.dark,
-                },
-                "&.Mui-disabled": {
-                  backgroundColor: theme.palette.grey[700],
-                  color: theme.palette.grey[500],
-                },
-              }}
-            >
-              Samples
-            </Button>
-            {row.status === "analysis_complete" && (
-              <>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleViewReport}
-                  sx={{
-                    mr: 1,
-                    borderColor: theme.palette.success.main,
-                    color: theme.palette.success.main,
-                    "&:hover": {
-                      borderColor: theme.palette.success.dark,
-                      backgroundColor: theme.palette.success.light,
-                    },
-                  }}
-                >
-                  View Report
-                </Button>
-                {!row.reportApprovedBy && reportViewedShiftIds.has(row._id) && (
-                  <Button
-                    variant="contained"
-                    size="small"
-                    color="success"
-                    onClick={handleAuthoriseReport}
-                    sx={{
-                      mr: 1,
-                      backgroundColor: theme.palette.success.main,
-                      color: theme.palette.common.white,
-                      "&:hover": {
-                        backgroundColor: theme.palette.success.dark,
-                      },
-                    }}
-                  >
-                    Authorise Report
-                  </Button>
-                )}
-              </>
-            )}
-            {[
-              "sampling_complete",
-              "samples_submitted_to_lab",
-              "analysis_complete",
-              "shift_complete",
-            ].includes(row.status) && (
-              <IconButton
-                size="small"
-                onClick={() => handleResetStatus(row._id)}
-                title="Reset status to Ongoing"
-                sx={{ color: theme.palette.error.main, mr: 1 }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            )}
-            <IconButton
-              onClick={handleDownloadCSV}
-              title="Download raw sample & analysis data"
-            >
-              <DownloadIcon />
-            </IconButton>
-            <IconButton onClick={() => handleDeleteShift(row._id)}>
-              <DeleteIcon />
-            </IconButton>
-            {row.reportApprovedBy && (
-              <Typography
-                variant="body2"
-                color="error.main"
-                sx={{ ml: 2, fontStyle: "italic", fontWeight: 500 }}
-              >
-                Report Authorised
-              </Typography>
-            )}
-          </Box>
-        );
-      },
+      flex: 1,
+      renderCell: (params) => (
+        <Box>
+          <IconButton
+            onClick={() => handleEdit(params.row)}
+            color="primary"
+            size="small"
+          >
+            <EditIcon />
+          </IconButton>
+          <IconButton
+            onClick={() => handleDelete(params.row._id)}
+            color="error"
+            size="small"
+          >
+            <DeleteIcon />
+          </IconButton>
+        </Box>
+      ),
     },
   ];
 

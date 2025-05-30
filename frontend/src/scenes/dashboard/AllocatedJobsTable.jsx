@@ -3,7 +3,7 @@ import { Box, Typography, useTheme } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { projectService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { StatusChip } from "../../components/JobStatus";
+import { StatusChip, ACTIVE_STATUSES } from "../../components/JobStatus";
 
 const AllocatedJobsTable = () => {
   const [jobs, setJobs] = useState([]);
@@ -14,11 +14,23 @@ const AllocatedJobsTable = () => {
   useEffect(() => {
     const fetchAllocatedJobs = async () => {
       try {
+        console.log("Fetching allocated jobs for user:", currentUser);
         const response = await projectService.getAll();
-        // Filter projects where the current user is assigned
-        const allocatedJobs = response.data.filter((project) =>
-          project.users.some((user) => user._id === currentUser.id)
-        );
+        console.log("All projects:", response.data);
+
+        // Filter projects where the current user is assigned AND status is active
+        const allocatedJobs = response.data.filter((project) => {
+          const isAssigned = project.users.some((user) => {
+            const userId = typeof user === "string" ? user : user._id;
+            return userId === currentUser._id;
+          });
+          const isActive = ACTIVE_STATUSES.includes(project.status);
+          console.log(
+            `Project ${project.name} - Assigned: ${isAssigned}, Active: ${isActive}`
+          );
+          return isAssigned && isActive;
+        });
+        console.log("Filtered active allocated jobs:", allocatedJobs);
 
         const formattedJobs = allocatedJobs.map((job) => ({
           id: job._id,
@@ -36,8 +48,10 @@ const AllocatedJobsTable = () => {
       }
     };
 
-    fetchAllocatedJobs();
-  }, [currentUser.id]);
+    if (currentUser) {
+      fetchAllocatedJobs();
+    }
+  }, [currentUser]);
 
   const columns = [
     {

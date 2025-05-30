@@ -51,6 +51,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import { useAuth } from "../../context/AuthContext";
 import SyncIcon from "@mui/icons-material/Sync";
+import { hasPermission } from "../../config/permissions";
 
 const STATUS_OPTIONS = ["paid", "unpaid"];
 
@@ -91,6 +92,9 @@ const Invoices = () => {
   const [xeroConnected, setXeroConnected] = useState(false);
   const [xeroError, setXeroError] = useState(null);
   const [showXeroAlert, setShowXeroAlert] = useState(false);
+
+  // Add permission check for Xero sync
+  const canSyncXero = hasPermission(currentUser, 'xero.sync');
 
   useEffect(() => {
     if (authLoading || !currentUser) {
@@ -775,7 +779,7 @@ const Invoices = () => {
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Header title="INVOICES" subtitle="Managing your invoices" />
         <Box>
-          {!xeroConnected ? (
+          {canSyncXero && !xeroConnected ? (
             <Button
               variant="contained"
               color="secondary"
@@ -791,7 +795,7 @@ const Invoices = () => {
               <AccountBalanceIcon sx={{ mr: 1 }} />
               Connect to Xero
             </Button>
-          ) : (
+          ) : canSyncXero && xeroConnected ? (
             <Button
               variant="contained"
               color="primary"
@@ -807,7 +811,7 @@ const Invoices = () => {
               <SyncIcon sx={{ mr: 1 }} />
               Sync from Xero
             </Button>
-          )}
+          ) : null}
           <Button
             variant="contained"
             color="secondary"

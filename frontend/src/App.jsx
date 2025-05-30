@@ -9,6 +9,7 @@ import Clients from "./scenes/clients";
 import Calendar from "./scenes/calendar";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PermissionRoute from "./components/PermissionRoute";
 import Login from "./scenes/login";
 import ResetPassword from "./scenes/login/ResetPassword";
 import AirMonitoring from "./scenes/air-monitoring";
@@ -25,6 +26,7 @@ import Profile from "./scenes/profile";
 import Layout from "./components/Layout";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
+import TimesheetReview from "./scenes/timesheets/review";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -53,51 +55,175 @@ function App() {
                         <Route path="/" element={<Dashboard />} />
                         <Route
                           path="/air-monitoring"
-                          element={<AirMonitoring />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.view"]}
+                            >
+                              <AirMonitoring />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/air-monitoring/jobs/:jobId/shifts"
-                          element={<Shifts />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.view"]}
+                            >
+                              <Shifts />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/air-monitoring/shift/:shiftId/samples"
-                          element={<SampleList />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.view"]}
+                            >
+                              <SampleList />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/air-monitoring/shift/:shiftId/samples/new"
-                          element={<NewSample />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.create"]}
+                            >
+                              <NewSample />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/air-monitoring/shift/:shiftId/samples/edit/:sampleId"
-                          element={<EditSample />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.edit"]}
+                            >
+                              <EditSample />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/air-monitoring/shift/:shiftId/analysis"
-                          element={<Analysis />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.view"]}
+                            >
+                              <Analysis />
+                            </PermissionRoute>
+                          }
                         />
-                        <Route path="/projects" element={<Projects />} />
+                        <Route
+                          path="/projects"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Projects />
+                            </PermissionRoute>
+                          }
+                        />
                         <Route
                           path="/projects/:id"
-                          element={<ProjectInformation />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <ProjectInformation />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/projects/new"
-                          element={<ProjectInformation />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.create"]}
+                            >
+                              <ProjectInformation />
+                            </PermissionRoute>
+                          }
                         />
-                        <Route path="/clients" element={<Clients />} />
-                        <Route path="/invoices" element={<Invoices />} />
-                        <Route path="/calendar" element={<Calendar />} />
-                        <Route path="/users" element={<Users />} />
+                        <Route
+                          path="/clients"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["clients.view"]}
+                            >
+                              <Clients />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/invoices"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["invoices.view"]}
+                            >
+                              <Invoices />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/calendar"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calendar.view"]}
+                            >
+                              <Calendar />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/users"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["users.view"]}
+                            >
+                              <Users />
+                            </PermissionRoute>
+                          }
+                        />
                         <Route path="/profile" element={<Profile />} />
                         <Route
                           path="/asbestos-assessment"
-                          element={<AsbestosAssessment />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <AsbestosAssessment />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/asbestos-assessment/samples"
-                          element={<AssessmentSamples />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <AssessmentSamples />
+                            </PermissionRoute>
+                          }
                         />
-                        <Route path="/timesheets" element={<Timesheets />} />
+                        <Route
+                          path="/timesheets"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["timesheets.view"]}
+                            >
+                              <Timesheets />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/timesheets/review"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["timesheets.view"]}
+                            >
+                              <TimesheetReview />
+                            </PermissionRoute>
+                          }
+                        />
                       </Routes>
                     </Layout>
                   </ProtectedRoute>

@@ -48,7 +48,7 @@ const Login = () => {
 
     try {
       console.log("Login component: Attempting login");
-      const result = await login(email, password);
+      const result = await login({ email, password });
       console.log("Login component: Login successful", result);
       // Navigation will be handled by the useEffect above
     } catch (err) {

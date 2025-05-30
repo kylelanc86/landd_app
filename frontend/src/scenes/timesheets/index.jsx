@@ -20,13 +20,14 @@ import {
   ListItemButton,
   ListItemText,
   IconButton,
+  Chip,
 } from "@mui/material";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
-import api from "../../services/api";
+import api, { timesheetService } from "../../services/api";
 import AddIcon from "@mui/icons-material/Add";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -48,17 +49,34 @@ import axios from "axios";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
+import { useLocation, useNavigate } from "react-router-dom";
+import { hasPermission } from "../../config/permissions";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
+import EventBusyIcon from "@mui/icons-material/EventBusy";
+
+// Add custom styles for the calendar
+const calendarStyles = `
+  .fc-slot-label-small {
+    font-size: 0.75em !important;
+  }
+`;
 
 const Timesheets = () => {
   const theme = useTheme();
   const colors = tokens;
   const { currentUser } = useAuth();
-  const [currentDate, setCurrentDate] = useState(new Date("2025-05-01"));
-  const [selectedDate, setSelectedDate] = useState(new Date("2025-05-01"));
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [openDialog, setOpenDialog] = useState(false);
   const [projects, setProjects] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
   const [monthlyTimeEntries, setMonthlyTimeEntries] = useState({});
+  const [monthlyProjectTimeEntries, setMonthlyProjectTimeEntries] = useState(
+    {}
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [entriesCache, setEntriesCache] = useState({});
@@ -68,12 +86,177 @@ const Timesheets = () => {
     projectId: "",
     description: "",
     isAdminWork: false,
+    isBreak: false,
+    projectInputType: "",
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const calendarRef = useRef(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [calendarKey, setCalendarKey] = useState(0);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [selectedUserName, setSelectedUserName] = useState("");
+  const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
+  const [viewMode, setViewMode] = useState("full");
+  const [dailyStatuses, setDailyStatuses] = useState({});
+
+  // Handle URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const userId = params.get("userId");
+    const view = params.get("view");
+    const date = params.get("date");
+
+    console.log("Timesheet component - URL params:", { userId, view, date });
+
+    if (userId && userId !== "undefined" && userId !== "null") {
+      setSelectedUserId(userId);
+      fetchUserDetails(userId);
+    }
+
+    if (view === "daily") {
+      setViewMode("daily");
+    }
+
+    if (date) {
+      setSelectedDate(new Date(date));
+    }
+  }, [location.search]);
+
+  // Fetch user details
+  const fetchUserDetails = async (userId) => {
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_API_URL}/users/${userId}`,
+        {
+          headers: { Authorization: `Bearer ${currentUser.token}` },
+        }
+      );
+      console.log("User details response:", response.data);
+      setSelectedUserName(
+        response.data.firstName + " " + response.data.lastName
+      );
+    } catch (error) {
+      console.error("Error fetching user details:", error);
+    }
+  };
+
+  // Fetch time entries for the month
+  const fetchTimeEntries = async () => {
+    try {
+      const startDate = format(startOfMonth(selectedDate), "yyyy-MM-dd");
+      const endDate = format(endOfMonth(selectedDate), "yyyy-MM-dd");
+      const userId = selectedUserId || currentUser._id;
+
+      console.log("Fetching entries for date range:", {
+        startDate,
+        endDate,
+        userId,
+        selectedDate: format(selectedDate, "yyyy-MM-dd"),
+        selectedDateUTC: selectedDate.toISOString(),
+      });
+
+      const response = await axios.get(
+        `${
+          process.env.REACT_APP_API_URL
+        }/timesheets/range/${startDate}/${endDate}${
+          userId ? `?userId=${userId}` : ""
+        }`,
+        {
+          headers: { Authorization: `Bearer ${currentUser.token}` },
+        }
+      );
+
+      console.log("Raw response data:", response.data);
+      setTimeEntries(response.data || []);
+
+      // Calculate monthly time entries
+      const monthlyEntries = {};
+      const monthlyProjectEntries = {};
+
+      (response.data || []).forEach((entry) => {
+        const dateStr = format(new Date(entry.date), "yyyy-MM-dd");
+
+        // Calculate duration in minutes
+        const [startHours, startMinutes] = entry.startTime
+          .split(":")
+          .map(Number);
+        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        let duration = endTotalMinutes - startTotalMinutes;
+        if (duration < 0) duration += 24 * 60; // Handle overnight entries
+
+        // Add to total time
+        monthlyEntries[dateStr] = (monthlyEntries[dateStr] || 0) + duration;
+
+        // Add to project time if not admin work or break
+        if (!entry.isAdminWork && !entry.isBreak) {
+          monthlyProjectEntries[dateStr] =
+            (monthlyProjectEntries[dateStr] || 0) + duration;
+        }
+      });
+
+      setMonthlyTimeEntries(monthlyEntries);
+      setMonthlyProjectTimeEntries(monthlyProjectEntries);
+    } catch (error) {
+      console.error(
+        "Error fetching time entries:",
+        error.response?.data || error
+      );
+      setTimeEntries([]);
+      setMonthlyTimeEntries({});
+      setMonthlyProjectTimeEntries({});
+    }
+  };
+
+  // Fetch daily statuses for the month
+  const fetchDailyStatuses = async () => {
+    try {
+      const startDate = format(startOfMonth(selectedDate), "yyyy-MM-dd");
+      const endDate = format(endOfMonth(selectedDate), "yyyy-MM-dd");
+      const userId = selectedUserId || currentUser._id;
+
+      console.log("Fetching daily statuses for date range:", {
+        startDate,
+        endDate,
+        userId,
+        selectedDate: format(selectedDate, "yyyy-MM-dd"),
+        selectedDateUTC: selectedDate.toISOString(),
+      });
+
+      const response = await api.get(
+        `/timesheets/status/range/${startDate}/${endDate}${
+          userId ? `?userId=${userId}` : ""
+        }`
+      );
+
+      // Convert array to object with date as key
+      const statusMap = (response.data || []).reduce((acc, status) => {
+        const dateStr = format(new Date(status.date), "yyyy-MM-dd");
+        acc[dateStr] = status.status;
+        return acc;
+      }, {});
+
+      console.log("Daily status map:", statusMap);
+      setDailyStatuses(statusMap);
+
+      // Update the timesheet status for the selected date
+      const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
+      if (statusMap[selectedDateStr]) {
+        setTimesheetStatus(statusMap[selectedDateStr]);
+      } else {
+        setTimesheetStatus("incomplete");
+      }
+    } catch (error) {
+      console.error(
+        "Error fetching daily statuses:",
+        error.response?.data || error
+      );
+      setDailyStatuses({});
+      setTimesheetStatus("incomplete");
+    }
+  };
 
   // Generate days of the current month
   const daysInMonth = selectedDate
@@ -85,12 +268,12 @@ const Timesheets = () => {
 
   // Update the useEffect to handle initial setup
   useEffect(() => {
-    const defaultDate = new Date("2025-05-01");
-    defaultDate.setHours(0, 0, 0, 0);
-    setSelectedDate(defaultDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setSelectedDate(today);
   }, []);
 
-  // Separate useEffect for data fetching
+  // Update useEffect to fetch statuses
   useEffect(() => {
     let isMounted = true;
 
@@ -107,8 +290,8 @@ const Timesheets = () => {
           }
         }
 
-        // Fetch time entries for the selected date
-        await fetchTimeEntries();
+        // Fetch time entries and statuses for the selected date
+        await Promise.all([fetchTimeEntries(), fetchDailyStatuses()]);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -124,83 +307,6 @@ const Timesheets = () => {
       isMounted = false;
     };
   }, [selectedDate]);
-
-  const fetchTimeEntries = async () => {
-    if (!selectedDate) return;
-
-    try {
-      setIsCalendarLoading(true);
-      const selectedFormattedDate = format(selectedDate, "yyyy-MM-dd");
-      console.log("Fetching entries for date:", selectedFormattedDate);
-
-      // Get the first and last day of the month
-      const startDate = startOfMonth(selectedDate);
-      const endDate = endOfMonth(selectedDate);
-
-      // Fetch all entries for the month
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/timesheets/range/${format(
-          startDate,
-          "yyyy-MM-dd"
-        )}/${format(endDate, "yyyy-MM-dd")}`,
-        {
-          headers: { Authorization: `Bearer ${currentUser.token}` },
-        }
-      );
-
-      console.log(
-        "Raw response data:",
-        response.data.map((entry) => ({
-          id: entry._id,
-          date: entry.date,
-          startTime: entry.startTime,
-          endTime: entry.endTime,
-        }))
-      );
-
-      // Keep all entries for the month
-      setTimeEntries(response.data);
-
-      // Process monthly entries for the sidebar
-      const newMonthlyTimeEntries = {};
-      let currentDate = new Date(startDate);
-      while (
-        isBefore(currentDate, endDate) ||
-        isSameDay(currentDate, endDate)
-      ) {
-        const dateStr = format(currentDate, "yyyy-MM-dd");
-        newMonthlyTimeEntries[dateStr] = 0;
-        currentDate = addDays(currentDate, 1);
-      }
-
-      // Calculate durations for each day
-      response.data.forEach((entry) => {
-        const entryDate = format(new Date(entry.date), "yyyy-MM-dd");
-        if (newMonthlyTimeEntries[entryDate] !== undefined) {
-          const [startHours, startMinutes] = entry.startTime
-            .split(":")
-            .map(Number);
-          const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
-          const startTotalMinutes = startHours * 60 + startMinutes;
-          const endTotalMinutes = endHours * 60 + endMinutes;
-          let duration = endTotalMinutes - startTotalMinutes;
-
-          if (duration < 0) {
-            duration += 24 * 60;
-          }
-
-          newMonthlyTimeEntries[entryDate] += duration;
-        }
-      });
-
-      setMonthlyTimeEntries(newMonthlyTimeEntries);
-    } catch (error) {
-      console.error("Error fetching time entries:", error);
-      setTimeEntries([]);
-    } finally {
-      setIsCalendarLoading(false);
-    }
-  };
 
   // Helper function to format duration
   const formatDuration = (minutes) => {
@@ -219,6 +325,8 @@ const Timesheets = () => {
       projectId: "",
       description: "",
       isAdminWork: false,
+      isBreak: false,
+      projectInputType: "",
     });
     setOpenDialog(true);
   };
@@ -232,6 +340,8 @@ const Timesheets = () => {
         projectId: entry.projectId || "",
         description: entry.description,
         isAdminWork: entry.isAdminWork,
+        isBreak: entry.isBreak,
+        projectInputType: entry.projectInputType,
       });
       setEditingEntryId(entry._id);
       setIsEditing(true);
@@ -271,27 +381,40 @@ const Timesheets = () => {
       entryDate.setHours(0, 0, 0, 0);
       const formattedEntryDate = format(entryDate, "yyyy-MM-dd");
 
+      // Determine event color based on type
+      let backgroundColor, borderColor;
+      if (entry.isBreak) {
+        backgroundColor = colors.secondary[500];
+        borderColor = colors.secondary[600];
+      } else if (entry.isAdminWork) {
+        backgroundColor = colors.primary[500];
+        borderColor = colors.primary[600];
+      } else {
+        backgroundColor = colors.primary[400];
+        borderColor = colors.primary[500];
+      }
+
       // Create the event with the entry's date
       const event = {
         id: entry._id,
-        title: entry.isAdminWork
+        title: entry.isBreak
+          ? "Break"
+          : entry.isAdminWork
           ? "Admin Work"
           : projects.find((p) => p._id === entry.projectId)?.name ||
             "Unknown Project",
         start: `${formattedEntryDate}T${entry.startTime}:00`,
         end: `${formattedEntryDate}T${entry.endTime}:00`,
-        backgroundColor: entry.isAdminWork
-          ? colors.primary[500]
-          : colors.primary[400],
-        borderColor: entry.isAdminWork
-          ? colors.primary[600]
-          : colors.primary[500],
+        backgroundColor,
+        borderColor,
         display: "block",
         allDay: false,
         extendedProps: {
           description: entry.description,
           projectId: entry.projectId,
           isAdminWork: entry.isAdminWork,
+          isBreak: entry.isBreak,
+          projectInputType: entry.projectInputType,
           originalDate: formattedEntryDate,
         },
       };
@@ -312,18 +435,61 @@ const Timesheets = () => {
     e.preventDefault();
 
     try {
+      // Create a copy of formData and ensure projectInputType is included
       const timesheetData = {
         ...formData,
         date: format(selectedDate, "yyyy-MM-dd"),
+        userId: selectedUserId || currentUser.id,
+        // If it's admin work or break, set projectInputType to null
+        projectInputType:
+          formData.isAdminWork || formData.isBreak
+            ? null
+            : formData.projectInputType,
       };
 
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/timesheets`,
-        timesheetData,
-        {
-          headers: { Authorization: `Bearer ${currentUser.token}` },
-        }
-      );
+      // Validate required fields
+      if (!timesheetData.startTime || !timesheetData.endTime) {
+        alert("Please select start and end times");
+        return;
+      }
+
+      if (
+        !timesheetData.isAdminWork &&
+        !timesheetData.isBreak &&
+        !timesheetData.projectId
+      ) {
+        alert("Please select a project");
+        return;
+      }
+
+      if (
+        !timesheetData.isAdminWork &&
+        !timesheetData.isBreak &&
+        !timesheetData.projectInputType
+      ) {
+        alert("Please select a project input type");
+        return;
+      }
+
+      if (isEditing && editingEntryId) {
+        // Update existing entry
+        await axios.put(
+          `${process.env.REACT_APP_API_URL}/timesheets/${editingEntryId}`,
+          timesheetData,
+          {
+            headers: { Authorization: `Bearer ${currentUser.token}` },
+          }
+        );
+      } else {
+        // Create new entry
+        await axios.post(
+          `${process.env.REACT_APP_API_URL}/timesheets`,
+          timesheetData,
+          {
+            headers: { Authorization: `Bearer ${currentUser.token}` },
+          }
+        );
+      }
 
       setOpenDialog(false);
       setFormData({
@@ -332,24 +498,17 @@ const Timesheets = () => {
         projectId: "",
         description: "",
         isAdminWork: false,
+        isBreak: false,
+        projectInputType: "",
       });
+      setIsEditing(false);
+      setEditingEntryId(null);
 
-      // Refresh time entries using the range endpoint instead of date endpoint
-      const startDate = startOfMonth(selectedDate);
-      const endDate = endOfMonth(selectedDate);
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/timesheets/range/${format(
-          startDate,
-          "yyyy-MM-dd"
-        )}/${format(endDate, "yyyy-MM-dd")}`,
-        {
-          headers: { Authorization: `Bearer ${currentUser.token}` },
-        }
-      );
-      setTimeEntries(response.data);
+      // Refresh time entries
+      await fetchTimeEntries();
     } catch (error) {
-      console.error("Error creating time entry:", error);
-      alert(error.response?.data?.message || "Error creating time entry");
+      console.error("Error saving time entry:", error);
+      alert(error.response?.data?.message || "Error saving time entry");
     }
   };
 
@@ -439,120 +598,248 @@ const Timesheets = () => {
     }
   };
 
+  // Add function to handle timesheet approval
+  const handleApproveTimesheet = async (entryId) => {
+    try {
+      await api.put(`/timesheets/${entryId}/approve`);
+      // Refresh the timesheet entries
+      await fetchTimeEntries();
+    } catch (error) {
+      console.error("Error approving timesheet:", error);
+      alert("Failed to approve timesheet");
+    }
+  };
+
+  // Add function to handle timesheet rejection
+  const handleRejectTimesheet = async (entryId) => {
+    try {
+      await api.put(`/timesheets/${entryId}/reject`);
+      // Refresh the timesheet entries
+      await fetchTimeEntries();
+    } catch (error) {
+      console.error("Error rejecting timesheet:", error);
+      alert("Failed to reject timesheet");
+    }
+  };
+
+  // Add function to handle status update
+  const handleStatusUpdate = async (status) => {
+    try {
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
+
+      // Get user ID from currentUser
+      const userId = selectedUserId || currentUser._id;
+
+      console.log("Status update details:", {
+        date: formattedDate,
+        status,
+        selectedUserId,
+        currentUserId: currentUser._id,
+        finalUserId: userId,
+      });
+
+      if (!userId) {
+        console.error("No user ID available for status update", {
+          selectedUserId,
+          currentUser,
+        });
+        return;
+      }
+
+      // Update the status for the specific user
+      const response = await api.put(`/timesheets/status/${formattedDate}`, {
+        status,
+        userId,
+      });
+
+      console.log("Status update response:", response.data);
+
+      // Update the local state
+      setTimesheetStatus(status);
+
+      // Refresh the time entries
+      await fetchTimeEntries();
+    } catch (error) {
+      console.error(
+        "Error updating timesheet status:",
+        error.response?.data || error
+      );
+    }
+  };
+
   return (
     <Box m="20px">
+      <style>{calendarStyles}</style>
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
         mb="20px"
       >
-        <Header title="TIMESHEETS" subtitle="Manage your timesheets" />
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenDialog(true)}
-        >
-          Add Time Entry
-        </Button>
+        <Header
+          title="TIMESHEETS"
+          subtitle={
+            selectedUserId
+              ? `Viewing timesheets for ${selectedUserName}`
+              : "Manage your timesheets"
+          }
+        />
+        {!selectedUserId && viewMode === "full" && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setOpenDialog(true)}
+          >
+            Add Time Entry
+          </Button>
+        )}
       </Box>
 
       <Grid container spacing={3}>
         {/* Monthly Calendar - Left Side */}
-        <Grid item xs={12} md={4}>
-          <Paper
-            elevation={3}
-            sx={{
-              p: 2,
-              backgroundColor: theme.palette.background.alt,
-              height: "calc(100vh - 200px)",
-              overflow: "auto",
-            }}
-          >
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              mb={2}
+        {viewMode === "full" && (
+          <Grid item xs={12} md={5}>
+            <Paper
+              elevation={3}
+              sx={{
+                p: 2,
+                backgroundColor: theme.palette.background.alt,
+                height: "calc(100vh - 200px)",
+                overflow: "auto",
+              }}
             >
-              <IconButton
-                onClick={() => handleMonthChange("prev")}
-                sx={{ color: colors.grey[100] }}
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                mb={2}
               >
-                <ArrowBackIosNewIcon />
-              </IconButton>
-              <Typography variant="h6">
-                {format(selectedDate, "MMMM yyyy")}
-              </Typography>
-              <IconButton
-                onClick={() => handleMonthChange("next")}
-                sx={{ color: colors.grey[100] }}
-              >
-                <ArrowForwardIosIcon />
-              </IconButton>
-            </Box>
-            <List sx={{ width: "100%", bgcolor: "background.paper" }}>
-              {daysInMonth.map((day) => {
-                const formattedDate = format(day, "yyyy-MM-dd");
-                const duration = monthlyTimeEntries[formattedDate] || 0;
+                <IconButton
+                  onClick={() => handleMonthChange("prev")}
+                  sx={{ color: colors.grey[100] }}
+                >
+                  <ArrowBackIosNewIcon />
+                </IconButton>
+                <Typography variant="h6">
+                  {format(selectedDate, "MMMM yyyy")}
+                </Typography>
+                <IconButton
+                  onClick={() => handleMonthChange("next")}
+                  sx={{ color: colors.grey[100] }}
+                >
+                  <ArrowForwardIosIcon />
+                </IconButton>
+              </Box>
+              <List sx={{ width: "100%", bgcolor: "background.paper" }}>
+                {daysInMonth.map((day) => {
+                  const formattedDate = format(day, "yyyy-MM-dd");
+                  const duration = monthlyTimeEntries[formattedDate] || 0;
+                  const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                  const status = dailyStatuses[formattedDate];
 
-                return (
-                  <ListItem
-                    key={formattedDate}
-                    disablePadding
-                    sx={{
-                      mb: 0.5,
-                      backgroundColor: isSameDay(day, selectedDate)
-                        ? colors.primary[500]
-                        : "transparent",
-                      borderRadius: "4px",
-                    }}
-                  >
-                    <ListItemButton
-                      onClick={() => handleDateSelect(day)}
+                  return (
+                    <ListItem
+                      key={formattedDate}
+                      disablePadding
                       sx={{
-                        py: 0.5,
-                        "&:hover": {
-                          backgroundColor: isSameDay(day, selectedDate)
-                            ? colors.primary[600]
-                            : colors.grey[700],
-                        },
+                        mb: 0.5,
+                        backgroundColor: isSameDay(day, selectedDate)
+                          ? colors.primary[500]
+                          : isWeekend
+                          ? colors.neutral[700]
+                          : "transparent",
+                        borderRadius: "4px",
                       }}
                     >
-                      <ListItemText
-                        primary={`${format(day, "EEEE")} - ${format(
-                          day,
-                          "do MMMM"
-                        )}`}
-                        primaryTypographyProps={{
-                          fontSize: "0.875rem",
-                          color: isSameDay(day, selectedDate)
-                            ? colors.grey[100]
-                            : colors.grey[100],
-                          fontWeight: isSameDay(day, selectedDate)
-                            ? "bold"
-                            : "normal",
-                        }}
-                      />
-                      <Typography
+                      <ListItemButton
+                        onClick={() => handleDateSelect(day)}
                         sx={{
-                          fontSize: "0.875rem",
-                          color: colors.grey[100],
-                          ml: 2,
+                          py: 0.5,
+                          "&:hover": {
+                            backgroundColor: isSameDay(day, selectedDate)
+                              ? colors.primary[600]
+                              : colors.grey[700],
+                          },
                         }}
                       >
-                        {formatDuration(duration)}
-                      </Typography>
-                    </ListItemButton>
-                  </ListItem>
-                );
-              })}
-            </List>
-          </Paper>
-        </Grid>
+                        <ListItemText
+                          primary={
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <Typography
+                                sx={{
+                                  fontSize: "0.875rem",
+                                  color: isSameDay(day, selectedDate)
+                                    ? colors.grey[100]
+                                    : colors.grey[100],
+                                  fontWeight: isSameDay(day, selectedDate)
+                                    ? "bold"
+                                    : "normal",
+                                }}
+                              >
+                                {`${format(day, "EEEE")} - ${format(
+                                  day,
+                                  "do MMMM"
+                                )}`}
+                              </Typography>
+                              {status && (
+                                <Chip
+                                  label={
+                                    status.charAt(0).toUpperCase() +
+                                    status.slice(1)
+                                  }
+                                  size="small"
+                                  sx={{
+                                    backgroundColor:
+                                      status === "finalised"
+                                        ? colors.greenAccent[500]
+                                        : status === "absent"
+                                        ? colors.grey[500]
+                                        : "transparent",
+                                    color:
+                                      status === "finalised"
+                                        ? colors.grey[100]
+                                        : colors.grey[100],
+                                    border:
+                                      status === "incomplete"
+                                        ? `1px solid ${colors.grey[500]}`
+                                        : "none",
+                                    fontSize: "0.75rem",
+                                    height: "20px",
+                                  }}
+                                />
+                              )}
+                            </Box>
+                          }
+                        />
+                        <Typography
+                          sx={{
+                            fontSize: "0.875rem",
+                            color: colors.grey[100],
+                            ml: 2,
+                          }}
+                        >
+                          {formatDuration(duration)}
+                          {monthlyProjectTimeEntries[formattedDate] > 0 && (
+                            <span style={{ marginLeft: "4px", opacity: 0.7 }}>
+                              (
+                              {formatDuration(
+                                monthlyProjectTimeEntries[formattedDate]
+                              )}
+                              )
+                            </span>
+                          )}
+                        </Typography>
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Paper>
+          </Grid>
+        )}
 
         {/* Day View - Right Side */}
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={viewMode === "full" ? 7 : 12}>
           <Paper
             elevation={3}
             sx={{
@@ -563,24 +850,70 @@ const Timesheets = () => {
               position: "relative",
             }}
           >
-            <Typography
-              variant="h5"
+            <Box
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
               mb={2}
-              sx={{ display: "flex", alignItems: "center", gap: 2 }}
             >
-              {format(selectedDate, "EEEE, MMMM d, yyyy")}
-              {timeEntries.length > 0 && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<DeleteSweepIcon />}
-                  onClick={handleClearDate}
-                  size="small"
-                >
-                  Clear Date
-                </Button>
+              <Typography variant="h5">
+                {format(selectedDate, "EEEE, MMMM d, yyyy")}
+              </Typography>
+              {!selectedUserId && (
+                <Box display="flex" gap={1}>
+                  <Button
+                    variant={
+                      timesheetStatus === "finalised" ? "contained" : "outlined"
+                    }
+                    color="success"
+                    startIcon={<CheckCircleIcon />}
+                    onClick={() => handleStatusUpdate("finalised")}
+                    disabled={timesheetStatus === "finalised"}
+                  >
+                    Finalise
+                  </Button>
+                  <Button
+                    variant={
+                      timesheetStatus === "absent" ? "contained" : "outlined"
+                    }
+                    sx={{
+                      color:
+                        timesheetStatus === "absent"
+                          ? "white"
+                          : colors.grey[100],
+                      borderColor: colors.grey[100],
+                      backgroundColor:
+                        timesheetStatus === "absent"
+                          ? colors.grey[500]
+                          : "transparent",
+                      "&:hover": {
+                        borderColor: colors.grey[300],
+                        backgroundColor:
+                          timesheetStatus === "absent"
+                            ? colors.grey[600]
+                            : colors.grey[700],
+                      },
+                    }}
+                    startIcon={<EventBusyIcon />}
+                    onClick={() => handleStatusUpdate("absent")}
+                    disabled={timesheetStatus === "absent"}
+                  >
+                    Mark Absent
+                  </Button>
+                  {timeEntries.length > 0 && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteSweepIcon />}
+                      onClick={handleClearDate}
+                      size="small"
+                    >
+                      Clear Date
+                    </Button>
+                  )}
+                </Box>
               )}
-            </Typography>
+            </Box>
             <Box sx={{ height: "calc(100% - 60px)", position: "relative" }}>
               {isCalendarLoading && (
                 <Box
@@ -621,7 +954,7 @@ const Timesheets = () => {
                 dayMaxEvents={true}
                 slotDuration="00:15:00"
                 allDaySlot={false}
-                slotHeight={10}
+                slotHeight={7.5}
                 timeZone="local"
                 initialDate={selectedDate}
                 date={selectedDate}
@@ -638,20 +971,32 @@ const Timesheets = () => {
                 }}
                 forceEventDuration={true}
                 eventDisplay="block"
-                eventMinHeight={20}
+                eventMinHeight={15}
                 eventOverlap={false}
                 eventConstraint={{
                   startTime: "07:00",
                   endTime: "18:00",
                   dows: [0, 1, 2, 3, 4, 5, 6],
                 }}
+                slotLabelClassNames="fc-slot-label-small"
                 eventContent={(eventInfo) => ({
                   html: `
-                    <div style="padding: 2px;">
-                      <div style="font-weight: bold;">${
-                        eventInfo.event.title
-                      }</div>
-                      <div style="font-size: 0.8em;">${
+                    <div style="padding: 1px;">
+                      <div style="font-weight: bold; font-size: 0.975em;">
+                        ${eventInfo.event.title}
+                        ${
+                          eventInfo.event.extendedProps.projectInputType
+                            ? `<span style="font-size: 0.78em; color: ${
+                                colors.grey[100]
+                              }; margin-left: 4px;">(${eventInfo.event.extendedProps.projectInputType
+                                .replace("_", " ")
+                                .replace(/\b\w/g, (l) =>
+                                  l.toUpperCase()
+                                )})</span>`
+                            : ""
+                        }
+                      </div>
+                      <div style="font-size: 0.78em;">${
                         eventInfo.event.extendedProps.description || ""
                       }</div>
                     </div>
@@ -710,6 +1055,8 @@ const Timesheets = () => {
             projectId: "",
             description: "",
             isAdminWork: false,
+            isBreak: false,
+            projectInputType: "",
           });
         }}
         maxWidth="sm"
@@ -731,8 +1078,8 @@ const Timesheets = () => {
                     }
                     required
                   >
-                    {Array.from({ length: 12 * 4 }, (_, i) => {
-                      const hour = Math.floor(i / 4) + 7;
+                    {Array.from({ length: 24 * 4 }, (_, i) => {
+                      const hour = Math.floor(i / 4);
                       const minute = (i % 4) * 15;
                       const time = `${hour.toString().padStart(2, "0")}:${minute
                         .toString()
@@ -756,8 +1103,8 @@ const Timesheets = () => {
                     }
                     required
                   >
-                    {Array.from({ length: 12 * 4 }, (_, i) => {
-                      const hour = Math.floor(i / 4) + 7;
+                    {Array.from({ length: 24 * 4 }, (_, i) => {
+                      const hour = Math.floor(i / 4);
                       const minute = (i % 4) * 15;
                       const time = `${hour.toString().padStart(2, "0")}:${minute
                         .toString()
@@ -775,41 +1122,76 @@ const Timesheets = () => {
                 <FormControl fullWidth>
                   <InputLabel>Work Type</InputLabel>
                   <Select
-                    value={formData.isAdminWork ? "admin" : "project"}
+                    value={
+                      formData.isBreak
+                        ? "break"
+                        : formData.isAdminWork
+                        ? "admin"
+                        : "project"
+                    }
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         isAdminWork: e.target.value === "admin",
+                        isBreak: e.target.value === "break",
                         projectId:
-                          e.target.value === "admin" ? "" : formData.projectId,
+                          e.target.value === "admin" ||
+                          e.target.value === "break"
+                            ? ""
+                            : formData.projectId,
                       })
                     }
                     required
                   >
                     <MenuItem value="project">Project Work</MenuItem>
                     <MenuItem value="admin">Admin Work</MenuItem>
+                    <MenuItem value="break">Break</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
-              {!formData.isAdminWork && (
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Project</InputLabel>
-                    <Select
-                      value={formData.projectId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, projectId: e.target.value })
-                      }
-                      required
-                    >
-                      {projects.map((project) => (
-                        <MenuItem key={project._id} value={project._id}>
-                          {project.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
+              {!formData.isAdminWork && !formData.isBreak && (
+                <>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Project</InputLabel>
+                      <Select
+                        value={formData.projectId}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            projectId: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        {projects.map((project) => (
+                          <MenuItem key={project._id} value={project._id}>
+                            {project.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Project Input Type</InputLabel>
+                      <Select
+                        value={formData.projectInputType}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            projectInputType: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        <MenuItem value="site_work">Site Work/Travel</MenuItem>
+                        <MenuItem value="reporting">Reporting</MenuItem>
+                        <MenuItem value="project_admin">Project Admin</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
               )}
               <Grid item xs={12}>
                 <TextField
@@ -821,7 +1203,6 @@ const Timesheets = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  required
                 />
               </Grid>
             </Grid>
@@ -839,6 +1220,8 @@ const Timesheets = () => {
                 projectId: "",
                 description: "",
                 isAdminWork: false,
+                isBreak: false,
+                projectInputType: "",
               });
             }}
           >

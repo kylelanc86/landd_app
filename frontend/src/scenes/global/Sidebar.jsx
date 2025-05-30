@@ -24,6 +24,7 @@ import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
+import PermissionGate from "../../components/PermissionGate";
 
 const getRandomColor = (user) => {
   const colors = [
@@ -346,22 +347,26 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             setSelected={setSelected}
             isCollapsed={isCollapsed}
           />
-          <Item
-            title="User Management"
-            to="/users"
-            icon={<AccessibilityIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
-          <Item
-            title="Timesheets"
-            to="/timesheets"
-            icon={<AccessTimeIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
+          <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
+            <Item
+              title="User Management"
+              to="/users"
+              icon={<AccessibilityIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["timesheets.view"]}>
+            <Item
+              title="Timesheets"
+              to="/timesheets"
+              icon={<AccessTimeIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
 
           {!isCollapsed ? (
             <Typography
@@ -382,38 +387,46 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             <SectionDivider isCollapsed={isCollapsed} />
           )}
 
-          <Item
-            title="Projects"
-            to="/projects"
-            icon={<MapOutlinedIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
-          <Item
-            title="Clients"
-            to="/clients"
-            icon={<ContactsOutlinedIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
-          <Item
-            title="Invoices"
-            to="/invoices"
-            icon={<ReceiptOutlinedIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
-          <Item
-            title="Scheduler"
-            to="/calendar"
-            icon={<CalendarTodayOutlinedIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
+          <PermissionGate requiredPermissions={["projects.view"]}>
+            <Item
+              title="Projects"
+              to="/projects"
+              icon={<MapOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["clients.view"]}>
+            <Item
+              title="Clients"
+              to="/clients"
+              icon={<ContactsOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["invoices.view"]}>
+            <Item
+              title="Invoices"
+              to="/invoices"
+              icon={<ReceiptOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["calendar.view"]}>
+            <Item
+              title="Scheduler"
+              to="/calendar"
+              icon={<CalendarTodayOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
 
           {!isCollapsed ? (
             <Typography
@@ -434,22 +447,26 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             <SectionDivider isCollapsed={isCollapsed} />
           )}
 
-          <Item
-            title="Air Monitoring"
-            to="/air-monitoring"
-            icon={<AirOutlinedIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
-          <Item
-            title="Asbestos Assessment"
-            to="/asbestos-assessment"
-            icon={<AssessmentIcon />}
-            selected={selected}
-            setSelected={setSelected}
-            isCollapsed={isCollapsed}
-          />
+          <PermissionGate requiredPermissions={["jobs.view"]}>
+            <Item
+              title="Air Monitoring"
+              to="/air-monitoring"
+              icon={<AirOutlinedIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["asbestos.view"]}>
+            <Item
+              title="Asbestos Assessment"
+              to="/asbestos-assessment"
+              icon={<AssessmentIcon />}
+              selected={selected}
+              setSelected={setSelected}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
         </Box>
       </Menu>
     </ProSidebar>

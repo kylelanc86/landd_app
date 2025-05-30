@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -42,10 +42,17 @@ import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import DescriptionIcon from "@mui/icons-material/Description";
-import { jobService, projectService, clientService } from "../../services/api";
+import {
+  jobService,
+  projectService,
+  clientService,
+  shiftService,
+} from "../../services/api";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import TruncatedCell from "../../components/TruncatedCell";
+import { StatusChip } from "../../components/JobStatus";
 
 const JOBS_KEY = "ldc_jobs";
 
@@ -81,12 +88,23 @@ const AirMonitoring = () => {
   const [projects, setProjects] = useState([]);
   const [statusMenu, setStatusMenu] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [jobShifts, setJobShifts] = useState({});
+  const isFetchingRef = useRef(false);
+  const fetchedJobIdsRef = useRef(new Set());
 
   useEffect(() => {
     const fetchData = async () => {
+      if (isFetchingRef.current) {
+        console.log("Fetch already in progress, skipping...");
+        return;
+      }
+
+      isFetchingRef.current = true;
       setLoading(true);
       setError(null);
+
       try {
+        // First fetch jobs and projects
         const [jobsResponse, projectsResponse] = await Promise.all([
           jobService.getAll(),
           projectService.getAll(),
@@ -96,15 +114,9 @@ const AirMonitoring = () => {
           throw new Error("No data received from server");
         }
 
-        console.log("Raw jobs data:", jobsResponse.data);
-        console.log("Raw projects data:", projectsResponse.data);
-
         // Process jobs to include project details
         const processedJobs = jobsResponse.data.map((job) => {
           const projectData = job.project;
-          console.log("Processing job:", job);
-          console.log("Project data:", projectData);
-
           return {
             id: job._id,
             _id: job._id,
@@ -115,18 +127,148 @@ const AirMonitoring = () => {
           };
         });
 
-        console.log("Final processed jobs:", processedJobs);
         setJobs(processedJobs);
         setProjects(projectsResponse.data);
+
+        // Get jobs that haven't been fetched yet
+        const jobsToFetch = processedJobs.filter(
+          (job) => !fetchedJobIdsRef.current.has(job._id)
+        );
+
+        if (jobsToFetch.length > 0) {
+          console.log(
+            `Fetching shifts for ${jobsToFetch.length} jobs in a single batch...`
+          );
+
+          try {
+            const shiftsResponse = await shiftService.getByJobs(
+              jobsToFetch.map((job) => job._id)
+            );
+            const shiftsData = shiftsResponse.data || {};
+
+            // Process the shifts data and update statuses for authorized reports
+            const processedShifts = {};
+            for (const [jobId, shifts] of Object.entries(shiftsData)) {
+              processedShifts[jobId] = await Promise.all(
+                shifts.map(async (shift) => {
+                  // If shift has an authorized report but status isn't shift_complete, update it
+                  if (
+                    shift.reportApprovedBy &&
+                    shift.status !== "shift_complete"
+                  ) {
+                    console.log(
+                      `Updating shift ${shift._id} status to shift_complete`
+                    );
+                    try {
+                      const updatedShift = await shiftService.update(
+                        shift._id,
+                        {
+                          ...shift,
+                          status: "shift_complete",
+                        }
+                      );
+                      return {
+                        ...updatedShift.data,
+                        status: "shift_complete",
+                      };
+                    } catch (err) {
+                      console.error(`Error updating shift ${shift._id}:`, err);
+                      return shift;
+                    }
+                  }
+                  return shift;
+                })
+              );
+              fetchedJobIdsRef.current.add(jobId);
+            }
+
+            setJobShifts((prev) => ({ ...prev, ...processedShifts }));
+            console.log("Successfully fetched and processed all shifts");
+          } catch (err) {
+            console.error("Error fetching shifts in batch:", err);
+            // Fallback to individual requests if batch fails
+            console.log("Falling back to individual requests...");
+
+            const shiftsPromises = jobsToFetch.map((job) =>
+              shiftService
+                .getByJob(job._id)
+                .then(async (response) => {
+                  console.log(`Successfully fetched shifts for job ${job._id}`);
+                  fetchedJobIdsRef.current.add(job._id);
+
+                  // Process shifts and update statuses for authorized reports
+                  const processedShifts = await Promise.all(
+                    (response.data || []).map(async (shift) => {
+                      if (
+                        shift.reportApprovedBy &&
+                        shift.status !== "shift_complete"
+                      ) {
+                        console.log(
+                          `Updating shift ${shift._id} status to shift_complete`
+                        );
+                        try {
+                          const updatedShift = await shiftService.update(
+                            shift._id,
+                            {
+                              ...shift,
+                              status: "shift_complete",
+                            }
+                          );
+                          return {
+                            ...updatedShift.data,
+                            status: "shift_complete",
+                          };
+                        } catch (err) {
+                          console.error(
+                            `Error updating shift ${shift._id}:`,
+                            err
+                          );
+                          return shift;
+                        }
+                      }
+                      return shift;
+                    })
+                  );
+
+                  return { jobId: job._id, shifts: processedShifts };
+                })
+                .catch((err) => {
+                  console.error(
+                    `Error fetching shifts for job ${job._id}:`,
+                    err
+                  );
+                  return { jobId: job._id, shifts: [] };
+                })
+            );
+
+            const shiftsResults = await Promise.all(shiftsPromises);
+            const newShiftsData = shiftsResults.reduce(
+              (acc, { jobId, shifts }) => {
+                acc[jobId] = shifts;
+                return acc;
+              },
+              {}
+            );
+
+            setJobShifts((prev) => ({ ...prev, ...newShiftsData }));
+          }
+        } else {
+          console.log("No new jobs to fetch shifts for");
+        }
       } catch (err) {
-        console.error("Error fetching data:", err);
+        console.error("Error in fetchData:", err);
         setError(err.message || "Failed to fetch data");
       } finally {
         setLoading(false);
+        isFetchingRef.current = false;
       }
     };
 
     fetchData();
+
+    return () => {
+      isFetchingRef.current = false;
+    };
   }, []);
 
   const handleChange = (e) => {
@@ -150,7 +292,7 @@ const AirMonitoring = () => {
       const newJob = {
         name: selectedProject.name,
         project: selectedProject._id,
-        status: form.status,
+        status: "pending",
         startDate: new Date(),
         asbestosRemovalist: form.asbestosRemovalist,
         description: `Air monitoring job for ${selectedProject.name}`,
@@ -304,134 +446,150 @@ const AirMonitoring = () => {
     console.log("Print report for job:", jobId);
   };
 
-  const handleStatusClick = (event, job) => {
-    setStatusMenu(event.currentTarget);
-    setSelectedJob(job);
+  const canCompleteJob = (jobId) => {
+    const shifts = jobShifts[jobId] || [];
+    console.log(`Checking completion status for job ${jobId}:`, {
+      totalShifts: shifts.length,
+      shifts: shifts.map((s) => ({
+        id: s._id,
+        status: s.status,
+        reportApprovedBy: s.reportApprovedBy,
+        rawStatus: s.status,
+      })),
+    });
+
+    if (shifts.length === 0) {
+      console.log("No shifts found for job");
+      return false;
+    }
+
+    const allShiftsComplete = shifts.every((shift) => {
+      const status = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
+      const isComplete = status === "shift_complete";
+      console.log(`Shift ${shift._id} details:`, {
+        rawStatus: shift.status,
+        normalizedStatus: status,
+        isComplete,
+        reportApprovedBy: shift.reportApprovedBy,
+      });
+      return isComplete;
+    });
+
+    console.log(`Job ${jobId} can be completed: ${allShiftsComplete}`);
+    return allShiftsComplete;
   };
 
-  const handleStatusClose = () => {
-    setStatusMenu(null);
-    setSelectedJob(null);
-  };
-
-  const handleStatusChange = async (newStatus) => {
+  const handleCompleteJob = async (jobId) => {
     try {
-      if (selectedJob) {
-        await jobService.update(selectedJob._id, { status: newStatus });
-        setJobs(
-          jobs.map((job) =>
-            job._id === selectedJob._id ? { ...job, status: newStatus } : job
-          )
+      if (!canCompleteJob(jobId)) {
+        setError(
+          "Cannot complete job: All shifts must be marked as complete first"
         );
+        return;
       }
+
+      console.log(`Completing job ${jobId}...`);
+
+      // First get the job details to find the project ID
+      const jobResponse = await jobService.getById(jobId);
+      console.log("Job response:", jobResponse.data);
+
+      const projectId =
+        jobResponse.data.project?._id || jobResponse.data.project;
+      console.log("Project ID:", projectId);
+
+      if (!projectId) {
+        throw new Error("Could not find project ID for this job");
+      }
+
+      // Get the current project details to preserve users
+      const projectResponse = await projectService.getById(projectId);
+      console.log("Current project details:", projectResponse.data);
+
+      const currentProject = projectResponse.data;
+      const updateData = {
+        status: "Ready for invoicing",
+        users: currentProject.users || [], // Preserve current users
+        name: currentProject.name, // Preserve other required fields
+        department: currentProject.department,
+        category: currentProject.category,
+        client: currentProject.client,
+      };
+
+      console.log("Project update data:", updateData);
+
+      // Update both job and project status
+      const [jobUpdateResponse, projectUpdateResponse] = await Promise.all([
+        jobService.update(jobId, { status: "completed" }),
+        projectService.update(projectId, updateData),
+      ]);
+
+      console.log("Job update response:", jobUpdateResponse.data);
+      console.log("Project update response:", projectUpdateResponse.data);
+
+      // Update local state
+      setJobs(
+        jobs.map((job) =>
+          job._id === jobId ? { ...job, status: "completed" } : job
+        )
+      );
+
+      console.log(`Job ${jobId} and project ${projectId} updated successfully`);
     } catch (err) {
-      setError(err.message);
-    } finally {
-      handleStatusClose();
+      console.error("Error completing job:", err);
+      setError(err.message || "Failed to complete job");
     }
   };
 
   const columns = [
     {
-      field: "projectID",
-      headerName: "Project ID",
+      field: "name",
+      headerName: "Job Name",
       flex: 1,
-      valueGetter: (params) => {
-        console.log("Project ID valueGetter - full params:", params);
-        if (typeof params === "string") return params;
-        return params?.row?.projectID || "Unknown";
-      },
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
-      field: "projectName",
-      headerName: "Project",
+      field: "client",
+      headerName: "Client",
       flex: 1,
-      valueGetter: (params) => {
-        console.log("Project Name valueGetter - full params:", params);
-        if (typeof params === "string") return params;
-        return params?.row?.projectName || "Unknown Project";
-      },
+      renderCell: (params) => (
+        <TruncatedCell value={params.value?.name || ""} />
+      ),
     },
     {
-      field: "asbestosRemovalist",
-      headerName: "Asbestos Removalist",
-      flex: 1,
-      valueGetter: (params) => {
-        if (typeof params === "string") return params;
-        return params?.row?.asbestosRemovalist || "Not assigned";
-      },
+      field: "address",
+      headerName: "Address",
+      flex: 1.5,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
       field: "status",
       headerName: "Status",
       flex: 1,
-      renderCell: (params) => (
-        <Box
-          onClick={(e) => handleStatusClick(e, params.row)}
-          sx={{
-            cursor: "pointer",
-            padding: "4px 8px",
-            borderRadius: "4px",
-            backgroundColor:
-              params.row.status === "completed"
-                ? theme.palette.success.main
-                : params.row.status === "in_progress"
-                ? theme.palette.info.main
-                : params.row.status === "pending"
-                ? theme.palette.warning.main
-                : theme.palette.grey[500],
-            color: theme.palette.common.white,
-            "&:hover": {
-              opacity: 0.8,
-            },
-          }}
-        >
-          {params.row.status.charAt(0).toUpperCase() +
-            params.row.status.slice(1).replace("_", " ")}
-        </Box>
-      ),
+      renderCell: (params) => <StatusChip status={params.value} />,
     },
     {
       field: "actions",
       headerName: "Actions",
       flex: 1,
-      renderCell: (params) => {
-        if (!params?.row) return null;
-
-        return (
-          <Box display="flex" alignItems="center" gap={1}>
-            <IconButton
-              onClick={() => handleEditJob(params.row)}
-              sx={{ color: colors.grey[100] }}
-            >
-              <EditIcon />
-            </IconButton>
-            <IconButton
-              onClick={(e) => handleDeleteClick(e, params.row)}
-              sx={{ color: colors.grey[100] }}
-            >
-              <DeleteIcon />
-            </IconButton>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() => handleViewShifts(params.row._id)}
-              sx={{
-                backgroundColor: colors.primary[700],
-                color: colors.grey[100],
-                fontSize: "0.75rem",
-                padding: "4px 8px",
-                minWidth: "80px",
-                "&:hover": {
-                  backgroundColor: colors.primary[800],
-                },
-              }}
-            >
-              Shifts
-            </Button>
-          </Box>
-        );
-      },
+      renderCell: (params) => (
+        <Box>
+          <IconButton
+            onClick={() => handleEditJob(params.row)}
+            color="primary"
+            size="small"
+          >
+            <EditIcon />
+          </IconButton>
+          <IconButton
+            onClick={() => handleDeleteClick(null, params.row)}
+            color="error"
+            size="small"
+          >
+            <DeleteIcon />
+          </IconButton>
+        </Box>
+      ),
     },
   ];
 
@@ -473,13 +631,13 @@ const AirMonitoring = () => {
           startIcon={<AddIcon />}
           onClick={() => setOpenDialog(true)}
           sx={{
-            backgroundColor: colors.primary[700],
-            color: colors.grey[100],
+            backgroundColor: theme.palette.primary.main,
+            color: theme.palette.grey[100],
             fontSize: "14px",
             fontWeight: "bold",
             padding: "10px 20px",
             "&:hover": {
-              backgroundColor: colors.primary[800],
+              backgroundColor: theme.palette.primary.dark,
             },
           }}
         >
@@ -623,29 +781,28 @@ const AirMonitoring = () => {
               </>
             )}
 
-            <TextField
-              fullWidth
-              label="Asbestos Removalist"
-              name="asbestosRemovalist"
-              value={form.asbestosRemovalist}
-              onChange={handleChange}
-              required
-              sx={{ mb: 2 }}
-            />
-
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Status</InputLabel>
+              <InputLabel>Asbestos Removalist</InputLabel>
               <Select
-                name="status"
-                value={form.status}
+                name="asbestosRemovalist"
+                value={form.asbestosRemovalist}
                 onChange={handleChange}
-                label="Status"
+                label="Asbestos Removalist"
                 required
               >
-                <MenuItem value="pending">Pending</MenuItem>
-                <MenuItem value="in_progress">In Progress</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
-                <MenuItem value="cancelled">Cancelled</MenuItem>
+                <MenuItem value="Aztech Services">Aztech Services</MenuItem>
+                <MenuItem value="International Asbestos Removals">
+                  International Asbestos Removals
+                </MenuItem>
+                <MenuItem value="Glade Group">Glade Group</MenuItem>
+                <MenuItem value="Crown Asbestos Removals">
+                  Crown Asbestos Removals
+                </MenuItem>
+                <MenuItem value="Empire Contracting">
+                  Empire Contracting
+                </MenuItem>
+                <MenuItem value="Spec Services">Spec Services</MenuItem>
+                <MenuItem value="Jesco">Jesco</MenuItem>
               </Select>
             </FormControl>
           </Box>
@@ -657,10 +814,10 @@ const AirMonitoring = () => {
             variant="contained"
             disabled={!selectedProject || !form.asbestosRemovalist}
             sx={{
-              backgroundColor: colors.primary[700],
-              color: colors.grey[100],
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.grey[100],
               "&:hover": {
-                backgroundColor: colors.primary[800],
+                backgroundColor: theme.palette.primary.dark,
               },
             }}
           >
@@ -692,22 +849,6 @@ const AirMonitoring = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      <Menu
-        anchorEl={statusMenu}
-        open={Boolean(statusMenu)}
-        onClose={handleStatusClose}
-      >
-        <MenuItem onClick={() => handleStatusChange("pending")}>
-          Pending
-        </MenuItem>
-        <MenuItem onClick={() => handleStatusChange("in_progress")}>
-          In Progress
-        </MenuItem>
-        <MenuItem onClick={() => handleStatusChange("completed")}>
-          Completed
-        </MenuItem>
-      </Menu>
     </Box>
   );
 };

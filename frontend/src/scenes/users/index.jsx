@@ -30,12 +30,17 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { USER_LEVELS } from "../../data/userData";
 import Header from "../../components/Header";
 import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../theme";
 import { useTheme } from "@mui/material/styles";
 import { userService } from "../../services/api";
+import TruncatedCell from "../../components/TruncatedCell";
+import { useNavigate } from "react-router-dom";
+import { hasPermission } from "../../config/permissions";
+import { useAuth } from "../../context/AuthContext";
 
 const USERS_KEY = "ldc_users";
 
@@ -49,6 +54,8 @@ const emptyForm = {
 };
 
 const Users = () => {
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -60,6 +67,7 @@ const Users = () => {
   const [statusChangeType, setStatusChangeType] = useState(null);
   const [sortBy, setSortBy] = useState("lastName");
   const [sortDir, setSortDir] = useState("asc");
+  const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
   const colors = tokens;
 
@@ -215,31 +223,43 @@ const Users = () => {
     return 0;
   });
 
+  const handleViewTimesheets = (userId) => {
+    navigate(`/timesheets/review?userId=${userId}`);
+  };
+
   const columns = [
-    { field: "firstName", headerName: "First Name", flex: 1 },
-    { field: "lastName", headerName: "Last Name", flex: 1 },
-    { field: "email", headerName: "Email", flex: 1 },
-    { field: "phone", headerName: "Phone", flex: 1 },
+    {
+      field: "firstName",
+      headerName: "First Name",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
+      field: "lastName",
+      headerName: "Last Name",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
+      field: "email",
+      headerName: "Email",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
+      field: "phone",
+      headerName: "Phone",
+      flex: 1,
+      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
     {
       field: "role",
       headerName: "User Level",
       flex: 1,
       renderCell: (params) => {
         const role = params.row.role || "employee";
-        return (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              height: "100%",
-              width: "100%",
-            }}
-          >
-            <Typography>
-              {role.charAt(0).toUpperCase() + role.slice(1)}
-            </Typography>
-          </Box>
-        );
+        const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+        return <TruncatedCell value={formattedRole} />;
       },
     },
     {
@@ -270,6 +290,14 @@ const Users = () => {
           >
             <DeleteIcon />
           </IconButton>
+          {hasPermission(currentUser, "timesheets.approve") && (
+            <IconButton
+              onClick={() => handleViewTimesheets(params.row._id)}
+              title="View Timesheets"
+            >
+              <AccessTimeIcon />
+            </IconButton>
+          )}
         </Box>
       ),
       sortable: false,
@@ -277,51 +305,8 @@ const Users = () => {
     },
   ];
 
-  const inactiveColumns = [
-    { field: "firstName", headerName: "First Name", flex: 1 },
-    { field: "lastName", headerName: "Last Name", flex: 1 },
-    { field: "email", headerName: "Email", flex: 1 },
-    { field: "phone", headerName: "Phone", flex: 1 },
-    {
-      field: "role",
-      headerName: "User Level",
-      flex: 1,
-      renderCell: (params) => {
-        const role = params.row.role || "employee";
-        return (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              height: "100%",
-              width: "100%",
-            }}
-          >
-            <Typography>
-              {role.charAt(0).toUpperCase() + role.slice(1)}
-            </Typography>
-          </Box>
-        );
-      },
-    },
-    {
-      field: "reactivate",
-      headerName: "Reactivate",
-      flex: 1,
-      renderCell: (params) => (
-        <FormControlLabel
-          control={
-            <Switch
-              checked={false}
-              onChange={() => handleStatusChange(params.row._id, true)}
-              color="primary"
-            />
-          }
-          label="Reactivate"
-        />
-      ),
-    },
-  ];
+  // Filter users based on active/inactive status
+  const filteredUsers = users.filter((user) => showInactive || user.isActive);
 
   return (
     <Box m="20px">
@@ -340,51 +325,31 @@ const Users = () => {
         </Button>
       </Box>
 
-      {/* Active Users Table */}
+      {/* Users Table with Toggle */}
       <Box mt="20px">
-        <Typography variant="h5" mb="10px" color={colors.grey[100]}>
-          Active Users
-        </Typography>
         <Box
-          height="40vh"
-          sx={{
-            "& .MuiDataGrid-root": { border: "none" },
-            "& .MuiDataGrid-cell": { borderBottom: "none" },
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: theme.palette.primary.dark,
-              borderBottom: "none",
-            },
-            "& .MuiDataGrid-virtualScroller": {
-              backgroundColor: theme.palette.background.default,
-            },
-            "& .MuiDataGrid-footerContainer": {
-              borderTop: "none",
-              backgroundColor: theme.palette.primary.dark,
-            },
-            "& .MuiCheckbox-root": {
-              color: `${theme.palette.secondary.main} !important`,
-            },
-          }}
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb="10px"
         >
-          <DataGrid
-            rows={users.filter((user) => user.isActive)}
-            columns={columns}
-            getRowId={(row) => row._id}
-            pageSize={5}
-            rowsPerPageOptions={[5]}
-            autoHeight
-            disableSelectionOnClick
+          <Typography variant="h5" color={colors.grey[100]}>
+            Users
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+                color="secondary"
+              />
+            }
+            label="Show Inactive Users"
+            sx={{ color: colors.grey[100] }}
           />
         </Box>
-      </Box>
-
-      {/* Inactive Users Table */}
-      <Box mt="40px">
-        <Typography variant="h5" mb="10px" color={colors.grey[100]}>
-          Inactive Users
-        </Typography>
         <Box
-          height="30vh"
+          height="75vh"
           sx={{
             "& .MuiDataGrid-root": { border: "none" },
             "& .MuiDataGrid-cell": { borderBottom: "none" },
@@ -405,11 +370,11 @@ const Users = () => {
           }}
         >
           <DataGrid
-            rows={users.filter((user) => !user.isActive)}
-            columns={inactiveColumns}
+            rows={filteredUsers}
+            columns={columns}
             getRowId={(row) => row._id}
-            pageSize={5}
-            rowsPerPageOptions={[5]}
+            pageSize={10}
+            rowsPerPageOptions={[10]}
             autoHeight
             disableSelectionOnClick
           />

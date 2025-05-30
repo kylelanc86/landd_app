@@ -141,6 +141,7 @@ export const shiftService = {
   getAll: () => api.get('/air-monitoring-shifts'),
   getById: (id) => api.get(`/air-monitoring-shifts/${id}`),
   getByJob: (jobId) => api.get(`/air-monitoring-shifts/job/${jobId}`),
+  getByJobs: (jobIds) => api.post('/air-monitoring-shifts/jobs', { jobIds }),
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
   delete: (id) => api.delete(`/air-monitoring-shifts/${id}`)
@@ -187,6 +188,34 @@ export const xeroService = {
   },
   checkStatus: () => api.get('/xero/status'),
   disconnect: () => api.post('/xero/disconnect')
+};
+
+// Timesheet API calls
+export const timesheetService = {
+  getTimesheets: async (startDate, endDate, userId = null) => {
+    const params = new URLSearchParams();
+    if (userId) {
+      params.append('userId', userId);
+    }
+    const response = await api.get(`/timesheets/range/${startDate}/${endDate}?${params.toString()}`);
+    return response.data;
+  },
+  createTimesheet: async (timesheetData) => {
+    const response = await api.post("/timesheets", timesheetData);
+    return response.data;
+  },
+  updateTimesheet: async (id, timesheetData) => {
+    const response = await api.put(`/timesheets/${id}`, timesheetData);
+    return response.data;
+  },
+  deleteTimesheet: async (id) => {
+    const response = await api.delete(`/timesheets/${id}`);
+    return response.data;
+  },
+  updateTimesheetStatus: async (date, status, userId) => {
+    const response = await api.put(`/timesheets/status/${date}`, { status, userId });
+    return response.data;
+  }
 };
 
 export default api; 
