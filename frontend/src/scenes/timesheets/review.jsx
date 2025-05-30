@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -30,14 +30,24 @@ import { useNavigate, useLocation } from "react-router-dom";
 const TimesheetReview = () => {
   const theme = useTheme();
   const colors = tokens;
-  const { currentUser } = useAuth();
+  const { currentUser, restoreUserState } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [timesheetData, setTimesheetData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [calendarKey, setCalendarKey] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedUserName, setSelectedUserName] = useState("");
+  const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
+  const [viewMode, setViewMode] = useState("full");
+  const [dailyStatuses, setDailyStatuses] = useState({});
+  const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
+
+  // Add a ref to track the current request
+  const currentRequestRef = useRef(null);
 
   // Get userId from URL query parameters
   useEffect(() => {
@@ -63,54 +73,158 @@ const TimesheetReview = () => {
     }
   }, [location.search]);
 
+  // Update useEffect to handle initial setup and user data loading
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        // First restore user state
+        await restoreUserState();
+
+        // Then set up the date
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        setSelectedDate(today);
+
+        // Finally mark everything as loaded
+        setIsInitialLoading(false);
+        setIsUserDataLoaded(true);
+      } catch (error) {
+        console.error("Error initializing data:", error);
+      }
+    };
+
+    initializeData();
+  }, [restoreUserState]);
+
   // Fetch timesheet data for the current month
   const fetchTimesheetData = async () => {
+    if (!currentUser?._id) return; // Don't fetch if user data isn't loaded
+
     setIsLoading(true);
     try {
       const startDate = startOfMonth(selectedDate);
       const endDate = endOfMonth(selectedDate);
 
-      const response = await api.get(
-        `/timesheets/review/${format(startDate, "yyyy-MM-dd")}/${format(
-          endDate,
-          "yyyy-MM-dd"
-        )}${selectedUserId ? `?userId=${selectedUserId}` : ""}`
-      );
+      // Cancel any existing request
+      if (currentRequestRef.current) {
+        currentRequestRef.current.abort();
+      }
 
-      // Create entries for all days in the month
-      const allDays = eachDayOfInterval({ start: startDate, end: endDate });
-      const timesheetMap = response.data.reduce((acc, entry) => {
-        acc[entry.date] = entry;
-        return acc;
-      }, {});
+      // Create a new AbortController for this request
+      const controller = new AbortController();
+      currentRequestRef.current = controller;
 
-      // Create complete dataset with all days
-      const completeData = allDays.map((date) => {
-        const dateStr = format(date, "yyyy-MM-dd");
-        return (
-          timesheetMap[dateStr] || {
-            userId: selectedUserId,
-            userName: selectedUserName,
+      console.log("Review - Fetching timesheet data:", {
+        startDate: format(startDate, "yyyy-MM-dd"),
+        endDate: format(endDate, "yyyy-MM-dd"),
+        selectedUserId,
+        currentUserId: currentUser._id,
+        currentUserRole: currentUser.role,
+        viewMode,
+      });
+
+      // Always include userId parameter if selectedUserId exists
+      const url = `/timesheets/review/${format(
+        startDate,
+        "yyyy-MM-dd"
+      )}/${format(endDate, "yyyy-MM-dd")}?userId=${
+        selectedUserId || currentUser._id
+      }`;
+
+      console.log("Review - API request URL:", url);
+
+      const { data } = await api.get(url, { signal: controller.signal });
+
+      // Only update state if this is still the current request
+      if (currentRequestRef.current === controller) {
+        console.log("Review - Raw response data:", data);
+
+        // Create entries for all days in the month
+        const allDays = eachDayOfInterval({ start: startDate, end: endDate });
+        const timesheetMap = data.reduce((acc, entry) => {
+          acc[entry.date] = entry;
+          return acc;
+        }, {});
+
+        console.log("Review - Timesheet map:", timesheetMap);
+
+        // Create complete dataset with all days
+        const completeData = allDays.map((date) => {
+          const dateStr = format(date, "yyyy-MM-dd");
+          const existingEntry = timesheetMap[dateStr];
+
+          if (existingEntry) {
+            console.log(
+              "Review - Using existing entry for date:",
+              dateStr,
+              existingEntry
+            );
+            return existingEntry;
+          }
+
+          // Default entry for days without data
+          const defaultEntry = {
+            userId: selectedUserId || currentUser._id,
+            userName:
+              selectedUserName ||
+              `${currentUser.firstName} ${currentUser.lastName}`,
             date: dateStr,
             totalTime: 0,
             projectTime: 0,
             status: "incomplete",
             authorizationStatus: "to_be_authorized",
-          }
-        );
-      });
+          };
+          console.log(
+            "Review - Creating default entry for date:",
+            dateStr,
+            defaultEntry
+          );
+          return defaultEntry;
+        });
 
-      setTimesheetData(completeData);
+        console.log("Review - Final processed data:", {
+          completeData,
+          currentUser: currentUser._id,
+          selectedUserId,
+          totalEntries: completeData.length,
+          entriesWithTime: completeData.filter((entry) => entry.totalTime > 0)
+            .length,
+        });
+
+        setTimesheetData(completeData);
+      }
     } catch (error) {
-      console.error("Error fetching timesheet data:", error);
+      if (error.name === "AbortError") {
+        console.log("Request was aborted");
+        return;
+      }
+      console.error("Review - Error fetching timesheet data:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Cleanup function to abort any pending request
   useEffect(() => {
-    fetchTimesheetData();
-  }, [selectedDate, selectedUserId]);
+    return () => {
+      if (currentRequestRef.current) {
+        currentRequestRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Update the fetch effect to include a delay and proper dependencies
+  useEffect(() => {
+    if (!isUserDataLoaded || !currentUser?._id) return;
+
+    const timeoutId = setTimeout(() => {
+      fetchTimesheetData();
+    }, 100); // Small delay to prevent rapid re-renders
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [selectedDate, selectedUserId, isUserDataLoaded, currentUser?._id]);
 
   const handleMonthChange = (direction) => {
     setSelectedDate(
@@ -209,18 +323,37 @@ const TimesheetReview = () => {
       field: "actions",
       headerName: "Actions",
       flex: 1,
-      renderCell: (params) => (
-        <Tooltip title="View Timesheet">
-          <IconButton
-            onClick={() =>
-              handleViewTimesheet(params.row.userId, params.row.date)
-            }
-            color="primary"
-          >
-            <VisibilityIcon />
-          </IconButton>
-        </Tooltip>
-      ),
+      renderCell: (params) => {
+        // Don't render anything until user data is fully loaded
+        if (!isUserDataLoaded || !currentUser?._id) {
+          return null;
+        }
+
+        console.log("Row data:", {
+          rowUserId: params.row.userId,
+          currentUserId: currentUser._id,
+          rowData: params.row,
+          isUserDataLoaded,
+        });
+
+        // Only show review icon if viewing someone else's timesheet
+        if (String(params.row.userId) === String(currentUser._id)) {
+          return null;
+        }
+
+        return (
+          <Tooltip title="View Timesheet">
+            <IconButton
+              onClick={() =>
+                handleViewTimesheet(params.row.userId, params.row.date)
+              }
+              color="primary"
+            >
+              <VisibilityIcon />
+            </IconButton>
+          </Tooltip>
+        );
+      },
     },
   ];
 

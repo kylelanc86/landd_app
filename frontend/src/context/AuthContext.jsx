@@ -4,16 +4,8 @@ import { authService } from "../services/api";
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(() => {
-    // Check both token and user data on initial render
-    const token = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("currentUser");
-    if (token && storedUser) {
-      return { ...JSON.parse(storedUser), token };
-    }
-    return null;
-  });
-  const [loading, setLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   // Function to restore user state from backend
   const restoreUserState = async () => {
@@ -39,6 +31,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem("currentUser");
       setCurrentUser(null);
     }
+    setLoading(false);
   };
 
   // Check and restore user state when the app loads
@@ -47,6 +40,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (credentials) => {
+    setLoading(true);
     try {
       const response = await authService.login(credentials);
       const { token, user } = response.data;
@@ -58,6 +52,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Login error:", error);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -290,14 +290,15 @@ const Users = () => {
           >
             <DeleteIcon />
           </IconButton>
-          {hasPermission(currentUser, "timesheets.approve") && (
-            <IconButton
-              onClick={() => handleViewTimesheets(params.row._id)}
-              title="View Timesheets"
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          )}
+          {hasPermission(currentUser, "timesheets.approve") &&
+            params.row._id !== currentUser._id && (
+              <IconButton
+                onClick={() => handleViewTimesheets(params.row._id)}
+                title="View Timesheets"
+              >
+                <AccessTimeIcon />
+              </IconButton>
+            )}
         </Box>
       ),
       sortable: false,

@@ -152,33 +152,37 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Validate projectId and projectInputType if not admin work or break
-    if (!isAdminWork && !isBreak && !projectId) {
-      console.log('Missing projectId for project work');
-      return res.status(400).json({ message: "Project ID is required for project work" });
-    }
-
-    if (!isAdminWork && !isBreak && !projectInputType) {
-      console.log('Missing projectInputType for project work');
-      return res.status(400).json({ message: "Project input type is required for project work" });
-    }
-
     // Create date object in UTC
     const entryDate = new Date(date);
     entryDate.setUTCHours(0, 0, 0, 0);
     console.log('Created date object:', entryDate.toISOString());
 
-    const timesheet = new Timesheet({
+    // Create timesheet object with conditional projectId
+    const timesheetData = {
       userId: req.user._id,
       date: entryDate,
       startTime,
       endTime,
-      projectId: isAdminWork || isBreak ? null : projectId,
       description: description || "",
       isAdminWork,
       isBreak,
-      projectInputType: isAdminWork || isBreak ? null : projectInputType,
-    });
+    };
+
+    // Only add projectId and projectInputType if it's not admin work or break
+    if (!isAdminWork && !isBreak) {
+      if (!projectId) {
+        console.log('Missing projectId for project work');
+        return res.status(400).json({ message: "Project ID is required for project work" });
+      }
+      if (!projectInputType) {
+        console.log('Missing projectInputType for project work');
+        return res.status(400).json({ message: "Project input type is required for project work" });
+      }
+      timesheetData.projectId = projectId;
+      timesheetData.projectInputType = projectInputType;
+    }
+
+    const timesheet = new Timesheet(timesheetData);
 
     console.log('Saving timesheet:', timesheet);
     const newTimesheet = await timesheet.save();
@@ -234,35 +238,43 @@ router.put("/:id", auth, async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Validate projectId and projectInputType if not admin work or break
-    if (!isAdminWork && !isBreak && !projectId) {
-      console.log('Missing projectId for project work');
-      return res.status(400).json({ message: "Project ID is required for project work" });
-    }
-
-    if (!isAdminWork && !isBreak && !projectInputType) {
-      console.log('Missing projectInputType for project work');
-      return res.status(400).json({ message: "Project input type is required for project work" });
-    }
-
     // Create date object in UTC
     const entryDate = new Date(date);
     entryDate.setUTCHours(0, 0, 0, 0);
     console.log('Created date object:', entryDate.toISOString());
 
+    // Create update object with conditional projectId
+    const updateData = {
+      date: entryDate,
+      startTime,
+      endTime,
+      description: description || "",
+      isAdminWork,
+      isBreak,
+    };
+
+    // Only add projectId and projectInputType if it's not admin work or break
+    if (!isAdminWork && !isBreak) {
+      if (!projectId) {
+        console.log('Missing projectId for project work');
+        return res.status(400).json({ message: "Project ID is required for project work" });
+      }
+      if (!projectInputType) {
+        console.log('Missing projectInputType for project work');
+        return res.status(400).json({ message: "Project input type is required for project work" });
+      }
+      updateData.projectId = projectId;
+      updateData.projectInputType = projectInputType;
+    } else {
+      // Clear projectId and projectInputType for admin work or break
+      updateData.projectId = null;
+      updateData.projectInputType = null;
+    }
+
     // Find and update the timesheet
     const timesheet = await Timesheet.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
-      {
-        date: entryDate,
-        startTime,
-        endTime,
-        projectId: isAdminWork || isBreak ? null : projectId,
-        description: description || "",
-        isAdminWork,
-        isBreak,
-        projectInputType: isAdminWork || isBreak ? null : projectInputType,
-      },
+      updateData,
       { new: true }
     );
 
@@ -521,7 +533,16 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     
-    console.log('Fetching timesheets from', start.toISOString(), 'to', end.toISOString());
+    console.log('Review endpoint - Request details:', {
+      startDate,
+      endDate,
+      userId: req.query.userId,
+      currentUser: {
+        id: req.user._id,
+        role: req.user.role
+      },
+      hasApprovePermission: hasPermission(req.user, 'timesheets.approve')
+    });
     
     // Build query based on whether we're looking at a specific user's timesheets
     const query = {
@@ -535,23 +556,47 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
     if (req.query.userId && hasPermission(req.user, 'timesheets.approve')) {
       try {
         query.userId = new mongoose.Types.ObjectId(req.query.userId);
+        console.log('Review endpoint - Using provided userId in query:', req.query.userId);
       } catch (error) {
-        console.error('Invalid user ID format:', error);
+        console.error('Review endpoint - Invalid user ID format:', error);
         return res.status(400).json({ message: "Invalid user ID format" });
       }
     } else {
       // Otherwise, only show the current user's timesheets
       query.userId = req.user._id;
+      console.log('Review endpoint - Using current user ID in query:', req.user._id);
     }
     
-    console.log('Query:', query);
+    console.log('Review endpoint - Final query:', JSON.stringify(query, null, 2));
     
     // Get all timesheet entries for the date range
     const entries = await Timesheet.find(query)
       .populate('userId', 'firstName lastName')
       .populate('finalisedBy', 'firstName lastName');
 
-    console.log('Found timesheets:', entries.length);
+    // Get all timesheet statuses for the date range
+    const statuses = await TimesheetStatus.find(query)
+      .populate('userId', 'firstName lastName')
+      .populate('updatedBy', 'firstName lastName');
+
+    console.log('Review endpoint - Found data:', {
+      entriesCount: entries.length,
+      statusesCount: statuses.length,
+      firstEntry: entries[0],
+      firstStatus: statuses[0]
+    });
+
+    // Create a map of statuses by date
+    const statusMap = {};
+    statuses.forEach(status => {
+      const date = format(new Date(status.date), 'yyyy-MM-dd');
+      // Only store non-incomplete statuses
+      if (status.status && status.status !== 'incomplete') {
+        statusMap[date] = status.status;
+      }
+    });
+
+    console.log('Review endpoint - Status map:', statusMap);
 
     // Group entries by user and date
     const timesheetData = entries.reduce((acc, entry) => {
@@ -568,7 +613,7 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
           date: date,
           totalTime: 0,
           projectTime: 0,
-          status: entry.status || 'incomplete',
+          status: statusMap[date] || 'incomplete',
           authorizationStatus: entry.isApproved ? 'authorized' : 
                              entry.rejectedBy ? 'query' : 'to_be_authorized'
         };
@@ -590,6 +635,11 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
       return acc;
     }, {});
 
+    console.log('Review endpoint - Processed timesheet data:', {
+      entriesCount: Object.keys(timesheetData).length,
+      sampleEntry: Object.values(timesheetData)[0]
+    });
+
     // Create entries for all days in the month
     const allDays = eachDayOfInterval({ start, end });
     const completeData = allDays.map(date => {
@@ -608,14 +658,20 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
         date: dateStr,
         totalTime: 0,
         projectTime: 0,
-        status: 'incomplete',
+        status: statusMap[dateStr] || 'incomplete',
         authorizationStatus: 'to_be_authorized'
       };
     });
 
+    console.log('Review endpoint - Final response data:', {
+      totalDays: completeData.length,
+      entriesWithTime: completeData.filter(entry => entry.totalTime > 0).length,
+      firstEntry: completeData[0]
+    });
+
     res.json(completeData);
   } catch (error) {
-    console.error("Error fetching timesheet review data:", error);
+    console.error("Review endpoint - Error:", error);
     res.status(500).json({ message: error.message });
   }
 });

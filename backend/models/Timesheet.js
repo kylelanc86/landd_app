@@ -22,7 +22,9 @@ const timesheetSchema = new mongoose.Schema(
     projectId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Project",
-      required: true,
+      required: function() {
+        return !this.isAdminWork && !this.isBreak;
+      },
     },
     description: {
       type: String,
@@ -39,7 +41,9 @@ const timesheetSchema = new mongoose.Schema(
     projectInputType: {
       type: String,
       enum: ["site_work", "reporting", "project_admin", null],
-      required: false,
+      required: function() {
+        return !this.isAdminWork && !this.isBreak;
+      },
     },
     status: {
       type: String,

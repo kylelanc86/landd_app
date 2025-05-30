@@ -65,7 +65,7 @@ const calendarStyles = `
 const Timesheets = () => {
   const theme = useTheme();
   const colors = tokens;
-  const { currentUser } = useAuth();
+  const { currentUser, loading: authLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -102,6 +102,8 @@ const Timesheets = () => {
 
   // Handle URL parameters
   useEffect(() => {
+    if (authLoading) return; // Don't process URL params until auth is loaded
+
     const params = new URLSearchParams(location.search);
     const userId = params.get("userId");
     const view = params.get("view");
@@ -121,7 +123,7 @@ const Timesheets = () => {
     if (date) {
       setSelectedDate(new Date(date));
     }
-  }, [location.search]);
+  }, [location.search, authLoading]);
 
   // Fetch user details
   const fetchUserDetails = async (userId) => {
@@ -225,10 +227,15 @@ const Timesheets = () => {
         selectedDateUTC: selectedDate.toISOString(),
       });
 
-      const response = await api.get(
-        `/timesheets/status/range/${startDate}/${endDate}${
+      const response = await axios.get(
+        `${
+          process.env.REACT_APP_API_URL
+        }/timesheets/status/range/${startDate}/${endDate}${
           userId ? `?userId=${userId}` : ""
-        }`
+        }`,
+        {
+          headers: { Authorization: `Bearer ${currentUser.token}` },
+        }
       );
 
       // Convert array to object with date as key
@@ -439,7 +446,7 @@ const Timesheets = () => {
       const timesheetData = {
         ...formData,
         date: format(selectedDate, "yyyy-MM-dd"),
-        userId: selectedUserId || currentUser.id,
+        userId: selectedUserId || currentUser._id,
         // If it's admin work or break, set projectInputType to null
         projectInputType:
           formData.isAdminWork || formData.isBreak
@@ -657,8 +664,11 @@ const Timesheets = () => {
       // Update the local state
       setTimesheetStatus(status);
 
-      // Refresh the time entries
-      await fetchTimeEntries();
+      // Refresh both time entries and daily statuses
+      await Promise.all([fetchTimeEntries(), fetchDailyStatuses()]);
+
+      // Force a re-render of the calendar
+      setCalendarKey((prev) => prev + 1);
     } catch (error) {
       console.error(
         "Error updating timesheet status:",
@@ -684,7 +694,7 @@ const Timesheets = () => {
               : "Manage your timesheets"
           }
         />
-        {!selectedUserId && viewMode === "full" && (
+        {!selectedUserId && viewMode === "full" && !authLoading && (
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -781,7 +791,7 @@ const Timesheets = () => {
                                   "do MMMM"
                                 )}`}
                               </Typography>
-                              {status && (
+                              {status && status !== "incomplete" && (
                                 <Chip
                                   label={
                                     status.charAt(0).toUpperCase() +
@@ -812,22 +822,16 @@ const Timesheets = () => {
                           }
                         />
                         <Typography
+                          variant="body2"
                           sx={{
-                            fontSize: "0.875rem",
-                            color: colors.grey[100],
-                            ml: 2,
+                            color:
+                              duration > 0
+                                ? colors.grey[900]
+                                : colors.grey[100],
+                            fontWeight: duration > 0 ? "bold" : "normal",
                           }}
                         >
                           {formatDuration(duration)}
-                          {monthlyProjectTimeEntries[formattedDate] > 0 && (
-                            <span style={{ marginLeft: "4px", opacity: 0.7 }}>
-                              (
-                              {formatDuration(
-                                monthlyProjectTimeEntries[formattedDate]
-                              )}
-                              )
-                            </span>
-                          )}
                         </Typography>
                       </ListItemButton>
                     </ListItem>
@@ -895,10 +899,15 @@ const Timesheets = () => {
                       },
                     }}
                     startIcon={<EventBusyIcon />}
-                    onClick={() => handleStatusUpdate("absent")}
-                    disabled={timesheetStatus === "absent"}
+                    onClick={() =>
+                      handleStatusUpdate(
+                        timesheetStatus === "absent" ? "incomplete" : "absent"
+                      )
+                    }
                   >
-                    Mark Absent
+                    {timesheetStatus === "absent"
+                      ? "Mark Present"
+                      : "Mark Absent"}
                   </Button>
                   {timeEntries.length > 0 && (
                     <Button
