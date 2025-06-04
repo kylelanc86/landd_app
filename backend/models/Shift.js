@@ -37,6 +37,10 @@ const shiftSchema = new mongoose.Schema({
     enum: ['ongoing', 'sampling_complete', 'samples_submitted_to_lab', 'analysis_complete', 'shift_complete'],
     default: 'ongoing'
   },
+  samples: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Sample'
+  }],
   samplesReceivedDate: {
     type: Date,
     required: false
@@ -67,6 +71,30 @@ const shiftSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   collection: 'air_monitoring_shifts'
+});
+
+// Add pre-find middleware to log queries
+shiftSchema.pre('find', function() {
+  console.log('Shift find query:', this.getQuery());
+});
+
+shiftSchema.pre('findOne', function() {
+  console.log('Shift findOne query:', this.getQuery());
+});
+
+// Add error handling for population
+shiftSchema.post('find', function(error, doc, next) {
+  if (error) {
+    console.error('Error in Shift find:', error);
+  }
+  next(error);
+});
+
+shiftSchema.post('findOne', function(error, doc, next) {
+  if (error) {
+    console.error('Error in Shift findOne:', error);
+  }
+  next(error);
 });
 
 module.exports = mongoose.model('Shift', shiftSchema); 

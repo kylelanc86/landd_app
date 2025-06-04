@@ -3,6 +3,7 @@ const router = express.Router();
 const Shift = require('../models/Shift');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const mongoose = require('mongoose');
 
 // Get all shifts
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
@@ -19,12 +20,38 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
 // Get shifts by job ID
 router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
+    console.log('Fetching shifts for job:', req.params.jobId);
+    console.log('User making request:', req.user._id);
+    
+    // First check if the job exists
+    const job = await mongoose.model('AirMonitoringJob').findById(req.params.jobId);
+    if (!job) {
+      console.log('Job not found:', req.params.jobId);
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    console.log('Found job:', job.jobID);
+
+    // Then fetch the shifts
     const shifts = await Shift.find({ job: req.params.jobId })
-      .populate('job')
+      .populate({
+        path: 'job',
+        select: 'jobID name project status asbestosRemovalist description',
+        populate: {
+          path: 'project',
+          select: 'projectID name'
+        }
+      })
       .populate('samples');
+    
+    console.log('Found shifts:', shifts.length);
     res.json(shifts);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error fetching shifts by job:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

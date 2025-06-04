@@ -49,64 +49,95 @@ const Shifts = () => {
 
   // Reusable function to fetch shifts and their sampleNumbers
   const fetchShiftsWithSamples = async () => {
-    const shiftsResponse = await shiftService.getByJob(jobId);
-    const formattedShifts = await Promise.all(
-      (shiftsResponse.data || []).map(async (shift) => {
-        // Fetch samples for this shift
-        try {
-          const samplesResponse = await sampleService.getByShift(shift._id);
-          const sampleNumbers = (samplesResponse.data || [])
-            .map((sample) => {
-              const match = sample.fullSampleID?.match(/-(\d+)$/);
-              return match ? match[1] : null;
-            })
-            .filter(Boolean)
-            .sort((a, b) => parseInt(a) - parseInt(b));
-          return {
-            ...shift,
-            id: shift._id,
-            sampleNumbers,
-            status: (() => {
-              const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
-              if (s === "pending") return "ongoing";
-              if (
-                [
-                  "ongoing",
-                  "sampling_complete",
-                  "samples_submitted_to_lab",
-                  "analysis_complete",
-                  "shift_complete",
-                ].includes(s)
-              )
-                return s;
-              return "ongoing";
-            })(),
-          };
-        } catch (error) {
-          return {
-            ...shift,
-            id: shift._id,
-            sampleNumbers: [],
-            status: (() => {
-              const s = (shift.status || "").toLowerCase().replace(/\s+/g, "_");
-              if (s === "pending") return "ongoing";
-              if (
-                [
-                  "ongoing",
-                  "sampling_complete",
-                  "samples_submitted_to_lab",
-                  "analysis_complete",
-                  "shift_complete",
-                ].includes(s)
-              )
-                return s;
-              return "ongoing";
-            })(),
-          };
-        }
-      })
-    );
-    setShifts(formattedShifts);
+    try {
+      console.log("Fetching shifts for job:", jobId);
+      const shiftsResponse = await shiftService.getByJob(jobId);
+      console.log("Shifts response:", shiftsResponse);
+
+      if (!shiftsResponse.data) {
+        console.log("No shifts data in response");
+        setShifts([]);
+        return;
+      }
+
+      const formattedShifts = await Promise.all(
+        (shiftsResponse.data || []).map(async (shift) => {
+          console.log("Processing shift:", shift._id);
+          // Fetch samples for this shift
+          try {
+            const samplesResponse = await sampleService.getByShift(shift._id);
+            console.log(
+              "Samples response for shift:",
+              shift._id,
+              samplesResponse
+            );
+            const sampleNumbers = (samplesResponse.data || [])
+              .map((sample) => {
+                const match = sample.fullSampleID?.match(/-(\d+)$/);
+                return match ? match[1] : null;
+              })
+              .filter(Boolean)
+              .sort((a, b) => parseInt(a) - parseInt(b));
+            return {
+              ...shift,
+              id: shift._id,
+              sampleNumbers,
+              status: (() => {
+                const s = (shift.status || "")
+                  .toLowerCase()
+                  .replace(/\s+/g, "_");
+                if (s === "pending") return "ongoing";
+                if (
+                  [
+                    "ongoing",
+                    "sampling_complete",
+                    "samples_submitted_to_lab",
+                    "analysis_complete",
+                    "shift_complete",
+                  ].includes(s)
+                )
+                  return s;
+                return "ongoing";
+              })(),
+            };
+          } catch (error) {
+            console.error(
+              "Error fetching samples for shift:",
+              shift._id,
+              error
+            );
+            return {
+              ...shift,
+              id: shift._id,
+              sampleNumbers: [],
+              status: (() => {
+                const s = (shift.status || "")
+                  .toLowerCase()
+                  .replace(/\s+/g, "_");
+                if (s === "pending") return "ongoing";
+                if (
+                  [
+                    "ongoing",
+                    "sampling_complete",
+                    "samples_submitted_to_lab",
+                    "analysis_complete",
+                    "shift_complete",
+                  ].includes(s)
+                )
+                  return s;
+                return "ongoing";
+              })(),
+            };
+          }
+        })
+      );
+      console.log("Formatted shifts:", formattedShifts);
+      setShifts(formattedShifts);
+    } catch (error) {
+      console.error("Error in fetchShiftsWithSamples:", error);
+      setError("Failed to load shifts. Please try again later.");
+      setShifts([]);
+    }
   };
 
   useEffect(() => {

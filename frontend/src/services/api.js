@@ -25,16 +25,6 @@ api.interceptors.request.use(
 // Add response interceptor
 api.interceptors.response.use(
   (response) => {
-    // If a new token is provided, update it in localStorage
-    const newToken = response.headers['new-token'] || response.headers['New-Token'];
-    if (newToken) {
-      console.log('Received new token from backend, updating localStorage.');
-      localStorage.setItem('token', newToken);
-      // Update the current user object with the new token
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      currentUser.token = newToken;
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    }
     return response;
   },
   (error) => {
@@ -42,8 +32,8 @@ api.interceptors.response.use(
     const isXero = error.config && error.config.url && error.config.url.includes('/xero/');
     if (error.response?.status === 401 && !isXero) {
       console.error('401 Unauthorized error:', error, error.response);
-      // Check if we got a new token in the response
-      const newToken = error.response?.headers?.['new-token'] || error.response?.headers?.['New-Token'];
+      // Check if we got a new token in the response body
+      const newToken = error.response?.data?.newToken;
       if (newToken) {
         console.log('Received new token in error response, updating localStorage.');
         localStorage.setItem('token', newToken);
