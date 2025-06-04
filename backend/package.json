@@ -5,9 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon",
-    "build": "tsc",
-    "postinstall": "tsc"
+    "dev": "nodemon"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -21,13 +19,6 @@
     "xero-node": "^11.1.0"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.2",
-    "@types/cors": "^2.8.13",
-    "@types/express": "^4.17.17",
-    "@types/jsonwebtoken": "^9.0.1",
-    "@types/node": "^18.15.11",
-    "nodemon": "^2.0.22",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.0.4"
+    "nodemon": "^2.0.22"
   }
 }
