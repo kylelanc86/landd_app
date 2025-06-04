@@ -1,0 +1,30 @@
+services:
+  # Backend service
+  - type: web
+    name: air-monitoring-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRE
+        value: 24h
+      - key: PORT
+        value: 5000
+
+  # Frontend service
+  - type: web
+    name: air-monitoring-frontend
+    env: node
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && serve -s build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://air-monitoring-backend.onrender.com/api
+      - key: NODE_ENV
+        value: production 

@@ -75,6 +75,8 @@ const TimesheetReview = () => {
 
   // Update useEffect to handle initial setup and user data loading
   useEffect(() => {
+    let isMounted = true;
+
     const initializeData = async () => {
       try {
         // First restore user state
@@ -83,18 +85,22 @@ const TimesheetReview = () => {
         // Then set up the date
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        setSelectedDate(today);
-
-        // Finally mark everything as loaded
-        setIsInitialLoading(false);
-        setIsUserDataLoaded(true);
+        if (isMounted) {
+          setSelectedDate(today);
+          setIsInitialLoading(false);
+          setIsUserDataLoaded(true);
+        }
       } catch (error) {
         console.error("Error initializing data:", error);
       }
     };
 
     initializeData();
-  }, [restoreUserState]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Only run once on mount
 
   // Fetch timesheet data for the current month
   const fetchTimesheetData = async () => {
@@ -115,8 +121,8 @@ const TimesheetReview = () => {
       currentRequestRef.current = controller;
 
       console.log("Review - Fetching timesheet data:", {
-        startDate: format(startDate, "yyyy-MM-dd"),
-        endDate: format(endDate, "yyyy-MM-dd"),
+        startDate: format(startDate, "dd-MM-yyyy"),
+        endDate: format(endDate, "dd-MM-yyyy"),
         selectedUserId,
         currentUserId: currentUser._id,
         currentUserRole: currentUser.role,
@@ -126,8 +132,8 @@ const TimesheetReview = () => {
       // Always include userId parameter if selectedUserId exists
       const url = `/timesheets/review/${format(
         startDate,
-        "yyyy-MM-dd"
-      )}/${format(endDate, "yyyy-MM-dd")}?userId=${
+        "dd-MM-yyyy"
+      )}/${format(endDate, "dd-MM-yyyy")}?userId=${
         selectedUserId || currentUser._id
       }`;
 
@@ -138,60 +144,7 @@ const TimesheetReview = () => {
       // Only update state if this is still the current request
       if (currentRequestRef.current === controller) {
         console.log("Review - Raw response data:", data);
-
-        // Create entries for all days in the month
-        const allDays = eachDayOfInterval({ start: startDate, end: endDate });
-        const timesheetMap = data.reduce((acc, entry) => {
-          acc[entry.date] = entry;
-          return acc;
-        }, {});
-
-        console.log("Review - Timesheet map:", timesheetMap);
-
-        // Create complete dataset with all days
-        const completeData = allDays.map((date) => {
-          const dateStr = format(date, "yyyy-MM-dd");
-          const existingEntry = timesheetMap[dateStr];
-
-          if (existingEntry) {
-            console.log(
-              "Review - Using existing entry for date:",
-              dateStr,
-              existingEntry
-            );
-            return existingEntry;
-          }
-
-          // Default entry for days without data
-          const defaultEntry = {
-            userId: selectedUserId || currentUser._id,
-            userName:
-              selectedUserName ||
-              `${currentUser.firstName} ${currentUser.lastName}`,
-            date: dateStr,
-            totalTime: 0,
-            projectTime: 0,
-            status: "incomplete",
-            authorizationStatus: "to_be_authorized",
-          };
-          console.log(
-            "Review - Creating default entry for date:",
-            dateStr,
-            defaultEntry
-          );
-          return defaultEntry;
-        });
-
-        console.log("Review - Final processed data:", {
-          completeData,
-          currentUser: currentUser._id,
-          selectedUserId,
-          totalEntries: completeData.length,
-          entriesWithTime: completeData.filter((entry) => entry.totalTime > 0)
-            .length,
-        });
-
-        setTimesheetData(completeData);
+        setTimesheetData(data);
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -213,18 +166,42 @@ const TimesheetReview = () => {
     };
   }, []);
 
-  // Update the fetch effect to include a delay and proper dependencies
+  // Update the fetch effect to include proper cleanup and debouncing
   useEffect(() => {
     if (!isUserDataLoaded || !currentUser?._id) return;
 
-    const timeoutId = setTimeout(() => {
-      fetchTimesheetData();
-    }, 100); // Small delay to prevent rapid re-renders
+    let timeoutId;
+    let isMounted = true;
+
+    const fetchData = async () => {
+      if (!isMounted) return;
+
+      try {
+        await fetchTimesheetData();
+      } catch (error) {
+        console.error("Error fetching timesheet data:", error);
+      }
+    };
+
+    // Clear any existing timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    // Set a new timeout
+    timeoutId = setTimeout(fetchData, 300); // Increased debounce time
 
     return () => {
-      clearTimeout(timeoutId);
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      // Abort any ongoing request
+      if (currentRequestRef.current) {
+        currentRequestRef.current.abort();
+      }
     };
-  }, [selectedDate, selectedUserId, isUserDataLoaded, currentUser?._id]);
+  }, [selectedDate, selectedUserId]); // Removed isUserDataLoaded and currentUser?._id from dependencies
 
   const handleMonthChange = (direction) => {
     setSelectedDate(
@@ -235,7 +212,13 @@ const TimesheetReview = () => {
   };
 
   const handleViewTimesheet = (userId, date) => {
-    // Always use the userId from the row data
+    // Use the date directly from the row data
+    console.log("Navigating to timesheet view:", {
+      userId,
+      date,
+      rowDate: date,
+    });
+    // Always use the userId from the row data and the date from the row
     navigate(`/timesheets?userId=${userId}&date=${date}&view=daily`);
   };
 
@@ -244,8 +227,17 @@ const TimesheetReview = () => {
       field: "date",
       headerName: "Date",
       flex: 1,
-      valueGetter: (params) =>
-        format(new Date(params.row.date), "EEEE, MMMM d, yyyy"),
+      valueGetter: (params) => {
+        try {
+          // Parse the date string in dd-MM-yyyy format
+          const [day, month, year] = params.row.date.split("-").map(Number);
+          const date = new Date(year, month - 1, day);
+          return format(date, "dd-MM-yyyy");
+        } catch (error) {
+          console.error("Error formatting date:", error);
+          return params.row.date; // Return original date string if parsing fails
+        }
+      },
     },
     {
       field: "totalTime",

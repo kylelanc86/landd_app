@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -15,71 +15,36 @@ import {
   FormControl,
   InputLabel,
   Select,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   IconButton,
   Chip,
 } from "@mui/material";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import { LocalizationProvider } from "@mui/x-date-pickers";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
-import api, { timesheetService } from "../../services/api";
+import api from "../../services/api";
 import AddIcon from "@mui/icons-material/Add";
-import FullCalendar from "@fullcalendar/react";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
-  isSameDay,
-  isBefore,
-  addDays,
-  parseISO,
-  addMonths,
-  subMonths,
-} from "date-fns";
-import { zonedTimeToUtc, utcToZonedTime } from "date-fns-tz";
-import axios from "axios";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import EventBusyIcon from "@mui/icons-material/EventBusy";
+import { format, addDays, subDays, startOfDay, endOfDay } from "date-fns";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
-import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
-import { useLocation, useNavigate } from "react-router-dom";
-import { hasPermission } from "../../config/permissions";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
-import EventBusyIcon from "@mui/icons-material/EventBusy";
-
-// Add custom styles for the calendar
-const calendarStyles = `
-  .fc-slot-label-small {
-    font-size: 0.75em !important;
-  }
-`;
 
 const Timesheets = () => {
   const theme = useTheme();
-  const colors = tokens;
-  const { currentUser, loading: authLoading } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const { currentUser } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [openDialog, setOpenDialog] = useState(false);
   const [projects, setProjects] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
-  const [monthlyTimeEntries, setMonthlyTimeEntries] = useState({});
-  const [monthlyProjectTimeEntries, setMonthlyProjectTimeEntries] = useState(
-    {}
-  );
   const [isLoading, setIsLoading] = useState(false);
-  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
-  const [entriesCache, setEntriesCache] = useState({});
   const [formData, setFormData] = useState({
     startTime: "",
     endTime: "",
@@ -91,411 +56,110 @@ const Timesheets = () => {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
-  const calendarRef = useRef(null);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [calendarKey, setCalendarKey] = useState(0);
-  const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedUserName, setSelectedUserName] = useState("");
   const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
-  const [viewMode, setViewMode] = useState("full");
-  const [dailyStatuses, setDailyStatuses] = useState({});
 
-  // Handle URL parameters
-  useEffect(() => {
-    if (authLoading) return; // Don't process URL params until auth is loaded
-
-    const params = new URLSearchParams(location.search);
-    const userId = params.get("userId");
-    const view = params.get("view");
-    const date = params.get("date");
-
-    console.log("Timesheet component - URL params:", { userId, view, date });
-
-    if (userId && userId !== "undefined" && userId !== "null") {
-      setSelectedUserId(userId);
-      fetchUserDetails(userId);
-    }
-
-    if (view === "daily") {
-      setViewMode("daily");
-    }
-
-    if (date) {
-      setSelectedDate(new Date(date));
-    }
-  }, [location.search, authLoading]);
-
-  // Fetch user details
-  const fetchUserDetails = async (userId) => {
-    try {
-      const response = await axios.get(
-        `${process.env.REACT_APP_API_URL}/users/${userId}`,
-        {
-          headers: { Authorization: `Bearer ${currentUser.token}` },
-        }
-      );
-      console.log("User details response:", response.data);
-      setSelectedUserName(
-        response.data.firstName + " " + response.data.lastName
-      );
-    } catch (error) {
-      console.error("Error fetching user details:", error);
-    }
-  };
-
-  // Fetch time entries for the month
+  // Fetch time entries for the selected day
   const fetchTimeEntries = async () => {
     try {
-      const startDate = format(startOfMonth(selectedDate), "yyyy-MM-dd");
-      const endDate = format(endOfMonth(selectedDate), "yyyy-MM-dd");
-      const userId = selectedUserId || currentUser._id;
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
+      const userId = currentUser._id;
 
-      console.log("Fetching entries for date range:", {
-        startDate,
-        endDate,
+      console.log("Fetching entries for date:", {
+        date: formattedDate,
         userId,
-        selectedDate: format(selectedDate, "yyyy-MM-dd"),
-        selectedDateUTC: selectedDate.toISOString(),
       });
 
-      const response = await axios.get(
-        `${
-          process.env.REACT_APP_API_URL
-        }/timesheets/range/${startDate}/${endDate}${
-          userId ? `?userId=${userId}` : ""
-        }`,
-        {
-          headers: { Authorization: `Bearer ${currentUser.token}` },
-        }
+      // Use the existing range endpoint but with same start and end date
+      const response = await api.get(
+        `/timesheets/range/${formattedDate}/${formattedDate}`
       );
 
-      console.log("Raw response data:", response.data);
-      setTimeEntries(response.data || []);
+      const processedEntries = (response.data || []).map((entry) => ({
+        ...entry,
+        date: new Date(entry.date).toISOString().split("T")[0],
+      }));
 
-      // Calculate monthly time entries
-      const monthlyEntries = {};
-      const monthlyProjectEntries = {};
-
-      (response.data || []).forEach((entry) => {
-        const dateStr = format(new Date(entry.date), "yyyy-MM-dd");
-
-        // Calculate duration in minutes
-        const [startHours, startMinutes] = entry.startTime
-          .split(":")
-          .map(Number);
-        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
-        const startTotalMinutes = startHours * 60 + startMinutes;
-        const endTotalMinutes = endHours * 60 + endMinutes;
-        let duration = endTotalMinutes - startTotalMinutes;
-        if (duration < 0) duration += 24 * 60; // Handle overnight entries
-
-        // Add to total time
-        monthlyEntries[dateStr] = (monthlyEntries[dateStr] || 0) + duration;
-
-        // Add to project time if not admin work or break
-        if (!entry.isAdminWork && !entry.isBreak) {
-          monthlyProjectEntries[dateStr] =
-            (monthlyProjectEntries[dateStr] || 0) + duration;
-        }
-      });
-
-      setMonthlyTimeEntries(monthlyEntries);
-      setMonthlyProjectTimeEntries(monthlyProjectEntries);
+      console.log("Processed entries:", processedEntries);
+      setTimeEntries(processedEntries);
     } catch (error) {
-      console.error(
-        "Error fetching time entries:",
-        error.response?.data || error
-      );
+      console.error("Error fetching time entries:", error);
       setTimeEntries([]);
-      setMonthlyTimeEntries({});
-      setMonthlyProjectTimeEntries({});
     }
   };
 
-  // Fetch daily statuses for the month
-  const fetchDailyStatuses = async () => {
+  // Fetch timesheet status for the selected day
+  const fetchTimesheetStatus = async () => {
     try {
-      const startDate = format(startOfMonth(selectedDate), "yyyy-MM-dd");
-      const endDate = format(endOfMonth(selectedDate), "yyyy-MM-dd");
-      const userId = selectedUserId || currentUser._id;
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
+      const userId = currentUser._id;
 
-      console.log("Fetching daily statuses for date range:", {
-        startDate,
-        endDate,
-        userId,
-        selectedDate: format(selectedDate, "yyyy-MM-dd"),
-        selectedDateUTC: selectedDate.toISOString(),
-      });
-
-      const response = await axios.get(
-        `${
-          process.env.REACT_APP_API_URL
-        }/timesheets/status/range/${startDate}/${endDate}${
-          userId ? `?userId=${userId}` : ""
-        }`,
-        {
-          headers: { Authorization: `Bearer ${currentUser.token}` },
-        }
+      // Use the existing status range endpoint but with same start and end date
+      const response = await api.get(
+        `/timesheets/status/range/${formattedDate}/${formattedDate}`
       );
 
-      // Convert array to object with date as key
-      const statusMap = (response.data || []).reduce((acc, status) => {
-        const dateStr = format(new Date(status.date), "yyyy-MM-dd");
-        acc[dateStr] = status.status;
-        return acc;
-      }, {});
-
-      console.log("Daily status map:", statusMap);
-      setDailyStatuses(statusMap);
-
-      // Update the timesheet status for the selected date
-      const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
-      if (statusMap[selectedDateStr]) {
-        setTimesheetStatus(statusMap[selectedDateStr]);
-      } else {
-        setTimesheetStatus("incomplete");
-      }
+      // Get the status for the current date from the response
+      const status = response.data?.[0]?.status || "incomplete";
+      console.log("Timesheet status:", status);
+      setTimesheetStatus(status);
     } catch (error) {
-      console.error(
-        "Error fetching daily statuses:",
-        error.response?.data || error
-      );
-      setDailyStatuses({});
+      console.error("Error fetching timesheet status:", error);
       setTimesheetStatus("incomplete");
     }
   };
 
-  // Generate days of the current month
-  const daysInMonth = selectedDate
-    ? eachDayOfInterval({
-        start: startOfMonth(selectedDate),
-        end: endOfMonth(selectedDate),
-      })
-    : [];
+  // Handle status update
+  const handleStatusUpdate = async (status) => {
+    try {
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
-  // Update the useEffect to handle initial setup
-  useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    setSelectedDate(today);
-  }, []);
-
-  // Update useEffect to fetch statuses
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchData = async () => {
-      if (!selectedDate) return;
-
-      setIsLoading(true);
-      try {
-        // Fetch projects only if not already loaded
-        if (projects.length === 0) {
-          const projectsResponse = await api.get("/projects");
-          if (isMounted) {
-            setProjects(projectsResponse.data);
-          }
-        }
-
-        // Fetch time entries and statuses for the selected date
-        await Promise.all([fetchTimeEntries(), fetchDailyStatuses()]);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedDate]);
-
-  // Helper function to format duration
-  const formatDuration = (minutes) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
-  };
-
-  const handleSelect = (info) => {
-    const startTime = format(new Date(info.start), "HH:mm");
-    const endTime = format(new Date(info.end), "HH:mm");
-
-    setFormData({
-      startTime,
-      endTime,
-      projectId: "",
-      description: "",
-      isAdminWork: false,
-      isBreak: false,
-      projectInputType: "",
-    });
-    setOpenDialog(true);
-  };
-
-  const handleEventClick = (info) => {
-    const entry = timeEntries.find((e) => e._id === info.event.id);
-    if (entry) {
-      setFormData({
-        startTime: entry.startTime,
-        endTime: entry.endTime,
-        projectId: entry.projectId || "",
-        description: entry.description,
-        isAdminWork: entry.isAdminWork,
-        isBreak: entry.isBreak,
-        projectInputType: entry.projectInputType,
+      // Use the existing status update endpoint
+      const response = await api.put(`/timesheets/status/${formattedDate}`, {
+        status,
+        userId: currentUser._id,
+        date: formattedDate,
       });
-      setEditingEntryId(entry._id);
-      setIsEditing(true);
-      setOpenDialog(true);
+
+      console.log("Status update response:", response.data);
+      setTimesheetStatus(status);
+      await fetchTimeEntries();
+    } catch (error) {
+      console.error("Error updating timesheet status:", error);
+      alert("Failed to update timesheet status. Please try again.");
     }
   };
 
-  const handleDateSelect = (day) => {
-    if (!day) return;
-    const newDate = new Date(day);
-    newDate.setHours(0, 0, 0, 0);
-    console.log("Selecting new date:", format(newDate, "yyyy-MM-dd"));
-    setSelectedDate(newDate);
-    setCalendarKey((prev) => prev + 1);
-  };
-
-  // Convert time entries to calendar events
-  const events = React.useMemo(() => {
-    if (!selectedDate || isCalendarLoading) {
-      return [];
-    }
-
-    const selectedFormattedDate = format(selectedDate, "yyyy-MM-dd");
-    console.log("Creating events for selected date:", selectedFormattedDate);
-
-    // Filter entries for the selected date only
-    const entriesForSelectedDate = timeEntries.filter((entry) => {
-      const entryDate = format(new Date(entry.date), "yyyy-MM-dd");
-      return entryDate === selectedFormattedDate;
-    });
-
-    console.log("Filtered entries for selected date:", entriesForSelectedDate);
-
-    return entriesForSelectedDate.map((entry) => {
-      // Parse the entry's date and ensure it's in the correct timezone
-      const entryDate = new Date(entry.date);
-      entryDate.setHours(0, 0, 0, 0);
-      const formattedEntryDate = format(entryDate, "yyyy-MM-dd");
-
-      // Determine event color based on type
-      let backgroundColor, borderColor;
-      if (entry.isBreak) {
-        backgroundColor = colors.secondary[500];
-        borderColor = colors.secondary[600];
-      } else if (entry.isAdminWork) {
-        backgroundColor = colors.primary[500];
-        borderColor = colors.primary[600];
-      } else {
-        backgroundColor = colors.primary[400];
-        borderColor = colors.primary[500];
-      }
-
-      // Create the event with the entry's date
-      const event = {
-        id: entry._id,
-        title: entry.isBreak
-          ? "Break"
-          : entry.isAdminWork
-          ? "Admin Work"
-          : projects.find((p) => p._id === entry.projectId)?.name ||
-            "Unknown Project",
-        start: `${formattedEntryDate}T${entry.startTime}:00`,
-        end: `${formattedEntryDate}T${entry.endTime}:00`,
-        backgroundColor,
-        borderColor,
-        display: "block",
-        allDay: false,
-        extendedProps: {
-          description: entry.description,
-          projectId: entry.projectId,
-          isAdminWork: entry.isAdminWork,
-          isBreak: entry.isBreak,
-          projectInputType: entry.projectInputType,
-          originalDate: formattedEntryDate,
-        },
-      };
-
-      console.log("Created event:", {
-        id: event.id,
-        title: event.title,
-        start: event.start,
-        end: event.end,
-        date: formattedEntryDate,
-      });
-
-      return event;
-    });
-  }, [timeEntries, selectedDate, projects, isCalendarLoading]);
-
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
-      // Create a copy of formData and ensure projectInputType is included
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
+
+      // Check if timesheet is finalised
+      if (timesheetStatus === "finalised") {
+        alert(
+          "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+        );
+        return;
+      }
+
       const timesheetData = {
         ...formData,
-        date: format(selectedDate, "yyyy-MM-dd"),
-        userId: selectedUserId || currentUser._id,
-        // If it's admin work or break, set projectInputType to null
+        date: formattedDate,
+        userId: currentUser._id,
+        projectId:
+          formData.isAdminWork || formData.isBreak ? null : formData.projectId,
         projectInputType:
           formData.isAdminWork || formData.isBreak
             ? null
             : formData.projectInputType,
       };
 
-      // Validate required fields
-      if (!timesheetData.startTime || !timesheetData.endTime) {
-        alert("Please select start and end times");
-        return;
-      }
-
-      if (
-        !timesheetData.isAdminWork &&
-        !timesheetData.isBreak &&
-        !timesheetData.projectId
-      ) {
-        alert("Please select a project");
-        return;
-      }
-
-      if (
-        !timesheetData.isAdminWork &&
-        !timesheetData.isBreak &&
-        !timesheetData.projectInputType
-      ) {
-        alert("Please select a project input type");
-        return;
-      }
-
       if (isEditing && editingEntryId) {
-        // Update existing entry
-        await axios.put(
-          `${process.env.REACT_APP_API_URL}/timesheets/${editingEntryId}`,
-          timesheetData,
-          {
-            headers: { Authorization: `Bearer ${currentUser.token}` },
-          }
-        );
+        await api.put(`/timesheets/${editingEntryId}`, timesheetData);
       } else {
-        // Create new entry
-        await axios.post(
-          `${process.env.REACT_APP_API_URL}/timesheets`,
-          timesheetData,
-          {
-            headers: { Authorization: `Bearer ${currentUser.token}` },
-          }
-        );
+        await api.post("/timesheets", timesheetData);
       }
 
       setOpenDialog(false);
@@ -511,7 +175,6 @@ const Timesheets = () => {
       setIsEditing(false);
       setEditingEntryId(null);
 
-      // Refresh time entries
       await fetchTimeEntries();
     } catch (error) {
       console.error("Error saving time entry:", error);
@@ -519,538 +182,216 @@ const Timesheets = () => {
     }
   };
 
+  // Handle entry deletion
   const handleDelete = async (entryId) => {
     try {
-      const response = await api.delete(`/timesheets/${entryId}`);
-      if (response.status === 200) {
-        // Clear the cache for the current date to force a fresh fetch
-        const formattedDate = format(selectedDate, "yyyy-MM-dd");
-        setEntriesCache((prev) => {
-          const newCache = { ...prev };
-          delete newCache[formattedDate];
-          return newCache;
-        });
-
-        await fetchTimeEntries();
-      }
+      await api.delete(`/timesheets/${entryId}`);
+      await fetchTimeEntries();
     } catch (error) {
       console.error("Error deleting time entry:", error);
       alert(error.response?.data?.message || "Error deleting time entry");
     }
   };
 
-  const handleMonthChange = (direction) => {
+  // Handle day navigation
+  const handleDayChange = (direction) => {
     const newDate =
       direction === "next"
-        ? addMonths(selectedDate, 1)
-        : subMonths(selectedDate, 1);
-    // Set the new date to the first day of the month
-    const firstDayOfMonth = new Date(
-      newDate.getFullYear(),
-      newDate.getMonth(),
-      1
-    );
-    handleDateSelect(firstDayOfMonth);
+        ? addDays(selectedDate, 1)
+        : subDays(selectedDate, 1);
+    setSelectedDate(newDate);
   };
 
-  const handleClearDate = async () => {
-    if (!selectedDate || !timeEntries.length) return;
+  // Calculate total hours for the day
+  const calculateTotalHours = (entries) => {
+    return (
+      entries.reduce((total, entry) => {
+        const [startHours, startMinutes] = entry.startTime
+          .split(":")
+          .map(Number);
+        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        let duration = endTotalMinutes - startTotalMinutes;
+        if (duration < 0) duration += 24 * 60;
+        return total + duration;
+      }, 0) / 60
+    ).toFixed(2);
+  };
 
-    if (
-      window.confirm(
-        `Are you sure you want to delete all entries for ${format(
-          selectedDate,
-          "MMMM d, yyyy"
-        )}?`
-      )
-    ) {
+  // Fetch initial data
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
       try {
-        // Filter entries for the selected date only
-        const entriesForSelectedDate = timeEntries.filter((entry) => {
-          const entryDate = format(new Date(entry.date), "yyyy-MM-dd");
-          const selectedFormattedDate = format(selectedDate, "yyyy-MM-dd");
-          return entryDate === selectedFormattedDate;
-        });
-
-        console.log(
-          "Deleting entries for date:",
-          format(selectedDate, "yyyy-MM-dd"),
-          entriesForSelectedDate
-        );
-
-        // Delete each entry for the selected date
-        const deletePromises = entriesForSelectedDate.map((entry) =>
-          api.delete(`/timesheets/${entry._id}`)
-        );
-
-        await Promise.all(deletePromises);
-
-        // Clear the cache for the current date
-        const formattedDate = format(selectedDate, "yyyy-MM-dd");
-        setEntriesCache((prev) => {
-          const newCache = { ...prev };
-          delete newCache[formattedDate];
-          return newCache;
-        });
-
-        // Clear current entries
-        setTimeEntries([]);
-
-        // Refresh the data
-        await fetchTimeEntries();
+        const [projectsResponse] = await Promise.all([
+          api.get("/projects"),
+          fetchTimeEntries(),
+          fetchTimesheetStatus(),
+        ]);
+        setProjects(projectsResponse.data);
       } catch (error) {
-        console.error("Error clearing date entries:", error);
-        alert("Error clearing entries. Please try again.");
+        console.error("Error fetching data:", error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-  };
+    };
 
-  // Add function to handle timesheet approval
-  const handleApproveTimesheet = async (entryId) => {
-    try {
-      await api.put(`/timesheets/${entryId}/approve`);
-      // Refresh the timesheet entries
-      await fetchTimeEntries();
-    } catch (error) {
-      console.error("Error approving timesheet:", error);
-      alert("Failed to approve timesheet");
-    }
-  };
-
-  // Add function to handle timesheet rejection
-  const handleRejectTimesheet = async (entryId) => {
-    try {
-      await api.put(`/timesheets/${entryId}/reject`);
-      // Refresh the timesheet entries
-      await fetchTimeEntries();
-    } catch (error) {
-      console.error("Error rejecting timesheet:", error);
-      alert("Failed to reject timesheet");
-    }
-  };
-
-  // Add function to handle status update
-  const handleStatusUpdate = async (status) => {
-    try {
-      const formattedDate = format(selectedDate, "yyyy-MM-dd");
-
-      // Get user ID from currentUser
-      const userId = selectedUserId || currentUser._id;
-
-      console.log("Status update details:", {
-        date: formattedDate,
-        status,
-        selectedUserId,
-        currentUserId: currentUser._id,
-        finalUserId: userId,
-      });
-
-      if (!userId) {
-        console.error("No user ID available for status update", {
-          selectedUserId,
-          currentUser,
-        });
-        return;
-      }
-
-      // Update the status for the specific user
-      const response = await api.put(`/timesheets/status/${formattedDate}`, {
-        status,
-        userId,
-      });
-
-      console.log("Status update response:", response.data);
-
-      // Update the local state
-      setTimesheetStatus(status);
-
-      // Refresh both time entries and daily statuses
-      await Promise.all([fetchTimeEntries(), fetchDailyStatuses()]);
-
-      // Force a re-render of the calendar
-      setCalendarKey((prev) => prev + 1);
-    } catch (error) {
-      console.error(
-        "Error updating timesheet status:",
-        error.response?.data || error
-      );
-    }
-  };
+    fetchData();
+  }, [selectedDate]);
 
   return (
     <Box m="20px">
-      <style>{calendarStyles}</style>
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
         mb="20px"
       >
-        <Header
-          title="TIMESHEETS"
-          subtitle={
-            selectedUserId
-              ? `Viewing timesheets for ${selectedUserName}`
-              : "Manage your timesheets"
-          }
-        />
-        {!selectedUserId && viewMode === "full" && !authLoading && (
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenDialog(true)}
-          >
-            Add Time Entry
-          </Button>
-        )}
+        <Header title="TIMESHEETS" subtitle="Manage your daily timesheet" />
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setOpenDialog(true)}
+          disabled={timesheetStatus === "finalised"}
+        >
+          Add Time Entry
+        </Button>
       </Box>
 
-      <Grid container spacing={3}>
-        {/* Monthly Calendar - Left Side */}
-        {viewMode === "full" && (
-          <Grid item xs={12} md={5}>
-            <Paper
-              elevation={3}
-              sx={{
-                p: 2,
-                backgroundColor: theme.palette.background.alt,
-                height: "calc(100vh - 200px)",
-                overflow: "auto",
-              }}
+      <Paper
+        elevation={3}
+        sx={{ p: 2, backgroundColor: theme.palette.background.alt }}
+      >
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={2}
+        >
+          <Box display="flex" alignItems="center" gap={2}>
+            <IconButton onClick={() => handleDayChange("prev")}>
+              <ArrowBackIosNewIcon />
+            </IconButton>
+            <Typography variant="h5">
+              {format(selectedDate, "EEEE, MMMM d, yyyy")}
+            </Typography>
+            <IconButton onClick={() => handleDayChange("next")}>
+              <ArrowForwardIosIcon />
+            </IconButton>
+          </Box>
+          <Box display="flex" gap={1}>
+            <Button
+              variant={
+                timesheetStatus === "finalised" ? "contained" : "outlined"
+              }
+              color="success"
+              startIcon={<CheckCircleIcon />}
+              onClick={() =>
+                handleStatusUpdate(
+                  timesheetStatus === "finalised" ? "incomplete" : "finalised"
+                )
+              }
             >
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="space-between"
-                mb={2}
-              >
-                <IconButton
-                  onClick={() => handleMonthChange("prev")}
-                  sx={{ color: colors.grey[100] }}
-                >
-                  <ArrowBackIosNewIcon />
-                </IconButton>
-                <Typography variant="h6">
-                  {format(selectedDate, "MMMM yyyy")}
-                </Typography>
-                <IconButton
-                  onClick={() => handleMonthChange("next")}
-                  sx={{ color: colors.grey[100] }}
-                >
-                  <ArrowForwardIosIcon />
-                </IconButton>
-              </Box>
-              <List sx={{ width: "100%", bgcolor: "background.paper" }}>
-                {daysInMonth.map((day) => {
-                  const formattedDate = format(day, "yyyy-MM-dd");
-                  const duration = monthlyTimeEntries[formattedDate] || 0;
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                  const status = dailyStatuses[formattedDate];
+              {timesheetStatus === "finalised" ? "Unfinalise" : "Finalise"}
+            </Button>
+            <Button
+              variant={timesheetStatus === "absent" ? "contained" : "outlined"}
+              startIcon={<EventBusyIcon />}
+              onClick={() =>
+                handleStatusUpdate(
+                  timesheetStatus === "absent" ? "incomplete" : "absent"
+                )
+              }
+            >
+              {timesheetStatus === "absent" ? "Mark Present" : "Mark Absent"}
+            </Button>
+          </Box>
+        </Box>
 
-                  return (
-                    <ListItem
-                      key={formattedDate}
-                      disablePadding
-                      sx={{
-                        mb: 0.5,
-                        backgroundColor: isSameDay(day, selectedDate)
-                          ? colors.primary[500]
-                          : isWeekend
-                          ? colors.neutral[700]
-                          : "transparent",
-                        borderRadius: "4px",
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Start Time</TableCell>
+                <TableCell>End Time</TableCell>
+                <TableCell>Project</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Hours</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {timeEntries.map((entry) => (
+                <TableRow key={entry._id}>
+                  <TableCell>{entry.startTime}</TableCell>
+                  <TableCell>{entry.endTime}</TableCell>
+                  <TableCell>
+                    {entry.isBreak
+                      ? "Break"
+                      : entry.isAdminWork
+                      ? "Admin Work"
+                      : projects.find((p) => p._id === entry.projectId)?.name ||
+                        "Unknown"}
+                  </TableCell>
+                  <TableCell>
+                    {entry.projectInputType
+                      ? entry.projectInputType
+                          .replace("_", " ")
+                          .replace(/\b\w/g, (l) => l.toUpperCase())
+                      : "-"}
+                  </TableCell>
+                  <TableCell>{entry.description}</TableCell>
+                  <TableCell>{calculateTotalHours([entry])}h</TableCell>
+                  <TableCell>
+                    <IconButton
+                      onClick={() => {
+                        setFormData({
+                          startTime: entry.startTime,
+                          endTime: entry.endTime,
+                          projectId: entry.projectId || "",
+                          description: entry.description,
+                          isAdminWork: entry.isAdminWork,
+                          isBreak: entry.isBreak,
+                          projectInputType: entry.projectInputType,
+                        });
+                        setEditingEntryId(entry._id);
+                        setIsEditing(true);
+                        setOpenDialog(true);
                       }}
+                      disabled={timesheetStatus === "finalised"}
                     >
-                      <ListItemButton
-                        onClick={() => handleDateSelect(day)}
-                        sx={{
-                          py: 0.5,
-                          "&:hover": {
-                            backgroundColor: isSameDay(day, selectedDate)
-                              ? colors.primary[600]
-                              : colors.grey[700],
-                          },
-                        }}
-                      >
-                        <ListItemText
-                          primary={
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <Typography
-                                sx={{
-                                  fontSize: "0.875rem",
-                                  color: isSameDay(day, selectedDate)
-                                    ? colors.grey[100]
-                                    : colors.grey[100],
-                                  fontWeight: isSameDay(day, selectedDate)
-                                    ? "bold"
-                                    : "normal",
-                                }}
-                              >
-                                {`${format(day, "EEEE")} - ${format(
-                                  day,
-                                  "do MMMM"
-                                )}`}
-                              </Typography>
-                              {status && status !== "incomplete" && (
-                                <Chip
-                                  label={
-                                    status.charAt(0).toUpperCase() +
-                                    status.slice(1)
-                                  }
-                                  size="small"
-                                  sx={{
-                                    backgroundColor:
-                                      status === "finalised"
-                                        ? colors.greenAccent[500]
-                                        : status === "absent"
-                                        ? colors.grey[500]
-                                        : "transparent",
-                                    color:
-                                      status === "finalised"
-                                        ? colors.grey[100]
-                                        : colors.grey[100],
-                                    border:
-                                      status === "incomplete"
-                                        ? `1px solid ${colors.grey[500]}`
-                                        : "none",
-                                    fontSize: "0.75rem",
-                                    height: "20px",
-                                  }}
-                                />
-                              )}
-                            </Box>
-                          }
-                        />
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color:
-                              duration > 0
-                                ? colors.grey[900]
-                                : colors.grey[100],
-                            fontWeight: duration > 0 ? "bold" : "normal",
-                          }}
-                        >
-                          {formatDuration(duration)}
-                        </Typography>
-                      </ListItemButton>
-                    </ListItem>
-                  );
-                })}
-              </List>
-            </Paper>
-          </Grid>
-        )}
-
-        {/* Day View - Right Side */}
-        <Grid item xs={12} md={viewMode === "full" ? 7 : 12}>
-          <Paper
-            elevation={3}
-            sx={{
-              p: 2,
-              backgroundColor: theme.palette.background.alt,
-              height: "calc(100vh - 200px)",
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-              mb={2}
-            >
-              <Typography variant="h5">
-                {format(selectedDate, "EEEE, MMMM d, yyyy")}
-              </Typography>
-              {!selectedUserId && (
-                <Box display="flex" gap={1}>
-                  <Button
-                    variant={
-                      timesheetStatus === "finalised" ? "contained" : "outlined"
-                    }
-                    color="success"
-                    startIcon={<CheckCircleIcon />}
-                    onClick={() => handleStatusUpdate("finalised")}
-                    disabled={timesheetStatus === "finalised"}
-                  >
-                    Finalise
-                  </Button>
-                  <Button
-                    variant={
-                      timesheetStatus === "absent" ? "contained" : "outlined"
-                    }
-                    sx={{
-                      color:
-                        timesheetStatus === "absent"
-                          ? "white"
-                          : colors.grey[100],
-                      borderColor: colors.grey[100],
-                      backgroundColor:
-                        timesheetStatus === "absent"
-                          ? colors.grey[500]
-                          : "transparent",
-                      "&:hover": {
-                        borderColor: colors.grey[300],
-                        backgroundColor:
-                          timesheetStatus === "absent"
-                            ? colors.grey[600]
-                            : colors.grey[700],
-                      },
-                    }}
-                    startIcon={<EventBusyIcon />}
-                    onClick={() =>
-                      handleStatusUpdate(
-                        timesheetStatus === "absent" ? "incomplete" : "absent"
-                      )
-                    }
-                  >
-                    {timesheetStatus === "absent"
-                      ? "Mark Present"
-                      : "Mark Absent"}
-                  </Button>
-                  {timeEntries.length > 0 && (
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteSweepIcon />}
-                      onClick={handleClearDate}
-                      size="small"
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => handleDelete(entry._id)}
+                      disabled={timesheetStatus === "finalised"}
                     >
-                      Clear Date
-                    </Button>
-                  )}
-                </Box>
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {timeEntries.length > 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} align="right">
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      Total Hours:
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="subtitle1" fontWeight="bold">
+                      {calculateTotalHours(timeEntries)}h
+                    </Typography>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
               )}
-            </Box>
-            <Box sx={{ height: "calc(100% - 60px)", position: "relative" }}>
-              {isCalendarLoading && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: "rgba(0, 0, 0, 0.5)",
-                    zIndex: 1,
-                  }}
-                >
-                  <Typography variant="h6" color="white">
-                    Loading...
-                  </Typography>
-                </Box>
-              )}
-              <FullCalendar
-                key={calendarKey}
-                ref={calendarRef}
-                plugins={[timeGridPlugin, interactionPlugin]}
-                initialView="timeGridDay"
-                headerToolbar={false}
-                selectable={true}
-                selectMirror={true}
-                select={handleSelect}
-                eventClick={handleEventClick}
-                nowIndicator={true}
-                slotMinTime="07:00:00"
-                slotMaxTime="18:00:00"
-                height="100%"
-                events={events}
-                editable={true}
-                dayMaxEvents={true}
-                slotDuration="00:15:00"
-                allDaySlot={false}
-                slotHeight={7.5}
-                timeZone="local"
-                initialDate={selectedDate}
-                date={selectedDate}
-                loading={isCalendarLoading}
-                slotLabelFormat={{
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }}
-                eventTimeFormat={{
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }}
-                forceEventDuration={true}
-                eventDisplay="block"
-                eventMinHeight={15}
-                eventOverlap={false}
-                eventConstraint={{
-                  startTime: "07:00",
-                  endTime: "18:00",
-                  dows: [0, 1, 2, 3, 4, 5, 6],
-                }}
-                slotLabelClassNames="fc-slot-label-small"
-                eventContent={(eventInfo) => ({
-                  html: `
-                    <div style="padding: 1px;">
-                      <div style="font-weight: bold; font-size: 0.975em;">
-                        ${eventInfo.event.title}
-                        ${
-                          eventInfo.event.extendedProps.projectInputType
-                            ? `<span style="font-size: 0.78em; color: ${
-                                colors.grey[100]
-                              }; margin-left: 4px;">(${eventInfo.event.extendedProps.projectInputType
-                                .replace("_", " ")
-                                .replace(/\b\w/g, (l) =>
-                                  l.toUpperCase()
-                                )})</span>`
-                            : ""
-                        }
-                      </div>
-                      <div style="font-size: 0.78em;">${
-                        eventInfo.event.extendedProps.description || ""
-                      }</div>
-                    </div>
-                  `,
-                })}
-                datesSet={(dateInfo) => {
-                  const newDate = dateInfo.start;
-                  if (newDate && !isSameDay(newDate, selectedDate)) {
-                    console.log(
-                      "Calendar dates set - updating selected date:",
-                      {
-                        newDate: format(newDate, "yyyy-MM-dd"),
-                        currentSelectedDate: format(selectedDate, "yyyy-MM-dd"),
-                      }
-                    );
-                    handleDateSelect(newDate);
-                  }
-                }}
-                eventDidMount={(info) => {
-                  if (info.event.id) {
-                    // Only log events with IDs (our actual events)
-                    console.log("Event mounted:", {
-                      id: info.event.id,
-                      title: info.event.title,
-                      start: format(info.event.start, "yyyy-MM-dd HH:mm"),
-                      end: format(info.event.end, "yyyy-MM-dd HH:mm"),
-                      date: format(info.event.start, "yyyy-MM-dd"),
-                      selectedDate: format(selectedDate, "yyyy-MM-dd"),
-                    });
-                  }
-                }}
-                eventWillUnmount={(info) => {
-                  if (info.event.id) {
-                    console.log("Event will unmount:", {
-                      id: info.event.id,
-                      title: info.event.title,
-                      date: format(info.event.start, "yyyy-MM-dd"),
-                    });
-                  }
-                }}
-              />
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
       <Dialog
         open={openDialog}
