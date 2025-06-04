@@ -15,12 +15,6 @@ import {
   FormControl,
   InputLabel,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Chip,
 } from "@mui/material";
@@ -33,14 +27,29 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
-import { format, addDays, subDays, startOfDay, endOfDay } from "date-fns";
+import {
+  format,
+  addDays,
+  subDays,
+  startOfDay,
+  endOfDay,
+  parseISO,
+} from "date-fns";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
 
 const Timesheets = () => {
   const theme = useTheme();
   const { currentUser } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [searchParams] = useSearchParams();
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const dateParam = searchParams.get("date");
+    return dateParam ? parseISO(dateParam) : new Date();
+  });
   const [openDialog, setOpenDialog] = useState(false);
   const [projects, setProjects] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
@@ -57,27 +66,37 @@ const Timesheets = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
+  const navigate = useNavigate();
+
+  // Update URL when date changes
+  useEffect(() => {
+    const formattedDate = format(selectedDate, "yyyy-MM-dd");
+    navigate(`/timesheets/daily?date=${formattedDate}`, { replace: true });
+  }, [selectedDate, navigate]);
 
   // Fetch time entries for the selected day
   const fetchTimeEntries = async () => {
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
-      const userId = currentUser._id;
+      console.log("Fetching entries for date:", formattedDate);
 
-      console.log("Fetching entries for date:", {
-        date: formattedDate,
-        userId,
-      });
-
-      // Use the existing range endpoint but with same start and end date
       const response = await api.get(
         `/timesheets/range/${formattedDate}/${formattedDate}`
       );
 
-      const processedEntries = (response.data || []).map((entry) => ({
-        ...entry,
-        date: new Date(entry.date).toISOString().split("T")[0],
-      }));
+      const processedEntries = (response.data || []).map((entry) => {
+        // Ensure we have a valid date string
+        const entryDate = entry.date
+          ? format(new Date(entry.date), "yyyy-MM-dd")
+          : formattedDate;
+
+        return {
+          ...entry,
+          date: entryDate,
+          startTime: entry.startTime || "00:00",
+          endTime: entry.endTime || "00:00",
+        };
+      });
 
       console.log("Processed entries:", processedEntries);
       setTimeEntries(processedEntries);
@@ -93,14 +112,11 @@ const Timesheets = () => {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
       const userId = currentUser._id;
 
-      // Use the existing status range endpoint but with same start and end date
       const response = await api.get(
         `/timesheets/status/range/${formattedDate}/${formattedDate}`
       );
 
-      // Get the status for the current date from the response
       const status = response.data?.[0]?.status || "incomplete";
-      console.log("Timesheet status:", status);
       setTimesheetStatus(status);
     } catch (error) {
       console.error("Error fetching timesheet status:", error);
@@ -113,14 +129,12 @@ const Timesheets = () => {
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
-      // Use the existing status update endpoint
       const response = await api.put(`/timesheets/status/${formattedDate}`, {
         status,
         userId: currentUser._id,
         date: formattedDate,
       });
 
-      console.log("Status update response:", response.data);
       setTimesheetStatus(status);
       await fetchTimeEntries();
     } catch (error) {
@@ -136,7 +150,6 @@ const Timesheets = () => {
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
-      // Check if timesheet is finalised
       if (timesheetStatus === "finalised") {
         alert(
           "Cannot modify entries for a finalised timesheet. Please unfinalise first."
@@ -144,17 +157,41 @@ const Timesheets = () => {
         return;
       }
 
+      // Validate required fields based on entry type
+      if (formData.isAdminWork || formData.isBreak) {
+        if (!formData.description) {
+          alert("Please enter a description for this entry");
+          return;
+        }
+      } else {
+        if (!formData.projectId) {
+          alert("Please select a project");
+          return;
+        }
+        if (!formData.projectInputType) {
+          alert("Please select a project input type");
+          return;
+        }
+      }
+
+      // Create timesheet data with proper project handling
       const timesheetData = {
-        ...formData,
         date: formattedDate,
         userId: currentUser._id,
-        projectId:
-          formData.isAdminWork || formData.isBreak ? null : formData.projectId,
-        projectInputType:
-          formData.isAdminWork || formData.isBreak
-            ? null
-            : formData.projectInputType,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        description: formData.description || "",
+        isAdminWork: formData.isAdminWork,
+        isBreak: formData.isBreak,
       };
+
+      // Only add project data if it's not admin work or break
+      if (!formData.isAdminWork && !formData.isBreak) {
+        timesheetData.projectId = formData.projectId;
+        timesheetData.projectInputType = formData.projectInputType;
+      }
+
+      console.log("Submitting timesheet data:", timesheetData);
 
       if (isEditing && editingEntryId) {
         await api.put(`/timesheets/${editingEntryId}`, timesheetData);
@@ -202,23 +239,6 @@ const Timesheets = () => {
     setSelectedDate(newDate);
   };
 
-  // Calculate total hours for the day
-  const calculateTotalHours = (entries) => {
-    return (
-      entries.reduce((total, entry) => {
-        const [startHours, startMinutes] = entry.startTime
-          .split(":")
-          .map(Number);
-        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
-        const startTotalMinutes = startHours * 60 + startMinutes;
-        const endTotalMinutes = endHours * 60 + endMinutes;
-        let duration = endTotalMinutes - startTotalMinutes;
-        if (duration < 0) duration += 24 * 60;
-        return total + duration;
-      }, 0) / 60
-    ).toFixed(2);
-  };
-
   // Fetch initial data
   useEffect(() => {
     const fetchData = async () => {
@@ -229,6 +249,7 @@ const Timesheets = () => {
           fetchTimeEntries(),
           fetchTimesheetStatus(),
         ]);
+        console.log("Fetched projects:", projectsResponse.data);
         setProjects(projectsResponse.data);
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -240,6 +261,194 @@ const Timesheets = () => {
     fetchData();
   }, [selectedDate]);
 
+  // Convert time entries to calendar events
+  const getCalendarEvents = () => {
+    console.log("Converting time entries to calendar events:", timeEntries);
+    console.log("Available projects:", projects);
+
+    return timeEntries.map((entry) => {
+      // Ensure we have valid date and time strings
+      const dateStr = entry.date
+        ? format(new Date(entry.date), "yyyy-MM-dd")
+        : format(selectedDate, "yyyy-MM-dd");
+      const startTimeStr = entry.startTime || "00:00";
+      const endTimeStr = entry.endTime || "00:00";
+
+      // Create Date objects for start and end times
+      const startDateTime = new Date(`${dateStr}T${startTimeStr}`);
+      const endDateTime = new Date(`${dateStr}T${endTimeStr}`);
+
+      // Handle overnight entries
+      if (endDateTime < startDateTime) {
+        endDateTime.setDate(endDateTime.getDate() + 1);
+      }
+
+      // Get project name if available
+      const projectId = entry.projectId?._id || entry.projectId;
+      const project = projectId
+        ? projects.find((p) => p._id === projectId)
+        : null;
+      const projectName = project?.name;
+
+      console.log("Entry project data:", {
+        entryId: entry._id,
+        projectId,
+        foundProject: project,
+        projectName,
+        rawProjectId: entry.projectId,
+      });
+
+      // Determine event title and color based on type
+      let title, backgroundColor, borderColor;
+      if (entry.isBreak) {
+        title = "Break";
+        backgroundColor = theme.palette.warning.main;
+        borderColor = theme.palette.warning.dark;
+      } else if (entry.isAdminWork) {
+        title = "Admin Work";
+        backgroundColor = theme.palette.info.main;
+        borderColor = theme.palette.info.dark;
+      } else {
+        title = projectName || "Unknown Project";
+        backgroundColor = theme.palette.primary.main;
+        borderColor = theme.palette.primary.dark;
+      }
+
+      const event = {
+        id: entry._id,
+        title,
+        start: startDateTime,
+        end: endDateTime,
+        backgroundColor,
+        borderColor,
+        extendedProps: {
+          description: entry.description,
+          projectId: projectId,
+          projectName,
+          isAdminWork: entry.isAdminWork,
+          isBreak: entry.isBreak,
+          projectInputType: entry.projectInputType,
+        },
+      };
+
+      console.log("Created calendar event:", event);
+      return event;
+    });
+  };
+
+  // Handle time slot selection
+  const handleSelect = (info) => {
+    if (timesheetStatus === "finalised") {
+      alert(
+        "Cannot add entries to a finalised timesheet. Please unfinalise first."
+      );
+      return;
+    }
+
+    const startTime = format(info.start, "HH:mm");
+    const endTime = format(info.end, "HH:mm");
+
+    console.log("Selected time slot:", { startTime, endTime });
+
+    setFormData({
+      startTime,
+      endTime,
+      projectId: "",
+      description: "",
+      isAdminWork: false,
+      isBreak: false,
+      projectInputType: "",
+    });
+    setOpenDialog(true);
+  };
+
+  // Handle event click
+  const handleEventClick = (info) => {
+    if (timesheetStatus === "finalised") return;
+
+    const entry = timeEntries.find((e) => e._id === info.event.id);
+    if (entry) {
+      console.log("Editing entry:", entry);
+      const projectId = entry.projectId?._id || entry.projectId;
+      setFormData({
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        projectId: projectId || "",
+        description: entry.description || "",
+        isAdminWork: entry.isAdminWork || false,
+        isBreak: entry.isBreak || false,
+        projectInputType: entry.projectInputType || "",
+      });
+      setEditingEntryId(entry._id);
+      setIsEditing(true);
+      setOpenDialog(true);
+    }
+  };
+
+  // Handle event drop (drag and drop)
+  const handleEventDrop = async (info) => {
+    if (timesheetStatus === "finalised") {
+      info.revert();
+      alert(
+        "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+      );
+      return;
+    }
+
+    try {
+      const entry = timeEntries.find((e) => e._id === info.event.id);
+      if (!entry) return;
+
+      const startTime = format(info.event.start, "HH:mm");
+      const endTime = format(info.event.end, "HH:mm");
+
+      const timesheetData = {
+        ...entry,
+        startTime,
+        endTime,
+      };
+
+      await api.put(`/timesheets/${entry._id}`, timesheetData);
+      await fetchTimeEntries();
+    } catch (error) {
+      console.error("Error updating time entry:", error);
+      info.revert();
+      alert("Failed to update time entry. Please try again.");
+    }
+  };
+
+  // Handle event resize
+  const handleEventResize = async (info) => {
+    if (timesheetStatus === "finalised") {
+      info.revert();
+      alert(
+        "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+      );
+      return;
+    }
+
+    try {
+      const entry = timeEntries.find((e) => e._id === info.event.id);
+      if (!entry) return;
+
+      const startTime = format(info.event.start, "HH:mm");
+      const endTime = format(info.event.end, "HH:mm");
+
+      const timesheetData = {
+        ...entry,
+        startTime,
+        endTime,
+      };
+
+      await api.put(`/timesheets/${entry._id}`, timesheetData);
+      await fetchTimeEntries();
+    } catch (error) {
+      console.error("Error updating time entry:", error);
+      info.revert();
+      alert("Failed to update time entry. Please try again.");
+    }
+  };
+
   return (
     <Box m="20px">
       <Box
@@ -248,15 +457,33 @@ const Timesheets = () => {
         alignItems="center"
         mb="20px"
       >
-        <Header title="TIMESHEETS" subtitle="Manage your daily timesheet" />
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenDialog(true)}
-          disabled={timesheetStatus === "finalised"}
-        >
-          Add Time Entry
-        </Button>
+        <Header
+          title="Daily Timesheet"
+          subtitle={`${format(selectedDate, "MMMM d, yyyy")}`}
+        />
+        <Box display="flex" gap={2}>
+          <Button
+            variant="contained"
+            onClick={() => navigate("/timesheets/monthly")}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.common.white,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Monthly View
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setOpenDialog(true)}
+            disabled={timesheetStatus === "finalised"}
+          >
+            Add Time Entry
+          </Button>
+        </Box>
       </Box>
 
       <Paper
@@ -309,88 +536,114 @@ const Timesheets = () => {
           </Box>
         </Box>
 
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Start Time</TableCell>
-                <TableCell>End Time</TableCell>
-                <TableCell>Project</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Hours</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {timeEntries.map((entry) => (
-                <TableRow key={entry._id}>
-                  <TableCell>{entry.startTime}</TableCell>
-                  <TableCell>{entry.endTime}</TableCell>
-                  <TableCell>
-                    {entry.isBreak
-                      ? "Break"
-                      : entry.isAdminWork
-                      ? "Admin Work"
-                      : projects.find((p) => p._id === entry.projectId)?.name ||
-                        "Unknown"}
-                  </TableCell>
-                  <TableCell>
-                    {entry.projectInputType
-                      ? entry.projectInputType
-                          .replace("_", " ")
-                          .replace(/\b\w/g, (l) => l.toUpperCase())
-                      : "-"}
-                  </TableCell>
-                  <TableCell>{entry.description}</TableCell>
-                  <TableCell>{calculateTotalHours([entry])}h</TableCell>
-                  <TableCell>
-                    <IconButton
-                      onClick={() => {
-                        setFormData({
-                          startTime: entry.startTime,
-                          endTime: entry.endTime,
-                          projectId: entry.projectId || "",
-                          description: entry.description,
-                          isAdminWork: entry.isAdminWork,
-                          isBreak: entry.isBreak,
-                          projectInputType: entry.projectInputType,
-                        });
-                        setEditingEntryId(entry._id);
-                        setIsEditing(true);
-                        setOpenDialog(true);
-                      }}
-                      disabled={timesheetStatus === "finalised"}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      onClick={() => handleDelete(entry._id)}
-                      disabled={timesheetStatus === "finalised"}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {timeEntries.length > 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} align="right">
-                    <Typography variant="subtitle1" fontWeight="bold">
-                      Total Hours:
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="subtitle1" fontWeight="bold">
-                      {calculateTotalHours(timeEntries)}h
-                    </Typography>
-                  </TableCell>
-                  <TableCell />
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Box sx={{ height: "600px" }}>
+          <FullCalendar
+            plugins={[timeGridPlugin, interactionPlugin]}
+            initialView="timeGridDay"
+            initialDate={selectedDate}
+            selectable={true}
+            selectMirror={true}
+            select={handleSelect}
+            eventClick={handleEventClick}
+            eventDrop={handleEventDrop}
+            eventResize={handleEventResize}
+            nowIndicator={true}
+            slotMinTime="06:00:00"
+            slotMaxTime="20:00:00"
+            slotDuration="00:15:00"
+            height="100%"
+            events={getCalendarEvents()}
+            editable={timesheetStatus !== "finalised"}
+            droppable={timesheetStatus !== "finalised"}
+            eventOverlap={false}
+            firstDay={1}
+            dayCellClassNames={(arg) => {
+              return arg.date.getDay() === 0 || arg.date.getDay() === 6
+                ? "weekend-day"
+                : "";
+            }}
+            eventContent={(eventInfo) => {
+              const duration = eventInfo.event.end - eventInfo.event.start;
+              const isShortEntry = duration <= 15 * 60 * 1000; // 15 minutes in milliseconds
+              const project = eventInfo.event.extendedProps.projectId
+                ? projects.find(
+                    (p) => p._id === eventInfo.event.extendedProps.projectId
+                  )
+                : null;
+
+              const formatEventContent = () => {
+                if (eventInfo.event.extendedProps.isBreak) {
+                  return `Break${
+                    eventInfo.event.extendedProps.description
+                      ? ` - ${eventInfo.event.extendedProps.description}`
+                      : ""
+                  }`;
+                }
+                if (eventInfo.event.extendedProps.isAdminWork) {
+                  return `Admin Work${
+                    eventInfo.event.extendedProps.description
+                      ? ` - ${eventInfo.event.extendedProps.description}`
+                      : ""
+                  }`;
+                }
+                if (!project) {
+                  return "Unknown Project";
+                }
+                return `${project.projectID}: ${project.name} - ${
+                  eventInfo.event.extendedProps.projectInputType?.replace(
+                    "_",
+                    " "
+                  ) || ""
+                }${
+                  eventInfo.event.extendedProps.description
+                    ? `, ${eventInfo.event.extendedProps.description}`
+                    : ""
+                }`;
+              };
+
+              return (
+                <Box sx={{ p: 0.5 }}>
+                  <Typography variant="body2" noWrap>
+                    {formatEventContent()}
+                  </Typography>
+                </Box>
+              );
+            }}
+            sx={{
+              "& .fc": {
+                backgroundColor: "background.paper",
+                borderRadius: "4px",
+              },
+              "& .fc-toolbar": {
+                padding: "16px",
+              },
+              "& .fc-toolbar-title": {
+                fontSize: "1.2rem !important",
+                fontWeight: "bold",
+              },
+              "& .fc-button": {
+                backgroundColor: "primary.main !important",
+                borderColor: "primary.main !important",
+                "&:hover": {
+                  backgroundColor: "primary.dark !important",
+                  borderColor: "primary.dark !important",
+                },
+              },
+              "& .fc-timegrid-slot": {
+                borderColor: "divider",
+              },
+              "& .fc-event": {
+                cursor: "pointer",
+                "&:hover": {
+                  opacity: 0.9,
+                },
+              },
+              "& .weekend-day": {
+                backgroundColor: theme.palette.grey[100],
+              },
+            }}
+          />
+        </Box>
       </Paper>
 
       <Dialog
@@ -418,56 +671,6 @@ const Timesheets = () => {
         <DialogContent>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Start Time</InputLabel>
-                  <Select
-                    value={formData.startTime}
-                    onChange={(e) =>
-                      setFormData({ ...formData, startTime: e.target.value })
-                    }
-                    required
-                  >
-                    {Array.from({ length: 24 * 4 }, (_, i) => {
-                      const hour = Math.floor(i / 4);
-                      const minute = (i % 4) * 15;
-                      const time = `${hour.toString().padStart(2, "0")}:${minute
-                        .toString()
-                        .padStart(2, "0")}`;
-                      return (
-                        <MenuItem key={time} value={time}>
-                          {time}
-                        </MenuItem>
-                      );
-                    })}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>End Time</InputLabel>
-                  <Select
-                    value={formData.endTime}
-                    onChange={(e) =>
-                      setFormData({ ...formData, endTime: e.target.value })
-                    }
-                    required
-                  >
-                    {Array.from({ length: 24 * 4 }, (_, i) => {
-                      const hour = Math.floor(i / 4);
-                      const minute = (i % 4) * 15;
-                      const time = `${hour.toString().padStart(2, "0")}:${minute
-                        .toString()
-                        .padStart(2, "0")}`;
-                      return (
-                        <MenuItem key={time} value={time}>
-                          {time}
-                        </MenuItem>
-                      );
-                    })}
-                  </Select>
-                </FormControl>
-              </Grid>
               <Grid item xs={12}>
                 <FormControl fullWidth>
                   <InputLabel>Work Type</InputLabel>
@@ -489,6 +692,11 @@ const Timesheets = () => {
                           e.target.value === "break"
                             ? ""
                             : formData.projectId,
+                        projectInputType:
+                          e.target.value === "admin" ||
+                          e.target.value === "break"
+                            ? ""
+                            : formData.projectInputType,
                       })
                     }
                     required
@@ -553,6 +761,7 @@ const Timesheets = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
+                  required={formData.isAdminWork || formData.isBreak}
                 />
               </Grid>
             </Grid>

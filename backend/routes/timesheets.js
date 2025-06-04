@@ -32,12 +32,9 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
     // Create dates at the start of the day in UTC
     let startDate, endDate;
     try {
-      // Parse dates in dd-MM-yyyy format
-      const [startDay, startMonth, startYear] = req.params.startDate.split('-').map(Number);
-      const [endDay, endMonth, endYear] = req.params.endDate.split('-').map(Number);
-      
-      startDate = new Date(startYear, startMonth - 1, startDay);
-      endDate = new Date(endYear, endMonth - 1, endDay);
+      // Parse dates in yyyy-MM-dd format
+      startDate = new Date(req.params.startDate);
+      endDate = new Date(req.params.endDate);
 
       // Validate dates
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
@@ -111,9 +108,8 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
 // Get timesheets for a specific date
 router.get("/:date", auth, async (req, res) => {
   try {
-    // Parse date in dd-MM-yyyy format
-    const [day, month, year] = req.params.date.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
+    // Parse date in yyyy-MM-dd format
+    const date = new Date(req.params.date);
     date.setUTCHours(0, 0, 0, 0);
     
     console.log('Fetching timesheets for date:', {
@@ -349,9 +345,8 @@ router.put("/status/:date", auth, async (req, res) => {
   try {
     const { status, userId } = req.body;
     
-    // Parse date in dd-MM-yyyy format
-    const [day, month, year] = req.params.date.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
+    // Parse date in yyyy-MM-dd format
+    const date = new Date(req.params.date);
     date.setUTCHours(0, 0, 0, 0);
 
     console.log('Updating timesheet status:', {
@@ -467,12 +462,9 @@ router.get("/status/range/:startDate/:endDate", auth, async (req, res) => {
     // Create dates at the start of the day in UTC
     let startDate, endDate;
     try {
-      // Parse dates in dd-MM-yyyy format
-      const [startDay, startMonth, startYear] = req.params.startDate.split('-').map(Number);
-      const [endDay, endMonth, endYear] = req.params.endDate.split('-').map(Number);
-      
-      startDate = new Date(startYear, startMonth - 1, startDay);
-      endDate = new Date(endYear, endMonth - 1, endDay);
+      // Parse dates in yyyy-MM-dd format
+      startDate = new Date(req.params.startDate);
+      endDate = new Date(req.params.endDate);
 
       // Validate dates
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
@@ -540,13 +532,14 @@ router.get("/status/range/:startDate/:endDate", auth, async (req, res) => {
 // Get timesheet review data for a date range
 router.get("/review/:startDate/:endDate", auth, async (req, res) => {
   try {
-    // Parse dates in dd-MM-yyyy format
-    const [startDay, startMonth, startYear] = req.params.startDate.split('-').map(Number);
-    const [endDay, endMonth, endYear] = req.params.endDate.split('-').map(Number);
+    // Parse dates in yyyy-MM-dd format
+    const start = new Date(req.params.startDate);
+    const end = new Date(req.params.endDate);
     
-    const start = new Date(startYear, startMonth - 1, startDay);
-    const end = new Date(endYear, endMonth - 1, endDay);
-    
+    // Set time to start/end of day in UTC
+    start.setUTCHours(0, 0, 0, 0);
+    end.setUTCHours(23, 59, 59, 999);
+
     console.log('Review endpoint - Request details:', {
       startDate: req.params.startDate,
       endDate: req.params.endDate,
@@ -618,7 +611,7 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
     const timesheetData = entries.reduce((acc, entry) => {
       if (!entry.userId) return acc; // Skip entries with no user
 
-      const date = format(new Date(entry.date), 'dd-MM-yyyy');
+      const date = format(new Date(entry.date), 'yyyy-MM-dd');
       const userId = entry.userId._id.toString();
       const key = `${userId}-${date}`;
 
@@ -659,7 +652,7 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
     // Create entries for all days in the month
     const allDays = eachDayOfInterval({ start, end });
     const completeData = allDays.map(date => {
-      const dateStr = format(date, 'dd-MM-yyyy');
+      const dateStr = format(date, 'yyyy-MM-dd');
       const userId = req.query.userId || req.user._id.toString();
       const key = `${userId}-${dateStr}`;
       

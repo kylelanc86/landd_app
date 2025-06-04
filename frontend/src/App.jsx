@@ -27,6 +27,7 @@ import Layout from "./components/Layout";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
+import MonthlyTimesheet from "./scenes/timesheets/monthly";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -210,7 +211,27 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["timesheets.view"]}
                             >
+                              <Navigate to="/timesheets/monthly" replace />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/timesheets/daily"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["timesheets.view"]}
+                            >
                               <Timesheets />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/timesheets/monthly"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["timesheets.view"]}
+                            >
+                              <MonthlyTimesheet />
                             </PermissionRoute>
                           }
                         />
@@ -218,7 +239,7 @@ function App() {
                           path="/timesheets/review"
                           element={
                             <PermissionRoute
-                              requiredPermissions={["timesheets.view"]}
+                              requiredPermissions={["timesheets.review"]}
                             >
                               <TimesheetReview />
                             </PermissionRoute>
