@@ -193,9 +193,30 @@ router.post('/forgot-password', async (req, res) => {
     try {
       await sendMail({
         to: user.email,
-        subject: 'Password Reset Request',
+        subject: 'Password Reset Request - L&D Consulting',
         text: `You requested a password reset. Click the link to reset your password: ${resetUrl}`,
-        html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Reset your password</a></p>`
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #1976d2; font-size: 24px; margin: 0; padding: 0;">L&D Consulting</h1>
+              <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+            </div>
+            <div style="color: #333; line-height: 1.6;">
+              <h2 style="color: #1976d2; margin-bottom: 20px;">Password Reset Request</h2>
+              <p>Hello,</p>
+              <p>We received a request to reset the password for your L&D Consulting account. If you didn't make this request, you can safely ignore this email.</p>
+              <p>To reset your password, click the button below:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetUrl}" style="background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
+              </div>
+              <p>This link will expire in 1 hour for security reasons.</p>
+              <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>
+              <p style="word-break: break-all; color: #666; font-size: 14px;">${resetUrl}</p>
+              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+              <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email. If you need assistance, please contact our support team.</p>
+            </div>
+          </div>
+        `
       });
       console.log('Email sent successfully');
     } catch (emailError) {

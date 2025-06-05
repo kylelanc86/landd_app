@@ -81,6 +81,7 @@ const AirMonitoring = () => {
   const [projects, setProjects] = useState([]);
   const [statusMenu, setStatusMenu] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [dialogError, setDialogError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -139,10 +140,15 @@ const AirMonitoring = () => {
 
   const handleAddJob = async (e) => {
     e.preventDefault();
-    if (!selectedProject) return;
+    console.log("Form submitted");
+    if (!selectedProject) {
+      console.log("No project selected");
+      setDialogError("Please select a project");
+      return;
+    }
 
     setLoading(true);
-    setError(null);
+    setDialogError(null);
     try {
       console.log("Creating new job with form data:", form);
       console.log("Selected project:", selectedProject);
@@ -181,12 +187,15 @@ const AirMonitoring = () => {
       setOpenDialog(false);
       setSelectedProject(null);
       setForm(emptyForm);
+      setLoading(false);
     } catch (error) {
       console.error("Error creating job:", error);
-      setError(
-        error.response?.data?.message || error.message || "Failed to create job"
-      );
-    } finally {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create job";
+      console.log("Setting error message:", errorMessage);
+      setDialogError(errorMessage);
       setLoading(false);
     }
   };
@@ -445,6 +454,13 @@ const AirMonitoring = () => {
     },
   ];
 
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setDialogError(null);
+    setSelectedProject(null);
+    setForm(emptyForm);
+  };
+
   if (loading) return <Typography>Loading jobs...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -553,7 +569,7 @@ const AirMonitoring = () => {
       {/* Add New Job Dialog */}
       <Dialog
         open={openDialog}
-        onClose={() => setOpenDialog(false)}
+        onClose={handleCloseDialog}
         maxWidth="sm"
         fullWidth
       >
@@ -564,13 +580,26 @@ const AirMonitoring = () => {
             alignItems="center"
           >
             <Typography variant="h6">Add New Air Monitoring Job</Typography>
-            <IconButton onClick={() => setOpenDialog(false)}>
+            <IconButton onClick={handleCloseDialog}>
               <CloseIcon />
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent>
-          <Box component="form" onSubmit={handleAddJob} sx={{ mt: 2 }}>
+        <Box component="form" onSubmit={handleAddJob}>
+          <DialogContent>
+            {dialogError && (
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 2,
+                  backgroundColor: theme.palette.error.light,
+                  color: theme.palette.error.contrastText,
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="body2">{dialogError}</Typography>
+              </Box>
+            )}
             <FormControl fullWidth sx={{ mb: 2 }}>
               <Autocomplete
                 options={projects}
@@ -580,6 +609,7 @@ const AirMonitoring = () => {
                 value={selectedProject}
                 onChange={(event, newValue) => {
                   setSelectedProject(newValue);
+                  setError(null); // Clear error when project selection changes
                   if (newValue) {
                     setForm({
                       ...form,
@@ -638,29 +668,32 @@ const AirMonitoring = () => {
               label="Asbestos Removalist"
               name="asbestosRemovalist"
               value={form.asbestosRemovalist}
-              onChange={handleChange}
+              onChange={(e) => {
+                handleChange(e);
+                setError(null); // Clear error when input changes
+              }}
               required
               sx={{ mb: 2 }}
             />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button
-            onClick={handleAddJob}
-            variant="contained"
-            disabled={!selectedProject || !form.asbestosRemovalist}
-            sx={{
-              backgroundColor: colors.primary[700],
-              color: colors.grey[100],
-              "&:hover": {
-                backgroundColor: colors.primary[800],
-              },
-            }}
-          >
-            Add Job
-          </Button>
-        </DialogActions>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={!selectedProject || !form.asbestosRemovalist || loading}
+              sx={{
+                backgroundColor: colors.primary[700],
+                color: colors.grey[100],
+                "&:hover": {
+                  backgroundColor: colors.primary[800],
+                },
+              }}
+            >
+              {loading ? "Adding..." : "Add Job"}
+            </Button>
+          </DialogActions>
+        </Box>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}

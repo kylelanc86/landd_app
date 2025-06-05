@@ -49,6 +49,19 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       });
     }
 
+    // Check for existing active jobs for this project
+    const existingActiveJob = await AirMonitoringJob.findOne({
+      project: req.body.project,
+      status: { $in: ['pending', 'in_progress'] }
+    });
+
+    if (existingActiveJob) {
+      return res.status(400).json({
+        message: 'This project already has an active air monitoring job',
+        existingJobId: existingActiveJob._id
+      });
+    }
+
     // Generate a unique jobID
     const jobID = `AMJ-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substr(2, 4)}`;
     console.log('Generated jobID:', jobID);

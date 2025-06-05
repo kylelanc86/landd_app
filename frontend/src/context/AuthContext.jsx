@@ -18,6 +18,7 @@ export const AuthProvider = ({ children }) => {
   const restoreUserState = async () => {
     // If we've already attempted to restore, don't try again
     if (restoreAttempted.current) {
+      console.log("Auth Debug - restoreUserState: Already attempted restore");
       return;
     }
     restoreAttempted.current = true;
@@ -31,11 +32,21 @@ export const AuthProvider = ({ children }) => {
         );
         const response = await authService.getCurrentUser();
         const user = response.data;
+        console.log("Auth Debug - restoreUserState: User data received:", user);
+
+        if (!user || !user._id) {
+          console.error(
+            "Auth Debug - restoreUserState: Invalid user data received"
+          );
+          throw new Error("Invalid user data");
+        }
+
         const userWithToken = { ...user, token };
         localStorage.setItem("currentUser", JSON.stringify(userWithToken));
         setCurrentUser(userWithToken);
         console.log(
-          "Auth Debug - restoreUserState: User restored successfully"
+          "Auth Debug - restoreUserState: User restored successfully",
+          userWithToken
         );
       } catch (error) {
         console.error(
@@ -57,6 +68,7 @@ export const AuthProvider = ({ children }) => {
 
   // Check and restore user state when the app loads
   useEffect(() => {
+    console.log("Auth Debug - AuthProvider mounted");
     restoreUserState();
   }, []);
 
@@ -66,11 +78,17 @@ export const AuthProvider = ({ children }) => {
       console.log("Auth Debug - Login attempt");
       const response = await authService.login(credentials);
       const { token, user } = response.data;
+
+      if (!user || !user._id) {
+        console.error("Auth Debug - Login: Invalid user data received");
+        throw new Error("Invalid user data");
+      }
+
       const userWithToken = { ...user, token };
       localStorage.setItem("token", token);
       localStorage.setItem("currentUser", JSON.stringify(userWithToken));
       setCurrentUser(userWithToken);
-      console.log("Auth Debug - Login successful");
+      console.log("Auth Debug - Login successful", userWithToken);
       return userWithToken;
     } catch (error) {
       console.error("Auth Debug - Login failed:", error);

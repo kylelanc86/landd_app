@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Box, Typography, useTheme } from "@mui/material";
+import { Box, Typography, useTheme, CircularProgress } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { projectService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -11,10 +11,20 @@ const AllocatedJobsTable = () => {
   const { currentUser } = useAuth();
   const theme = useTheme();
 
+  // Debug logging for component lifecycle
+  useEffect(() => {
+    console.log("AllocatedJobsTable mounted/updated");
+    console.log("Current user state:", currentUser);
+  }, [currentUser]);
+
   useEffect(() => {
     const fetchAllocatedJobs = async () => {
-      if (!currentUser) {
-        setLoading(false);
+      console.log("fetchAllocatedJobs called");
+      console.log("Current user in fetch:", currentUser);
+
+      if (!currentUser?.id) {
+        console.log("No user ID available, waiting for user data...");
+        setLoading(true);
         return;
       }
 
@@ -34,11 +44,12 @@ const AllocatedJobsTable = () => {
           // Check if the current user is in the users array
           const isAssigned = project.users.some((user) => {
             // Handle both string IDs and user objects
-            const userId = typeof user === "string" ? user : user._id;
-            const isAssigned = userId === currentUser._id;
+            const userId =
+              typeof user === "string" ? user : user.id || user._id;
+            const isAssigned = userId === currentUser.id;
             console.log(`Checking user assignment for ${project.name}:`, {
               userId,
-              currentUserId: currentUser._id,
+              currentUserId: currentUser.id,
               isAssigned,
             });
             return isAssigned;
@@ -71,7 +82,7 @@ const AllocatedJobsTable = () => {
     };
 
     fetchAllocatedJobs();
-  }, [currentUser]);
+  }, [currentUser?.id]); // Only re-run when currentUser.id changes
 
   const columns = [
     {
@@ -96,6 +107,28 @@ const AllocatedJobsTable = () => {
       renderCell: (params) => <StatusChip status={params.value} />,
     },
   ];
+
+  // Debug render conditions
+  console.log("Render conditions:", {
+    hasCurrentUser: !!currentUser,
+    hasUserId: !!currentUser?.id,
+    loading,
+    jobsCount: jobs.length,
+  });
+
+  if (!currentUser?.id) {
+    console.log("Rendering loading state - no user ID");
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="200px"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box

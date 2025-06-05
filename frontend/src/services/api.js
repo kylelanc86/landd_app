@@ -76,8 +76,16 @@ export const authService = {
       console.log('Auth Debug - No token available for getCurrentUser');
       return Promise.reject(new Error('No token available'));
     }
-    console.log('Auth Debug - Fetching current user');
-    return api.get('/auth/me');
+    console.log('Auth Debug - Fetching current user with token:', token.substring(0, 10) + '...');
+    return api.get('/auth/me')
+      .then(response => {
+        console.log('Auth Debug - getCurrentUser response:', response.data);
+        return response;
+      })
+      .catch(error => {
+        console.error('Auth Debug - getCurrentUser error:', error);
+        throw error;
+      });
   },
   updateUser: (userData) => {
     const token = localStorage.getItem('token');
