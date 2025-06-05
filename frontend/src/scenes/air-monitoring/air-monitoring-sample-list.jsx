@@ -293,6 +293,11 @@ const SampleList = () => {
           onBlur={handleDescriptionBlur}
           onKeyDown={handleDescriptionKeyDown}
           placeholder="Enter a description of works for this shift..."
+          required
+          error={!descriptionOfWorks}
+          helperText={
+            !descriptionOfWorks ? "Description of works is required" : ""
+          }
         />
         {descSaveStatus === "Saved" && (
           <Typography variant="caption" color="success.main">

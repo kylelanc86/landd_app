@@ -91,7 +91,7 @@ userSchema.methods.generateAuthToken = function() {
         role: this.role
       },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: process.env.JWT_EXPIRE || '24h' }
+      { expiresIn: process.env.JWT_EXPIRE || '7d' }
     );
   } catch (error) {
     console.error('Token generation error:', error);

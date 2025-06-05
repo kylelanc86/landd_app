@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import { authService } from "../services/api";
 
 const AuthContext = createContext(null);
@@ -6,28 +12,43 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const restoreAttempted = useRef(false);
 
   // Function to restore user state from backend
   const restoreUserState = async () => {
-    console.log("restoreUserState: called");
+    // If we've already attempted to restore, don't try again
+    if (restoreAttempted.current) {
+      return;
+    }
+    restoreAttempted.current = true;
+
+    console.log("Auth Debug - restoreUserState: called");
     const token = localStorage.getItem("token");
     if (token) {
       try {
+        console.log(
+          "Auth Debug - restoreUserState: Found token, attempting to restore user"
+        );
         const response = await authService.getCurrentUser();
         const user = response.data;
         const userWithToken = { ...user, token };
         localStorage.setItem("currentUser", JSON.stringify(userWithToken));
         setCurrentUser(userWithToken);
-        console.log("restoreUserState: user restored", userWithToken);
+        console.log(
+          "Auth Debug - restoreUserState: User restored successfully"
+        );
       } catch (error) {
-        console.error("restoreUserState: failed to restore user state", error);
+        console.error(
+          "Auth Debug - restoreUserState: Failed to restore user state",
+          error
+        );
         // If we can't restore the user state, clear everything
         localStorage.removeItem("token");
         localStorage.removeItem("currentUser");
         setCurrentUser(null);
       }
     } else {
-      console.log("restoreUserState: no token found");
+      console.log("Auth Debug - restoreUserState: No token found");
       localStorage.removeItem("currentUser");
       setCurrentUser(null);
     }
@@ -42,15 +63,17 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     setLoading(true);
     try {
+      console.log("Auth Debug - Login attempt");
       const response = await authService.login(credentials);
       const { token, user } = response.data;
       const userWithToken = { ...user, token };
       localStorage.setItem("token", token);
       localStorage.setItem("currentUser", JSON.stringify(userWithToken));
       setCurrentUser(userWithToken);
+      console.log("Auth Debug - Login successful");
       return userWithToken;
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Auth Debug - Login failed:", error);
       throw error;
     } finally {
       setLoading(false);
@@ -58,9 +81,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    console.log("Auth Debug - Logout called");
     localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
     setCurrentUser(null);
+    restoreAttempted.current = false; // Reset the restore attempt flag
   };
 
   const value = {

@@ -4,6 +4,19 @@ import { hasPermission, hasAnyPermission, hasAllPermissions } from '../config/pe
 export const usePermissions = () => {
   const { currentUser } = useAuth();
 
+  // If no user is logged in, return false for all permission checks
+  if (!currentUser) {
+    return {
+      can: () => false,
+      canAny: () => false,
+      canAll: () => false,
+      role: 'employee',
+      isAdmin: false,
+      isManager: false,
+      isEmployee: true,
+    };
+  }
+
   return {
     // Check if user has a specific permission
     can: (permission) => hasPermission(currentUser, permission),
@@ -15,15 +28,15 @@ export const usePermissions = () => {
     canAll: (permissions) => hasAllPermissions(currentUser, permissions),
     
     // Get user's role
-    role: currentUser?.role || 'employee',
+    role: currentUser.role || 'employee',
     
     // Check if user is admin
-    isAdmin: currentUser?.role === 'admin',
+    isAdmin: currentUser.role === 'admin',
     
     // Check if user is manager
-    isManager: currentUser?.role === 'manager',
+    isManager: currentUser.role === 'manager',
     
     // Check if user is employee
-    isEmployee: currentUser?.role === 'employee',
+    isEmployee: currentUser.role === 'employee',
   };
 }; 

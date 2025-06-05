@@ -180,81 +180,29 @@ const Shifts = () => {
 
   const handleSubmit = async () => {
     try {
-      console.log("Submit clicked - User state:", currentUser);
+      // First update the job status to 'in_progress'
+      await jobService.update(jobId, { status: "in_progress" });
 
-      if (!newDate) {
-        setError("Please select a date");
-        return;
-      }
-
-      let userToUse = currentUser;
-      if (!userToUse || !userToUse.id) {
-        console.log("User validation failed (before restore):", {
-          currentUser,
-        });
-        console.log("About to enter try/catch for restoreUserState");
-        // Try to restore user state before giving up
-        try {
-          try {
-            console.log(
-              "restoreUserState function reference:",
-              restoreUserState
-            );
-            await restoreUserState();
-            console.log("restoreUserState() called");
-          } catch (err) {
-            console.error("Error when calling restoreUserState:", err);
-          }
-          // Wait a tick to ensure localStorage is updated
-          await new Promise((res) => setTimeout(res, 100));
-          userToUse = JSON.parse(localStorage.getItem("currentUser"));
-          console.log("User after restoreUserState:", userToUse);
-          if (!userToUse || !userToUse.id) {
-            console.log("userToUse before redirect:", userToUse);
-            alert(
-              "User is not valid. See console for details. (No redirect for debugging)"
-            );
-            setError("Please log in to create a shift");
-            // window.location.href = "/login"; // TEMPORARILY DISABLED FOR DEBUGGING
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to restore user state:", error);
-          setError("Please log in to create a shift");
-          // window.location.href = "/login"; // TEMPORARILY DISABLED FOR DEBUGGING
-          return;
-        }
-      }
-
-      const newShift = {
+      // Then create the new shift
+      const shiftData = {
         job: jobId,
-        name: `Shift ${new Date(newDate).toLocaleDateString()}`,
-        date: new Date(newDate).toISOString(),
+        name: `Shift ${shifts.length + 1}`,
+        date: newDate,
         startTime: "08:00",
         endTime: "16:00",
-        supervisor: userToUse.id,
+        supervisor: currentUser._id,
         status: "ongoing",
-        notes: "",
       };
 
-      console.log("Creating shift with data:", newShift);
-      const response = await shiftService.create(newShift);
+      const response = await shiftService.create(shiftData);
+      console.log("New shift created:", response.data);
 
-      // Ensure the response data has the correct structure
-      const createdShift = {
-        ...response.data,
-        date: response.data.date || newShift.date, // Ensure date is present
-        _id: response.data._id, // Ensure _id is present
-      };
-
-      setShifts((prevShifts) => [...prevShifts, createdShift]);
+      // Refresh the shifts list
+      await fetchShiftsWithSamples();
       handleCloseDialog();
-    } catch (err) {
-      console.error("Error creating shift:", err);
-      setError(
-        err.response?.data?.message ||
-          "Failed to create shift. Please try again."
-      );
+    } catch (error) {
+      console.error("Error creating shift:", error);
+      setError("Failed to create shift. Please try again.");
     }
   };
 
@@ -305,6 +253,22 @@ const Shifts = () => {
   const cancelResetStatus = () => {
     setResetDialogOpen(false);
     setResetShiftId(null);
+  };
+
+  const handleCompleteJob = async () => {
+    try {
+      // Update the job status to completed
+      await jobService.update(jobId, { status: "completed" });
+
+      // Show success message
+      alert("Job marked as completed successfully");
+
+      // Navigate back to jobs page
+      navigate("/air-monitoring");
+    } catch (error) {
+      console.error("Error completing job:", error);
+      setError("Failed to complete job. Please try again.");
+    }
   };
 
   const columns = [
@@ -744,20 +708,42 @@ const Shifts = () => {
             } - ${projectDetails?.name || "Loading..."}`}
           />
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddShift}
-          sx={{
-            backgroundColor: colors.primary[500],
-            color: colors.grey[0],
-            fontSize: "14px",
-            fontWeight: "bold",
-            padding: "10px 20px",
-          }}
-        >
-          Add Shift
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleCompleteJob}
+            sx={{
+              backgroundColor: theme.palette.success.main,
+              color: theme.palette.common.white,
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                backgroundColor: theme.palette.success.dark,
+              },
+            }}
+          >
+            Complete Job
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddShift}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.common.white,
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Add Shift
+          </Button>
+        </Box>
       </Box>
 
       {error && (

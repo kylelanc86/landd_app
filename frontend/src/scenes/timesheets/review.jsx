@@ -45,6 +45,7 @@ const TimesheetReview = () => {
   const [viewMode, setViewMode] = useState("full");
   const [dailyStatuses, setDailyStatuses] = useState({});
   const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
+  const [error, setError] = useState("");
 
   // Add a ref to track the current request
   const currentRequestRef = useRef(null);
@@ -82,11 +83,11 @@ const TimesheetReview = () => {
         // First restore user state
         await restoreUserState();
 
-        // Then set up the date
+        // Then set up the date to the first day of the current month
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const firstDayOfMonth = startOfMonth(today);
         if (isMounted) {
-          setSelectedDate(today);
+          setSelectedDate(firstDayOfMonth);
           setIsInitialLoading(false);
           setIsUserDataLoaded(true);
         }
@@ -108,8 +109,11 @@ const TimesheetReview = () => {
 
     setIsLoading(true);
     try {
+      // Set the date to the first day of the month
       const startDate = startOfMonth(selectedDate);
-      const endDate = endOfMonth(selectedDate);
+      // Set end date to the last day of the month at 23:59:59
+      const endDate = new Date(endOfMonth(selectedDate));
+      endDate.setHours(23, 59, 59, 999);
 
       // Cancel any existing request
       if (currentRequestRef.current) {
@@ -120,20 +124,18 @@ const TimesheetReview = () => {
       const controller = new AbortController();
       currentRequestRef.current = controller;
 
-      console.log("Review - Fetching timesheet data:", {
-        startDate: format(startDate, "dd-MM-yyyy"),
-        endDate: format(endDate, "dd-MM-yyyy"),
-        selectedUserId,
-        currentUserId: currentUser._id,
-        currentUserRole: currentUser.role,
-        viewMode,
+      console.log("Review - Date range:", {
+        selectedDate: format(selectedDate, "yyyy-MM-dd"),
+        startDate: format(startDate, "yyyy-MM-dd"),
+        endDate: format(endDate, "yyyy-MM-dd HH:mm:ss"),
+        month: format(startDate, "MMMM yyyy"),
       });
 
       // Always include userId parameter if selectedUserId exists
       const url = `/timesheets/review/${format(
         startDate,
-        "dd-MM-yyyy"
-      )}/${format(endDate, "dd-MM-yyyy")}?userId=${
+        "yyyy-MM-dd"
+      )}/${format(endDate, "yyyy-MM-dd")}?userId=${
         selectedUserId || currentUser._id
       }`;
 
@@ -141,10 +143,19 @@ const TimesheetReview = () => {
 
       const { data } = await api.get(url, { signal: controller.signal });
 
+      // Filter out any entries that are not in the selected month
+      const filteredData = data.filter((entry) => {
+        const entryDate = new Date(entry.date);
+        return (
+          entryDate.getMonth() === selectedDate.getMonth() &&
+          entryDate.getFullYear() === selectedDate.getFullYear()
+        );
+      });
+
       // Only update state if this is still the current request
       if (currentRequestRef.current === controller) {
-        console.log("Review - Raw response data:", data);
-        setTimesheetData(data);
+        console.log("Review - Filtered response data:", filteredData);
+        setTimesheetData(filteredData);
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -152,6 +163,7 @@ const TimesheetReview = () => {
         return;
       }
       console.error("Review - Error fetching timesheet data:", error);
+      setError("Failed to fetch timesheet data. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -204,22 +216,62 @@ const TimesheetReview = () => {
   }, [selectedDate, selectedUserId]); // Removed isUserDataLoaded and currentUser?._id from dependencies
 
   const handleMonthChange = (direction) => {
-    setSelectedDate(
+    const newDate =
       direction === "next"
         ? addMonths(selectedDate, 1)
-        : subMonths(selectedDate, 1)
-    );
+        : subMonths(selectedDate, 1);
+
+    // Set the date to the first day of the month
+    const firstDayOfMonth = startOfMonth(newDate);
+    console.log("Month changed:", {
+      direction,
+      oldDate: format(selectedDate, "yyyy-MM-dd"),
+      newDate: format(newDate, "yyyy-MM-dd"),
+      firstDayOfMonth: format(firstDayOfMonth, "yyyy-MM-dd"),
+    });
+    setSelectedDate(firstDayOfMonth);
   };
 
   const handleViewTimesheet = (userId, date) => {
-    // Use the date directly from the row data
-    console.log("Navigating to timesheet view:", {
-      userId,
-      date,
-      rowDate: date,
-    });
-    // Always use the userId from the row data and the date from the row
-    navigate(`/timesheets?userId=${userId}&date=${date}&view=daily`);
+    try {
+      // Parse the date to ensure it's in the correct format
+      const parsedDate = new Date(date);
+      const formattedDate = format(parsedDate, "yyyy-MM-dd");
+
+      // Use selectedUserId if available, otherwise fall back to the row's userId
+      const targetUserId = selectedUserId || userId;
+
+      console.log("Navigating to timesheet view:", {
+        selectedUserId,
+        rowUserId: userId,
+        targetUserId,
+        date: formattedDate,
+      });
+
+      // Navigate to the daily timesheet view with the correct user ID
+      navigate(
+        `/timesheets/daily?userId=${targetUserId}&date=${formattedDate}`
+      );
+    } catch (error) {
+      console.error("Error navigating to timesheet:", error);
+      setError("Failed to open timesheet. Please try again.");
+    }
+  };
+
+  const handleAuthorizeTimesheet = async (userId, date) => {
+    try {
+      // Update the timesheet status to authorized
+      await api.put(`/timesheets/${userId}/${date}/approve`);
+
+      // Refresh the timesheet data
+      await fetchTimesheetData();
+
+      // Show success message
+      alert("Timesheet authorized successfully");
+    } catch (error) {
+      console.error("Error authorizing timesheet:", error);
+      setError("Failed to authorize timesheet. Please try again.");
+    }
   };
 
   const columns = [
@@ -229,14 +281,35 @@ const TimesheetReview = () => {
       flex: 1,
       valueGetter: (params) => {
         try {
-          // Parse the date string in dd-MM-yyyy format
-          const [day, month, year] = params.row.date.split("-").map(Number);
-          const date = new Date(year, month - 1, day);
-          return format(date, "dd-MM-yyyy");
+          // Parse the date string in yyyy-MM-dd format
+          const date = new Date(params.row.date);
+          return {
+            date: date,
+            formattedDate: format(date, "EEEE, dd MMMM yyyy"),
+            isWeekend: date.getDay() === 0 || date.getDay() === 6,
+          };
         } catch (error) {
           console.error("Error formatting date:", error);
-          return params.row.date; // Return original date string if parsing fails
+          return {
+            date: new Date(params.row.date),
+            formattedDate: params.row.date,
+            isWeekend: false,
+          };
         }
+      },
+      renderCell: (params) => {
+        const { formattedDate, isWeekend } = params.value;
+        return (
+          <Typography
+            sx={{
+              color: colors.grey[100],
+              fontStyle: isWeekend ? "italic" : "normal",
+              fontSize: "0.875rem",
+            }}
+          >
+            {formattedDate}
+          </Typography>
+        );
       },
     },
     {
@@ -250,18 +323,8 @@ const TimesheetReview = () => {
       },
     },
     {
-      field: "projectTime",
-      headerName: "Project Time",
-      flex: 1,
-      valueGetter: (params) => {
-        const hours = Math.floor(params.row.projectTime / 60);
-        const minutes = params.row.projectTime % 60;
-        return `${hours}h ${minutes}m`;
-      },
-    },
-    {
       field: "projectTimePercentage",
-      headerName: "Project Time %",
+      headerName: "Project %",
       flex: 1,
       valueGetter: (params) => {
         if (params.row.totalTime === 0) return "0%";
@@ -272,13 +335,14 @@ const TimesheetReview = () => {
     },
     {
       field: "status",
-      headerName: "User Status",
+      headerName: "Status",
       flex: 1,
       renderCell: (params) => {
         const statusColors = {
           incomplete: "warning",
           absent: "error",
           finalised: "success",
+          authorized: "success",
         };
         return (
           <Chip
@@ -290,60 +354,38 @@ const TimesheetReview = () => {
       },
     },
     {
-      field: "authorizationStatus",
-      headerName: "Authorization Status",
-      flex: 1,
-      renderCell: (params) => {
-        const statusColors = {
-          to_be_authorized: "warning",
-          authorized: "success",
-          query: "error",
-        };
-        return (
-          <Chip
-            label={params.value
-              .split("_")
-              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(" ")}
-            color={statusColors[params.value]}
-            size="small"
-          />
-        );
-      },
-    },
-    {
       field: "actions",
       headerName: "Actions",
       flex: 1,
       renderCell: (params) => {
-        // Don't render anything until user data is fully loaded
-        if (!isUserDataLoaded || !currentUser?._id) {
-          return null;
-        }
-
-        console.log("Row data:", {
-          rowUserId: params.row.userId,
-          currentUserId: currentUser._id,
-          rowData: params.row,
-          isUserDataLoaded,
-        });
-
-        // Only show review icon if viewing someone else's timesheet
-        if (String(params.row.userId) === String(currentUser._id)) {
-          return null;
-        }
-
         return (
-          <Tooltip title="View Timesheet">
-            <IconButton
-              onClick={() =>
-                handleViewTimesheet(params.row.userId, params.row.date)
-              }
-              color="primary"
+          <Box display="flex" alignItems="center" gap={1}>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleAuthorizeTimesheet(params.row.userId, params.row.date);
+              }}
+              disabled={params.row.status === "authorized"}
+              sx={{
+                backgroundColor: colors.secondary[500],
+                color: colors.grey[100],
+                fontSize: "0.75rem",
+                padding: "4px 8px",
+                minWidth: "120px",
+                "&:hover": {
+                  backgroundColor: colors.secondary[600],
+                },
+                "&.Mui-disabled": {
+                  backgroundColor: colors.grey[700],
+                  color: colors.grey[500],
+                },
+              }}
             >
-              <VisibilityIcon />
-            </IconButton>
-          </Tooltip>
+              Authorise Timesheet
+            </Button>
+          </Box>
         );
       },
     },
@@ -397,7 +439,13 @@ const TimesheetReview = () => {
           columns={columns}
           loading={isLoading}
           getRowId={(row) => `${row.userId}-${row.date}`}
-          disableRowSelectionOnClick
+          onRowClick={(params) => {
+            // Check if the click was in the actions column
+            if (params.field === "actions") {
+              return;
+            }
+            handleViewTimesheet(params.row.userId, params.row.date);
+          }}
           sx={{
             "& .MuiDataGrid-cell": {
               borderBottom: `1px solid ${colors.grey[800]}`,
@@ -417,15 +465,34 @@ const TimesheetReview = () => {
               color: `${colors.grey[100]} !important`,
             },
             "& .MuiDataGrid-row": {
-              backgroundColor: theme.palette.background.alt,
-              "&.weekend": {
+              cursor: "pointer",
+              "&:hover": {
                 backgroundColor: colors.primary[600],
+              },
+              "&.authorized": {
+                backgroundColor: theme.palette.success.main,
+                "&:hover": {
+                  backgroundColor: theme.palette.success.dark,
+                },
+              },
+              "&.weekend": {
+                backgroundColor: colors.primary[700],
+                "&:hover": {
+                  backgroundColor: colors.primary[600],
+                },
               },
             },
           }}
           getRowClassName={(params) => {
+            const classes = [];
+            if (params.row.status === "authorized") {
+              classes.push("authorized");
+            }
             const date = new Date(params.row.date);
-            return date.getDay() === 0 || date.getDay() === 6 ? "weekend" : "";
+            if (date.getDay() === 0 || date.getDay() === 6) {
+              classes.push("weekend");
+            }
+            return classes.join(" ");
           }}
         />
       </Paper>

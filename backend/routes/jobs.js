@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const AirMonitoringJob = require('../models/Job');
+const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -69,6 +70,19 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
 
     const newJob = await job.save();
     console.log('Saved job:', newJob);
+
+    // Update project status to "In progress" if it's currently "Assigned"
+    try {
+      const project = await Project.findById(req.body.project);
+      if (project && project.status === 'Assigned') {
+        project.status = 'In progress';
+        await project.save();
+        console.log(`Updated project ${project._id} status to In progress`);
+      }
+    } catch (projectError) {
+      console.error('Error updating project status:', projectError);
+      // Don't fail the job creation if project update fails
+    }
     
     // Populate the project and assignedTo fields before sending response
     const populatedJob = await AirMonitoringJob.findById(newJob._id)
@@ -86,16 +100,39 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
 });
 
 // Update an air monitoring job
-router.put('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
+router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findById(req.params.id);
     if (!job) {
       return res.status(404).json({ message: 'Air monitoring job not found' });
     }
 
-    Object.assign(job, req.body);
+    // Only update the fields that are provided in the request
+    Object.keys(req.body).forEach(key => {
+      job[key] = req.body[key];
+    });
+
     const updatedJob = await job.save();
-    res.json(updatedJob);
+    
+    // If job status is being updated to 'completed', update the project status
+    if (req.body.status === 'completed' && job.project) {
+      try {
+        await Project.findByIdAndUpdate(job.project, {
+          status: 'Ready for invoicing'
+        });
+        console.log(`Updated project ${job.project} status to Ready for invoicing`);
+      } catch (projectError) {
+        console.error('Error updating project status:', projectError);
+        // Don't fail the job update if project update fails
+      }
+    }
+    
+    // Populate the project and assignedTo fields before sending response
+    const populatedJob = await AirMonitoringJob.findById(updatedJob._id)
+      .populate('project')
+      .populate('assignedTo', 'firstName lastName');
+
+    res.json(populatedJob);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

@@ -4,6 +4,7 @@ const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
+const User = require('../models/User');
 
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
@@ -108,6 +109,23 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
       }
     }
 
+    // If users are being updated, validate that all users are active
+    if (req.body.users) {
+      const userIds = Array.isArray(req.body.users) ? req.body.users : [];
+      const users = await User.find({ _id: { $in: userIds } });
+      const inactiveUsers = users.filter(user => !user.isActive);
+      
+      if (inactiveUsers.length > 0) {
+        return res.status(400).json({ 
+          message: 'Cannot assign inactive users to projects',
+          inactiveUsers: inactiveUsers.map(user => ({
+            id: user._id,
+            name: `${user.firstName} ${user.lastName}`
+          }))
+        });
+      }
+    }
+
     // Update fields
     if (req.body.name) project.name = req.body.name;
     if (req.body.department) project.department = req.body.department;
@@ -131,9 +149,9 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     
     console.log('Updated project:', populatedProject.toObject());
     res.json(populatedProject);
-  } catch (err) {
-    console.error('Error updating project:', err);
-    res.status(400).json({ message: err.message });
+  } catch (error) {
+    console.error('Error updating project:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 

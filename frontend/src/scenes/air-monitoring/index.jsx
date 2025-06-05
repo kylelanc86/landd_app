@@ -150,7 +150,7 @@ const AirMonitoring = () => {
       const newJob = {
         name: selectedProject.name,
         project: selectedProject._id,
-        status: form.status,
+        status: "pending",
         startDate: new Date(),
         asbestosRemovalist: form.asbestosRemovalist,
         description: `Air monitoring job for ${selectedProject.name}`,
@@ -172,7 +172,7 @@ const AirMonitoring = () => {
         _id: response.data._id,
         projectID: selectedProject.projectID,
         projectName: selectedProject.name,
-        status: response.data.status,
+        status: "pending",
         asbestosRemovalist: response.data.asbestosRemovalist,
       };
 
@@ -317,7 +317,16 @@ const AirMonitoring = () => {
   const handleStatusChange = async (newStatus) => {
     try {
       if (selectedJob) {
-        await jobService.update(selectedJob._id, { status: newStatus });
+        console.log("Updating job status:", {
+          jobId: selectedJob._id,
+          newStatus,
+        });
+        const response = await jobService.update(selectedJob._id, {
+          status: newStatus,
+        });
+        console.log("Update response:", response);
+
+        // Update local state
         setJobs(
           jobs.map((job) =>
             job._id === selectedJob._id ? { ...job, status: newStatus } : job
@@ -325,7 +334,8 @@ const AirMonitoring = () => {
         );
       }
     } catch (err) {
-      setError(err.message);
+      console.error("Error updating job status:", err);
+      setError(err.message || "Failed to update job status");
     } finally {
       handleStatusClose();
     }
@@ -632,22 +642,6 @@ const AirMonitoring = () => {
               required
               sx={{ mb: 2 }}
             />
-
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Status</InputLabel>
-              <Select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-                label="Status"
-                required
-              >
-                <MenuItem value="pending">Pending</MenuItem>
-                <MenuItem value="in_progress">In Progress</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
-                <MenuItem value="cancelled">Cancelled</MenuItem>
-              </Select>
-            </FormControl>
           </Box>
         </DialogContent>
         <DialogActions>

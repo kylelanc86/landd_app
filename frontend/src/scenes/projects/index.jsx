@@ -31,6 +31,7 @@ import {
   Switch,
   FormControlLabel,
   Autocomplete,
+  Grid,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -526,14 +527,25 @@ const Projects = () => {
         }
 
         const response = await userService.getAll();
-        console.log("Users fetched:", response.data);
+        console.log("Raw users from API:", response.data);
 
-        // Transform the user data to include full name
-        const transformedUsers = response.data.map((user) => ({
+        // Filter out inactive users and transform the data
+        const activeUsers = response.data.filter((user) => {
+          console.log(
+            `User ${user.firstName} ${user.lastName} active status:`,
+            user.isActive
+          );
+          return user.isActive === true;
+        });
+
+        console.log("Filtered active users:", activeUsers);
+
+        const transformedUsers = activeUsers.map((user) => ({
           ...user,
           name: `${user.firstName} ${user.lastName}`,
         }));
 
+        console.log("Final transformed users:", transformedUsers);
         setUsers(transformedUsers);
         setLoadingUsers(false);
       } catch (err) {
@@ -567,6 +579,11 @@ const Projects = () => {
     try {
       console.log("Submitting edit form:", editForm);
 
+      // Filter out any inactive users from the edit form data
+      const activeUserIds = editForm.users.filter((userId) =>
+        users.some((user) => user._id === userId && user.isActive === true)
+      );
+
       // Create a clean update object with only the necessary fields
       const formattedData = {
         name: editForm.name,
@@ -574,7 +591,7 @@ const Projects = () => {
         category: editForm.category || "",
         status: editForm.status,
         address: editForm.address,
-        users: editForm.users || [],
+        users: activeUserIds,
       };
 
       console.log("Sending update to backend:", formattedData);
@@ -757,12 +774,18 @@ const Projects = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Filter out any inactive users from the form data
+      const activeUserIds = form.users.filter((userId) =>
+        users.some((user) => user._id === userId && user.isActive === true)
+      );
+
       const projectData = {
         ...form,
-        users: form.users || [],
+        users: activeUserIds,
         category: form.category || "",
       };
 
+      console.log("Submitting project data:", projectData);
       const response = await projectService.create(projectData);
       setProjects([response.data, ...projects]);
       setDialogOpen(false);
@@ -995,13 +1018,18 @@ const Projects = () => {
     // Ensure value is always an array of user IDs
     const selectedUserIds = Array.isArray(value) ? value : [];
 
+    // Filter out any inactive users from the selected values
+    const activeSelectedIds = selectedUserIds.filter((userId) =>
+      users.some((user) => user._id === userId && user.isActive === true)
+    );
+
     return (
       <FormControl fullWidth>
         <InputLabel>Assigned Users</InputLabel>
         <Select
           multiple
           name={name}
-          value={selectedUserIds}
+          value={activeSelectedIds}
           onChange={onChange}
           label="Assigned Users"
           disabled={loadingUsers}
@@ -1017,19 +1045,15 @@ const Projects = () => {
             </Box>
           )}
         >
-          {users && users.length > 0 ? (
-            users.map((user) => {
-              const displayName =
-                user.name || `${user.firstName} ${user.lastName}`.trim();
-              return (
-                <MenuItem key={user._id} value={user._id}>
-                  {displayName}
-                </MenuItem>
-              );
-            })
-          ) : (
-            <MenuItem disabled>No users available</MenuItem>
-          )}
+          {users.map((user) => {
+            const displayName =
+              user.name || `${user.firstName} ${user.lastName}`.trim();
+            return (
+              <MenuItem key={user._id} value={user._id}>
+                {displayName}
+              </MenuItem>
+            );
+          })}
         </Select>
       </FormControl>
     );
@@ -1317,11 +1341,7 @@ const Projects = () => {
                   fullWidth
                   disabled
                 />
-                {renderUsersSelect(
-                  editForm?.users || [],
-                  handleEditChange,
-                  "users"
-                )}
+                {renderUsersSelect(editForm?.users, handleEditChange, "users")}
               </Stack>
             )}
           </DialogContent>
@@ -1342,144 +1362,173 @@ const Projects = () => {
       {/* Create Project Dialog */}
       <Dialog
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+        onClose={() => {
+          setDialogOpen(false);
+          setForm(emptyForm);
+        }}
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Create New Project</DialogTitle>
-        <form onSubmit={handleSubmit}>
-          <DialogContent>
-            <Stack spacing={2}>
-              <TextField
-                label="Project ID"
-                value="Will be auto-generated"
-                disabled
-                fullWidth
-                sx={{
-                  "& .MuiInputBase-input.Mui-disabled": {
-                    WebkitTextFillColor: "#666",
-                    fontStyle: "italic",
-                  },
-                }}
-              />
-              <TextField
-                label="Project Name"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-                fullWidth
-              />
-              <Box>
-                <Autocomplete
-                  options={clients}
-                  getOptionLabel={(option) => option.name || ""}
-                  value={
-                    clients.find((client) => client._id === form.client) || null
-                  }
-                  onChange={(event, newValue) => {
-                    setForm({
-                      ...form,
-                      client: newValue ? newValue._id : "",
-                    });
-                  }}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Client" required fullWidth />
-                  )}
-                  renderOption={(props, option) => (
-                    <li {...props}>
-                      <Box>
-                        <Typography variant="body1">{option.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {option.address}
-                        </Typography>
-                      </Box>
-                    </li>
-                  )}
-                  isOptionEqualToValue={(option, value) =>
-                    option._id === value._id
-                  }
-                  filterOptions={(options, { inputValue }) => {
-                    const searchTerm = inputValue.toLowerCase();
-                    return options.filter(
-                      (option) =>
-                        option.name.toLowerCase().includes(searchTerm) ||
-                        (option.address || "")
-                          .toLowerCase()
-                          .includes(searchTerm)
-                    );
+        <DialogTitle>
+          {selectedProject ? "Edit Project" : "Add New Project"}
+        </DialogTitle>
+        <DialogContent>
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  label="Project ID"
+                  value="Will be auto-generated"
+                  disabled
+                  fullWidth
+                  sx={{
+                    "& .MuiInputBase-input.Mui-disabled": {
+                      WebkitTextFillColor: "#666",
+                      fontStyle: "italic",
+                    },
                   }}
                 />
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={() => setClientDialogOpen(true)}
-                  sx={{ mt: 1 }}
-                >
-                  Add New Client
-                </Button>
-              </Box>
-              <FormControl fullWidth required>
-                <InputLabel>Department</InputLabel>
-                <Select
-                  name="department"
-                  value={form.department}
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Project Name"
+                  name="name"
+                  value={form.name}
                   onChange={handleChange}
-                  label="Department"
-                >
-                  {DEPARTMENTS.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl fullWidth>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  name="category"
-                  value={form.category}
+                  required
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Box>
+                  <Autocomplete
+                    options={clients}
+                    getOptionLabel={(option) => option.name || ""}
+                    value={
+                      clients.find((client) => client._id === form.client) ||
+                      null
+                    }
+                    onChange={(event, newValue) => {
+                      setForm({
+                        ...form,
+                        client: newValue ? newValue._id : "",
+                      });
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Client"
+                        required
+                        fullWidth
+                      />
+                    )}
+                    renderOption={(props, option) => (
+                      <li {...props}>
+                        <Box>
+                          <Typography variant="body1">{option.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.address}
+                          </Typography>
+                        </Box>
+                      </li>
+                    )}
+                    isOptionEqualToValue={(option, value) =>
+                      option._id === value._id
+                    }
+                    filterOptions={(options, { inputValue }) => {
+                      const searchTerm = inputValue.toLowerCase();
+                      return options.filter(
+                        (option) =>
+                          option.name.toLowerCase().includes(searchTerm) ||
+                          (option.address || "")
+                            .toLowerCase()
+                            .includes(searchTerm)
+                      );
+                    }}
+                  />
+                  <Button
+                    startIcon={<AddIcon />}
+                    onClick={() => setClientDialogOpen(true)}
+                    sx={{ mt: 1 }}
+                  >
+                    Add New Client
+                  </Button>
+                </Box>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Department</InputLabel>
+                  <Select
+                    name="department"
+                    value={form.department}
+                    onChange={handleChange}
+                    label="Department"
+                  >
+                    {DEPARTMENTS.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        {type}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    name="category"
+                    value={form.category}
+                    onChange={handleChange}
+                    label="Category"
+                  >
+                    {CATEGORIES.map((category) => (
+                      <MenuItem key={category} value={category}>
+                        {category}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  {renderStatusSelect(form.status, handleChange)}
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Address"
+                  name="address"
+                  value={form.address}
                   onChange={handleChange}
-                  label="Category"
-                >
-                  {CATEGORIES.map((category) => (
-                    <MenuItem key={category} value={category}>
-                      {category}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl fullWidth required>
-                <InputLabel>Status</InputLabel>
-                {renderStatusSelect(form.status, handleChange)}
-              </FormControl>
-              <TextField
-                label="Address"
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                fullWidth
-              />
-              {renderUsersSelect(form.users, handleChange, "users")}
-              <TextField
-                label="Description"
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                multiline
-                rows={4}
-                fullWidth
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDialogOpen(false)} color="secondary">
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary">
-              Create Project
-            </Button>
-          </DialogActions>
-        </form>
+                  fullWidth
+                />
+              </Grid>
+              <Grid item xs={12}>
+                {renderUsersSelect(form.users, handleChange, "users")}
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Description"
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  multiline
+                  rows={4}
+                  fullWidth
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)} color="secondary">
+            Cancel
+          </Button>
+          <Button type="submit" variant="contained" color="primary">
+            {selectedProject ? "Save Changes" : "Create Project"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Add New Client Dialog */}

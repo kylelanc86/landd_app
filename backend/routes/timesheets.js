@@ -6,6 +6,7 @@ const auth = require("../middleware/auth");
 const { ROLE_PERMISSIONS } = require("../config/permissions");
 const { format, eachDayOfInterval } = require('date-fns');
 const mongoose = require('mongoose');
+const Project = require("../models/Project");
 
 // Helper function to check permissions
 const hasPermission = (user, permission) => {
@@ -180,6 +181,19 @@ router.post("/", auth, async (req, res) => {
       }
       timesheetData.projectId = projectId;
       timesheetData.projectInputType = projectInputType;
+
+      // Update project status to "In progress" if it's currently "Assigned"
+      try {
+        const project = await Project.findById(projectId);
+        if (project && project.status === 'Assigned') {
+          project.status = 'In progress';
+          await project.save();
+          console.log(`Updated project ${project._id} status to In progress`);
+        }
+      } catch (projectError) {
+        console.error('Error updating project status:', projectError);
+        // Don't fail the timesheet creation if project update fails
+      }
     }
 
     const timesheet = new Timesheet(timesheetData);
@@ -532,26 +546,40 @@ router.get("/status/range/:startDate/:endDate", auth, async (req, res) => {
 // Get timesheet review data for a date range
 router.get("/review/:startDate/:endDate", auth, async (req, res) => {
   try {
-    // Parse dates in yyyy-MM-dd format
-    const start = new Date(req.params.startDate);
-    const end = new Date(req.params.endDate);
-    
-    // Set time to start/end of day in UTC
-    start.setUTCHours(0, 0, 0, 0);
-    end.setUTCHours(23, 59, 59, 999);
-
     console.log('Review endpoint - Request details:', {
       startDate: req.params.startDate,
       endDate: req.params.endDate,
-      parsedStart: start.toISOString(),
-      parsedEnd: end.toISOString(),
       userId: req.query.userId,
       currentUser: {
         id: req.user._id,
         role: req.user.role
-      },
-      hasApprovePermission: hasPermission(req.user, 'timesheets.approve')
+      }
     });
+
+    // Parse dates in yyyy-MM-dd format
+    let start, end;
+    try {
+      start = new Date(req.params.startDate);
+      end = new Date(req.params.endDate);
+      
+      // Validate dates
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.error('Invalid date format:', { startDate: req.params.startDate, endDate: req.params.endDate });
+        return res.status(400).json({ message: "Invalid date format. Expected yyyy-MM-dd" });
+      }
+
+      // Set time to start/end of day in UTC
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(23, 59, 59, 999);
+
+      console.log('Parsed dates:', {
+        start: start.toISOString(),
+        end: end.toISOString()
+      });
+    } catch (error) {
+      console.error('Error parsing dates:', error);
+      return res.status(400).json({ message: "Error parsing dates" });
+    }
     
     // Build query based on whether we're looking at a specific user's timesheets
     const query = {
@@ -590,9 +618,7 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
 
     console.log('Review endpoint - Found data:', {
       entriesCount: entries.length,
-      statusesCount: statuses.length,
-      firstEntry: entries[0],
-      firstStatus: statuses[0]
+      statusesCount: statuses.length
     });
 
     // Create a map of statuses by date
@@ -604,8 +630,6 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
         statusMap[date] = status.status;
       }
     });
-
-    console.log('Review endpoint - Status map:', statusMap);
 
     // Group entries by user and date
     const timesheetData = entries.reduce((acc, entry) => {
@@ -644,11 +668,6 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
       return acc;
     }, {});
 
-    console.log('Review endpoint - Processed timesheet data:', {
-      entriesCount: Object.keys(timesheetData).length,
-      sampleEntry: Object.values(timesheetData)[0]
-    });
-
     // Create entries for all days in the month
     const allDays = eachDayOfInterval({ start, end });
     const completeData = allDays.map(date => {
@@ -672,15 +691,63 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
       };
     });
 
-    console.log('Review endpoint - Final response data:', {
-      totalDays: completeData.length,
-      entriesWithTime: completeData.filter(entry => entry.totalTime > 0).length,
-      firstEntry: completeData[0]
-    });
-
     res.json(completeData);
   } catch (error) {
     console.error("Review endpoint - Error:", error);
+    res.status(500).json({ 
+      message: "Error fetching timesheet review data",
+      details: error.message 
+    });
+  }
+});
+
+// Authorize a timesheet for a specific user and date
+router.put("/:userId/:date/approve", auth, async (req, res) => {
+  try {
+    // Check if user has permission to approve timesheets
+    if (!hasPermission(req.user, 'timesheets.approve')) {
+      return res.status(403).json({ message: "Not authorized to approve timesheets" });
+    }
+
+    const { userId, date } = req.params;
+    
+    // Find all timesheet entries for this user and date
+    const timesheets = await Timesheet.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      date: new Date(date)
+    });
+
+    if (!timesheets || timesheets.length === 0) {
+      return res.status(404).json({ message: "No timesheet entries found for this date" });
+    }
+
+    // Update all entries for this date
+    const updatePromises = timesheets.map(timesheet => {
+      timesheet.isApproved = true;
+      timesheet.approvedBy = req.user._id;
+      timesheet.approvedAt = new Date();
+      return timesheet.save();
+    });
+
+    await Promise.all(updatePromises);
+
+    // Update the timesheet status
+    await TimesheetStatus.findOneAndUpdate(
+      {
+        userId: new mongoose.Types.ObjectId(userId),
+        date: new Date(date)
+      },
+      {
+        status: 'authorized',
+        updatedBy: req.user._id,
+        updatedAt: new Date()
+      },
+      { upsert: true }
+    );
+
+    res.json({ message: "Timesheet authorized successfully" });
+  } catch (error) {
+    console.error("Error authorizing timesheet:", error);
     res.status(500).json({ message: error.message });
   }
 });

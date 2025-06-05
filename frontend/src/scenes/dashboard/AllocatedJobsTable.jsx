@@ -13,6 +13,11 @@ const AllocatedJobsTable = () => {
 
   useEffect(() => {
     const fetchAllocatedJobs = async () => {
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
+
       try {
         console.log("Fetching allocated jobs for user:", currentUser);
         const response = await projectService.getAll();
@@ -20,13 +25,29 @@ const AllocatedJobsTable = () => {
 
         // Filter projects where the current user is assigned AND status is active
         const allocatedJobs = response.data.filter((project) => {
+          // Check if project.users exists and is an array
+          if (!project.users || !Array.isArray(project.users)) {
+            console.log(`Project ${project.name} has no users array`);
+            return false;
+          }
+
+          // Check if the current user is in the users array
           const isAssigned = project.users.some((user) => {
+            // Handle both string IDs and user objects
             const userId = typeof user === "string" ? user : user._id;
-            return userId === currentUser._id;
+            const isAssigned = userId === currentUser._id;
+            console.log(`Checking user assignment for ${project.name}:`, {
+              userId,
+              currentUserId: currentUser._id,
+              isAssigned,
+            });
+            return isAssigned;
           });
+
           const isActive = ACTIVE_STATUSES.includes(project.status);
           console.log(
-            `Project ${project.name} - Assigned: ${isAssigned}, Active: ${isActive}`
+            `Project ${project.name} - Assigned: ${isAssigned}, Active: ${isActive}, Users:`,
+            project.users
           );
           return isAssigned && isActive;
         });
@@ -43,14 +64,13 @@ const AllocatedJobsTable = () => {
         setJobs(formattedJobs);
       } catch (error) {
         console.error("Error fetching allocated jobs:", error);
+        setJobs([]); // Set empty array on error
       } finally {
         setLoading(false);
       }
     };
 
-    if (currentUser) {
-      fetchAllocatedJobs();
-    }
+    fetchAllocatedJobs();
   }, [currentUser]);
 
   const columns = [

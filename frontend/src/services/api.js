@@ -24,32 +24,39 @@ api.interceptors.request.use(
 
 // Add response interceptor
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    // Only remove token/redirect if the 401 is NOT from a Xero endpoint
-    const isXero = error.config && error.config.url && error.config.url.includes('/xero/');
-    if (error.response?.status === 401 && !isXero) {
-      console.error('401 Unauthorized error:', error, error.response);
-      // Check if we got a new token in the response body
-      const newToken = error.response?.data?.newToken;
-      if (newToken) {
-        console.log('Received new token in error response, updating localStorage.');
-        localStorage.setItem('token', newToken);
-        // Update the current user object with the new token
-        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-        currentUser.token = newToken;
-        localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        // Retry the original request
-        const config = error.config;
-        config.headers.Authorization = `Bearer ${newToken}`;
-        return api(config);
-      } else {
-        // No new token, clear storage and redirect to login
-        localStorage.removeItem("token");
-        localStorage.removeItem("currentUser");
-        window.location.href = "/login";
+  (response) => response,
+  async (error) => {
+    // Only handle auth errors for non-Xero endpoints
+    if (error.response?.status === 401 && !error.config.url.includes('/xero')) {
+      console.log('Auth Debug - Received 401 error, attempting token refresh');
+      
+      try {
+        const response = await authService.getCurrentUser();
+        if (response.data) {
+          console.log('Auth Debug - Token refresh successful');
+          // Update token in localStorage
+          localStorage.setItem('token', response.data.token);
+          // Update current user object
+          const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+          currentUser.token = response.data.token;
+          localStorage.setItem('currentUser', JSON.stringify(currentUser));
+          // Retry the original request
+          const config = error.config;
+          config.headers.Authorization = `Bearer ${response.data.token}`;
+          console.log('Auth Debug - Retrying request with refreshed token');
+          return api(config);
+        }
+      } catch (refreshError) {
+        console.error('Auth Debug - Token refresh failed:', refreshError);
+        // Only redirect to login if we're not already on the login page
+        // and if the error is not from the token refresh attempt itself
+        if (!window.location.pathname.includes('/login') && 
+            !error.config.url.includes('/auth/current-user')) {
+          console.log('Auth Debug - Redirecting to login page');
+          localStorage.removeItem("token");
+          localStorage.removeItem("currentUser");
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);
@@ -59,15 +66,17 @@ api.interceptors.response.use(
 // Auth service
 export const authService = {
   login: (credentials) => {
-    console.log("AuthService: Login attempt with credentials:", credentials);
+    console.log("Auth Debug - Login attempt");
     return api.post('/auth/login', credentials);
   },
   register: (userData) => api.post('/auth/register', userData),
   getCurrentUser: () => {
     const token = localStorage.getItem('token');
     if (!token) {
+      console.log('Auth Debug - No token available for getCurrentUser');
       return Promise.reject(new Error('No token available'));
     }
+    console.log('Auth Debug - Fetching current user');
     return api.get('/auth/me');
   },
   updateUser: (userData) => {
@@ -112,7 +121,7 @@ export const jobService = {
   getAll: () => api.get('/air-monitoring-jobs'),
   getById: (id) => api.get(`/air-monitoring-jobs/${id}`),
   create: (data) => api.post('/air-monitoring-jobs', data),
-  update: (id, data) => api.put(`/air-monitoring-jobs/${id}`, data),
+  update: (id, data) => api.patch(`/air-monitoring-jobs/${id}`, data),
   delete: (id) => api.delete(`/air-monitoring-jobs/${id}`)
 };
 
@@ -148,10 +157,10 @@ export const invoiceService = {
 
 // User service
 export const userService = {
-  getAll: () => api.get('/users'),
+  getAll: () => api.get('/users?isActive=true'),
   getById: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
-  update: (id, data) => api.put(`/users/${id}`, data),
+  update: (id, data) => api.patch(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`)
 };
 

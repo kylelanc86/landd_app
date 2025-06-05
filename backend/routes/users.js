@@ -2,11 +2,22 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 
 // Get all users
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const query = {};
+    
+    // If isActive parameter is provided, filter by active status
+    if (req.query.isActive !== undefined) {
+      query.isActive = req.query.isActive === 'true';
+    }
+    
+    const users = await User.find(query)
+      .select('-password')
+      .sort({ createdAt: -1 });
+    
     console.log('Users from database:', users.map(u => ({ 
       id: u._id, 
       email: u.email, 
