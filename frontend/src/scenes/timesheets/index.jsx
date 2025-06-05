@@ -44,15 +44,13 @@ import interactionPlugin from "@fullcalendar/interaction";
 
 const Timesheets = () => {
   const theme = useTheme();
-  const { currentUser } = useAuth();
+  const { currentUser, loading: authLoading } = useAuth();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(() => {
     const dateParam = searchParams.get("date");
     return dateParam ? parseISO(dateParam) : new Date();
   });
-  const [targetUserId, setTargetUserId] = useState(() => {
-    return searchParams.get("userId") || currentUser._id;
-  });
+  const [targetUserId, setTargetUserId] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [projects, setProjects] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
@@ -71,39 +69,144 @@ const Timesheets = () => {
   const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
   const navigate = useNavigate();
 
+  // Initialize targetUserId when currentUser is available
+  useEffect(() => {
+    if (!authLoading && currentUser?._id) {
+      console.log("Current user object:", currentUser);
+      const userId = searchParams.get("userId") || currentUser._id;
+      console.log("Setting targetUserId:", {
+        fromParams: searchParams.get("userId"),
+        currentUserId: currentUser._id,
+        finalValue: userId,
+        currentUser: {
+          id: currentUser._id,
+          firstName: currentUser.firstName,
+          lastName: currentUser.lastName,
+          email: currentUser.email,
+        },
+      });
+      setTargetUserId(userId);
+    }
+  }, [authLoading, currentUser, searchParams]);
+
+  // Log current user state
+  useEffect(() => {
+    console.log("Current user state:", {
+      currentUser: currentUser
+        ? {
+            id: currentUser._id,
+            firstName: currentUser.firstName,
+            lastName: currentUser.lastName,
+            email: currentUser.email,
+          }
+        : null,
+      targetUserId,
+      authLoading,
+      hasUserId: Boolean(currentUser?._id),
+    });
+  }, [currentUser, targetUserId, authLoading]);
+
   // Update URL when date changes
   useEffect(() => {
+    if (!targetUserId) {
+      console.log("No targetUserId available for URL update", {
+        targetUserId,
+        currentUser: currentUser
+          ? {
+              id: currentUser._id,
+              firstName: currentUser.firstName,
+              lastName: currentUser.lastName,
+            }
+          : null,
+      });
+      return;
+    }
+
     const formattedDate = format(selectedDate, "yyyy-MM-dd");
+    console.log("Updating URL:", {
+      date: formattedDate,
+      userId: targetUserId,
+      currentUser: currentUser
+        ? {
+            id: currentUser._id,
+            firstName: currentUser.firstName,
+            lastName: currentUser.lastName,
+          }
+        : null,
+    });
     navigate(`/timesheets/daily?date=${formattedDate}&userId=${targetUserId}`, {
       replace: true,
     });
-  }, [selectedDate, targetUserId, navigate]);
+  }, [selectedDate, targetUserId, navigate, currentUser]);
 
   // Fetch time entries for the selected day
   const fetchTimeEntries = async () => {
+    if (!targetUserId) {
+      console.log("Waiting for user ID before fetching entries", {
+        targetUserId,
+        currentUser: currentUser
+          ? {
+              id: currentUser.id || currentUser._id,
+              firstName: currentUser.firstName,
+              lastName: currentUser.lastName,
+            }
+          : null,
+      });
+      return;
+    }
+
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
-      console.log("Fetching entries for date:", formattedDate);
+      console.log("Fetching entries for date:", {
+        date: formattedDate,
+        userId: targetUserId,
+        currentUser: currentUser
+          ? {
+              id: currentUser.id || currentUser._id,
+              firstName: currentUser.firstName,
+              lastName: currentUser.lastName,
+            }
+          : null,
+      });
 
       const response = await api.get(
         `/timesheets/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
       );
 
-      const processedEntries = (response.data || []).map((entry) => {
-        // Ensure we have a valid date string
+      console.log("Raw API response:", response.data);
+
+      if (!Array.isArray(response.data)) {
+        console.error("Invalid response data format:", response.data);
+        setTimeEntries([]);
+        return;
+      }
+
+      const processedEntries = response.data.map((entry) => {
         const entryDate = entry.date
           ? format(new Date(entry.date), "yyyy-MM-dd")
           : formattedDate;
 
-        return {
+        const processedEntry = {
           ...entry,
           date: entryDate,
           startTime: entry.startTime || "00:00",
           endTime: entry.endTime || "00:00",
+          projectId: entry.projectId?._id || entry.projectId,
+          projectInputType: entry.projectInputType || "",
+          description: entry.description || "",
+          isAdminWork: entry.isAdminWork || false,
+          isBreak: entry.isBreak || false,
         };
+
+        console.log("Processing entry:", {
+          original: entry,
+          processed: processedEntry,
+        });
+
+        return processedEntry;
       });
 
-      console.log("Processed entries:", processedEntries);
+      console.log("Final processed entries:", processedEntries);
       setTimeEntries(processedEntries);
     } catch (error) {
       console.error("Error fetching time entries:", error);
@@ -113,12 +216,23 @@ const Timesheets = () => {
 
   // Fetch timesheet status for the selected day
   const fetchTimesheetStatus = async () => {
+    if (!targetUserId) {
+      console.log("Waiting for user ID before fetching status");
+      return;
+    }
+
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
+      console.log("Fetching timesheet status:", {
+        date: formattedDate,
+        userId: targetUserId,
+      });
 
       const response = await api.get(
         `/timesheets/status/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
       );
+
+      console.log("Timesheet status response:", response.data);
 
       const status = response.data?.[0]?.status || "incomplete";
       setTimesheetStatus(status);
@@ -150,6 +264,12 @@ const Timesheets = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!targetUserId) {
+      console.error("No user ID available for submitting timesheet");
+      alert("Error: No user ID available. Please try logging in again.");
+      return;
+    }
 
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
@@ -247,6 +367,17 @@ const Timesheets = () => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        console.log("Fetching initial data:", {
+          targetUserId,
+          currentUser: currentUser
+            ? {
+                id: currentUser.id || currentUser._id,
+                firstName: currentUser.firstName,
+                lastName: currentUser.lastName,
+              }
+            : null,
+        });
+
         const [projectsResponse] = await Promise.all([
           api.get("/projects"),
           fetchTimeEntries(),
@@ -261,58 +392,46 @@ const Timesheets = () => {
       }
     };
 
-    fetchData();
-  }, [selectedDate]);
+    if (targetUserId) {
+      fetchData();
+    }
+  }, [selectedDate, targetUserId]);
 
   // Convert time entries to calendar events
   const getCalendarEvents = () => {
     console.log("Converting time entries to calendar events:", timeEntries);
-    console.log("Available projects:", projects);
 
     return timeEntries.map((entry) => {
-      // Ensure we have valid date and time strings
-      const dateStr = entry.date
-        ? format(new Date(entry.date), "yyyy-MM-dd")
-        : format(selectedDate, "yyyy-MM-dd");
-      const startTimeStr = entry.startTime || "00:00";
-      const endTimeStr = entry.endTime || "00:00";
+      const startDateTime = new Date(entry.date);
+      const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
+      startDateTime.setHours(startHours, startMinutes, 0);
 
-      // Create Date objects for start and end times
-      const startDateTime = new Date(`${dateStr}T${startTimeStr}`);
-      const endDateTime = new Date(`${dateStr}T${endTimeStr}`);
+      const endDateTime = new Date(entry.date);
+      const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+      endDateTime.setHours(endHours, endMinutes, 0);
 
-      // Handle overnight entries
-      if (endDateTime < startDateTime) {
-        endDateTime.setDate(endDateTime.getDate() + 1);
-      }
-
-      // Get project name if available
       const projectId = entry.projectId?._id || entry.projectId;
-      const project = projectId
-        ? projects.find((p) => p._id === projectId)
-        : null;
-      const projectName = project?.name;
+      const project = projects.find((p) => p._id === projectId);
+      const projectName = project?.name || "Unknown Project";
 
-      console.log("Entry project data:", {
-        entryId: entry._id,
-        projectId,
-        foundProject: project,
-        projectName,
-        rawProjectId: entry.projectId,
-      });
+      let title = "";
+      let backgroundColor = "";
+      let borderColor = "";
 
-      // Determine event title and color based on type
-      let title, backgroundColor, borderColor;
       if (entry.isBreak) {
-        title = "Break";
+        title = `Break${entry.description ? ` - ${entry.description}` : ""}`;
         backgroundColor = theme.palette.warning.main;
         borderColor = theme.palette.warning.dark;
       } else if (entry.isAdminWork) {
-        title = "Admin Work";
+        title = `Admin Work${
+          entry.description ? ` - ${entry.description}` : ""
+        }`;
         backgroundColor = theme.palette.info.main;
         borderColor = theme.palette.info.dark;
       } else {
-        title = projectName || "Unknown Project";
+        title = `${projectName} - ${
+          entry.projectInputType?.replace("_", " ") || ""
+        }${entry.description ? `, ${entry.description}` : ""}`;
         backgroundColor = theme.palette.primary.main;
         borderColor = theme.palette.primary.dark;
       }
@@ -451,6 +570,32 @@ const Timesheets = () => {
       alert("Failed to update time entry. Please try again.");
     }
   };
+
+  // Show loading state while auth is loading or no user ID
+  if (authLoading || !targetUserId) {
+    console.log("Showing loading state:", {
+      authLoading,
+      targetUserId,
+      currentUser: currentUser
+        ? {
+            id: currentUser.id || currentUser._id,
+            firstName: currentUser.firstName,
+            lastName: currentUser.lastName,
+          }
+        : null,
+    });
+    return (
+      <Box
+        m="20px"
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="400px"
+      >
+        <Typography variant="h4">Loading...</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box m="20px">

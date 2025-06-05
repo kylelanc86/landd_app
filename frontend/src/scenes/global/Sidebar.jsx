@@ -9,7 +9,7 @@ import {
   Avatar,
   Divider,
 } from "@mui/material";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
 import ContactsOutlinedIcon from "@mui/icons-material/ContactsOutlined";
@@ -69,47 +69,32 @@ const getRandomColor = (user) => {
   return colors[index];
 };
 
-const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
+const Item = ({ title, to, icon, isCollapsed }) => {
   const theme = useTheme();
+  const location = useLocation();
+  const isActive =
+    location.pathname === to || location.pathname.startsWith(`${to}/`);
+
   return (
     <MenuItem
-      active={selected === title}
+      icon={icon}
       style={{
-        color:
-          theme.palette.mode === "dark" ? tokens.grey[100] : tokens.grey[700],
-        backgroundColor:
-          selected === title
-            ? theme.palette.mode === "dark"
-              ? tokens.primary[600]
-              : tokens.primary[100]
-            : "transparent",
-        borderRadius: "8px",
-        margin: isCollapsed ? "2px 4px" : "4px 4px",
-        transition: "all 0.3s ease",
-        textAlign: "left",
-        paddingLeft: isCollapsed ? "4px" : "10px",
+        color: isActive
+          ? theme.palette.mode === "dark"
+            ? tokens.grey[100]
+            : tokens.primary[700]
+          : theme.palette.mode === "dark"
+          ? tokens.grey[100]
+          : tokens.grey[700],
+        backgroundColor: isActive
+          ? theme.palette.mode === "dark"
+            ? tokens.primary[900]
+            : tokens.primary[100]
+          : "transparent",
+        borderRadius: "4px",
+        margin: "2px 8px",
+        padding: isCollapsed ? "4px" : "4px 16px",
       }}
-      onClick={() => setSelected(title)}
-      icon={
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "32px",
-            height: "32px",
-            borderRadius: "8px",
-            backgroundColor: "transparent",
-            boxShadow:
-              theme.palette.mode === "dark"
-                ? "none"
-                : "0 2px 4px rgba(0,0,0,0.1)",
-            mr: 1,
-          }}
-        >
-          {icon}
-        </Box>
-      }
     >
       <Link
         to={to}
@@ -120,21 +105,20 @@ const Item = ({ title, to, icon, selected, setSelected, isCollapsed }) => {
           display: "flex",
           alignItems: "center",
           justifyContent: "flex-start",
-          padding: isCollapsed ? "4px 0" : "8px 0",
+          padding: isCollapsed ? "2px 0" : "4px 0",
         }}
       >
         {!isCollapsed && (
           <Typography
             sx={{
-              fontWeight: selected === title ? "bold" : "normal",
-              color:
-                selected === title
-                  ? theme.palette.mode === "dark"
-                    ? tokens.grey[100]
-                    : tokens.primary[700]
-                  : theme.palette.mode === "dark"
+              fontWeight: isActive ? "bold" : "normal",
+              color: isActive
+                ? theme.palette.mode === "dark"
                   ? tokens.grey[100]
-                  : tokens.grey[700],
+                  : tokens.primary[700]
+                : theme.palette.mode === "dark"
+                ? tokens.grey[100]
+                : tokens.grey[700],
               whiteSpace: "normal",
               wordBreak: "break-word",
               fontSize: "0.9rem",
@@ -158,7 +142,7 @@ const SectionDivider = ({ isCollapsed }) => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        my: isCollapsed ? 1 : 2,
+        my: isCollapsed ? 0.5 : 1,
         px: isCollapsed ? 1 : 2,
       }}
     >
@@ -175,8 +159,8 @@ const SectionDivider = ({ isCollapsed }) => {
 
 const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const theme = useTheme();
-  const [selected, setSelected] = useState("Dashboard");
   const { currentUser } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -343,8 +327,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             title="Dashboard"
             to="/"
             icon={<HomeOutlinedIcon />}
-            selected={selected}
-            setSelected={setSelected}
             isCollapsed={isCollapsed}
           />
           <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
@@ -352,8 +334,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="User Management"
               to="/users"
               icon={<AccessibilityIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -362,8 +342,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Timesheets"
               to="/timesheets"
               icon={<AccessTimeIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -373,7 +351,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               variant="h3"
               color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
               sx={{
-                m: "15px 0 5px 10px",
+                m: "10px 0 2px 10px",
                 fontSize: "1.2rem",
                 fontWeight: "bold",
                 opacity: 0.8,
@@ -392,8 +370,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Projects"
               to="/projects"
               icon={<MapOutlinedIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -402,8 +378,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Clients"
               to="/clients"
               icon={<ContactsOutlinedIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -412,8 +386,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Invoices"
               to="/invoices"
               icon={<ReceiptOutlinedIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -422,8 +394,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Scheduler"
               to="/calendar"
               icon={<CalendarTodayOutlinedIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -433,7 +403,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               variant="h3"
               color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
               sx={{
-                m: "15px 0 5px 10px",
+                m: "10px 0 2px 10px",
                 fontSize: "1.2rem",
                 fontWeight: "bold",
                 opacity: 0.8,
@@ -452,8 +422,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Air Monitoring"
               to="/air-monitoring"
               icon={<AirOutlinedIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -462,8 +430,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Asbestos Assessment"
               to="/asbestos-assessment"
               icon={<AssessmentIcon />}
-              selected={selected}
-              setSelected={setSelected}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>

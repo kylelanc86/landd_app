@@ -41,12 +41,19 @@ export const AuthProvider = ({ children }) => {
           throw new Error("Invalid user data");
         }
 
-        const userWithToken = { ...user, token };
-        localStorage.setItem("currentUser", JSON.stringify(userWithToken));
-        setCurrentUser(userWithToken);
+        // Normalize user ID format
+        const normalizedUser = {
+          ...user,
+          _id: user._id || user.id,
+          id: user._id || user.id,
+          token,
+        };
+
+        localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
+        setCurrentUser(normalizedUser);
         console.log(
           "Auth Debug - restoreUserState: User restored successfully",
-          userWithToken
+          normalizedUser
         );
       } catch (error) {
         console.error(
@@ -105,6 +112,7 @@ export const AuthProvider = ({ children }) => {
       // Normalize user ID format
       const normalizedUser = {
         ...user,
+        _id: user._id || user.id,
         id: user._id || user.id,
         token,
       };

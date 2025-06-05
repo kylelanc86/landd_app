@@ -29,21 +29,33 @@ import { useNavigate } from "react-router-dom";
 const MonthlyTimesheet = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, loading: authLoading } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [monthData, setMonthData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch timesheet data for the entire month
   const fetchMonthData = async () => {
+    if (!currentUser?._id) {
+      console.log("Waiting for user ID before fetching month data");
+      return;
+    }
+
     try {
       setIsLoading(true);
       const startDate = format(startOfMonth(selectedDate), "yyyy-MM-dd");
       const endDate = format(endOfMonth(selectedDate), "yyyy-MM-dd");
 
+      console.log("Fetching month data:", {
+        startDate,
+        endDate,
+        userId: currentUser._id,
+      });
+
       const response = await api.get(
-        `/timesheets/status/range/${startDate}/${endDate}`
+        `/timesheets/status/range/${startDate}/${endDate}?userId=${currentUser._id}`
       );
+      console.log("Month data response:", response.data);
       setMonthData(response.data || []);
     } catch (error) {
       console.error("Error fetching month data:", error);
@@ -54,8 +66,10 @@ const MonthlyTimesheet = () => {
   };
 
   useEffect(() => {
-    fetchMonthData();
-  }, [selectedDate]);
+    if (currentUser?._id) {
+      fetchMonthData();
+    }
+  }, [selectedDate, currentUser]);
 
   const handleMonthChange = (direction) => {
     const newDate = new Date(selectedDate);
@@ -64,8 +78,27 @@ const MonthlyTimesheet = () => {
   };
 
   const handleDayClick = (date) => {
+    if (!currentUser?._id) {
+      console.log("No user ID available for day click", {
+        currentUser,
+        authLoading,
+      });
+      return;
+    }
+
     const formattedDate = format(date, "yyyy-MM-dd");
-    navigate(`/timesheets/daily?date=${formattedDate}`);
+    console.log("Navigating to daily view:", {
+      date: formattedDate,
+      userId: currentUser._id,
+      currentUser: {
+        id: currentUser._id,
+        firstName: currentUser.firstName,
+        lastName: currentUser.lastName,
+      },
+    });
+    navigate(
+      `/timesheets/daily?date=${formattedDate}&userId=${currentUser._id}`
+    );
   };
 
   const getStatusColor = (status) => {
@@ -103,6 +136,31 @@ const MonthlyTimesheet = () => {
     return dayData?.status || "incomplete";
   };
 
+  // Show loading state while auth is loading or no user ID
+  if (authLoading || !currentUser?._id) {
+    console.log("Showing loading state:", {
+      authLoading,
+      currentUser: currentUser
+        ? {
+            id: currentUser._id,
+            firstName: currentUser.firstName,
+            lastName: currentUser.lastName,
+          }
+        : null,
+    });
+    return (
+      <Box
+        m="20px"
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="400px"
+      >
+        <Typography variant="h4">Loading...</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box m="20px">
       <Box
@@ -115,19 +173,6 @@ const MonthlyTimesheet = () => {
           title="Monthly Timesheet"
           subtitle={`${format(selectedDate, "MMMM yyyy")}`}
         />
-        <Button
-          variant="contained"
-          onClick={() => navigate("/timesheets/daily")}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            color: theme.palette.common.white,
-            "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
-            },
-          }}
-        >
-          Daily View
-        </Button>
       </Box>
 
       <Paper
@@ -176,14 +221,14 @@ const MonthlyTimesheet = () => {
           {getDaysInMonth().map((day, index) => (
             <Grid item xs={12 / 7} key={index}>
               <Box
-                onClick={() => handleDayClick(day)}
+                onClick={() => day && handleDayClick(day)}
                 sx={{
                   p: 1,
                   height: "100px",
                   border: "1px solid",
                   borderColor: "divider",
                   borderRadius: "0 0 4px 4px",
-                  cursor: "pointer",
+                  cursor: day ? "pointer" : "default",
                   backgroundColor: day
                     ? day.getDay() === 0 || day.getDay() === 6
                       ? theme.palette.primary.light

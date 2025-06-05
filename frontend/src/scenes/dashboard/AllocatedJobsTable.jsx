@@ -6,9 +6,10 @@ import { useAuth } from "../../context/AuthContext";
 import { StatusChip, ACTIVE_STATUSES } from "../../components/JobStatus";
 
 const AllocatedJobsTable = () => {
+  const { currentUser, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { currentUser } = useAuth();
+  const [error, setError] = useState(null);
   const theme = useTheme();
 
   // Debug logging for component lifecycle
@@ -19,17 +20,12 @@ const AllocatedJobsTable = () => {
 
   useEffect(() => {
     const fetchAllocatedJobs = async () => {
-      console.log("fetchAllocatedJobs called");
-      console.log("Current user in fetch:", currentUser);
-
-      if (!currentUser?.id) {
-        console.log("No user ID available, waiting for user data...");
-        setLoading(true);
+      if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
+        console.log("Waiting for user data...");
         return;
       }
-
+      setLoading(true);
       try {
-        console.log("Fetching allocated jobs for user:", currentUser);
         const response = await projectService.getAll();
         console.log("All projects:", response.data);
 
@@ -73,16 +69,15 @@ const AllocatedJobsTable = () => {
         }));
 
         setJobs(formattedJobs);
-      } catch (error) {
-        console.error("Error fetching allocated jobs:", error);
-        setJobs([]); // Set empty array on error
+      } catch (err) {
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
     fetchAllocatedJobs();
-  }, [currentUser?.id]); // Only re-run when currentUser.id changes
+  }, [authLoading, currentUser]);
 
   const columns = [
     {
@@ -116,7 +111,7 @@ const AllocatedJobsTable = () => {
     jobsCount: jobs.length,
   });
 
-  if (!currentUser?.id) {
+  if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
     console.log("Rendering loading state - no user ID");
     return (
       <Box
@@ -128,6 +123,23 @@ const AllocatedJobsTable = () => {
         <CircularProgress />
       </Box>
     );
+  }
+
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="200px"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return <Typography color="error">{error}</Typography>;
   }
 
   return (
