@@ -774,19 +774,30 @@ const Projects = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Filter out any inactive users from the form data
-      const activeUserIds = form.users.filter((userId) =>
-        users.some((user) => user._id === userId && user.isActive === true)
-      );
+      // Validate required fields
+      if (!form.name || !form.client || !form.department || !form.status) {
+        throw new Error("Please fill in all required fields");
+      }
 
+      // Format project data
       const projectData = {
-        ...form,
-        users: activeUserIds,
-        category: form.category || "",
+        name: form.name,
+        client: form.client,
+        department: form.department,
+        category: form.category || undefined,
+        status: form.status,
+        address: form.address || undefined,
+        description: form.description || undefined,
+        users: form.users || [],
       };
 
       console.log("Submitting project data:", projectData);
       const response = await projectService.create(projectData);
+
+      if (!response.data) {
+        throw new Error("Failed to create project");
+      }
+
       setProjects([response.data, ...projects]);
       setDialogOpen(false);
       setForm({
@@ -800,12 +811,15 @@ const Projects = () => {
         users: [],
       });
     } catch (err) {
+      console.error("Error creating project:", err);
       if (err.response) {
         alert(
           `Error creating project: ${
             err.response.data.message || "Unknown error"
           }`
         );
+      } else {
+        alert(`Error creating project: ${err.message}`);
       }
     }
   };
@@ -1372,163 +1386,170 @@ const Projects = () => {
         <DialogTitle>
           {selectedProject ? "Edit Project" : "Add New Project"}
         </DialogTitle>
-        <DialogContent>
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  label="Project ID"
-                  value="Will be auto-generated"
-                  disabled
-                  fullWidth
-                  sx={{
-                    "& .MuiInputBase-input.Mui-disabled": {
-                      WebkitTextFillColor: "#666",
-                      fontStyle: "italic",
-                    },
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Project Name"
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  required
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Box>
-                  <Autocomplete
-                    options={clients}
-                    getOptionLabel={(option) => option.name || ""}
-                    value={
-                      clients.find((client) => client._id === form.client) ||
-                      null
-                    }
-                    onChange={(event, newValue) => {
-                      setForm({
-                        ...form,
-                        client: newValue ? newValue._id : "",
-                      });
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Client"
-                        required
-                        fullWidth
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <li {...props}>
-                        <Box>
-                          <Typography variant="body1">{option.name}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {option.address}
-                          </Typography>
-                        </Box>
-                      </li>
-                    )}
-                    isOptionEqualToValue={(option, value) =>
-                      option._id === value._id
-                    }
-                    filterOptions={(options, { inputValue }) => {
-                      const searchTerm = inputValue.toLowerCase();
-                      return options.filter(
-                        (option) =>
-                          option.name.toLowerCase().includes(searchTerm) ||
-                          (option.address || "")
-                            .toLowerCase()
-                            .includes(searchTerm)
-                      );
+        <form onSubmit={handleSubmit}>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Project ID"
+                    value="Will be auto-generated"
+                    disabled
+                    fullWidth
+                    sx={{
+                      "& .MuiInputBase-input.Mui-disabled": {
+                        WebkitTextFillColor: "#666",
+                        fontStyle: "italic",
+                      },
                     }}
                   />
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() => setClientDialogOpen(true)}
-                    sx={{ mt: 1 }}
-                  >
-                    Add New Client
-                  </Button>
-                </Box>
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Department</InputLabel>
-                  <Select
-                    name="department"
-                    value={form.department}
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Project Name"
+                    name="name"
+                    value={form.name}
                     onChange={handleChange}
-                    label="Department"
-                  >
-                    {DEPARTMENTS.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Category</InputLabel>
-                  <Select
-                    name="category"
-                    value={form.category}
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Box>
+                    <Autocomplete
+                      options={clients}
+                      getOptionLabel={(option) => option.name || ""}
+                      value={
+                        clients.find((client) => client._id === form.client) ||
+                        null
+                      }
+                      onChange={(event, newValue) => {
+                        setForm({
+                          ...form,
+                          client: newValue ? newValue._id : "",
+                        });
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Client"
+                          required
+                          fullWidth
+                        />
+                      )}
+                      renderOption={(props, option) => (
+                        <li {...props}>
+                          <Box>
+                            <Typography variant="body1">
+                              {option.name}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {option.address}
+                            </Typography>
+                          </Box>
+                        </li>
+                      )}
+                      isOptionEqualToValue={(option, value) =>
+                        option._id === value._id
+                      }
+                      filterOptions={(options, { inputValue }) => {
+                        const searchTerm = inputValue.toLowerCase();
+                        return options.filter(
+                          (option) =>
+                            option.name.toLowerCase().includes(searchTerm) ||
+                            (option.address || "")
+                              .toLowerCase()
+                              .includes(searchTerm)
+                        );
+                      }}
+                    />
+                    <Button
+                      startIcon={<AddIcon />}
+                      onClick={() => setClientDialogOpen(true)}
+                      sx={{ mt: 1 }}
+                    >
+                      Add New Client
+                    </Button>
+                  </Box>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Department</InputLabel>
+                    <Select
+                      name="department"
+                      value={form.department}
+                      onChange={handleChange}
+                      label="Department"
+                    >
+                      {DEPARTMENTS.map((type) => (
+                        <MenuItem key={type} value={type}>
+                          {type}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      name="category"
+                      value={form.category}
+                      onChange={handleChange}
+                      label="Category"
+                    >
+                      {CATEGORIES.map((category) => (
+                        <MenuItem key={category} value={category}>
+                          {category}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Status</InputLabel>
+                    {renderStatusSelect(form.status, handleChange)}
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Address"
+                    name="address"
+                    value={form.address}
                     onChange={handleChange}
-                    label="Category"
-                  >
-                    {CATEGORIES.map((category) => (
-                      <MenuItem key={category} value={category}>
-                        {category}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  {renderUsersSelect(form.users, handleChange, "users")}
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Description"
+                    name="description"
+                    value={form.description}
+                    onChange={handleChange}
+                    multiline
+                    rows={4}
+                    fullWidth
+                  />
+                </Grid>
               </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  {renderStatusSelect(form.status, handleChange)}
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Address"
-                  name="address"
-                  value={form.address}
-                  onChange={handleChange}
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12}>
-                {renderUsersSelect(form.users, handleChange, "users")}
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Description"
-                  name="description"
-                  value={form.description}
-                  onChange={handleChange}
-                  multiline
-                  rows={4}
-                  fullWidth
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)} color="secondary">
-            Cancel
-          </Button>
-          <Button type="submit" variant="contained" color="primary">
-            {selectedProject ? "Save Changes" : "Create Project"}
-          </Button>
-        </DialogActions>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDialogOpen(false)} color="secondary">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" color="primary">
+              {selectedProject ? "Save Changes" : "Create Project"}
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
 
       {/* Add New Client Dialog */}
