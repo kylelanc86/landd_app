@@ -1,5 +1,12 @@
 import axios from 'axios';
 
+// Log environment info
+console.log('API Environment:', {
+  nodeEnv: process.env.NODE_ENV,
+  apiUrl: process.env.REACT_APP_API_URL,
+  defaultUrl: "https://landd-app-backend.onrender.com/api"
+});
+
 // Create axios instance
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || "https://landd-app-backend.onrender.com/api",
@@ -12,6 +19,12 @@ const api = axios.create({
 // Add request interceptor
 api.interceptors.request.use(
   (config) => {
+    console.log('API Request:', {
+      url: config.url,
+      method: config.method,
+      baseURL: config.baseURL,
+      headers: config.headers
+    });
     const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -19,16 +32,29 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    console.error('API Request Error:', error);
     return Promise.reject(error);
   }
 );
 
 // Add response interceptor for better error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('API Response:', {
+      url: response.config.url,
+      status: response.status,
+      data: response.data
+    });
+    return response;
+  },
   (error) => {
+    console.error('API Response Error:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message
+    });
     if (error.response?.status === 401) {
-      // Handle token refresh or logout
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
@@ -39,8 +65,27 @@ api.interceptors.response.use(
 // Auth service
 export const authService = {
   login: (credentials) => {
-    console.log("Auth Debug - Login attempt");
-    return api.post('/auth/login', credentials);
+    console.log("Auth Debug - API: Login attempt with credentials:", { email: credentials.email });
+    return api.post('/auth/login', credentials)
+      .then(response => {
+        console.log("Auth Debug - API: Login response received:", {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+          data: response.data
+        });
+        return response;
+      })
+      .catch(error => {
+        console.error("Auth Debug - API: Login failed:", {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.response?.data?.message || error.message,
+          data: error.response?.data,
+          error: error
+        });
+        throw error;
+      });
   },
   register: (userData) => api.post('/auth/register', userData),
   getCurrentUser: () => {

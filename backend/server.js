@@ -22,14 +22,44 @@ dotenv.config();
 const app = express();
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://landd-app-frontend.onrender.com'
+];
+
+console.log('CORS Configuration:', {
+  allowedOrigins,
+  nodeEnv: process.env.NODE_ENV
+});
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://landd-app-frontend.onrender.com'],
+  origin: function(origin, callback) {
+    console.log('CORS Request Origin:', origin);
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.error('CORS Error: Origin not allowed:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   maxAge: 86400 // 24 hours
 }));
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log('Incoming Request:', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin,
+    headers: req.headers
+  });
+  next();
+});
+
 app.use(express.json());
 
 // Connect to database

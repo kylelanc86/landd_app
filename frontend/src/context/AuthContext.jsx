@@ -75,23 +75,53 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     setLoading(true);
     try {
-      console.log("Auth Debug - Login attempt");
+      console.log("Auth Debug - Login attempt with credentials:", {
+        email: credentials.email,
+      });
       const response = await authService.login(credentials);
-      const { token, user } = response.data;
+      console.log("Auth Debug - Login response received:", response);
+      console.log("Auth Debug - Response data:", response.data);
 
-      if (!user || !user._id) {
-        console.error("Auth Debug - Login: Invalid user data received");
-        throw new Error("Invalid user data");
+      const { token, user } = response.data;
+      console.log("Auth Debug - Extracted token and user:", {
+        hasToken: !!token,
+        userData: user,
+        userId: user?._id || user?.id,
+      });
+
+      if (!user) {
+        console.error("Auth Debug - Login: No user data in response");
+        throw new Error("No user data received");
       }
 
-      const userWithToken = { ...user, token };
+      if (!user._id && !user.id) {
+        console.error(
+          "Auth Debug - Login: No user ID found in user data",
+          user
+        );
+        throw new Error("No user ID found in user data");
+      }
+
+      // Normalize user ID format
+      const normalizedUser = {
+        ...user,
+        id: user._id || user.id,
+        token,
+      };
+      console.log("Auth Debug - Normalized user object:", normalizedUser);
+
       localStorage.setItem("token", token);
-      localStorage.setItem("currentUser", JSON.stringify(userWithToken));
-      setCurrentUser(userWithToken);
-      console.log("Auth Debug - Login successful", userWithToken);
-      return userWithToken;
+      localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
+      setCurrentUser(normalizedUser);
+      console.log("Auth Debug - Login successful, user state updated");
+      return normalizedUser;
     } catch (error) {
-      console.error("Auth Debug - Login failed:", error);
+      console.error("Auth Debug - Login failed:", {
+        error,
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
       throw error;
     } finally {
       setLoading(false);
