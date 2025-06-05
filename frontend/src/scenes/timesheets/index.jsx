@@ -50,6 +50,9 @@ const Timesheets = () => {
     const dateParam = searchParams.get("date");
     return dateParam ? parseISO(dateParam) : new Date();
   });
+  const [targetUserId, setTargetUserId] = useState(() => {
+    return searchParams.get("userId") || currentUser._id;
+  });
   const [openDialog, setOpenDialog] = useState(false);
   const [projects, setProjects] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
@@ -71,8 +74,10 @@ const Timesheets = () => {
   // Update URL when date changes
   useEffect(() => {
     const formattedDate = format(selectedDate, "yyyy-MM-dd");
-    navigate(`/timesheets/daily?date=${formattedDate}`, { replace: true });
-  }, [selectedDate, navigate]);
+    navigate(`/timesheets/daily?date=${formattedDate}&userId=${targetUserId}`, {
+      replace: true,
+    });
+  }, [selectedDate, targetUserId, navigate]);
 
   // Fetch time entries for the selected day
   const fetchTimeEntries = async () => {
@@ -81,7 +86,7 @@ const Timesheets = () => {
       console.log("Fetching entries for date:", formattedDate);
 
       const response = await api.get(
-        `/timesheets/range/${formattedDate}/${formattedDate}`
+        `/timesheets/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
       );
 
       const processedEntries = (response.data || []).map((entry) => {
@@ -110,10 +115,9 @@ const Timesheets = () => {
   const fetchTimesheetStatus = async () => {
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
-      const userId = currentUser._id;
 
       const response = await api.get(
-        `/timesheets/status/range/${formattedDate}/${formattedDate}`
+        `/timesheets/status/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
       );
 
       const status = response.data?.[0]?.status || "incomplete";
@@ -131,7 +135,7 @@ const Timesheets = () => {
 
       const response = await api.put(`/timesheets/status/${formattedDate}`, {
         status,
-        userId: currentUser._id,
+        userId: targetUserId,
         date: formattedDate,
       });
 
@@ -160,8 +164,7 @@ const Timesheets = () => {
       // Validate required fields based on entry type
       if (formData.isAdminWork || formData.isBreak) {
         if (!formData.description) {
-          alert("Please enter a description for this entry");
-          return;
+          formData.description = "";
         }
       } else {
         if (!formData.projectId) {
@@ -177,7 +180,7 @@ const Timesheets = () => {
       // Create timesheet data with proper project handling
       const timesheetData = {
         date: formattedDate,
-        userId: currentUser._id,
+        userId: targetUserId,
         startTime: formData.startTime,
         endTime: formData.endTime,
         description: formData.description || "",
@@ -724,7 +727,7 @@ const Timesheets = () => {
                       >
                         {projects.map((project) => (
                           <MenuItem key={project._id} value={project._id}>
-                            {project.name}
+                            {project.projectID}: {project.name}
                           </MenuItem>
                         ))}
                       </Select>
@@ -761,7 +764,7 @@ const Timesheets = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  required={formData.isAdminWork || formData.isBreak}
+                  required={false}
                 />
               </Grid>
             </Grid>
