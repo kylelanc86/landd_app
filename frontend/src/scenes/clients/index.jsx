@@ -26,6 +26,10 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
+import {
+  formatPhoneNumber,
+  isValidAustralianMobile,
+} from "../../utils/formatters";
 
 const emptyForm = {
   name: "",
@@ -72,11 +76,21 @@ const Clients = () => {
   }, []);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === "contact1Number" || name === "contact2Number") {
+      setForm({ ...form, [name]: formatPhoneNumber(value) });
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const handleEditChange = (e) => {
-    setEditForm({ ...editForm, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === "contact1Number" || name === "contact2Number") {
+      setEditForm({ ...editForm, [name]: formatPhoneNumber(value) });
+    } else {
+      setEditForm({ ...editForm, [name]: value });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -177,7 +191,12 @@ const Clients = () => {
     { field: "name", headerName: "Client Name", flex: 1 },
     { field: "invoiceEmail", headerName: "Invoice Email", flex: 1 },
     { field: "contact1Name", headerName: "Primary Contact", flex: 1 },
-    { field: "contact1Number", headerName: "Primary Phone", flex: 1 },
+    {
+      field: "contact1Number",
+      headerName: "Primary Phone",
+      flex: 1,
+      valueGetter: (params) => formatPhoneNumber(params.row.contact1Number),
+    },
     { field: "address", headerName: "Address", flex: 1 },
     {
       field: "actions",
@@ -328,6 +347,17 @@ const Clients = () => {
                 onChange={handleChange}
                 required
                 fullWidth
+                placeholder="04xx xxx xxx"
+                error={
+                  form.contact1Number &&
+                  !isValidAustralianMobile(form.contact1Number)
+                }
+                helperText={
+                  form.contact1Number &&
+                  !isValidAustralianMobile(form.contact1Number)
+                    ? "Please enter a valid Australian mobile number"
+                    : ""
+                }
               />
               <TextField
                 label="Contact Email"
@@ -354,6 +384,17 @@ const Clients = () => {
                 value={form.contact2Number}
                 onChange={handleChange}
                 fullWidth
+                placeholder="04xx xxx xxx"
+                error={
+                  form.contact2Number &&
+                  !isValidAustralianMobile(form.contact2Number)
+                }
+                helperText={
+                  form.contact2Number &&
+                  !isValidAustralianMobile(form.contact2Number)
+                    ? "Please enter a valid Australian mobile number"
+                    : ""
+                }
               />
               <TextField
                 label="Contact Email"
@@ -430,6 +471,17 @@ const Clients = () => {
                 onChange={handleEditChange}
                 required
                 fullWidth
+                placeholder="04xx xxx xxx"
+                error={
+                  editForm.contact1Number &&
+                  !isValidAustralianMobile(editForm.contact1Number)
+                }
+                helperText={
+                  editForm.contact1Number &&
+                  !isValidAustralianMobile(editForm.contact1Number)
+                    ? "Please enter a valid Australian mobile number"
+                    : ""
+                }
               />
               <TextField
                 label="Contact Email"
@@ -456,6 +508,17 @@ const Clients = () => {
                 value={editForm.contact2Number}
                 onChange={handleEditChange}
                 fullWidth
+                placeholder="04xx xxx xxx"
+                error={
+                  editForm.contact2Number &&
+                  !isValidAustralianMobile(editForm.contact2Number)
+                }
+                helperText={
+                  editForm.contact2Number &&
+                  !isValidAustralianMobile(editForm.contact2Number)
+                    ? "Please enter a valid Australian mobile number"
+                    : ""
+                }
               />
               <TextField
                 label="Contact Email"

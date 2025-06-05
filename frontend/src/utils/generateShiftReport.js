@@ -1,5 +1,6 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import * as pdfFonts from "pdfmake/build/vfs_fonts";
+
 pdfMake.vfs = pdfFonts.vfs || (pdfFonts.default && pdfFonts.default.vfs);
 
 // Helper to format date as DD/MM/YYYY
@@ -40,6 +41,37 @@ async function loadImageAsBase64(imagePath) {
   }
 }
 
+// Add this helper function at the top of the file
+const formatReportedConcentration = (sample) => {
+  if (!sample.analysis) return '-';
+  
+  // If sample is uncountable
+  if (sample.analysis.edgesDistribution === 'fail' || sample.analysis.backgroundDust === 'fail') {
+    return { text: 'Sample uncountable', color: 'red' };
+  }
+  
+  // If it's a field blank
+  if (sample.location === 'Field blank') {
+    return '-';
+  }
+  
+  // Get the reported concentration
+  const reportedConc = sample.analysis.reportedConcentration;
+  if (!reportedConc) return '-';
+  
+  // If it's already a string (like "<0.01"), return it as is
+  if (typeof reportedConc === 'string' && reportedConc.startsWith('<')) {
+    return reportedConc;
+  }
+  
+  // If it's a number, format it to 2 decimal places
+  const numValue = parseFloat(reportedConc);
+  if (numValue < 0.0149 && sample.analysis.fibresCounted < 10) {
+    return '<0.01';
+  }
+  return numValue.toFixed(2);
+};
+
 export async function generateShiftReport({ shift, job, samples, project, openInNewTab }) {
   // Add debug logging
   console.log('Shift data in report generation:', shift);
@@ -72,6 +104,29 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
 
   // Build the document definition
   const docDefinition = {
+    pageSize: "A4",
+    pageMargins: [40, 60, 40, 60],
+    defaultStyle: {
+      font: "Roboto",
+      fontSize: 10,
+    },
+    styles: {
+      header: {
+        fontSize: 18,
+        bold: true,
+        margin: [0, 0, 0, 10],
+      },
+      subheader: {
+        fontSize: 14,
+        bold: true,
+        margin: [0, 10, 0, 5],
+      },
+      tableHeader: {
+        bold: true,
+        fontSize: 9,
+        color: "black",
+      },
+    },
     content: [
       // Header
       {
@@ -192,9 +247,7 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                 isFieldBlank ? dash : (flowRate ?? dash),
                 isUncountable ? 'N/A' : (s.analysis?.fieldsCounted ?? dash),
                 isUncountable ? 'N/A' : (typeof s.analysis?.fibresCounted === 'number' ? s.analysis.fibresCounted : dash),
-                isUncountable 
-                  ? { text: 'Sample uncountable', color: 'red' }
-                  : (isFieldBlank ? dash : (typeof s.analysis?.reportedConcentration === 'number' ? s.analysis.reportedConcentration : dash)),
+                formatReportedConcentration(s),
               ];
             }),
           ],
@@ -233,17 +286,6 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
         margin: [0, 0, 0, 10],
       },
     ],
-    styles: {
-      header: { fontSize: 18, bold: true },
-      subheader: { fontSize: 12, bold: true },
-      title: { fontSize: 14, bold: true, alignment: 'center' },
-      tableHeader: { bold: true, fillColor: '#eeeeee' },
-    },
-    defaultStyle: {
-      font: 'Roboto',
-      fontSize: 10,
-    },
-    pageMargins: [42.5, 30, 42.5, 100],
     footer: function(currentPage, pageCount) {
       return {
         columns: [

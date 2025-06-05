@@ -35,6 +35,10 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'manager', 'employee'],
     default: 'employee'
   },
+  permissions: {
+    type: [String],
+    default: []
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -88,7 +92,8 @@ userSchema.methods.generateAuthToken = function() {
       { 
         id: this._id,
         email: this.email,
-        role: this.role
+        role: this.role,
+        permissions: this.permissions
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: process.env.JWT_EXPIRE || '7d' }

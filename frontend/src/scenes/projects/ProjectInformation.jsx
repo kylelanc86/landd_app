@@ -77,6 +77,7 @@ const ProjectInformation = () => {
     description: "",
     users: [],
     category: "",
+    notes: "",
   });
 
   const [addressInput, setAddressInput] = useState("");
@@ -301,6 +302,7 @@ const ProjectInformation = () => {
         address: form.address || undefined,
         description: form.description || undefined,
         users: form.users?.map((user) => user._id) || [],
+        notes: form.notes || undefined,
       };
 
       let response;
@@ -476,12 +478,12 @@ const ProjectInformation = () => {
 
               <Grid item xs={12} md={6}>
                 <FormControl fullWidth required>
-                  <InputLabel>Status</InputLabel>
+                  <InputLabel> </InputLabel>
                   <Select
                     name="status"
                     value={form.status}
                     onChange={handleStatusChange}
-                    label="Status"
+                    label=" "
                   >
                     <MenuItem disabled>
                       <Typography variant="subtitle2" color="text.secondary">
@@ -540,6 +542,19 @@ const ProjectInformation = () => {
                       <Typography>{option.description}</Typography>
                     </li>
                   )}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Notes"
+                  name="notes"
+                  value={form.notes || ""}
+                  onChange={handleChange}
+                  multiline
+                  rows={4}
+                  placeholder="Add any additional notes or comments about the project..."
                 />
               </Grid>
 

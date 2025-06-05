@@ -249,10 +249,18 @@ const NewSample = () => {
         const avg =
           (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) /
           2;
-        setForm((prev) => ({ ...prev, averageFlowrate: avg.toFixed(2) }));
+        setForm((prev) => ({
+          ...prev,
+          averageFlowrate: Math.round(avg).toString(),
+        }));
       } else {
         // If no final flowrate, use initial flowrate as average
-        setForm((prev) => ({ ...prev, averageFlowrate: form.initialFlowrate }));
+        setForm((prev) => ({
+          ...prev,
+          averageFlowrate: Math.round(
+            parseFloat(form.initialFlowrate)
+          ).toString(),
+        }));
       }
     }
   }, [form.initialFlowrate, form.finalFlowrate]);
@@ -535,7 +543,7 @@ const NewSample = () => {
                   required
                   fullWidth
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ step: 1 }}
+                  inputProps={{ step: 60 }}
                 />
                 <IconButton
                   onClick={() => setCurrentTime("startTime")}
@@ -553,7 +561,7 @@ const NewSample = () => {
                   onChange={handleChange}
                   fullWidth
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ step: 1 }}
+                  inputProps={{ step: 60 }}
                 />
                 <IconButton
                   onClick={() => setCurrentTime("endTime")}

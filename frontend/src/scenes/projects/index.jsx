@@ -1350,6 +1350,16 @@ const Projects = () => {
                   fullWidth
                 />
                 <TextField
+                  label="Notes"
+                  name="notes"
+                  value={editForm?.notes || ""}
+                  onChange={handleEditChange}
+                  fullWidth
+                  multiline
+                  rows={4}
+                  placeholder="Add any additional notes or comments about the project..."
+                />
+                <TextField
                   label="Client"
                   value={selectedProject.client?.name || "N/A"}
                   fullWidth
@@ -1511,7 +1521,6 @@ const Projects = () => {
                 </Grid>
                 <Grid item xs={12}>
                   <FormControl fullWidth required>
-                    <InputLabel>Status</InputLabel>
                     {renderStatusSelect(form.status, handleChange)}
                   </FormControl>
                 </Grid>

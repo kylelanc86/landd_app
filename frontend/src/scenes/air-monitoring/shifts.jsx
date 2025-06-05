@@ -328,7 +328,7 @@ const Shifts = () => {
     {
       field: "sampleNumbers",
       headerName: "Sample Numbers",
-      flex: 0.6,
+      flex: 0.3,
       renderCell: (params) => {
         const numbers = params.row.sampleNumbers || [];
         return numbers.length > 0 ? numbers.join(", ") : "No samples";
@@ -337,7 +337,7 @@ const Shifts = () => {
     {
       field: "actions",
       headerName: "Actions",
-      flex: 1.5,
+      flex: 2,
       renderCell: ({ row }) => {
         const handleSamplesClick = () => {
           // Don't allow access to samples if report is authorized
@@ -427,9 +427,13 @@ const Shifts = () => {
             // First get the current shift data
             const currentShift = await shiftService.getById(row._id);
 
-            // Create the updated shift data - only update report approval fields
+            // Create the updated shift data by spreading the current data and updating the fields we want
             const updatedShiftData = {
               ...currentShift.data,
+              job: currentShift.data.job._id, // Convert to string ID
+              supervisor: currentShift.data.supervisor._id, // Convert to string ID
+              defaultSampler: currentShift.data.defaultSampler, // Keep as is
+              status: "shift_complete",
               reportApprovedBy: approver,
               reportIssueDate: now,
             };
@@ -450,23 +454,18 @@ const Shifts = () => {
             try {
               // Fetch job and samples for this shift
               const jobResponse = await jobService.getById(
-                currentShift.data.job?._id || currentShift.data.job
+                row.job?._id || row.job
               );
-              const samplesResponse = await sampleService.getByShift(
-                currentShift.data._id
-              );
+              const samplesResponse = await sampleService.getByShift(row._id);
 
               // Ensure we have the complete sample data including analysis
               const samplesWithAnalysis = await Promise.all(
                 samplesResponse.data.map(async (sample) => {
-                  if (!sample.analysis) {
-                    // If analysis data is missing, fetch the complete sample data
-                    const completeSample = await sampleService.getById(
-                      sample._id
-                    );
-                    return completeSample.data;
-                  }
-                  return sample;
+                  // Always fetch the complete sample data to ensure we have the latest analysis
+                  const completeSample = await sampleService.getById(
+                    sample._id
+                  );
+                  return completeSample.data;
                 })
               );
 
@@ -487,9 +486,17 @@ const Shifts = () => {
                 project.client = clientResponse.data;
               }
 
+              // Log the data being sent to generateShiftReport
+              console.log("Generating report with data:", {
+                shift: response.data,
+                job: jobResponse.data,
+                samples: samplesWithAnalysis,
+                project,
+              });
+
               // Generate and download the report
               generateShiftReport({
-                shift: currentShift.data,
+                shift: response.data, // Use the updated shift data from the response
                 job: jobResponse.data,
                 samples: samplesWithAnalysis,
                 project,
@@ -504,7 +511,17 @@ const Shifts = () => {
             await fetchShiftsWithSamples();
           } catch (err) {
             console.error("Error authorizing report:", err);
-            alert("Failed to authorise report.");
+            // Show more detailed error message
+            const errorMessage =
+              err.response?.data?.message ||
+              err.message ||
+              "Failed to authorise report.";
+            const errorDetails = err.response?.data?.details || "";
+            alert(
+              `${errorMessage}${
+                errorDetails ? `\n\nDetails: ${errorDetails}` : ""
+              }`
+            );
           }
         };
 
@@ -587,27 +604,30 @@ const Shifts = () => {
 
         return (
           <Box display="flex" alignItems="center">
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleSamplesClick}
-              disabled={row.reportApprovedBy}
-              sx={{
-                mr: 1,
-                backgroundColor: theme.palette.primary.main,
-                color: theme.palette.common.white,
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.dark,
-                },
-                "&.Mui-disabled": {
-                  backgroundColor: theme.palette.grey[700],
-                  color: theme.palette.grey[500],
-                },
-              }}
-            >
-              Samples
-            </Button>
-            {row.status === "analysis_complete" && (
+            {row.status !== "shift_complete" && (
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleSamplesClick}
+                disabled={row.reportApprovedBy}
+                sx={{
+                  mr: 1,
+                  backgroundColor: theme.palette.primary.main,
+                  color: theme.palette.common.white,
+                  "&:hover": {
+                    backgroundColor: theme.palette.primary.dark,
+                  },
+                  "&.Mui-disabled": {
+                    backgroundColor: theme.palette.grey[700],
+                    color: theme.palette.grey[500],
+                  },
+                }}
+              >
+                Samples
+              </Button>
+            )}
+            {(row.status === "analysis_complete" ||
+              row.status === "shift_complete") && (
               <>
                 <Button
                   variant="outlined"
@@ -623,7 +643,7 @@ const Shifts = () => {
                     },
                   }}
                 >
-                  View Report
+                  {row.reportApprovedBy ? "Download Report" : "View Report"}
                 </Button>
                 {!row.reportApprovedBy && reportViewedShiftIds.has(row._id) && (
                   <Button
@@ -765,6 +785,11 @@ const Shifts = () => {
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: theme.palette.primary.main,
             borderBottom: "none",
+          },
+          "& .MuiDataGrid-columnHeader": {
+            whiteSpace: "normal",
+            lineHeight: "1.2",
+            padding: "8px",
           },
           "& .MuiDataGrid-virtualScroller": {
             backgroundColor: theme.palette.background.default,

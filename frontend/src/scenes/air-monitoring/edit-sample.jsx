@@ -420,7 +420,7 @@ const EditSample = () => {
                   required
                   fullWidth
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ step: 1 }}
+                  inputProps={{ step: 60 }}
                 />
                 <IconButton
                   onClick={() => setCurrentTime("startTime")}
@@ -438,7 +438,7 @@ const EditSample = () => {
                   onChange={handleChange}
                   fullWidth
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ step: 1 }}
+                  inputProps={{ step: 60 }}
                 />
                 <IconButton
                   onClick={() => setCurrentTime("endTime")}

@@ -12,6 +12,13 @@ const PERMISSIONS = {
   'users.create': 'Create new users',
   'users.delete': 'Delete users',
   
+  // Job permissions
+  'jobs.view': 'View jobs',
+  'jobs.create': 'Create jobs',
+  'jobs.edit': 'Edit jobs',
+  'jobs.delete': 'Delete jobs',
+  'jobs.authorize_reports': 'Authorize job reports',
+  
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
@@ -26,6 +33,10 @@ const ROLE_PERMISSIONS = {
     'projects.edit',
     'projects.change_status',
     'users.view',
+    'jobs.view',
+    'jobs.create',
+    'jobs.edit',
+    'jobs.authorize_reports',
     'invoices.approve',
     'timesheets.approve',
   ],
@@ -33,6 +44,9 @@ const ROLE_PERMISSIONS = {
     'projects.view',
     'projects.create',
     'projects.edit',
+    'jobs.view',
+    'jobs.create',
+    'jobs.edit',
   ], // Employees can view, create and edit projects but not change status
 };
 

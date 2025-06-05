@@ -82,6 +82,16 @@ shiftSchema.pre('findOne', function() {
   console.log('Shift findOne query:', this.getQuery());
 });
 
+// Add pre-save middleware to log validation errors
+shiftSchema.pre('save', function(next) {
+  console.log('Saving shift with data:', this.toObject());
+  const validationError = this.validateSync();
+  if (validationError) {
+    console.error('Validation error:', validationError);
+  }
+  next();
+});
+
 // Add error handling for population
 shiftSchema.post('find', function(error, doc, next) {
   if (error) {

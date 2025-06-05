@@ -82,7 +82,7 @@ const sampleSchema = new mongoose.Schema({
     fibreCounts: [[Number]],
     fibresCounted: Number,
     fieldsCounted: Number,
-    reportedConcentration: Number
+    reportedConcentration: String
   },
   analyzedBy: {
     type: mongoose.Schema.Types.ObjectId,

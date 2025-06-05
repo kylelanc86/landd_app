@@ -108,23 +108,122 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
 });
 
 // Update a shift
-router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
+router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']), async (req, res) => {
   try {
+    console.log('Updating shift with data:', req.body);
+    
     const shift = await Shift.findById(req.params.id);
     if (!shift) {
       return res.status(404).json({ message: 'Shift not found' });
     }
 
-    // Check for report authorization
-    if (req.body.reportApprovedBy && !req.user.permissions.includes('jobs.authorize_reports')) {
-      return res.status(403).json({ message: 'You do not have permission to authorize reports' });
+    // Only update the fields that are provided in the request
+    const allowedUpdates = [
+      'status',
+      'reportApprovedBy',
+      'reportIssueDate',
+      'analysedBy',
+      'analysisDate',
+      'samplesReceivedDate',
+      'descriptionOfWorks',
+      'notes'
+    ];
+
+    // Filter out any fields that aren't in allowedUpdates
+    const updates = Object.keys(req.body)
+      .filter(key => allowedUpdates.includes(key))
+      .reduce((obj, key) => {
+        obj[key] = req.body[key];
+        return obj;
+      }, {});
+
+    console.log('Filtered updates:', updates);
+
+    // Update each field individually
+    for (const [key, value] of Object.entries(updates)) {
+      shift[key] = value;
     }
 
-    Object.assign(shift, req.body);
-    const updatedShift = await shift.save();
-    res.json(updatedShift);
+    try {
+      // Validate the document before saving
+      const validationError = shift.validateSync();
+      if (validationError) {
+        console.error('Validation error:', validationError);
+        return res.status(400).json({ 
+          message: 'Validation error updating shift',
+          details: validationError.message,
+          errors: validationError.errors
+        });
+      }
+
+      const updatedShift = await shift.save();
+      console.log('Successfully updated shift:', updatedShift);
+      res.json(updatedShift);
+    } catch (saveError) {
+      console.error('Error saving shift:', saveError);
+      return res.status(400).json({ 
+        message: 'Error saving shift',
+        details: saveError.message,
+        errors: saveError.errors
+      });
+    }
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error updating shift:', error);
+    res.status(400).json({ 
+      message: error.message,
+      details: error.stack
+    });
+  }
+});
+
+// Update a shift (PUT)
+router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']), async (req, res) => {
+  try {
+    console.log('Updating shift with data:', req.body);
+    
+    const shift = await Shift.findById(req.params.id);
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    // Log the current shift data
+    console.log('Current shift data:', shift.toObject());
+
+    // Update all fields from the request body
+    Object.assign(shift, req.body);
+
+    // Log the updated shift data before saving
+    console.log('Updated shift data before save:', shift.toObject());
+
+    try {
+      // Validate before saving
+      const validationError = shift.validateSync();
+      if (validationError) {
+        console.error('Validation error:', validationError);
+        return res.status(400).json({ 
+          message: 'Validation error updating shift',
+          details: validationError.message,
+          errors: validationError.errors
+        });
+      }
+
+      const updatedShift = await shift.save();
+      console.log('Successfully updated shift:', updatedShift);
+      res.json(updatedShift);
+    } catch (saveError) {
+      console.error('Error saving shift:', saveError);
+      return res.status(400).json({ 
+        message: 'Error saving shift',
+        details: saveError.message,
+        errors: saveError.errors
+      });
+    }
+  } catch (error) {
+    console.error('Error updating shift:', error);
+    res.status(400).json({ 
+      message: error.message,
+      details: error.stack
+    });
   }
 });
 

@@ -129,13 +129,9 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
     // Handle nested analysis data
     if (req.body.analysis) {
       try {
-        // Convert reportedConcentration to number if it's a string
-        if (req.body.analysis.reportedConcentration === '<0.01') {
-          req.body.analysis.reportedConcentration = 0.01;
-        } else if (req.body.analysis.reportedConcentration === 'N/A') {
+        // Keep reportedConcentration as a string
+        if (req.body.analysis.reportedConcentration === 'N/A') {
           req.body.analysis.reportedConcentration = null;
-        } else {
-          req.body.analysis.reportedConcentration = parseFloat(req.body.analysis.reportedConcentration);
         }
 
         // Convert fibresCounted and fieldsCounted to numbers
