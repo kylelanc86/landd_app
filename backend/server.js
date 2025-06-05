@@ -24,7 +24,11 @@ const app = express();
 // Middleware
 app.use(cors({
   origin: ['http://localhost:3000', 'https://landd-app-frontend.onrender.com'],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 hours
 }));
 app.use(express.json());
 

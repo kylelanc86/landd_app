@@ -2,10 +2,11 @@ import axios from 'axios';
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://localhost:5000/api",
+  baseURL: process.env.REACT_APP_API_URL || "https://landd-app-backend.onrender.com/api",
   headers: {
     "Content-Type": "application/json",
   },
+  withCredentials: true
 });
 
 // Add request interceptor
@@ -22,42 +23,14 @@ api.interceptors.request.use(
   }
 );
 
-// Add response interceptor
+// Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    // Only handle auth errors for non-Xero endpoints
-    if (error.response?.status === 401 && !error.config.url.includes('/xero')) {
-      console.log('Auth Debug - Received 401 error, attempting token refresh');
-      
-      try {
-        const response = await authService.getCurrentUser();
-        if (response.data) {
-          console.log('Auth Debug - Token refresh successful');
-          // Update token in localStorage
-          localStorage.setItem('token', response.data.token);
-          // Update current user object
-          const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-          currentUser.token = response.data.token;
-          localStorage.setItem('currentUser', JSON.stringify(currentUser));
-          // Retry the original request
-          const config = error.config;
-          config.headers.Authorization = `Bearer ${response.data.token}`;
-          console.log('Auth Debug - Retrying request with refreshed token');
-          return api(config);
-        }
-      } catch (refreshError) {
-        console.error('Auth Debug - Token refresh failed:', refreshError);
-        // Only redirect to login if we're not already on the login page
-        // and if the error is not from the token refresh attempt itself
-        if (!window.location.pathname.includes('/login') && 
-            !error.config.url.includes('/auth/current-user')) {
-          console.log('Auth Debug - Redirecting to login page');
-          localStorage.removeItem("token");
-          localStorage.removeItem("currentUser");
-          window.location.href = "/login";
-        }
-      }
+  (error) => {
+    if (error.response?.status === 401) {
+      // Handle token refresh or logout
+      localStorage.removeItem("token");
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }
