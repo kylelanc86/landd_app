@@ -21,7 +21,8 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
     console.log('Range request received:', {
       params: req.params,
       query: req.query,
-      user: req.user._id
+      user: req.user._id,
+      headers: req.headers
     });
 
     // Validate date parameters
@@ -76,6 +77,7 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
     if (req.query.userId && hasPermission(req.user, 'timesheets.approve')) {
       try {
         query.userId = new mongoose.Types.ObjectId(req.query.userId);
+        console.log('Using provided userId in query:', req.query.userId);
       } catch (error) {
         console.error('Invalid user ID format:', error);
         return res.json([]);
@@ -83,9 +85,10 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
     } else {
       // Otherwise, only show the current user's timesheets
       query.userId = req.user._id;
+      console.log('Using current user ID in query:', req.user._id);
     }
     
-    console.log('Query:', JSON.stringify(query, null, 2));
+    console.log('Final query:', JSON.stringify(query, null, 2));
     
     try {
       const timesheets = await Timesheet.find(query)
@@ -94,7 +97,20 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
         .populate('projectId', 'name')
         .populate('finalisedBy', 'firstName lastName');
       
-      console.log('Found timesheets:', timesheets.length);
+      console.log('Found timesheets:', {
+        count: timesheets.length,
+        entries: timesheets.map(t => ({
+          id: t._id,
+          date: t.date,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          userId: t.userId?._id,
+          projectId: t.projectId?._id,
+          isAdminWork: t.isAdminWork,
+          isBreak: t.isBreak
+        }))
+      });
+      
       res.json(timesheets || []);
     } catch (error) {
       console.error('Database error:', error);
