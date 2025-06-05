@@ -24,7 +24,8 @@ const app = express();
 // Middleware
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://landd-app-frontend.onrender.com'
+  'https://landd-app-frontend.onrender.com',
+  'https://air-monitoring-frontend.onrender.com'
 ];
 
 console.log('CORS Configuration:', {
@@ -34,29 +35,22 @@ console.log('CORS Configuration:', {
 
 app.use(cors({
   origin: function(origin, callback) {
-    console.log('CORS Request Origin:', origin);
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.error('CORS Error: Origin not allowed:', origin);
-      callback(new Error('Not allowed by CORS'));
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      console.log('CORS blocked request from:', origin);
+      return callback(new Error('Not allowed by CORS'));
     }
+    console.log('CORS allowed request from:', origin);
+    return callback(null, true);
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // 24 hours
+  credentials: true
 }));
 
 // Add request logging middleware
 app.use((req, res, next) => {
-  console.log('Incoming Request:', {
-    method: req.method,
-    path: req.path,
-    origin: req.headers.origin,
-    headers: req.headers
-  });
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
 

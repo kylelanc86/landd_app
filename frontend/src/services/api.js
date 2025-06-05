@@ -4,12 +4,13 @@ import axios from 'axios';
 console.log('API Environment:', {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
-  defaultUrl: "https://landd-app-backend.onrender.com/api"
+  defaultUrl: "https://air-monitoring-backend.onrender.com/api",
+  currentUrl: process.env.REACT_APP_API_URL || "https://air-monitoring-backend.onrender.com/api"
 });
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "https://landd-app-backend.onrender.com/api",
+  baseURL: process.env.REACT_APP_API_URL || "https://air-monitoring-backend.onrender.com/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -23,7 +24,8 @@ api.interceptors.request.use(
       url: config.url,
       method: config.method,
       baseURL: config.baseURL,
-      headers: config.headers
+      headers: config.headers,
+      withCredentials: config.withCredentials
     });
     const token = localStorage.getItem("token");
     if (token) {
@@ -43,21 +45,38 @@ api.interceptors.response.use(
     console.log('API Response:', {
       url: response.config.url,
       status: response.status,
-      data: response.data
+      data: response.data,
+      headers: response.headers
     });
     return response;
   },
-  (error) => {
+  async (error) => {
     console.error('API Response Error:', {
       url: error.config?.url,
       status: error.response?.status,
       data: error.response?.data,
-      message: error.message
+      message: error.message,
+      headers: error.response?.headers
     });
+
+    // Handle token expiration
+    if (error.response?.status === 401 && error.response?.data?.newToken) {
+      console.log('Token expired, received new token');
+      const newToken = error.response.data.newToken;
+      localStorage.setItem("token", newToken);
+      
+      // Retry the original request with the new token
+      error.config.headers.Authorization = `Bearer ${newToken}`;
+      return api(error.config);
+    }
+
+    // Handle other 401 errors (not token expiration)
     if (error.response?.status === 401) {
+      console.log('Unauthorized access, redirecting to login');
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
+
     return Promise.reject(error);
   }
 );
