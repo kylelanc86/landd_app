@@ -126,7 +126,8 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'analysisDate',
       'samplesReceivedDate',
       'descriptionOfWorks',
-      'notes'
+      'notes',
+      'defaultSampler'
     ];
 
     // Filter out any fields that aren't in allowedUpdates

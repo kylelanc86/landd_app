@@ -109,20 +109,6 @@ const NewSample = () => {
           "in this shift"
         );
 
-        // Log the default sampler details
-        console.log(
-          "Default sampler from shift:",
-          response.data.defaultSampler
-        );
-        console.log(
-          "Default sampler type:",
-          typeof response.data.defaultSampler
-        );
-        console.log(
-          "Default sampler ID:",
-          response.data.defaultSampler?._id || response.data.defaultSampler
-        );
-
         // If there's no default sampler but we have samples, check the first sample
         if (!response.data.defaultSampler && samplesInShift.length > 0) {
           const firstSample = samplesInShift[0];
@@ -155,8 +141,8 @@ const NewSample = () => {
             }
           }
         }
-        // Only set default sampler if this is not the first sample in the shift
-        else if (shiftSampleNumber > 1 && response.data.defaultSampler) {
+        // If there is a default sampler, use it for subsequent samples
+        else if (response.data.defaultSampler) {
           console.log(
             "Setting default sampler from shift:",
             response.data.defaultSampler
@@ -168,16 +154,6 @@ const NewSample = () => {
             ...prev,
             sampler: samplerId,
           }));
-        } else {
-          console.log(
-            "No default sampler set - this is the first sample in shift or no default exists"
-          );
-          console.log(
-            "Reason:",
-            !response.data.defaultSampler
-              ? "No default sampler in shift"
-              : "This is the first sample"
-          );
         }
       } catch (err) {
         console.error("Error fetching shift:", err);
@@ -301,58 +277,10 @@ const NewSample = () => {
         throw new Error("Sample number is required");
       }
 
-      // Generate full sample ID in the format: {projectID}-{sampleNumber}
-      const fullSampleID = `${projectID}-${form.sampleNumber}`;
-      console.log("Generated full sample ID:", fullSampleID);
-
-      // Map sample type to match backend enum
-      const sampleType = form.type;
-
-      // Format times to include seconds
-      const formatTime = (time) => {
-        if (!time) return "";
-        return time.includes(":") ? time : `${time}:00`;
-      };
-
-      const sampleData = {
-        shift: shiftId,
-        job: job._id,
-        sampleNumber: form.sampleNumber,
-        fullSampleID: fullSampleID,
-        type: sampleType || undefined,
-        location: form.location || undefined,
-        pumpNo: form.pumpNo || undefined,
-        cowlNo: form.cowlNo || undefined,
-        filterSize: form.filterSize || undefined,
-        startTime: form.startTime ? formatTime(form.startTime) : undefined,
-        endTime: form.endTime ? formatTime(form.endTime) : undefined,
-        initialFlowrate: form.initialFlowrate
-          ? parseFloat(form.initialFlowrate)
-          : undefined,
-        finalFlowrate: form.finalFlowrate
-          ? parseFloat(form.finalFlowrate)
-          : undefined,
-        averageFlowrate: form.averageFlowrate
-          ? parseFloat(form.averageFlowrate)
-          : undefined,
-        status: "pending",
-        notes: form.notes || undefined,
-        collectedBy: form.sampler || undefined,
-      };
-
-      console.log("Submitting sample data:", sampleData);
-      const response = await sampleService.create(sampleData);
-      console.log("Sample created successfully:", response);
-
       // Get the number of samples in this shift
       const samplesResponse = await sampleService.getByShift(shiftId);
       const samplesInShift = samplesResponse.data || [];
-      const shiftSampleNumber = samplesInShift.length;
-      console.log(
-        "This was sample number:",
-        shiftSampleNumber,
-        "in this shift"
-      );
+      const shiftSampleNumber = samplesInShift.length + 1;
 
       // If this is the first sample in the shift and we have a sampler, set it as the default
       if (shiftSampleNumber === 1 && form.sampler) {
@@ -367,8 +295,21 @@ const NewSample = () => {
           );
         } catch (error) {
           console.error("Error setting default sampler:", error);
+          // Don't throw the error, just log it and continue
         }
       }
+
+      // Create the sample
+      const sampleData = {
+        ...form,
+        shift: shiftId,
+        job: job._id,
+        fullSampleID: `${projectID}-${form.sampleNumber}`,
+        collectedBy: form.sampler, // Explicitly set collectedBy to match sampler
+      };
+
+      const newSample = await sampleService.create(sampleData);
+      console.log("Sample created successfully:", newSample);
 
       // Add a small delay before navigation to ensure the sample is saved
       setTimeout(() => {
