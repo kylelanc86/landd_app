@@ -76,7 +76,7 @@ const ProjectInformation = () => {
     address: "",
     description: "",
     users: [],
-    category: "",
+    categories: [],
     notes: "",
   });
 
@@ -297,7 +297,7 @@ const ProjectInformation = () => {
         name: form.name,
         client: form.client._id,
         department: form.department,
-        category: form.category || undefined,
+        categories: form.categories || [],
         status: form.status,
         address: form.address || undefined,
         description: form.description || undefined,
@@ -355,10 +355,7 @@ const ProjectInformation = () => {
 
   const renderStatusMenuItem = (status) => (
     <MenuItem key={status} value={status}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <StatusChip status={status} />
-        <Typography>{status}</Typography>
-      </Box>
+      <StatusChip status={status} />
     </MenuItem>
   );
 
@@ -371,9 +368,7 @@ const ProjectInformation = () => {
         <IconButton onClick={() => navigate("/projects")} sx={{ mr: 2 }}>
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4">
-          {isEditMode ? "Edit Project" : "New Project"}
-        </Typography>
+        <Typography variant="h4">Project Details</Typography>
       </Box>
 
       {loading ? (
@@ -401,107 +396,38 @@ const ProjectInformation = () => {
 
               <Grid item xs={12} md={6}>
                 <TextField
-                  fullWidth
                   label="Project Name"
                   name="name"
                   value={form.name}
                   onChange={handleChange}
                   required
+                  sx={{ width: "100%" }}
                 />
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <Autocomplete
-                  options={clients}
-                  getOptionLabel={(option) => option.name}
-                  value={form.client}
-                  onChange={handleClientChange}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Client"
-                      required
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {params.InputProps.endAdornment}
-                            <Button
-                              onClick={() => setNewClientDialogOpen(true)}
-                              sx={{ ml: 1 }}
-                            >
-                              New Client
-                            </Button>
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                />
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Department</InputLabel>
-                  <Select
-                    name="department"
-                    value={form.department}
-                    onChange={handleChange}
-                    label="Department"
+                <Box display="flex" gap={1} sx={{ width: "100%" }}>
+                  <Autocomplete
+                    options={clients}
+                    getOptionLabel={(option) => option.name}
+                    value={form.client}
+                    onChange={handleClientChange}
+                    sx={{ flex: 1 }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Client" required />
+                    )}
+                  />
+                  <Button
+                    variant="outlined"
+                    onClick={() => setNewClientDialogOpen(true)}
+                    sx={{ minWidth: "120px" }}
                   >
-                    {DEPARTMENTS.map((dept) => (
-                      <MenuItem key={dept} value={dept}>
-                        {dept}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    New Client
+                  </Button>
+                </Box>
               </Grid>
 
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Category (Optional)</InputLabel>
-                  <Select
-                    name="category"
-                    value={form.category}
-                    onChange={handleChange}
-                    label="Category (Optional)"
-                  >
-                    {CATEGORIES.map((category) => (
-                      <MenuItem key={category} value={category}>
-                        {category}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth required>
-                  <InputLabel> </InputLabel>
-                  <Select
-                    name="status"
-                    value={form.status}
-                    onChange={handleStatusChange}
-                    label=" "
-                  >
-                    <MenuItem disabled>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Active Jobs
-                      </Typography>
-                    </MenuItem>
-                    {ACTIVE_STATUSES.map(renderStatusMenuItem)}
-                    <MenuItem disabled>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Inactive Jobs
-                      </Typography>
-                    </MenuItem>
-                    {INACTIVE_STATUSES.map(renderStatusMenuItem)}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12}>
                 <Autocomplete
                   freeSolo
                   options={addressOptions}
@@ -545,6 +471,72 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Department</InputLabel>
+                  <Select
+                    name="department"
+                    value={form.department}
+                    onChange={handleChange}
+                    label="Department"
+                  >
+                    {DEPARTMENTS.map((dept) => (
+                      <MenuItem key={dept} value={dept}>
+                        {dept}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Autocomplete
+                  multiple
+                  options={CATEGORIES}
+                  value={form.categories}
+                  onChange={(event, newValue) => {
+                    setForm((prev) => ({ ...prev, categories: newValue }));
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Categories"
+                      placeholder="Select categories"
+                    />
+                  )}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => (
+                      <Chip label={option} {...getTagProps({ index })} />
+                    ))
+                  }
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    value={form.status}
+                    onChange={handleStatusChange}
+                    label="Status"
+                  >
+                    <MenuItem disabled>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Active Jobs
+                      </Typography>
+                    </MenuItem>
+                    {ACTIVE_STATUSES.map(renderStatusMenuItem)}
+                    <MenuItem disabled>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Inactive Jobs
+                      </Typography>
+                    </MenuItem>
+                    {INACTIVE_STATUSES.map(renderStatusMenuItem)}
+                  </Select>
+                </FormControl>
+              </Grid>
+
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -582,18 +574,6 @@ const ProjectInformation = () => {
                       />
                     ))
                   }
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Description"
-                  name="description"
-                  value={form.description}
-                  onChange={handleChange}
-                  multiline
-                  rows={4}
                 />
               </Grid>
 

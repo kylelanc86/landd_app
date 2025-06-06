@@ -55,6 +55,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import PersonIcon from "@mui/icons-material/Person";
 import { usePermissions } from "../../hooks/usePermissions";
 import TruncatedCell from "../../components/TruncatedCell";
+import { Visibility, MoreVert } from "@mui/icons-material";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -408,6 +409,7 @@ const Projects = () => {
     contact2Number: "",
     contact2Email: "",
   });
+  const [menuAnchor, setMenuAnchor] = useState(null);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -558,13 +560,15 @@ const Projects = () => {
 
   const handleEditChange = (e) => {
     const { name, value } = e.target;
-    console.log("Form field changed:", name, value);
-
     if (name === "users") {
-      // For users, ensure we're storing an array of user IDs
       setEditForm((prev) => ({
         ...prev,
-        users: value, // value is already an array of user IDs from the Select component
+        users: value,
+      }));
+    } else if (name === "categories") {
+      setEditForm((prev) => ({
+        ...prev,
+        categories: value,
       }));
     } else {
       setEditForm((prev) => ({
@@ -588,7 +592,7 @@ const Projects = () => {
       const formattedData = {
         name: editForm.name,
         department: editForm.department,
-        category: editForm.category || "",
+        categories: editForm.categories || [],
         status: editForm.status,
         address: editForm.address,
         users: activeUserIds,
@@ -677,89 +681,81 @@ const Projects = () => {
     {
       field: "projectID",
       headerName: "Project ID",
-      flex: 0.6,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
+      flex: 1,
     },
     {
       field: "name",
-      headerName: "Project Name",
+      headerName: "Name",
       flex: 1,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
+    },
+    {
+      field: "client",
+      headerName: "Client",
+      flex: 1,
+      hide: true,
+      valueGetter: (params) => {
+        const client = clients.find((c) => c.id === params.row.clientID);
+        return client ? client.name : "";
+      },
+    },
+    {
+      field: "address",
+      headerName: "Address",
+      flex: 1,
+      hide: true,
     },
     {
       field: "department",
       headerName: "Department",
       flex: 1,
-      renderCell: (params) => {
-        const department = params.row.department;
-        if (!department) return "Other";
-
-        // Handle air_quality specifically
-        if (department === "air_quality") return "Air Quality";
-
-        // Handle other types
-        const formattedDepartment = department
-          .split("_")
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(" ");
-        return <TruncatedCell value={formattedDepartment} />;
-      },
+      hide: true,
     },
     {
       field: "category",
       headerName: "Category",
-      flex: 1.5,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
+      flex: 1,
+      hide: true,
     },
     {
       field: "status",
       headerName: "Status",
       flex: 1,
+      renderCell: (params) => <StatusCell params={params} />,
+    },
+    {
+      field: "categories",
+      headerName: "Categories",
+      flex: 1,
       renderCell: (params) => (
-        <StatusCell
-          params={params}
-          onStatusChange={(projectId, newStatus) => {
-            setProjects((prevProjects) =>
-              prevProjects.map((p) =>
-                p._id === projectId ? { ...p, status: newStatus } : p
-              )
-            );
-          }}
-        />
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+          {params.row.categories?.map((category, index) => (
+            <Chip
+              key={index}
+              label={category}
+              size="small"
+              sx={{ maxWidth: "200px" }}
+            />
+          ))}
+        </Box>
       ),
-      editable: false,
     },
     {
       field: "users",
-      headerName: "Assigned Users",
+      headerName: "Users",
       flex: 1,
-      renderCell: (params) => {
-        if (!params || !params.row) return null;
-        const users = params.row.users || [];
-        return (
-          <UsersCell
-            users={users}
-            onRemoveUser={(userId) => handleRemoveUser(params.row._id, userId)}
-          />
-        );
-      },
+      renderCell: (params) => (
+        <UsersCell users={params.value} allUsers={users} />
+      ),
     },
     {
       field: "actions",
       headerName: "Actions",
-      flex: 0.5,
+      flex: 1,
       renderCell: (params) => (
         <Button
-          variant="contained"
-          color="primary"
-          onClick={() => {
-            setSelectedProject(params.row);
-            setEditForm({
-              ...params.row,
-              users: params.row.users.map((user) => user._id),
-            });
-            setDetailsDialogOpen(true);
-          }}
+          variant="outlined"
+          size="small"
+          onClick={() => navigate(`/projects/${params.row.id}`)}
         >
           Details
         </Button>
@@ -902,7 +898,7 @@ const Projects = () => {
   });
 
   // Update the UsersCell component
-  const UsersCell = ({ users, onRemoveUser }) => {
+  const UsersCell = ({ users, allUsers }) => {
     if (loadingUsers)
       return (
         <Box
@@ -998,7 +994,7 @@ const Projects = () => {
               <IconButton
                 className="remove-button"
                 size="small"
-                onClick={() => onRemoveUser(user._id)}
+                onClick={() => handleRemoveUser(user._id, user._id)}
                 sx={{
                   position: "absolute",
                   top: -8,
@@ -1103,6 +1099,11 @@ const Projects = () => {
         );
       }
     }
+  };
+
+  const handleMenuOpen = (event, data) => {
+    setMenuAnchor(event.currentTarget);
+    setSelectedProject(data);
   };
 
   if (loading) return <Typography>Loading projects...</Typography>;
@@ -1278,6 +1279,16 @@ const Projects = () => {
           autoHeight
           disableSelectionOnClick
           components={{ Toolbar: GridToolbar }}
+          initialState={{
+            columns: {
+              columnVisibilityModel: {
+                client: false,
+                address: false,
+                department: false,
+                category: false,
+              },
+            },
+          }}
         />
       </Box>
 
