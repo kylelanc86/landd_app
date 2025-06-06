@@ -12,17 +12,32 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const projects = await Project.find()
       .select('projectID name client department category status address startDate endDate description users createdAt updatedAt')
-      .populate('client')
-      .populate('users')
+      .populate({
+        path: 'client',
+        select: 'name'
+      })
+      .populate({
+        path: 'users',
+        select: 'firstName lastName email',
+        match: { isActive: true }
+      })
+      .lean()
       .sort({ createdAt: -1 });
     
-    console.log('Projects being sent to frontend:', JSON.stringify(projects.map(p => ({
+    // Filter out null users from the populated array
+    const projectsWithFilteredUsers = projects.map(project => ({
+      ...project,
+      users: project.users.filter(user => user !== null)
+    }));
+    
+    console.log('Projects with populated users:', JSON.stringify(projectsWithFilteredUsers.map(p => ({
       id: p._id,
       projectID: p.projectID,
-      name: p.name
+      name: p.name,
+      users: p.users
     })), null, 2));
     
-    res.json(projects);
+    res.json(projectsWithFilteredUsers);
   } catch (err) {
     console.error('Error fetching projects:', err);
     res.status(500).json({ message: err.message });

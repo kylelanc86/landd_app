@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -32,6 +32,9 @@ import {
   FormControlLabel,
   Autocomplete,
   Grid,
+  Avatar,
+  Tooltip,
+  Alert,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -44,7 +47,7 @@ import {
   UserAvatar,
 } from "../../components/JobStatus";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useTheme } from "@mui/material/styles";
+import { useTheme } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { projectService, clientService, userService } from "../../services/api";
 import Header from "../../components/Header";
@@ -56,6 +59,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import { usePermissions } from "../../hooks/usePermissions";
 import TruncatedCell from "../../components/TruncatedCell";
 import { Visibility, MoreVert } from "@mui/icons-material";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -369,6 +373,36 @@ const getRandomColor = (user) => {
   return colors[index];
 };
 
+// Helper to get a color for a given status
+const getStatusColor = (status) => {
+  switch (status) {
+    case "Assigned":
+      return "#2196f3"; // Blue
+    case "In progress":
+      return "#ff9800"; // Orange
+    case "Samples submitted":
+      return "#9c27b0"; // Purple
+    case "Lab Analysis Complete":
+      return "#4caf50"; // Green
+    case "Report sent for review":
+      return "#f44336"; // Red
+    case "Ready for invoicing":
+      return "#795548"; // Brown
+    case "Invoice sent":
+      return "#607d8b"; // Blue Grey
+    case "Job complete":
+      return "#4caf50"; // Green
+    case "On hold":
+      return "#ffeb3b"; // Yellow
+    case "Quote sent":
+      return "#00bcd4"; // Cyan
+    case "Cancelled":
+      return "#f44336"; // Red
+    default:
+      return "#bdbdbd"; // Grey
+  }
+};
+
 // Main Projects component
 const Projects = () => {
   const theme = useTheme();
@@ -378,25 +412,19 @@ const Projects = () => {
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
     useJobStatus();
   const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
-  const [form, setForm] = useState(emptyForm);
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [editForm, setEditForm] = useState(emptyForm);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("status") || "all";
-  });
-  const [showInactive, setShowInactive] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("all");
   const [newClient, setNewClient] = useState({
     name: "",
     email: "",
@@ -410,52 +438,56 @@ const Projects = () => {
     contact2Number: "",
     contact2Email: "",
   });
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState(null);
 
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        setLoading(true);
-        const response = await projectService.getAll();
-        const usersMap = new Map();
+  const fetchProjects = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await projectService.getAll();
+      console.log("Raw projects from API:", response);
 
-        // Transform the data
-        const formattedProjects = response.data.map((project) => {
-          // Get user details
-          const users = project.users
-            .map((userId) => {
-              if (!usersMap.has(userId)) {
-                const user = response.data
-                  .find((p) => p.users.includes(userId))
-                  ?.users.find((u) => u._id === userId);
-                if (user) {
-                  usersMap.set(userId, user);
-                }
-              }
-              return usersMap.get(userId);
-            })
-            .filter(Boolean);
+      // Extract the data array from the response
+      const projectsData = response.data || [];
+      console.log("Projects data array:", projectsData);
 
-          return {
-            ...project,
-            users: users,
-            clientName: project.client?.name || "N/A",
-            department: project.department || "N/A",
-            status: project.status || "Assigned",
-            categories: project.categories || [],
-          };
-        });
+      // Transform the projects data if it's an array
+      const transformedProjects = Array.isArray(projectsData)
+        ? projectsData.map((project) => {
+            const transformed = {
+              ...project,
+              id: project._id,
+              users: Array.isArray(project.users)
+                ? project.users.map((user) => ({
+                    _id: user._id,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                  }))
+                : [],
+              clientName: project.client?.name || "Unknown Client",
+              department: project.department || "N/A",
+              status: project.status || "Assigned",
+              categories: project.categories || [],
+            };
+            console.log("Transformed project:", transformed);
+            return transformed;
+          })
+        : [];
 
-        setProjects(formattedProjects);
-      } catch (error) {
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProjects();
+      console.log("Final transformed projects:", transformedProjects);
+      setProjects(transformedProjects);
+    } catch (err) {
+      console.error("Error fetching projects:", err);
+      setError(err.message);
+      setProjects([]); // fallback to empty array on error
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   // Fetch clients and users when component mounts
   useEffect(() => {
@@ -512,416 +544,135 @@ const Projects = () => {
     fetchUsers();
   }, []);
 
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    if (name === "users") {
-      setEditForm((prev) => ({
-        ...prev,
-        users: value,
-      }));
-    } else if (name === "categories") {
-      setEditForm((prev) => ({
-        ...prev,
-        categories: value,
-      }));
-    } else {
-      setEditForm((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
-  };
-
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      setSubmitting(true);
-      const formattedData = {
-        ...editForm,
-        users: editForm.users || [],
-      };
-
-      const response = await projectService.update(editForm._id, formattedData);
-      const updatedProject = {
-        ...response.data,
-        clientName: response.data.client?.name || "N/A",
-        department: response.data.department || "N/A",
-        status: response.data.status || "Assigned",
-        categories: response.data.categories || [],
-      };
-
-      setProjects((prevProjects) =>
-        prevProjects.map((project) =>
-          project._id === updatedProject._id ? updatedProject : project
-        )
+      const response = await projectService.update(selectedProject.id, form);
+      setProjects(
+        projects.map((p) => (p.id === selectedProject.id ? response.data : p))
       );
-      setDetailsDialogOpen(false);
+      setDialogOpen(false);
+      setSelectedProject(null);
+      setForm(emptyForm);
     } catch (error) {
-      setError(error.message);
-    } finally {
-      setSubmitting(false);
+      console.error("Error updating project:", error);
+      setError("Failed to update project");
     }
-  };
-
-  const handleRemoveUser = async (projectId, userId) => {
-    try {
-      // Get the current project
-      const project = projects.find((p) => p._id === projectId);
-      if (!project) return;
-
-      // Remove the user from the users array
-      const updatedUsers = project.users.filter((user) => user._id !== userId);
-
-      // Create update object
-      const updateData = {
-        ...project,
-        users: updatedUsers.map((user) => user._id), // Send only user IDs to backend
-      };
-
-      // Send update to backend
-      const response = await projectService.update(projectId, updateData);
-
-      if (response.data) {
-        // Update local state
-        setProjects((prevProjects) =>
-          prevProjects.map((p) => {
-            if (p._id === projectId) {
-              return {
-                ...p,
-                ...response.data,
-                users: response.data.users || [],
-              };
-            }
-            return p;
-          })
-        );
-      }
-    } catch (error) {
-      console.error("Error removing user:", error);
-      alert("Failed to remove user. Please try again.");
-    }
-  };
-
-  const columns = [
-    {
-      field: "projectID",
-      headerName: "Project ID",
-      flex: 1,
-    },
-    {
-      field: "name",
-      headerName: "Name",
-      flex: 1,
-    },
-    {
-      field: "client",
-      headerName: "Client",
-      flex: 1,
-      hide: true,
-      valueGetter: (params) => {
-        const client = clients.find((c) => c.id === params.row.clientID);
-        return client ? client.name : "";
-      },
-    },
-    {
-      field: "address",
-      headerName: "Address",
-      flex: 1,
-      hide: true,
-    },
-    {
-      field: "department",
-      headerName: "Department",
-      flex: 1,
-      hide: true,
-    },
-    {
-      field: "category",
-      headerName: "Category",
-      flex: 1,
-      hide: true,
-    },
-    {
-      field: "status",
-      headerName: "Status",
-      flex: 1,
-      renderCell: (params) => <StatusCell params={params} />,
-    },
-    {
-      field: "categories",
-      headerName: "Categories",
-      flex: 1,
-      renderCell: (params) => (
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-          {params.row.categories?.map((category, index) => (
-            <Chip
-              key={index}
-              label={category}
-              size="small"
-              sx={{ maxWidth: "200px" }}
-            />
-          ))}
-        </Box>
-      ),
-    },
-    {
-      field: "users",
-      headerName: "Users",
-      flex: 1,
-      renderCell: (params) => (
-        <UsersCell users={params.value} allUsers={users} />
-      ),
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      flex: 1,
-      renderCell: (params) => (
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => navigate(`/projects/${params.row.id}`)}
-        >
-          Details
-        </Button>
-      ),
-    },
-  ];
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Validate required fields
-      if (!form.name || !form.client || !form.department || !form.status) {
-        throw new Error("Please fill in all required fields");
-      }
-
-      // Format project data
-      const projectData = {
-        name: form.name,
-        client: form.client,
-        department: form.department,
-        category: form.category || undefined,
-        status: form.status,
-        address: form.address || undefined,
-        description: form.description || undefined,
-        users: form.users || [],
-      };
-
-      console.log("Submitting project data:", projectData);
-      const response = await projectService.create(projectData);
-
-      if (!response.data) {
-        throw new Error("Failed to create project");
-      }
-
-      setProjects([response.data, ...projects]);
+      const response = await projectService.create(form);
+      setProjects([...projects, response.data]);
       setDialogOpen(false);
-      setForm({
-        name: "",
-        client: "",
-        department: PROJECT_TYPES[0],
-        category: "",
-        status: ACTIVE_STATUSES[0],
-        address: "",
-        description: "",
-        users: [],
-      });
-    } catch (err) {
-      console.error("Error creating project:", err);
-      if (err.response) {
-        alert(
-          `Error creating project: ${
-            err.response.data.message || "Unknown error"
-          }`
-        );
-      } else {
-        alert(`Error creating project: ${err.message}`);
-      }
+      setForm(emptyForm);
+    } catch (error) {
+      console.error("Error creating project:", error);
+      setError("Failed to create project");
     }
   };
 
-  const handleCellEditCommit = async (params) => {
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleUsersChange = (event, newValue) => {
+    setForm((prev) => ({
+      ...prev,
+      users: newValue,
+    }));
+  };
+
+  const handleClientChange = (event, newValue) => {
+    setForm((prev) => ({
+      ...prev,
+      client: newValue,
+    }));
+  };
+
+  const handleStatusChange = async (projectId, newStatus) => {
     try {
-      const { id, field, value } = params;
-      const project = projects.find((p) => p._id === id);
+      const project = projects.find((p) => p.id === projectId);
       if (!project) return;
 
-      const updateData = {
-        [field]: value,
-      };
+      const response = await projectService.update(projectId, {
+        ...project,
+        status: newStatus,
+      });
 
-      const response = await projectService.update(id, updateData);
-      const updatedProject = {
-        ...response.data,
-        clientName: response.data.client?.name || "N/A",
-        department: response.data.department || "N/A",
-        status: response.data.status || "Assigned",
-        categories: response.data.categories || [],
-      };
-
-      setProjects((prevProjects) =>
-        prevProjects.map((project) =>
-          project._id === updatedProject._id ? updatedProject : project
-        )
+      setProjects(
+        projects.map((p) => (p.id === projectId ? response.data : p))
       );
     } catch (error) {
-      setError(error.message);
+      console.error("Error updating project status:", error);
+      setError("Failed to update project status");
     }
   };
 
-  // Filter projects based on search, status, and inactive toggle
-  const filteredProjects = projects.filter((project) => {
-    const searchTerm = search.toLowerCase();
-    const projectName = project.name?.toLowerCase() || "";
-    const projectAddress = project.address?.toLowerCase() || "";
-    const clientName = (project.client?.name || "").toLowerCase();
+  const handleRemoveUser = async (projectId, userId) => {
+    try {
+      const project = projects.find((p) => p.id === projectId);
+      if (!project) {
+        console.error("Project not found:", projectId);
+        return;
+      }
 
-    const matchesSearch =
-      searchTerm === "" ||
-      projectName.includes(searchTerm) ||
-      projectAddress.includes(searchTerm) ||
-      clientName.includes(searchTerm);
+      const updatedUsers = project.users.filter((id) => id !== userId);
+      const response = await projectService.update(projectId, {
+        ...project,
+        users: updatedUsers,
+      });
 
-    const matchesStatus =
-      statusFilter === "all" || project.status === statusFilter;
+      setProjects(
+        projects.map((p) => (p.id === projectId ? response.data : p))
+      );
+    } catch (error) {
+      console.error("Error removing user:", error);
+      setError("Failed to remove user from project");
+    }
+  };
 
-    const matchesActiveFilter =
-      showInactive || ACTIVE_STATUSES.includes(project.status);
+  const handleDeleteProject = async () => {
+    try {
+      await projectService.delete(selectedProject.id);
+      setProjects(projects.filter((p) => p.id !== selectedProject.id));
+      setDeleteDialogOpen(false);
+      setSelectedProject(null);
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      setError("Failed to delete project");
+    }
+  };
 
-    const matchesDepartment =
-      departmentFilter === "all" || project.department === departmentFilter;
+  // UsersCell component for rendering user avatars
+  const UsersCell = ({ users }) => {
+    if (!users || users.length === 0) {
+      return (
+        <Typography variant="body2" color="textSecondary">
+          No users assigned
+        </Typography>
+      );
+    }
 
     return (
-      matchesDepartment && matchesSearch && matchesStatus && matchesActiveFilter
-    );
-  });
-
-  // Update the UsersCell component
-  const UsersCell = ({ users, allUsers }) => {
-    if (loadingUsers)
-      return (
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            minHeight: "52px",
-            justifyContent: "center",
-          }}
-        >
-          <Typography>Loading users...</Typography>
-        </Box>
-      );
-
-    if (!users || users.length === 0)
-      return (
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            minHeight: "52px",
-            justifyContent: "center",
-          }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            No users assigned
-          </Typography>
-        </Box>
-      );
-
-    return (
-      <Stack
-        direction="row"
-        spacing={1}
-        flexWrap="wrap"
-        gap={1}
-        sx={{
-          alignItems: "center",
-          minHeight: "52px",
-          py: 1,
-        }}
-      >
-        {users.map((user) => {
-          if (!user) return null;
-
-          // Get user name and initials
-          const userDisplayName =
-            user.name || `${user.firstName} ${user.lastName}`.trim();
-          if (!userDisplayName) return null;
-
-          const userInitials = userDisplayName
-            .split(" ")
-            .map((word) => word[0])
-            .join("")
-            .toUpperCase();
-
-          const bgColor = getRandomColor(user);
-
-          return (
-            <Box
-              key={user._id}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                backgroundColor: "background.paper",
-                borderRadius: "50%",
-                padding: "4px",
-                border: "1px solid",
-                borderColor: "divider",
-                position: "relative",
-                "&:hover .remove-button": {
-                  opacity: 1,
-                },
-              }}
-            >
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  backgroundColor: bgColor,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "white",
-                  fontSize: "0.875rem",
-                  fontWeight: "bold",
-                }}
-              >
-                {userInitials}
-              </Box>
-              <IconButton
-                className="remove-button"
-                size="small"
-                onClick={() => handleRemoveUser(user._id, user._id)}
-                sx={{
-                  position: "absolute",
-                  top: -8,
-                  right: -8,
-                  backgroundColor: "error.main",
-                  color: "white",
-                  width: 20,
-                  height: 20,
-                  opacity: 0,
-                  transition: "opacity 0.2s",
-                  "&:hover": {
-                    backgroundColor: "error.dark",
-                  },
-                }}
-              >
-                <Typography sx={{ fontSize: "0.75rem", lineHeight: 1 }}>
-                  ×
-                </Typography>
-              </IconButton>
-            </Box>
-          );
-        })}
-      </Stack>
+      <Box sx={{ display: "flex", gap: 0.5 }}>
+        {users.map((user, idx) => (
+          <Tooltip
+            key={user._id || idx}
+            title={`${user.firstName} ${user.lastName}`}
+          >
+            <Avatar sx={{ width: 24, height: 24, fontSize: "0.75rem" }}>
+              {user.firstName?.[0]}
+              {user.lastName?.[0]}
+            </Avatar>
+          </Tooltip>
+        ))}
+      </Box>
     );
   };
 
@@ -1010,6 +761,98 @@ const Projects = () => {
     setSelectedProject(data);
   };
 
+  // Handler for edit action
+  const handleEditClick = (project) => {
+    setSelectedProject(project);
+    setDialogOpen(true);
+  };
+
+  // Handler for delete action
+  const handleDeleteClick = (project) => {
+    setSelectedProject(project);
+    setDeleteDialogOpen(true);
+  };
+
+  const columns = [
+    {
+      field: "projectID",
+      headerName: "Project ID",
+      flex: 0.5,
+    },
+    {
+      field: "name",
+      headerName: "Project Name",
+      flex: 1,
+      renderCell: (params) => (
+        <Box
+          onClick={() => navigate(`/projects/${params.row._id}`)}
+          sx={{ cursor: "pointer", color: "primary.main" }}
+        >
+          {params.value}
+        </Box>
+      ),
+    },
+    {
+      field: "clientName",
+      headerName: "Client",
+      flex: 1,
+    },
+    {
+      field: "department",
+      headerName: "Department",
+      flex: 1,
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      flex: 1,
+      renderCell: (params) => (
+        <Box
+          sx={{
+            backgroundColor: getStatusColor(params.value),
+            color: "white",
+            padding: "4px 8px",
+            borderRadius: "4px",
+            fontSize: "0.75rem",
+          }}
+        >
+          {params.value}
+        </Box>
+      ),
+    },
+    {
+      field: "users",
+      headerName: "Assigned Users",
+      flex: 1,
+      renderCell: (params) => <UsersCell users={params.row.users} />,
+    },
+    {
+      field: "actions",
+      headerName: "Actions",
+      flex: 1,
+      renderCell: (params) => (
+        <Box>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<VisibilityIcon />}
+            onClick={() => navigate(`/projects/${params.row._id}`)}
+            sx={{ mr: 1 }}
+          >
+            Details
+          </Button>
+          <IconButton
+            onClick={() => handleDeleteClick(params.row)}
+            size="small"
+            color="error"
+          >
+            <DeleteIcon />
+          </IconButton>
+        </Box>
+      ),
+    },
+  ];
+
   if (loading) return <Typography>Loading projects...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -1045,8 +888,8 @@ const Projects = () => {
         <Stack direction="row" spacing={2} alignItems="center">
           <TextField
             label="Search Projects"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             sx={{ flex: 1 }}
             InputProps={{
               startAdornment: (
@@ -1079,12 +922,14 @@ const Projects = () => {
           <FormControlLabel
             control={
               <Switch
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
+                checked={activeFilter === "active"}
+                onChange={(e) =>
+                  setActiveFilter(e.target.checked ? "active" : "all")
+                }
                 color="primary"
               />
             }
-            label="Show Inactive Projects"
+            label="Show Active Projects"
           />
         </Stack>
       </Box>
@@ -1152,12 +997,22 @@ const Projects = () => {
         </Button>
       </Box>
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
       <Box
         m="40px 0 0 0"
         height="75vh"
         sx={{
-          "& .MuiDataGrid-root": { border: "none" },
-          "& .MuiDataGrid-cell": { borderBottom: "none" },
+          "& .MuiDataGrid-root": {
+            border: "none",
+          },
+          "& .MuiDataGrid-cell": {
+            borderBottom: "none",
+          },
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: theme.palette.primary.dark,
             borderBottom: "none",
@@ -1175,130 +1030,20 @@ const Projects = () => {
         }}
       >
         <DataGrid
-          rows={filteredProjects}
+          rows={projects}
           columns={columns}
-          getRowId={(row) => row._id}
-          pageSize={10}
-          rowsPerPageOptions={[10]}
-          autoHeight
-          disableSelectionOnClick
-          components={{ Toolbar: GridToolbar }}
-          initialState={{
-            columns: {
-              columnVisibilityModel: {
-                client: false,
-                address: false,
-                department: false,
-                category: false,
-              },
-            },
+          getRowId={(row) => row._id || row.id}
+          components={{
+            Toolbar: GridToolbar,
           }}
+          loading={loading}
+          error={error}
+          checkboxSelection
+          disableRowSelectionOnClick
         />
       </Box>
 
       {/* Project Details Dialog */}
-      <Dialog
-        open={detailsDialogOpen}
-        onClose={() => setDetailsDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Project Details</DialogTitle>
-        <form onSubmit={handleEditSubmit}>
-          <DialogContent>
-            {selectedProject && (
-              <Stack spacing={2} sx={{ mt: 2 }}>
-                <TextField
-                  label="Project ID"
-                  name="projectID"
-                  value={editForm?.projectID || ""}
-                  fullWidth
-                  disabled
-                />
-                <TextField
-                  label="Project Name"
-                  name="name"
-                  value={editForm?.name || ""}
-                  onChange={handleEditChange}
-                  fullWidth
-                  required
-                />
-                <FormControl fullWidth required>
-                  <InputLabel>Department</InputLabel>
-                  <Select
-                    name="department"
-                    value={editForm?.department || ""}
-                    onChange={handleEditChange}
-                    label="Department"
-                  >
-                    {DEPARTMENTS.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth>
-                  <InputLabel>Category</InputLabel>
-                  <Select
-                    name="category"
-                    value={editForm?.category || ""}
-                    onChange={handleEditChange}
-                    label="Category"
-                  >
-                    {CATEGORIES.map((category) => (
-                      <MenuItem key={category} value={category}>
-                        {category}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth required>
-                  <InputLabel>Status</InputLabel>
-                  {renderStatusSelect(editForm?.status, handleEditChange)}
-                </FormControl>
-                <TextField
-                  label="Address"
-                  name="address"
-                  value={editForm?.address || ""}
-                  onChange={handleEditChange}
-                  fullWidth
-                />
-                <TextField
-                  label="Notes"
-                  name="notes"
-                  value={editForm?.notes || ""}
-                  onChange={handleEditChange}
-                  fullWidth
-                  multiline
-                  rows={4}
-                  placeholder="Add any additional notes or comments about the project..."
-                />
-                <TextField
-                  label="Client"
-                  value={selectedProject.client?.name || "N/A"}
-                  fullWidth
-                  disabled
-                />
-                {renderUsersSelect(editForm?.users, handleEditChange, "users")}
-              </Stack>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => setDetailsDialogOpen(false)}
-              color="secondary"
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary">
-              Save Changes
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-
-      {/* Create Project Dialog */}
       <Dialog
         open={dialogOpen}
         onClose={() => {
@@ -1348,12 +1093,7 @@ const Projects = () => {
                         clients.find((client) => client._id === form.client) ||
                         null
                       }
-                      onChange={(event, newValue) => {
-                        setForm({
-                          ...form,
-                          client: newValue ? newValue._id : "",
-                        });
-                      }}
+                      onChange={handleClientChange}
                       renderInput={(params) => (
                         <TextField
                           {...params}
@@ -1449,7 +1189,7 @@ const Projects = () => {
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  {renderUsersSelect(form.users, handleChange, "users")}
+                  {renderUsersSelect(form.users, handleUsersChange, "users")}
                 </Grid>
                 <Grid item xs={12}>
                   <TextField

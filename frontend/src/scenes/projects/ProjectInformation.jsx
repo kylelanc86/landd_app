@@ -140,13 +140,20 @@ const ProjectInformation = () => {
         setUsers(usersRes.data);
 
         // If we're in edit mode, fetch the project data
-        if (id && id !== "new") {
+        if (id && id !== "new" && id !== "undefined") {
           try {
             const projectRes = await projectService.getById(id);
             if (!projectRes.data) {
               throw new Error("No project data received");
             }
-            setForm(projectRes.data);
+            // Ensure users is always an array
+            const projectData = {
+              ...projectRes.data,
+              users: Array.isArray(projectRes.data.users)
+                ? projectRes.data.users
+                : [],
+            };
+            setForm(projectData);
           } catch (projectErr) {
             console.error("Error fetching project:", projectErr);
             if (projectErr.response) {
@@ -156,15 +163,18 @@ const ProjectInformation = () => {
             setError("Failed to load project data. Please try again.");
             navigate("/projects");
           }
-        } else {
+        } else if (id === "new") {
           // Generate new project ID for new projects
           try {
             const nextId = await generateNextProjectId();
-            setForm((prev) => ({ ...prev, projectID: nextId }));
+            setForm((prev) => ({ ...prev, projectID: nextId, users: [] }));
           } catch (idError) {
             console.error("Error generating project ID:", idError);
             setError("Failed to generate project ID. Please try again.");
           }
+        } else {
+          // Invalid ID, redirect to projects list
+          navigate("/projects");
         }
       } catch (err) {
         console.error("Error in fetchData:", err);
@@ -284,53 +294,38 @@ const ProjectInformation = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleClientChange = (event, newValue) => {
-    setForm((prev) => ({ ...prev, client: newValue }));
+    setForm((prev) => ({
+      ...prev,
+      client: newValue,
+    }));
   };
 
   const handleUsersChange = (event, newValue) => {
-    setForm((prev) => ({ ...prev, users: newValue }));
+    setForm((prev) => ({
+      ...prev,
+      users: newValue,
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Validate required fields
-      if (!form.name || !form.client || !form.department || !form.status) {
-        throw new Error("Please fill in all required fields");
-      }
-
-      // Format project data
-      const projectData = {
-        name: form.name,
-        client: form.client._id,
-        department: form.department,
-        categories: form.categories || [],
-        status: form.status,
-        address: form.address || undefined,
-        description: form.description || undefined,
-        users: form.users?.map((user) => user._id) || [],
-        notes: form.notes || undefined,
-      };
-
-      let response;
-      if (isEditMode && id) {
-        response = await projectService.update(id, projectData);
+      if (isEditMode) {
+        await projectService.update(id, form);
       } else {
-        response = await projectService.create(projectData);
+        await projectService.create(form);
       }
-
-      if (!response.data) {
-        throw new Error("Failed to save project");
-      }
-
       navigate("/projects");
-    } catch (err) {
-      console.error("Error saving project:", err);
-      setError(err.message || "Failed to save project. Please try again.");
+    } catch (error) {
+      console.error("Error saving project:", error);
+      setError("Failed to save project. Please try again.");
     }
   };
 
@@ -360,8 +355,10 @@ const ProjectInformation = () => {
   };
 
   const handleStatusChange = (e) => {
-    const newStatus = e.target.value;
-    setForm((prev) => ({ ...prev, status: newStatus }));
+    setForm((prev) => ({
+      ...prev,
+      status: e.target.value,
+    }));
   };
 
   const renderStatusMenuItem = (status) => (

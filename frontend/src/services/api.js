@@ -150,10 +150,10 @@ export const projectService = {
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => {
-    // Ensure users is included in the update
+    // Ensure users is included in the update and is always an array
     const updateData = {
       ...data,
-      users: Array.isArray(data.users) ? data.users : []
+      users: Array.isArray(data.users) ? data.users : (data.users ? [data.users] : [])
     };
     console.log('Project service update data:', updateData);
     return api.patch(`/projects/${id}`, updateData);
