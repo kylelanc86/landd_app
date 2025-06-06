@@ -28,6 +28,15 @@ import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
 import MonthlyTimesheet from "./scenes/timesheets/monthly";
+import Calibrations from "./scenes/calibrations";
+import CalibrationsList from "./scenes/calibrations/CalibrationsList";
+import AirPumpPage from "./scenes/calibrations/pages/AirPumpPage";
+import FlowmeterPage from "./scenes/calibrations/pages/FlowmeterPage";
+import EFAPage from "./scenes/calibrations/pages/EFAPage";
+import MicroscopePage from "./scenes/calibrations/pages/MicroscopePage";
+import AcetoneVaporiserPage from "./scenes/calibrations/pages/AcetoneVaporiserPage";
+import GraticulePage from "./scenes/calibrations/pages/GraticulePage";
+import PrimaryFlowmeterPage from "./scenes/calibrations/pages/PrimaryFlowmeterPage";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -244,6 +253,45 @@ function App() {
                               <TimesheetReview />
                             </PermissionRoute>
                           }
+                        />
+                        <Route
+                          path="/calibrations"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["jobs.view"]}
+                            >
+                              <Calibrations />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/calibrations/:type"
+                          element={<CalibrationsList />}
+                        />
+                        <Route
+                          path="/calibrations/air-pump"
+                          element={<AirPumpPage />}
+                        />
+                        <Route
+                          path="/calibrations/flowmeter"
+                          element={<FlowmeterPage />}
+                        />
+                        <Route path="/calibrations/efa" element={<EFAPage />} />
+                        <Route
+                          path="/calibrations/microscope"
+                          element={<MicroscopePage />}
+                        />
+                        <Route
+                          path="/calibrations/acetone-vaporiser"
+                          element={<AcetoneVaporiserPage />}
+                        />
+                        <Route
+                          path="/calibrations/graticule"
+                          element={<GraticulePage />}
+                        />
+                        <Route
+                          path="/calibrations/primary-flowmeter"
+                          element={<PrimaryFlowmeterPage />}
                         />
                       </Routes>
                     </Layout>

@@ -9,6 +9,7 @@ import {
   MenuItem,
   Tooltip,
   Typography,
+  Divider,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -51,15 +52,15 @@ const Topbar = ({ toggleColorMode }) => {
         boxShadow: 1,
         width: "100%",
         zIndex: (theme) => theme.zIndex.drawer + 1,
-        height: "100px",
+        height: "50px",
         display: "flex",
         alignItems: "center",
       }}
     >
       <Toolbar
         sx={{
-          minHeight: "100px !important",
-          height: "100px",
+          minHeight: "50px !important",
+          height: "50px",
           display: "flex",
           alignItems: "center",
           padding: "0 24px",
@@ -67,6 +68,29 @@ const Topbar = ({ toggleColorMode }) => {
           justifyContent: "flex-end",
         }}
       >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mr: 2 }}>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              color: theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a",
+              fontWeight: "medium",
+            }}
+          >
+            {currentUser
+              ? `${currentUser.firstName} ${currentUser.lastName}`
+              : "Unknown User"}
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color: theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32",
+              textTransform: "capitalize",
+            }}
+          >
+            {currentUser ? currentUser.role : "Guest"}
+          </Typography>
+        </Box>
+        <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Tooltip title="Toggle theme">
             <IconButton

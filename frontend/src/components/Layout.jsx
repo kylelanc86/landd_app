@@ -29,7 +29,7 @@ const Layout = ({ children, toggleColorMode, mode }) => {
         <Box
           sx={{
             flex: 1,
-            mt: "80px", // Match the Topbar height
+            mt: "30px", // Match the Topbar height
             p: 3,
             overflow: "auto",
           }}

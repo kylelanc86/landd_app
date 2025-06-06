@@ -22,6 +22,7 @@ import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import ScienceIcon from "@mui/icons-material/Science";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -102,8 +103,8 @@ const Item = ({ title, to, icon, isCollapsed }) => {
             : tokens.primary[100]
           : "transparent",
         borderRadius: "4px",
-        margin: "2px 8px",
-        padding: isCollapsed ? "4px" : "4px 16px",
+        margin: "1px 8px",
+        padding: isCollapsed ? "2px" : "2px 10px",
         display: "flex",
         justifyContent: isCollapsed ? "center" : "flex-start",
         alignItems: "center",
@@ -252,7 +253,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             ) : undefined
           }
           style={{
-            margin: "10px 0 50px 0",
+            margin: "10px 0 20px 0",
             color:
               theme.palette.mode === "dark"
                 ? tokens.grey[100]
@@ -292,51 +293,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           )}
         </MenuItem>
 
-        {!isCollapsed && (
-          <Box mb="25px">
-            <Box display="flex" justifyContent="center" alignItems="center">
-              <Box
-                sx={{
-                  width: 100,
-                  height: 100,
-                  borderRadius: "50%",
-                  backgroundColor: currentUser
-                    ? getRandomColor(currentUser)
-                    : "#757575",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                  fontSize: "2.5rem",
-                  fontWeight: "bold",
-                  boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-                }}
-              >
-                {currentUser ? getInitials(currentUser) : "?"}
-              </Box>
-            </Box>
-            <Box textAlign="center">
-              <Typography
-                variant="h2"
-                color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-                fontWeight="bold"
-                sx={{ m: "10px 0 0 0" }}
-              >
-                {currentUser
-                  ? `${currentUser.firstName} ${currentUser.lastName}`
-                  : "Unknown User"}
-              </Typography>
-              <Typography
-                variant="h5"
-                color={theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32"}
-                sx={{ textTransform: "capitalize" }}
-              >
-                {currentUser ? currentUser.role : "Guest"}
-              </Typography>
-            </Box>
-          </Box>
-        )}
-
         <Box paddingLeft={isCollapsed ? undefined : "5%"}>
           <Item
             title="Dashboard"
@@ -344,22 +300,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             icon={<HomeOutlinedIcon />}
             isCollapsed={isCollapsed}
           />
-          <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
-            <Item
-              title="User Management"
-              to="/users"
-              icon={<AccessibilityIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-          <PermissionGate requiredPermissions={["timesheets.view"]}>
-            <Item
-              title="Timesheets"
-              to="/timesheets"
-              icon={<AccessTimeIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
 
           {!isCollapsed ? (
             <Typography
@@ -379,6 +319,23 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           ) : (
             <SectionDivider isCollapsed={isCollapsed} />
           )}
+
+          <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
+            <Item
+              title="User Management"
+              to="/users"
+              icon={<AccessibilityIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["timesheets.view"]}>
+            <Item
+              title="Timesheets"
+              to="/timesheets"
+              icon={<AccessTimeIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
 
           <PermissionGate requiredPermissions={["projects.view"]}>
             <Item
@@ -426,7 +383,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 paddingLeft: "10px",
               }}
             >
-              Site Work
+              Air Monitoring
             </Typography>
           ) : (
             <SectionDivider isCollapsed={isCollapsed} />
@@ -434,17 +391,81 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
 
           <PermissionGate requiredPermissions={["jobs.view"]}>
             <Item
-              title="Air Monitoring"
+              title="Site Work"
               to="/air-monitoring"
               icon={<AirOutlinedIcon />}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
+          <PermissionGate requiredPermissions={["jobs.view"]}>
+            <Item
+              title="Calibrations"
+              to="/calibrations"
+              icon={<ScienceIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+
+          {!isCollapsed ? (
+            <Typography
+              variant="h3"
+              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+              sx={{
+                m: "10px 0 2px 10px",
+                fontSize: "1.2rem",
+                fontWeight: "bold",
+                opacity: 0.8,
+                textAlign: "left",
+                paddingLeft: "10px",
+              }}
+            >
+              Surveys
+            </Typography>
+          ) : (
+            <SectionDivider isCollapsed={isCollapsed} />
+          )}
+
           <PermissionGate requiredPermissions={["asbestos.view"]}>
             <Item
               title="Asbestos Assessment"
               to="/asbestos-assessment"
               icon={<AssessmentIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+
+          {!isCollapsed ? (
+            <Typography
+              variant="h3"
+              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+              sx={{
+                m: "10px 0 2px 10px",
+                fontSize: "1.2rem",
+                fontWeight: "bold",
+                opacity: 0.8,
+                textAlign: "left",
+                paddingLeft: "10px",
+              }}
+            >
+              Fibre Identification
+            </Typography>
+          ) : (
+            <SectionDivider isCollapsed={isCollapsed} />
+          )}
+
+          <PermissionGate requiredPermissions={["fibre.view"]}>
+            <Item
+              title="Analysis"
+              to="/fibre-analysis"
+              icon={<ScienceIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["fibre.view"]}>
+            <Item
+              title="Calibrations"
+              to="/fibre-calibrations"
+              icon={<ScienceIcon />}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
