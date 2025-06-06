@@ -528,71 +528,81 @@ const Analysis = () => {
     }));
   }, []);
 
-  const handleFibreCountChange = useCallback((sampleId, row, col, value) => {
-    const newValue = value === "" ? "" : parseInt(value);
-    if (isNaN(newValue) && value !== "") return;
+  const handleFibreCountChange = useCallback(
+    (sampleId, rowIndex, colIndex, value) => {
+      const newValue = value === "/" ? "0.5" : value;
+      if (isNaN(newValue) && value !== "") return;
 
-    setSampleAnalyses((prev) => {
-      const newAnalyses = { ...prev };
-      const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
-      newFibreCounts[row][col] = newValue;
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
+        newFibreCounts[rowIndex][colIndex] = newValue;
 
-      // Calculate fibres counted and fields counted
-      const fibresCounted = newFibreCounts
-        .flat()
-        .reduce((sum, val) => sum + (val || 0), 0);
-      const fieldsCounted = newFibreCounts
-        .flat()
-        .filter((val) => val !== "").length;
+        // Calculate fibres counted and fields counted
+        let fibresCounted = 0;
+        let fieldsCounted = 0;
+        newFibreCounts.forEach((row) => {
+          row.forEach((cell) => {
+            if (cell !== "") {
+              const numValue = parseFloat(cell);
+              if (!isNaN(numValue)) {
+                fibresCounted += numValue;
+                fieldsCounted += 1;
+              }
+            }
+          });
+        });
 
-      newAnalyses[sampleId] = {
-        ...newAnalyses[sampleId],
-        fibreCounts: newFibreCounts,
-        fibresCounted,
-        fieldsCounted,
-      };
+        newAnalyses[sampleId] = {
+          ...newAnalyses[sampleId],
+          fibreCounts: newFibreCounts,
+          fibresCounted: parseFloat(fibresCounted.toFixed(1)),
+          fieldsCounted,
+        };
+        return newAnalyses;
+      });
 
-      return newAnalyses;
-    });
-
-    // Move to next cell
-    const nextCol = col + 1;
-    const nextRow = row;
-    if (nextCol < 20) {
-      // Move to next column in same row
-      const nextInput = inputRefs.current[`${sampleId}-${nextRow}-${nextCol}`];
-      if (nextInput) {
-        nextInput.focus();
+      // Move to next cell
+      const nextCol = colIndex + 1;
+      const nextRow = rowIndex;
+      if (nextCol < 20) {
+        // Move to next column in same row
+        const nextInput =
+          inputRefs.current[`${sampleId}-${nextRow}-${nextCol}`];
+        if (nextInput) {
+          nextInput.focus();
+        }
+      } else if (rowIndex < 4) {
+        // Move to first column of next row
+        const nextInput = inputRefs.current[`${sampleId}-${nextRow + 1}-0`];
+        if (nextInput) {
+          nextInput.focus();
+        }
       }
-    } else if (row < 4) {
-      // Move to first column of next row
-      const nextInput = inputRefs.current[`${sampleId}-${nextRow + 1}-0`];
-      if (nextInput) {
-        nextInput.focus();
-      }
-    }
-  }, []);
+    },
+    []
+  );
 
-  const handleKeyDown = useCallback(
-    (e, sampleId, row, col) => {
-      if (e.key === " ") {
-        e.preventDefault();
-        const newAnalyses = { ...sampleAnalyses };
+  const handleKeyDown = useCallback((e, sampleId, rowIndex, colIndex) => {
+    if (e.key === " ") {
+      e.preventDefault();
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
         const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
 
         // Fill next 10 cells with 0
-        let lastFilledRow = row;
-        let lastFilledCol = col;
+        let lastFilledRow = rowIndex;
+        let lastFilledCol = colIndex;
         for (let i = 0; i < 10; i++) {
-          const nextCol = col + i;
+          const nextCol = colIndex + i;
           if (nextCol < 20) {
-            newFibreCounts[row][nextCol] = 0;
-            lastFilledRow = row;
+            newFibreCounts[rowIndex][nextCol] = "0";
+            lastFilledRow = rowIndex;
             lastFilledCol = nextCol;
           } else {
-            const nextRow = row + 1;
+            const nextRow = rowIndex + 1;
             if (nextRow < 5) {
-              newFibreCounts[nextRow][nextCol - 20] = 0;
+              newFibreCounts[nextRow][nextCol - 20] = "0";
               lastFilledRow = nextRow;
               lastFilledCol = nextCol - 20;
             }
@@ -600,23 +610,28 @@ const Analysis = () => {
         }
 
         // Calculate new totals
-        const fibresCounted = newFibreCounts
-          .flat()
-          .reduce((sum, val) => sum + (val || 0), 0);
-        const fieldsCounted = newFibreCounts
-          .flat()
-          .filter((val) => val !== "").length;
+        let fibresCounted = 0;
+        let fieldsCounted = 0;
+        newFibreCounts.forEach((row) => {
+          row.forEach((cell) => {
+            if (cell !== "") {
+              const numValue = parseFloat(cell);
+              if (!isNaN(numValue)) {
+                fibresCounted += numValue;
+                fieldsCounted += 1;
+              }
+            }
+          });
+        });
 
         newAnalyses[sampleId] = {
           ...newAnalyses[sampleId],
           fibreCounts: newFibreCounts,
-          fibresCounted,
+          fibresCounted: parseFloat(fibresCounted.toFixed(1)),
           fieldsCounted,
         };
 
-        setSampleAnalyses(newAnalyses);
-
-        // Find next empty cell
+        // Find next empty cell after the last filled cell
         let nextEmptyRow = lastFilledRow;
         let nextEmptyCol = lastFilledCol + 1;
 
@@ -628,19 +643,23 @@ const Analysis = () => {
                   `${sampleId}-${nextEmptyRow}-${nextEmptyCol}`
                 ];
               if (nextInput) {
-                nextInput.focus();
-                return;
+                setTimeout(() => {
+                  nextInput.focus();
+                }, 0);
+                break;
               }
             }
             nextEmptyCol++;
           }
+          if (nextEmptyCol < 20) break;
           nextEmptyRow++;
           nextEmptyCol = 0;
         }
-      }
-    },
-    [sampleAnalyses]
-  );
+
+        return newAnalyses;
+      });
+    }
+  }, []);
 
   const handleClearTable = useCallback((sampleId) => {
     setSelectedSampleId(sampleId);
@@ -695,8 +714,8 @@ const Analysis = () => {
     if (!analysis || !sample) return null;
 
     const microscopeConstant = 50000; // This will be dynamic based on microscope selection in future
-    const fibresCounted = analysis.fibresCounted || 0;
-    const fieldsCounted = analysis.fieldsCounted || 0;
+    const fibresCounted = parseFloat(analysis.fibresCounted) || 0;
+    const fieldsCounted = parseInt(analysis.fieldsCounted) || 0;
     const averageFlowrate = parseFloat(sample.averageFlowrate) || 0;
     const minutes = calculateDuration(sample.startTime, sample.endTime);
 
@@ -709,7 +728,7 @@ const Analysis = () => {
       (fibresForCalculation / fieldsCounted) *
       (1 / (averageFlowrate * 1000 * minutes));
 
-    return concentration.toFixed(3);
+    return parseFloat(concentration.toFixed(3));
   };
 
   const getReportedConcentration = (sampleId) => {
