@@ -22,9 +22,8 @@ const projectSchema = new mongoose.Schema({
     required: true,
     enum: ['Asbestos & HAZMAT', 'Occupational Hygiene', 'Client Supplied']
   },
-  category: {
+  categories: [{
     type: String,
-    required: false,
     enum: [
       'Asbestos Materials Assessment',
       'Asbestos & Lead Paint Assessment',
@@ -38,7 +37,7 @@ const projectSchema = new mongoose.Schema({
       'Mould/Moisture Assessment',
       'Other'
     ]
-  },
+  }],
   status: {
     type: String,
     enum: [

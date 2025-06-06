@@ -158,7 +158,8 @@ export const projectService = {
     console.log('Project service update data:', updateData);
     return api.patch(`/projects/${id}`, updateData);
   },
-  delete: (id) => api.delete(`/projects/${id}`)
+  delete: (id) => api.delete(`/projects/${id}`),
+  getTimeLogs: (projectId) => api.get(`/projects/${projectId}/timelogs`),
 };
 
 // Job service

@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
 const User = require('../models/User');
+const Timesheet = require('../models/Timesheet');
 
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
@@ -53,7 +54,7 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       name: req.body.name,
       client: req.body.client,
       department: req.body.department,
-      category: req.body.category,
+      categories: req.body.categories || [],
       status: req.body.status,
       address: req.body.address,
       startDate: req.body.startDate,
@@ -129,7 +130,7 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     // Update fields
     if (req.body.name) project.name = req.body.name;
     if (req.body.department) project.department = req.body.department;
-    if (req.body.category) project.category = req.body.category;
+    if (req.body.categories) project.categories = req.body.categories;
     if (req.body.status) project.status = req.body.status;
     if (req.body.address) project.address = req.body.address;
     if (req.body.startDate) project.startDate = req.body.startDate;
@@ -166,6 +167,20 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
     await project.deleteOne();
     res.json({ message: 'Project deleted' });
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get time logs for a project
+router.get('/:id/timelogs', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const timesheets = await Timesheet.find({ projectId: req.params.id })
+      .populate('userId', 'firstName lastName')
+      .sort({ date: -1, startTime: -1 });
+    
+    res.json(timesheets);
+  } catch (err) {
+    console.error('Error fetching project time logs:', err);
     res.status(500).json({ message: err.message });
   }
 });

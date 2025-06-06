@@ -27,6 +27,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Header from "../../components/Header";
 
 const AsbestosAssessment = () => {
@@ -101,20 +102,29 @@ const AsbestosAssessment = () => {
           zIndex: 1000,
         }}
       >
-        <Typography
-          variant="h1"
+        <Box
           sx={{
-            color: "rgba(0, 0, 0, 0.1)",
-            transform: "rotate(-45deg)",
-            fontSize: "5rem",
-            fontWeight: "bold",
-            whiteSpace: "nowrap",
-            textTransform: "uppercase",
-            letterSpacing: "0.5rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            opacity: 0.25,
+            userSelect: "none",
           }}
         >
-          Under Construction
-        </Typography>
+          <WarningAmberIcon sx={{ fontSize: 80, color: "orange" }} />
+          <Typography
+            variant="h1"
+            sx={{
+              color: "orange",
+              fontSize: "2rem",
+              fontWeight: "bold",
+              textShadow: "1px 1px 8px #fff",
+            }}
+          >
+            UNDER CONSTRUCTION
+          </Typography>
+        </Box>
       </Box>
 
       <Header

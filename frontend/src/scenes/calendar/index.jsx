@@ -21,6 +21,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
 import Header from "../../components/Header";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
 const PROJECTS_KEY = "ldc_projects";
 
@@ -119,8 +120,40 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
               opacity: 0.9,
             },
           },
+          position: "relative",
         }}
       >
+        {/* Under Construction Watermark */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            zIndex: 10,
+            opacity: 0.25,
+            flexDirection: "column",
+            userSelect: "none",
+          }}
+        >
+          <WarningAmberIcon sx={{ fontSize: 80, color: "orange" }} />
+          <Box
+            sx={{
+              fontSize: "2rem",
+              fontWeight: "bold",
+              color: "orange",
+              textShadow: "1px 1px 8px #fff",
+              
+            }}
+          >
+            UNDER <br />CONSTRUCTION
+          </Box>
+        </Box>
         <FullCalendar
           ref={calendarRef}
           plugins={[

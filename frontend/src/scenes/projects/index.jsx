@@ -378,8 +378,9 @@ const Projects = () => {
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
     useJobStatus();
   const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
@@ -414,88 +415,41 @@ const Projects = () => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
+        setLoading(true);
         const response = await projectService.getAll();
-        console.log("Raw API response:", response.data);
+        const usersMap = new Map();
 
-        // Fetch all users first
-        const usersResponse = await userService.getAll();
-        const usersMap = new Map(
-          usersResponse.data.map((user) => [user._id, user])
-        );
-        console.log("Users map:", usersMap);
-
+        // Transform the data
         const formattedProjects = response.data.map((project) => {
-          console.log("Processing project:", project);
+          // Get user details
+          const users = project.users
+            .map((userId) => {
+              if (!usersMap.has(userId)) {
+                const user = response.data
+                  .find((p) => p.users.includes(userId))
+                  ?.users.find((u) => u._id === userId);
+                if (user) {
+                  usersMap.set(userId, user);
+                }
+              }
+              return usersMap.get(userId);
+            })
+            .filter(Boolean);
 
-          // Ensure status is one of the allowed values
-          let status = project.status;
-          if (
-            ![
-              "Assigned",
-              "In progress",
-              "Samples submitted",
-              "Lab Analysis Complete",
-              "Report sent for review",
-              "Ready for invoicing",
-              "Invoice sent",
-              "Job complete",
-              "On hold",
-              "Quote sent",
-              "Cancelled",
-            ].includes(status)
-          ) {
-            status = "Assigned"; // Default to Assigned if status is invalid
-          }
-
-          // Transform users data to include full user objects
-          const transformedUsers = project.users
-            ? project.users
-                .map((user) => {
-                  // Handle both string IDs and full user objects
-                  const userId = typeof user === "string" ? user : user._id;
-                  const userData = usersMap.get(userId);
-                  if (!userData) {
-                    console.warn("User not found:", user);
-                    return null;
-                  }
-                  // Ensure we have the full user object with name
-                  return {
-                    _id: userData._id,
-                    name:
-                      userData.name ||
-                      `${userData.firstName} ${userData.lastName}`.trim(),
-                    firstName: userData.firstName || "",
-                    lastName: userData.lastName || "",
-                    email: userData.email || "",
-                  };
-                })
-                .filter(Boolean)
-            : [];
-
-          // Create formatted project without overwriting type
-          const formattedProject = {
-            id: project._id,
-            _id: project._id,
-            projectID: project.projectID,
-            name: project.name,
-            client: project.client,
-            department: project.department || "other",
-            category: project.category || "",
-            status: status,
-            address: project.address,
-            description: project.description,
-            users: transformedUsers,
+          return {
+            ...project,
+            users: users,
+            clientName: project.client?.name || "N/A",
+            department: project.department || "N/A",
+            status: project.status || "Assigned",
+            categories: project.categories || [],
           };
-
-          console.log("Formatted project:", formattedProject);
-          return formattedProject;
         });
 
         setProjects(formattedProjects);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching projects:", err);
-        setError("Failed to fetch projects");
+      } catch (error) {
+        setError(error.message);
+      } finally {
         setLoading(false);
       }
     };
@@ -581,60 +535,31 @@ const Projects = () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      console.log("Submitting edit form:", editForm);
-
-      // Filter out any inactive users from the edit form data
-      const activeUserIds = editForm.users.filter((userId) =>
-        users.some((user) => user._id === userId && user.isActive === true)
-      );
-
-      // Create a clean update object with only the necessary fields
+      setSubmitting(true);
       const formattedData = {
-        name: editForm.name,
-        department: editForm.department,
-        categories: editForm.categories || [],
-        status: editForm.status,
-        address: editForm.address,
-        users: activeUserIds,
+        ...editForm,
+        users: editForm.users || [],
       };
 
-      console.log("Sending update to backend:", formattedData);
-      const response = await projectService.update(
-        selectedProject._id,
-        formattedData
-      );
+      const response = await projectService.update(editForm._id, formattedData);
+      const updatedProject = {
+        ...response.data,
+        clientName: response.data.client?.name || "N/A",
+        department: response.data.department || "N/A",
+        status: response.data.status || "Assigned",
+        categories: response.data.categories || [],
+      };
 
-      if (response.data) {
-        console.log("Received response from backend:", response.data);
-        // Update the projects state with the new data
-        setProjects((prevProjects) =>
-          prevProjects.map((p) => {
-            if (p._id === selectedProject._id) {
-              // Create a new project object with the updated data
-              const updatedProject = {
-                ...p,
-                ...response.data,
-                category: response.data.category || "",
-                users: response.data.users || [],
-                id: response.data._id,
-              };
-              console.log("Updated project in state:", updatedProject);
-              return updatedProject;
-            }
-            return p;
-          })
-        );
-        setDetailsDialogOpen(false);
-      }
-    } catch (err) {
-      console.error("Error updating project:", err);
-      if (err.response) {
-        alert(
-          `Error updating project: ${
-            err.response.data.message || "Unknown error"
-          }`
-        );
-      }
+      setProjects((prevProjects) =>
+        prevProjects.map((project) =>
+          project._id === updatedProject._id ? updatedProject : project
+        )
+      );
+      setDetailsDialogOpen(false);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -821,52 +746,31 @@ const Projects = () => {
   };
 
   const handleCellEditCommit = async (params) => {
-    if (params.field === "status") {
-      try {
-        console.log("Cell edit commit params:", params);
+    try {
+      const { id, field, value } = params;
+      const project = projects.find((p) => p._id === id);
+      if (!project) return;
 
-        // Get the project ID from the row
-        const projectId = params.row._id;
-        if (!projectId) {
-          throw new Error("No project ID found in row data");
-        }
+      const updateData = {
+        [field]: value,
+      };
 
-        // Create update object with only the status field
-        const updateData = {
-          status: params.value,
-        };
+      const response = await projectService.update(id, updateData);
+      const updatedProject = {
+        ...response.data,
+        clientName: response.data.client?.name || "N/A",
+        department: response.data.department || "N/A",
+        status: response.data.status || "Assigned",
+        categories: response.data.categories || [],
+      };
 
-        console.log("Sending update to backend:", {
-          projectId,
-          updateData,
-        });
-
-        // Send update to backend
-        const response = await projectService.update(projectId, updateData);
-        console.log("Backend response:", response);
-
-        if (!response.data) {
-          throw new Error("No data received from server");
-        }
-
-        // Update local state
-        setProjects((prevProjects) => {
-          const updatedProjects = prevProjects.map((p) => {
-            if (p._id === projectId) {
-              console.log("Updating project in state:", {
-                before: p.status,
-                after: response.data.status,
-              });
-              return { ...p, status: response.data.status };
-            }
-            return p;
-          });
-          return updatedProjects;
-        });
-      } catch (error) {
-        console.error("Error in handleCellEditCommit:", error);
-        alert("Failed to update project status. Please try again.");
-      }
+      setProjects((prevProjects) =>
+        prevProjects.map((project) =>
+          project._id === updatedProject._id ? updatedProject : project
+        )
+      );
+    } catch (error) {
+      setError(error.message);
     }
   };
 

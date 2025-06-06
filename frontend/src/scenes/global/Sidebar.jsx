@@ -77,7 +77,17 @@ const Item = ({ title, to, icon, isCollapsed }) => {
 
   return (
     <MenuItem
-      icon={icon}
+      icon={
+        isCollapsed ? (
+          <Box
+            sx={{ display: "flex", justifyContent: "center", width: "100%" }}
+          >
+            {icon}
+          </Box>
+        ) : (
+          icon
+        )
+      }
       style={{
         color: isActive
           ? theme.palette.mode === "dark"
@@ -94,6 +104,10 @@ const Item = ({ title, to, icon, isCollapsed }) => {
         borderRadius: "4px",
         margin: "2px 8px",
         padding: isCollapsed ? "4px" : "4px 16px",
+        display: "flex",
+        justifyContent: isCollapsed ? "center" : "flex-start",
+        alignItems: "center",
+        textAlign: isCollapsed ? "center" : "left",
       }}
     >
       <Link
@@ -104,8 +118,9 @@ const Item = ({ title, to, icon, isCollapsed }) => {
           width: "100%",
           display: "flex",
           alignItems: "center",
-          justifyContent: "flex-start",
+          justifyContent: isCollapsed ? "center" : "flex-start",
           padding: isCollapsed ? "2px 0" : "4px 0",
+          textAlign: isCollapsed ? "center" : "left",
         }}
       >
         {!isCollapsed && (

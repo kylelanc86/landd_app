@@ -20,9 +20,16 @@ import {
   Autocomplete,
   CircularProgress,
   Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DownloadIcon from "@mui/icons-material/Download";
 import { projectService, clientService, userService } from "../../services/api";
 import {
   ACTIVE_STATUSES,
@@ -87,6 +94,10 @@ const ProjectInformation = () => {
   // Initialize Google Places Autocomplete
   const [autocompleteService, setAutocompleteService] = useState(null);
   const [placesService, setPlacesService] = useState(null);
+
+  const [timeLogsOpen, setTimeLogsOpen] = useState(false);
+  const [timeLogs, setTimeLogs] = useState([]);
+  const [loadingTimeLogs, setLoadingTimeLogs] = useState(false);
 
   const generateNextProjectId = async () => {
     try {
@@ -359,6 +370,85 @@ const ProjectInformation = () => {
     </MenuItem>
   );
 
+  // Add function to fetch time logs
+  const fetchTimeLogs = async () => {
+    try {
+      setLoadingTimeLogs(true);
+      const response = await projectService.getTimeLogs(id);
+      setTimeLogs(response.data);
+    } catch (error) {
+      console.error("Error fetching time logs:", error);
+      setError("Failed to fetch time logs");
+    } finally {
+      setLoadingTimeLogs(false);
+    }
+  };
+
+  // Add function to handle time logs button click
+  const handleTimeLogsClick = () => {
+    setTimeLogsOpen(true);
+    fetchTimeLogs();
+  };
+
+  // Function to convert time logs to CSV
+  const downloadTimeLogsCSV = () => {
+    if (!timeLogs.length) return;
+
+    // Define CSV headers
+    const headers = [
+      "Date",
+      "User",
+      "Start Time",
+      "End Time",
+      "Duration",
+      "Description",
+    ];
+
+    // Convert time logs to CSV rows
+    const rows = timeLogs.map((log) => {
+      const [startHours, startMinutes] = log.startTime.split(":").map(Number);
+      const [endHours, endMinutes] = log.endTime.split(":").map(Number);
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+      let duration = endTotalMinutes - startTotalMinutes;
+      if (duration < 0) duration += 24 * 60;
+      const hours = Math.floor(duration / 60);
+      const minutes = duration % 60;
+      const durationStr = `${hours}h ${minutes}m`;
+
+      return [
+        new Date(log.date).toLocaleDateString(),
+        `${log.userId.firstName} ${log.userId.lastName}`,
+        log.startTime,
+        log.endTime,
+        durationStr,
+        log.description || "",
+      ];
+    });
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+    ].join("\n");
+
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `time_logs_${form.projectID}_${
+        new Date().toISOString().split("T")[0]
+      }.csv`
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) return <Typography>Loading...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -369,6 +459,13 @@ const ProjectInformation = () => {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4">Project Details</Typography>
+        <Button
+          variant="outlined"
+          onClick={handleTimeLogsClick}
+          sx={{ ml: "auto" }}
+        >
+          Time Logs
+        </Button>
       </Box>
 
       {loading ? (
@@ -648,6 +745,95 @@ const ProjectInformation = () => {
           >
             {creatingClient ? "Creating..." : "Create Client"}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Time Logs Dialog */}
+      <Dialog
+        open={timeLogsOpen}
+        onClose={() => setTimeLogsOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Time Logs</Typography>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={downloadTimeLogsCSV}
+              disabled={!timeLogs.length}
+            >
+              Download CSV
+            </Button>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {loadingTimeLogs ? (
+            <Box display="flex" justifyContent="center" p={3}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>User</TableCell>
+                    <TableCell>Start Time</TableCell>
+                    <TableCell>End Time</TableCell>
+                    <TableCell>Duration</TableCell>
+                    <TableCell>Description</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {timeLogs.map((log) => (
+                    <TableRow key={log._id}>
+                      <TableCell>
+                        {new Date(log.date).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>{`${log.userId.firstName} ${log.userId.lastName}`}</TableCell>
+                      <TableCell>{log.startTime}</TableCell>
+                      <TableCell>{log.endTime}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const [startHours, startMinutes] = log.startTime
+                            .split(":")
+                            .map(Number);
+                          const [endHours, endMinutes] = log.endTime
+                            .split(":")
+                            .map(Number);
+                          const startTotalMinutes =
+                            startHours * 60 + startMinutes;
+                          const endTotalMinutes = endHours * 60 + endMinutes;
+                          let duration = endTotalMinutes - startTotalMinutes;
+                          if (duration < 0) duration += 24 * 60;
+                          const hours = Math.floor(duration / 60);
+                          const minutes = duration % 60;
+                          return `${hours}h ${minutes}m`;
+                        })()}
+                      </TableCell>
+                      <TableCell>{log.description}</TableCell>
+                    </TableRow>
+                  ))}
+                  {timeLogs.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        No time logs found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTimeLogsOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>
