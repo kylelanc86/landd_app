@@ -201,20 +201,17 @@ const NewSample = () => {
 
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
-    console.log("Form field changed:", { name, value, checked });
     if (name === "isFieldBlank") {
       setForm((prev) => ({
         ...prev,
         [name]: checked,
-        // If field blank is checked, set location to 'Field blank'
         location: checked ? "Field blank" : prev.location,
       }));
     } else {
-      setForm((prev) => {
-        const newState = { ...prev, [name]: value };
-        console.log("New form state after change:", newState);
-        return newState;
-      });
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
     }
   };
 
@@ -255,12 +252,6 @@ const NewSample = () => {
     setError("");
 
     try {
-      console.log("Starting sample submission...");
-      console.log("Current user:", currentUser);
-      console.log("Form data:", form);
-      console.log("Project ID:", projectID);
-      console.log("Job:", job);
-
       if (!projectID) {
         throw new Error("Project ID is required");
       }
@@ -284,17 +275,11 @@ const NewSample = () => {
 
       // If this is the first sample in the shift and we have a sampler, set it as the default
       if (shiftSampleNumber === 1 && form.sampler) {
-        console.log("Setting default sampler for shift:", form.sampler);
         try {
-          const shiftUpdateResponse = await shiftService.update(shiftId, {
+          await shiftService.update(shiftId, {
             defaultSampler: form.sampler,
           });
-          console.log(
-            "Shift updated with default sampler:",
-            shiftUpdateResponse
-          );
         } catch (error) {
-          console.error("Error setting default sampler:", error);
           // Don't throw the error, just log it and continue
         }
       }
@@ -305,18 +290,16 @@ const NewSample = () => {
         shift: shiftId,
         job: job._id,
         fullSampleID: `${projectID}-${form.sampleNumber}`,
-        collectedBy: form.sampler, // Explicitly set collectedBy to match sampler
+        collectedBy: form.sampler,
       };
 
-      const newSample = await sampleService.create(sampleData);
-      console.log("Sample created successfully:", newSample);
+      await sampleService.create(sampleData);
 
       // Add a small delay before navigation to ensure the sample is saved
       setTimeout(() => {
         navigate(`/air-monitoring/shift/${shiftId}/samples`);
       }, 500);
     } catch (error) {
-      console.error("Error creating sample:", error);
       setError(
         error.response?.data?.message ||
           error.message ||
