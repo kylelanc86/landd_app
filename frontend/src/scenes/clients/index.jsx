@@ -26,6 +26,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import {
   formatPhoneNumber,
   isValidAustralianMobile,
@@ -204,6 +205,12 @@ const Clients = () => {
       flex: 1,
       renderCell: (params) => (
         <Box>
+          <IconButton
+            onClick={() => navigate(`/invoices?client=${params.row._id}`)}
+            title="View Invoices"
+          >
+            <AttachMoneyIcon />
+          </IconButton>
           <IconButton onClick={() => handleEdit(params.row)}>
             <EditIcon />
           </IconButton>

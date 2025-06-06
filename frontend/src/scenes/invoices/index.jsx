@@ -85,6 +85,7 @@ const Invoices = () => {
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [filterClient, setFilterClient] = useState(null);
   const [dueDateManuallyChanged, setDueDateManuallyChanged] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [showPaidInvoices, setShowPaidInvoices] = useState(false);
@@ -94,7 +95,7 @@ const Invoices = () => {
   const [showXeroAlert, setShowXeroAlert] = useState(false);
 
   // Add permission check for Xero sync
-  const canSyncXero = hasPermission(currentUser, 'xero.sync');
+  const canSyncXero = hasPermission(currentUser, "xero.sync");
 
   useEffect(() => {
     if (authLoading || !currentUser) {
@@ -243,6 +244,18 @@ const Invoices = () => {
       window.history.replaceState({}, "", newUrl);
     }
   }, [location.search]);
+
+  // Add useEffect to handle client filter from URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const clientId = params.get("client");
+    if (clientId && clients.length > 0) {
+      const client = clients.find((c) => c._id === clientId);
+      if (client) {
+        setFilterClient(client);
+      }
+    }
+  }, [location.search, clients]);
 
   // When invoice date changes, auto-set due date if not manually changed
   useEffect(() => {
@@ -397,6 +410,13 @@ const Invoices = () => {
       filtered = filtered.filter((invoice) => invoice.status === filterStatus);
     }
 
+    // Apply client filter
+    if (filterClient) {
+      filtered = filtered.filter(
+        (invoice) => invoice.client._id === filterClient._id
+      );
+    }
+
     // Apply sorting
     const sorted = filtered.sort((a, b) => {
       let valA = a[sortBy],
@@ -411,7 +431,15 @@ const Invoices = () => {
     });
 
     return sorted;
-  }, [invoices, filterStatus, sortBy, sortDir, showPaidInvoices, search]);
+  }, [
+    invoices,
+    filterStatus,
+    sortBy,
+    sortDir,
+    showPaidInvoices,
+    search,
+    filterClient,
+  ]);
 
   // Sum of unpaid invoice amounts
   const totalUnpaid = invoices
@@ -778,53 +806,40 @@ const Invoices = () => {
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Header title="INVOICES" subtitle="Managing your invoices" />
-        <Box>
-          {canSyncXero && !xeroConnected ? (
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleConnectXero}
-              sx={{
-                backgroundColor: colors.secondary[500],
-                "&:hover": {
-                  backgroundColor: colors.secondary[600],
-                },
-                mr: 2,
-              }}
-            >
-              <AccountBalanceIcon sx={{ mr: 1 }} />
-              Connect to Xero
-            </Button>
-          ) : canSyncXero && xeroConnected ? (
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleSyncXero}
-              sx={{
-                backgroundColor: colors.primary[500],
-                "&:hover": {
-                  backgroundColor: colors.primary[600],
-                },
-                mr: 2,
-              }}
-            >
-              <SyncIcon sx={{ mr: 1 }} />
-              Sync from Xero
-            </Button>
-          ) : null}
+        <Box display="flex" gap={2}>
           <Button
             variant="contained"
             color="secondary"
-            onClick={handleOpenDialog}
+            onClick={() => setDialogOpen(true)}
             sx={{
-              backgroundColor: colors.secondary[500],
-              "&:hover": {
-                backgroundColor: colors.secondary[600],
-              },
+              backgroundColor: theme.palette.secondary.main,
+              "&:hover": { backgroundColor: theme.palette.secondary.dark },
             }}
           >
             Add Invoice
           </Button>
+          {canSyncXero && (
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleConnectXero}
+              startIcon={<AccountBalanceIcon />}
+              sx={{ minWidth: "200px" }}
+            >
+              {xeroConnected ? "Connected to Xero" : "Connect to Xero"}
+            </Button>
+          )}
+          {xeroConnected && canSyncXero && (
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleSyncXero}
+              startIcon={<SyncIcon />}
+              sx={{ minWidth: "200px" }}
+            >
+              Sync with Xero
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -842,66 +857,53 @@ const Invoices = () => {
         </Alert>
       </Snackbar>
 
-      {/* Search and Summary Section */}
-      <Box
-        sx={{
-          backgroundColor: colors.primary[600],
-          p: 2,
-          borderRadius: 1,
-          mt: 2,
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-        }}
-      >
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6" color="white">
-            Outstanding Invoices: ${totalUnpaid}
-          </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showPaidInvoices}
-                onChange={(e) => setShowPaidInvoices(e.target.checked)}
-                color="secondary"
+      <Box display="flex" gap={2} alignItems="center" sx={{ mt: 2, mb: 2 }}>
+        <FormControl sx={{ minWidth: 120 }}>
+          <InputLabel>Status</InputLabel>
+          <Select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            label="Status"
+          >
+            <MenuItem value="All">All</MenuItem>
+            {STATUS_OPTIONS.map((status) => (
+              <MenuItem key={status} value={status}>
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl sx={{ minWidth: 200 }}>
+          <Autocomplete
+            options={clients}
+            getOptionLabel={(option) => option.name}
+            value={filterClient}
+            onChange={(event, newValue) => setFilterClient(newValue)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Filter by Client"
+                placeholder="Select client"
               />
-            }
-            label="Show Paid Invoices"
-            sx={{ color: "white" }}
+            )}
+            isOptionEqualToValue={(option, value) => option._id === value._id}
           />
-        </Box>
+        </FormControl>
 
         <TextField
-          fullWidth
+          label="Search"
           variant="outlined"
-          placeholder="Search invoices..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          sx={{
-            backgroundColor: colors.primary[400],
-            borderRadius: 1,
-            "& .MuiOutlinedInput-root": {
-              "& fieldset": {
-                borderColor: colors.primary[300],
-              },
-              "&:hover fieldset": {
-                borderColor: colors.primary[200],
-              },
-              "&.Mui-focused fieldset": {
-                borderColor: colors.secondary[500],
-              },
-            },
-            "& .MuiInputBase-input": {
-              color: colors.grey[100],
-            },
-          }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon sx={{ color: colors.grey[100] }} />
+                <SearchIcon />
               </InputAdornment>
             ),
           }}
+          sx={{ minWidth: 200 }}
         />
       </Box>
 
