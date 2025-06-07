@@ -4,9 +4,10 @@ import BaseCalibrationWidget from "./BaseCalibrationWidget";
 const PrimaryFlowmeter = ({ nextCalibrationDue, viewCalibrationsPath }) => {
   return (
     <BaseCalibrationWidget
-      title="Primary Flowmeter Calibration"
+      title="Primary Flowmeter"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath={viewCalibrationsPath}
+      viewCalibrationsPath="/calibrations/primary-flowmeter"
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/primary flowmeter.png"}
     />
   );
 };

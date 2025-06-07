@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Grid } from "@mui/material";
+import { Box, Grid, Typography } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import AirPumpCalibration from "./widgets/AirPumpCalibration";
 import FlowmeterCalibration from "./widgets/FlowmeterCalibration";
@@ -19,31 +19,61 @@ const Calibrations = () => {
           position: "absolute",
           top: 0,
           left: 0,
-          width: "100%",
-          height: "100%",
+          right: 0,
+          bottom: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           pointerEvents: "none",
-          zIndex: 10,
-          opacity: 0.25,
-          flexDirection: "column",
-          userSelect: "none",
+          zIndex: 99999,
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
         }}
       >
-        <WarningAmberIcon sx={{ fontSize: 80, color: "orange" }} />
         <Box
           sx={{
-            fontSize: "2rem",
-            fontWeight: "bold",
-            color: "orange",
-            textShadow: "1px 1px 8px #fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            opacity: 0.3,
+            userSelect: "none",
+            transform: "rotate(-45deg)",
+            width: "100%",
+            maxWidth: "800px",
           }}
         >
-          UNDER <br />
-          CONSTRUCTION
+          <WarningAmberIcon sx={{ fontSize: 120, color: "orange", mb: 2 }} />
+          <Typography
+            variant="h1"
+            sx={{
+              color: "orange",
+              fontSize: "4rem",
+              fontWeight: 900,
+              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.2)",
+              textAlign: "center",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              lineHeight: 1.2,
+            }}
+          >
+            Under Construction
+          </Typography>
         </Box>
       </Box>
+
+      {/* Interaction Blocker */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.1)",
+          zIndex: 99998,
+          cursor: "not-allowed",
+        }}
+      />
 
       <Header title="Equipment Calibrations" subtitle="Air Monitoring" />
       <Grid container spacing={3}>

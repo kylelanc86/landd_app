@@ -20,6 +20,7 @@ import NewSample from "./scenes/air-monitoring/new-sample";
 import EditSample from "./scenes/air-monitoring/edit-sample";
 import Analysis from "./scenes/air-monitoring/analysis";
 import AsbestosAssessment from "./scenes/asbestos-assessment";
+import ResidentialAssessment from "./scenes/asbestos-assessment/ResidentialAssessment";
 import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
 import Users from "./scenes/users";
 import Profile from "./scenes/profile";
@@ -37,6 +38,8 @@ import MicroscopePage from "./scenes/calibrations/pages/MicroscopePage";
 import AcetoneVaporiserPage from "./scenes/calibrations/pages/AcetoneVaporiserPage";
 import GraticulePage from "./scenes/calibrations/pages/GraticulePage";
 import PrimaryFlowmeterPage from "./scenes/calibrations/pages/PrimaryFlowmeterPage";
+import AnalysisPage from "./scenes/fibre/pages/AnalysisPage";
+import CalibrationsPage from "./scenes/fibre/pages/CalibrationsPage";
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -205,7 +208,17 @@ function App() {
                           }
                         />
                         <Route
-                          path="/asbestos-assessment/samples"
+                          path="/residential-assessment"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <ResidentialAssessment />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/asbestos-assessment/:id/samples"
                           element={
                             <PermissionRoute
                               requiredPermissions={["asbestos.view"]}
@@ -220,27 +233,7 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["timesheets.view"]}
                             >
-                              <Navigate to="/timesheets/monthly" replace />
-                            </PermissionRoute>
-                          }
-                        />
-                        <Route
-                          path="/timesheets/daily"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["timesheets.view"]}
-                            >
                               <Timesheets />
-                            </PermissionRoute>
-                          }
-                        />
-                        <Route
-                          path="/timesheets/monthly"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["timesheets.view"]}
-                            >
-                              <MonthlyTimesheet />
                             </PermissionRoute>
                           }
                         />
@@ -255,43 +248,114 @@ function App() {
                           }
                         />
                         <Route
+                          path="/timesheets/monthly"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["timesheets.view"]}
+                            >
+                              <MonthlyTimesheet />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
                           path="/calibrations"
                           element={
                             <PermissionRoute
-                              requiredPermissions={["jobs.view"]}
+                              requiredPermissions={["calibrations.view"]}
                             >
                               <Calibrations />
                             </PermissionRoute>
                           }
                         />
                         <Route
-                          path="/calibrations/:type"
-                          element={<CalibrationsList />}
-                        />
-                        <Route
                           path="/calibrations/air-pump"
-                          element={<AirPumpPage />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <AirPumpPage />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/calibrations/flowmeter"
-                          element={<FlowmeterPage />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <FlowmeterPage />
+                            </PermissionRoute>
+                          }
                         />
-                        <Route path="/calibrations/efa" element={<EFAPage />} />
+                        <Route
+                          path="/calibrations/efa"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <EFAPage />
+                            </PermissionRoute>
+                          }
+                        />
                         <Route
                           path="/calibrations/microscope"
-                          element={<MicroscopePage />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <MicroscopePage />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/calibrations/acetone-vaporiser"
-                          element={<AcetoneVaporiserPage />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <AcetoneVaporiserPage />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/calibrations/graticule"
-                          element={<GraticulePage />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <GraticulePage />
+                            </PermissionRoute>
+                          }
                         />
                         <Route
                           path="/calibrations/primary-flowmeter"
-                          element={<PrimaryFlowmeterPage />}
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <PrimaryFlowmeterPage />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre/analysis"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <AnalysisPage />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre/calibrations"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <CalibrationsPage />
+                            </PermissionRoute>
+                          }
                         />
                       </Routes>
                     </Layout>

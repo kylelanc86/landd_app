@@ -6,7 +6,8 @@ const GraticuleCalibration = ({ nextCalibrationDue, viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Graticule Calibration"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath={viewCalibrationsPath}
+      viewCalibrationsPath="/calibrations/graticule"
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/graticule.png"}
     />
   );
 };

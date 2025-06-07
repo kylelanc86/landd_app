@@ -4,9 +4,10 @@ import BaseCalibrationWidget from "./BaseCalibrationWidget";
 const AcetoneVaporiser = ({ nextCalibrationDue, viewCalibrationsPath }) => {
   return (
     <BaseCalibrationWidget
-      title="Acetone Vaporiser Calibration"
+      title="Acetone Vaporiser"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath={viewCalibrationsPath}
+      viewCalibrationsPath="/calibrations/acetone-vaporiser"
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/vaporiser.png"}
     />
   );
 };

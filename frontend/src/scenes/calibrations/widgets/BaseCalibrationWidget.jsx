@@ -13,6 +13,7 @@ const BaseCalibrationWidget = ({
   addButtonText = "Add Calibration",
   nextCalibrationDue,
   viewCalibrationsPath,
+  icon,
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -32,13 +33,26 @@ const BaseCalibrationWidget = ({
         alignItems="center"
         mb={2}
       >
-        <Typography
-          variant="h5"
-          color={theme.palette.text.primary}
-          fontWeight="bold"
-        >
-          {title}
-        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          {icon && (
+            <img
+              src={icon}
+              alt={`${title} icon`}
+              style={{
+                width: "32px",
+                height: "32px",
+                objectFit: "contain",
+              }}
+            />
+          )}
+          <Typography
+            variant="h5"
+            color={theme.palette.text.primary}
+            fontWeight="bold"
+          >
+            {title}
+          </Typography>
+        </Box>
       </Box>
 
       <Box mb={2}>

@@ -7,6 +7,7 @@ const FlowmeterCalibration = ({ nextCalibrationDue, viewCalibrationsPath }) => {
       title="Flowmeter Calibration"
       nextCalibrationDue={nextCalibrationDue}
       viewCalibrationsPath={viewCalibrationsPath}
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/fm.png"}
     />
   );
 };

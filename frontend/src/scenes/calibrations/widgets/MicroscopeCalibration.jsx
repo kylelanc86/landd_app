@@ -1,12 +1,16 @@
 import React from "react";
 import BaseCalibrationWidget from "./BaseCalibrationWidget";
 
-const MicroscopeCalibration = ({ nextCalibrationDue, viewCalibrationsPath }) => {
+const MicroscopeCalibration = ({
+  nextCalibrationDue,
+  viewCalibrationsPath,
+}) => {
   return (
     <BaseCalibrationWidget
       title="Microscope Calibration"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath={viewCalibrationsPath}
+      viewCalibrationsPath="/calibrations/microscope"
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/microscope.png"}
     />
   );
 };

@@ -8,6 +8,11 @@ import {
   useTheme,
   Avatar,
   Divider,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
@@ -23,6 +28,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScienceIcon from "@mui/icons-material/Science";
+import HomeIcon from "@mui/icons-material/Home";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -74,7 +80,9 @@ const Item = ({ title, to, icon, isCollapsed }) => {
   const theme = useTheme();
   const location = useLocation();
   const isActive =
-    location.pathname === to || location.pathname.startsWith(`${to}/`);
+    to === "/asbestos-assessment" || to === "/asbestos-assessment/residential"
+      ? location.pathname === to
+      : location.pathname === to || location.pathname.startsWith(`${to}/`);
 
   return (
     <MenuItem
@@ -301,6 +309,24 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             isCollapsed={isCollapsed}
           />
 
+          <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
+            <Item
+              title="User Management"
+              to="/users"
+              icon={<AccessibilityIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+
+          <PermissionGate requiredPermissions={["timesheets.view"]}>
+            <Item
+              title="Timesheets"
+              to="/timesheets"
+              icon={<AccessTimeIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+
           {!isCollapsed ? (
             <Typography
               variant="h3"
@@ -314,28 +340,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 paddingLeft: "10px",
               }}
             >
-              Pages
+              Project Management
             </Typography>
           ) : (
             <SectionDivider isCollapsed={isCollapsed} />
           )}
-
-          <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
-            <Item
-              title="User Management"
-              to="/users"
-              icon={<AccessibilityIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-          <PermissionGate requiredPermissions={["timesheets.view"]}>
-            <Item
-              title="Timesheets"
-              to="/timesheets"
-              icon={<AccessTimeIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
 
           <PermissionGate requiredPermissions={["projects.view"]}>
             <Item
@@ -397,6 +406,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
+
           <PermissionGate requiredPermissions={["jobs.view"]}>
             <Item
               title="Calibrations"
@@ -432,6 +442,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               icon={<AssessmentIcon />}
               isCollapsed={isCollapsed}
             />
+            <Item
+              title="Residential Assessment"
+              to="/residential-assessment"
+              icon={<HomeIcon />}
+              isCollapsed={isCollapsed}
+            />
           </PermissionGate>
 
           {!isCollapsed ? (
@@ -456,16 +472,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           <PermissionGate requiredPermissions={["fibre.view"]}>
             <Item
               title="Analysis"
-              to="/fibre-analysis"
+              to="/fibre/analysis"
               icon={<ScienceIcon />}
               isCollapsed={isCollapsed}
             />
-          </PermissionGate>
-          <PermissionGate requiredPermissions={["fibre.view"]}>
             <Item
               title="Calibrations"
-              to="/fibre-calibrations"
-              icon={<ScienceIcon />}
+              to="/fibre/calibrations"
+              icon={<AssessmentIcon />}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>

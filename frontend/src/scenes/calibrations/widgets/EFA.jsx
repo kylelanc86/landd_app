@@ -4,9 +4,10 @@ import BaseCalibrationWidget from "./BaseCalibrationWidget";
 const EFA = ({ nextCalibrationDue, viewCalibrationsPath }) => {
   return (
     <BaseCalibrationWidget
-      title="EFA Calibration"
+      title="Effective Filter Area"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath={viewCalibrationsPath}
+      viewCalibrationsPath="/calibrations/efa"
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/effective filter area.png"}
     />
   );
 };
