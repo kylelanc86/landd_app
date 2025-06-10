@@ -88,7 +88,8 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
 
         // Transform calendar entries to include _id in extendedProps and add color
         const calendarEvents = calendarRes.data.map((event) => {
-          const userColor = getUserColor(event.userId);
+          // Use the stored color if it exists, otherwise generate a new one
+          const userColor = event.backgroundColor || getUserColor(event.userId);
           return {
             ...event,
             backgroundColor: userColor,
@@ -161,7 +162,13 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
 
     try {
       const response = await api.post("/calendar-entries", event);
-      setEvents([...events, response.data]);
+      // Ensure the response data includes the colors
+      const newEvent = {
+        ...response.data,
+        backgroundColor: userColor,
+        borderColor: userColor,
+      };
+      setEvents([...events, newEvent]);
       setBookingDialogOpen(false);
       setSelectedInfo(null);
       setSelectedProject(null);
@@ -233,7 +240,9 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
   // Handle event update
   const handleEventUpdate = async (info) => {
     try {
-      const userColor = getUserColor(info.event.extendedProps.userId);
+      const userColor =
+        info.event.backgroundColor ||
+        getUserColor(info.event.extendedProps.userId);
       const updatedEvent = {
         title: info.event.title,
         start: info.event.startStr,
@@ -250,7 +259,22 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           userName: info.event.extendedProps.userName,
         },
       };
-      await api.put(`/calendar-entries/${info.event._id}`, updatedEvent);
+      const response = await api.put(
+        `/calendar-entries/${info.event._id}`,
+        updatedEvent
+      );
+      // Update the event in the local state with the response data
+      setEvents(
+        events.map((event) =>
+          event._id === info.event._id
+            ? {
+                ...response.data,
+                backgroundColor: userColor,
+                borderColor: userColor,
+              }
+            : event
+        )
+      );
     } catch (error) {
       console.error("Error updating calendar entry:", error);
       if (error.response) {
