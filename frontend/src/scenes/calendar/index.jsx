@@ -69,6 +69,30 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
     return userColors.colors[userIndex % userColors.colors.length];
   };
 
+  // Get user initials
+  const getUserInitials = (userName) => {
+    if (!userName) return "";
+    const names = userName.split(" ");
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[1][0]}`.toUpperCase();
+    }
+    return names[0][0].toUpperCase();
+  };
+
+  // Get project ID from title
+  const getProjectId = (title) => {
+    const match = title.match(/^([A-Z0-9]+):/);
+    return match ? match[1] : title;
+  };
+
+  // Handle date click
+  const handleDateClick = (info) => {
+    if (info.view.type === "dayGridMonth") {
+      // Navigate to day view
+      calendarRef.current.getApi().changeView("timeGridDay", info.dateStr);
+    }
+  };
+
   // Load active projects and calendar entries
   useEffect(() => {
     const fetchData = async () => {
@@ -327,6 +351,23 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           "& .fc-event-title": {
             fontWeight: "bold",
           },
+          "& .fc-daygrid-event-dot": {
+            borderColor: "inherit",
+          },
+          // Add weekend styling
+          "& .fc-day-sat": {
+            backgroundColor: "rgba(255, 240, 240, 0.3) !important",
+          },
+          "& .fc-day-sun": {
+            backgroundColor: "rgba(240, 240, 255, 0.3) !important",
+          },
+          // Style weekend headers
+          "& .fc-col-header-cell.fc-day-sat": {
+            backgroundColor: "rgba(255, 240, 240, 0.5) !important",
+          },
+          "& .fc-col-header-cell.fc-day-sun": {
+            backgroundColor: "rgba(240, 240, 255, 0.5) !important",
+          },
         }}
       >
         {/* Under Construction Watermark */}
@@ -396,15 +437,7 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           headerToolbar={{
             left: "prev,next today",
             center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay,timeGridWorkWeek",
-          }}
-          views={{
-            timeGridWorkWeek: {
-              type: "timeGrid",
-              duration: { days: 5 },
-              buttonText: "work week",
-              hiddenDays: [0, 6],
-            },
+            right: "dayGridMonth,timeGridWeek,timeGridDay",
           }}
           selectable={true}
           selectMirror={true}
@@ -412,6 +445,7 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           eventClick={handleEventClick}
           eventDrop={handleEventUpdate}
           eventResize={handleEventUpdate}
+          dateClick={handleDateClick}
           nowIndicator={true}
           slotMinTime="06:00:00"
           slotMaxTime="20:00:00"
@@ -419,17 +453,56 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           events={events}
           editable={true}
           dayMaxEvents={true}
+          // Add weekend styling
+          dayCellClassNames={(arg) => {
+            if (arg.date.getDay() === 0) return "weekend-sunday";
+            if (arg.date.getDay() === 6) return "weekend-saturday";
+            return "";
+          }}
           eventContent={(eventInfo) => {
-            return (
-              <div style={{ padding: "2px 4px" }}>
-                <div style={{ fontWeight: "bold" }}>
-                  {eventInfo.event.title}
+            const view = eventInfo.view.type;
+            if (view === "dayGridMonth") {
+              // Show as bullet point with project ID and user initials
+              const projectId = getProjectId(eventInfo.event.title);
+              const userInitials = getUserInitials(
+                eventInfo.event.extendedProps.userName
+              );
+              return (
+                <div
+                  style={{
+                    padding: "2px 4px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      backgroundColor: eventInfo.event.backgroundColor,
+                      display: "inline-block",
+                    }}
+                  />
+                  <span style={{ fontSize: "0.9em" }}>
+                    {projectId} - {userInitials}
+                  </span>
                 </div>
-                <div style={{ fontSize: "0.8em", opacity: 0.8 }}>
-                  {eventInfo.event.extendedProps.userName}
+              );
+            } else {
+              // Show full title and user name in other views
+              return (
+                <div style={{ padding: "2px 4px" }}>
+                  <div style={{ fontWeight: "bold" }}>
+                    {eventInfo.event.title}
+                  </div>
+                  <div style={{ fontSize: "0.8em", opacity: 0.8 }}>
+                    {eventInfo.event.extendedProps.userName}
+                  </div>
                 </div>
-              </div>
-            );
+              );
+            }
           }}
         />
       </Box>
