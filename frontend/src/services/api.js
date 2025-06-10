@@ -146,7 +146,16 @@ export const clientService = {
 
 // Project service
 export const projectService = {
-  getAll: () => api.get('/projects'),
+  getAll: () => api.get('/projects').then(response => {
+    // Handle both response structures
+    const data = response.data;
+    return {
+      ...response,
+      data: Array.isArray(data) 
+        ? data 
+        : (data.projects || data.data || [])
+    };
+  }),
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => {

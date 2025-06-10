@@ -102,8 +102,14 @@ const Dashboard = () => {
           projectService.getAll(),
           invoiceService.getAll(),
         ]);
-        const projects = projectsRes.data;
-        const invoices = invoicesRes.data;
+
+        // Handle both response structures
+        const projects = Array.isArray(projectsRes.data)
+          ? projectsRes.data
+          : projectsRes.data.projects || projectsRes.data.data || [];
+        const invoices = Array.isArray(invoicesRes.data)
+          ? invoicesRes.data
+          : invoicesRes.data.data || [];
 
         // Use ACTIVE_STATUSES for active projects
         const activeProjects = projects.filter((p) =>

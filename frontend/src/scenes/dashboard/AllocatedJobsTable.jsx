@@ -29,8 +29,10 @@ const AllocatedJobsTable = () => {
         const response = await projectService.getAll();
         console.log("All projects:", response);
 
-        // Ensure response.data is an array
-        const projectsData = Array.isArray(response.data) ? response.data : [];
+        // Handle both response structures
+        const projectsData = Array.isArray(response.data)
+          ? response.data
+          : response.data.projects || response.data.data || [];
         console.log("Projects data array:", projectsData);
 
         // Filter projects where the current user is assigned AND status is active
