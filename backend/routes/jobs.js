@@ -9,7 +9,7 @@ const checkPermission = require('../middleware/checkPermission');
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const jobs = await AirMonitoringJob.find()
-      .populate('project')
+      .populate('project', 'name projectID status department')
       .populate('assignedTo', 'firstName lastName');
     res.json(jobs);
   } catch (error) {
@@ -21,7 +21,7 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
 router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findById(req.params.id)
-      .populate('project')
+      .populate('project', 'name projectID status department')
       .populate('assignedTo', 'firstName lastName');
     if (!job) {
       return res.status(404).json({ message: 'Air monitoring job not found' });

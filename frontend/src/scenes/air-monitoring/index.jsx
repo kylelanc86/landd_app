@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -46,6 +46,7 @@ import { jobService, projectService, clientService } from "../../services/api";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import performanceMonitor from "../../utils/performanceMonitor";
 
 const JOBS_KEY = "ldc_jobs";
 
@@ -82,52 +83,76 @@ const AirMonitoring = () => {
   const [statusMenu, setStatusMenu] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [dialogError, setDialogError] = useState(null);
+  const [isDataFetched, setIsDataFetched] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    let isFetching = false;
+
     const fetchData = async () => {
+      // Prevent duplicate fetches
+      if (isFetching || isDataFetched) return;
+
+      isFetching = true;
+      performanceMonitor.startPageLoad("Air Monitoring");
       setLoading(true);
       setError(null);
-      try {
-        const [jobsResponse, projectsResponse] = await Promise.all([
-          jobService.getAll(),
-          projectService.getAll(),
-        ]);
 
-        if (!jobsResponse.data || !projectsResponse.data) {
+      try {
+        performanceMonitor.startTimer("Fetch Jobs");
+        const jobsResponse = await jobService.getAll();
+
+        if (!isMounted) return;
+
+        if (!jobsResponse.data) {
           throw new Error("No data received from server");
         }
 
         console.log("Raw jobs data:", jobsResponse.data);
-        console.log("Raw projects data:", projectsResponse.data);
 
         // Process jobs to include project details
-        const processedJobs = jobsResponse.data.map((job) => {
-          const projectData = job.project;
-          console.log("Processing job:", job);
-          console.log("Project data:", projectData);
-
-          return {
-            id: job._id,
-            _id: job._id,
-            projectID: projectData?.projectID || "Unknown",
-            projectName: projectData?.name || "Unknown Project",
-            status: job.status,
-            asbestosRemovalist: job.asbestosRemovalist,
-          };
-        });
+        const processedJobs = jobsResponse.data.map((job) => ({
+          id: job._id,
+          _id: job._id,
+          projectID: job.project?.projectID || "Unknown",
+          projectName: job.project?.name || "Unknown Project",
+          status: job.status,
+          asbestosRemovalist: job.asbestosRemovalist,
+          department: job.project?.department || "Unknown",
+        }));
 
         console.log("Final processed jobs:", processedJobs);
         setJobs(processedJobs);
-        setProjects(projectsResponse.data);
+        setIsDataFetched(true);
+        performanceMonitor.endTimer("Fetch Jobs");
       } catch (err) {
+        if (!isMounted) return;
         console.error("Error fetching data:", err);
         setError(err.message || "Failed to fetch data");
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          performanceMonitor.endPageLoad("Air Monitoring");
+        }
+        isFetching = false;
       }
     };
 
     fetchData();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [isDataFetched]);
+
+  // Memoize the value getters to prevent unnecessary recalculations
+  const projectIDValueGetter = useCallback((params) => {
+    return params.row.projectID;
+  }, []);
+
+  const projectNameValueGetter = useCallback((params) => {
+    return params.row.projectName;
   }, []);
 
   const handleChange = (e) => {
@@ -355,21 +380,13 @@ const AirMonitoring = () => {
       field: "projectID",
       headerName: "Project ID",
       flex: 1,
-      valueGetter: (params) => {
-        console.log("Project ID valueGetter - full params:", params);
-        if (typeof params === "string") return params;
-        return params?.row?.projectID || "Unknown";
-      },
+      valueGetter: projectIDValueGetter,
     },
     {
       field: "projectName",
       headerName: "Project",
       flex: 1,
-      valueGetter: (params) => {
-        console.log("Project Name valueGetter - full params:", params);
-        if (typeof params === "string") return params;
-        return params?.row?.projectName || "Unknown Project";
-      },
+      valueGetter: projectNameValueGetter,
     },
     {
       field: "asbestosRemovalist",
