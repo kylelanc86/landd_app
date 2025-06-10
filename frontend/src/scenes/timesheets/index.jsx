@@ -303,7 +303,10 @@ const Timesheets = () => {
           fetchTimeEntries(),
           fetchTimesheetStatus(),
         ]);
-        setProjects(projectsResponse.data);
+        const projectsData = Array.isArray(projectsResponse.data)
+          ? projectsResponse.data
+          : projectsResponse.data.projects || projectsResponse.data.data || [];
+        setProjects(projectsData);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
