@@ -27,10 +27,14 @@ const AllocatedJobsTable = () => {
       setLoading(true);
       try {
         const response = await projectService.getAll();
-        console.log("All projects:", response.data);
+        console.log("All projects:", response);
+
+        // Ensure response.data is an array
+        const projectsData = Array.isArray(response.data) ? response.data : [];
+        console.log("Projects data array:", projectsData);
 
         // Filter projects where the current user is assigned AND status is active
-        const allocatedJobs = response.data.filter((project) => {
+        const allocatedJobs = projectsData.filter((project) => {
           // Check if project.users exists and is an array
           if (!project.users || !Array.isArray(project.users)) {
             console.log(`Project ${project.name} has no users array`);
@@ -42,10 +46,11 @@ const AllocatedJobsTable = () => {
             // Handle both string IDs and user objects
             const userId =
               typeof user === "string" ? user : user.id || user._id;
-            const isAssigned = userId === currentUser.id;
+            const currentUserId = currentUser.id || currentUser._id;
+            const isAssigned = userId === currentUserId;
             console.log(`Checking user assignment for ${project.name}:`, {
               userId,
-              currentUserId: currentUser.id,
+              currentUserId,
               isAssigned,
             });
             return isAssigned;
