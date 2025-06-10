@@ -4,13 +4,13 @@ import axios from 'axios';
 console.log('API Environment:', {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
-  defaultUrl: "https://air-monitoring-backend.onrender.com/api",
-  currentUrl: process.env.REACT_APP_API_URL || "https://air-monitoring-backend.onrender.com/api"
+  defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://air-monitoring-backend.onrender.com/api",
+  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://air-monitoring-backend.onrender.com/api")
 });
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "https://air-monitoring-backend.onrender.com/api",
+  baseURL: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://air-monitoring-backend.onrender.com/api"),
   headers: {
     "Content-Type": "application/json",
   },

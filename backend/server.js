@@ -39,6 +39,12 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // In development, allow all localhost origins
+    if (process.env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
+      console.log('CORS allowed development request from:', origin);
+      return callback(null, true);
+    }
+    
     if (allowedOrigins.indexOf(origin) === -1) {
       console.log('CORS blocked request from:', origin);
       return callback(new Error('Not allowed by CORS'));
