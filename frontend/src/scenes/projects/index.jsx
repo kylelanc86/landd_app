@@ -440,6 +440,16 @@ const Projects = () => {
   });
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState(null);
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState(() => {
+    try {
+      const savedVisibility = localStorage.getItem("projectsColumnVisibility");
+      return savedVisibility ? JSON.parse(savedVisibility) : {};
+    } catch (error) {
+      console.error("Error loading column visibility:", error);
+      return {};
+    }
+  });
+  const [selectedDepartment, setSelectedDepartment] = useState("All");
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -457,6 +467,7 @@ const Projects = () => {
             const transformed = {
               ...project,
               id: project._id,
+              projectName: project.name,
               users: Array.isArray(project.users)
                 ? project.users.map((user) => ({
                     _id: user._id,
@@ -773,22 +784,70 @@ const Projects = () => {
     setDeleteDialogOpen(true);
   };
 
+  const handleColumnVisibilityModelChange = (newModel) => {
+    console.log("Column visibility changed:", newModel);
+    setColumnVisibilityModel(newModel);
+    try {
+      localStorage.setItem(
+        "projectsColumnVisibility",
+        JSON.stringify(newModel)
+      );
+    } catch (error) {
+      console.error("Error saving column visibility:", error);
+    }
+  };
+
+  const handleDepartmentClick = (department) => {
+    console.log("Department filter clicked:", department);
+    setSelectedDepartment(department);
+  };
+
+  const filteredProjects = useMemo(() => {
+    if (selectedDepartment === "All") {
+      return projects;
+    }
+    return projects.filter(
+      (project) => project.department === selectedDepartment
+    );
+  }, [projects, selectedDepartment]);
+
   const columns = [
     {
       field: "projectID",
       headerName: "Project ID",
-      flex: 0.5,
-    },
-    {
-      field: "name",
-      headerName: "Project Name",
-      flex: 1,
+      flex: 0,
+      width: 105,
+      minWidth: 105,
+      maxWidth: 105,
       renderCell: (params) => (
         <Box
           onClick={() => navigate(`/projects/${params.row._id}`)}
-          sx={{ cursor: "pointer", color: "primary.main" }}
+          sx={{ cursor: "pointer" }}
         >
           {params.value}
+        </Box>
+      ),
+    },
+    {
+      field: "projectName",
+      headerName: "Project Name",
+      flex: 1,
+      minWidth: 200,
+      renderCell: ({ row: { projectName, _id } }) => (
+        <Box
+          onClick={() => navigate(`/projects/${_id}`)}
+          sx={{
+            cursor: "pointer",
+            "&:hover": { color: colors.blueAccent[500] },
+            whiteSpace: "normal",
+            wordWrap: "break-word",
+            lineHeight: 1.2,
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          {projectName}
         </Box>
       ),
     },
@@ -806,6 +865,9 @@ const Projects = () => {
       field: "status",
       headerName: "Status",
       flex: 1,
+      width: 165,
+      minWidth: 165,
+      maxWidth: 165,
       renderCell: (params) => (
         <Box
           sx={{
@@ -822,8 +884,11 @@ const Projects = () => {
     },
     {
       field: "users",
-      headerName: "Assigned Users",
+      headerName: "Users",
       flex: 1,
+      width: 120,
+      minWidth: 120,
+      maxWidth: 120,
       renderCell: (params) => <UsersCell users={params.row.users} />,
     },
     {
@@ -935,66 +1000,73 @@ const Projects = () => {
       </Box>
 
       {/* Department Filter Buttons */}
-      <Box display="flex" gap={2} mb={2}>
+      <Box
+        display="flex"
+        justifyContent="flex-start"
+        alignItems="center"
+        gap={1}
+        mb={2}
+      >
         <Button
-          variant={departmentFilter === "all" ? "contained" : "outlined"}
-          color="primary"
-          onClick={() => setDepartmentFilter("all")}
+          variant={selectedDepartment === "All" ? "contained" : "outlined"}
+          onClick={() => handleDepartmentClick("All")}
+          sx={{
+            backgroundColor:
+              selectedDepartment === "All" ? "#1976d2" : "transparent",
+            color: selectedDepartment === "All" ? "#fff" : "#1976d2",
+            borderColor: "#1976d2",
+            "&:hover": {
+              backgroundColor: "#1976d2",
+              color: "#fff",
+            },
+          }}
         >
           All Departments
         </Button>
-        <Button
-          variant={
-            departmentFilter === "Asbestos & HAZMAT" ? "contained" : "outlined"
-          }
-          color="secondary"
-          onClick={() => setDepartmentFilter("Asbestos & HAZMAT")}
-        >
-          Asbestos & HAZMAT
-        </Button>
-        <Button
-          variant={
-            departmentFilter === "Occupational Hygiene"
-              ? "contained"
-              : "outlined"
-          }
-          onClick={() => setDepartmentFilter("Occupational Hygiene")}
-          sx={{
-            backgroundColor:
-              departmentFilter === "Occupational Hygiene"
-                ? "#FF9800"
-                : "transparent",
-            color:
-              departmentFilter === "Occupational Hygiene" ? "#fff" : "#FF9800",
-            borderColor: "#FF9800",
-            "&:hover": {
-              backgroundColor: "#F57C00",
-              color: "#fff",
-              borderColor: "#F57C00",
-            },
-          }}
-        >
-          Occupational Hygiene
-        </Button>
-        <Button
-          variant={
-            departmentFilter === "Client Supplied" ? "contained" : "outlined"
-          }
-          onClick={() => setDepartmentFilter("Client Supplied")}
-          sx={{
-            backgroundColor:
-              departmentFilter === "Client Supplied"
-                ? "#9c27b0"
-                : "transparent",
-            color: departmentFilter === "Client Supplied" ? "#fff" : "#9c27b0",
-            "&:hover": {
-              backgroundColor: "#9c27b0",
-              color: "#fff",
-            },
-          }}
-        >
-          Client Supplied
-        </Button>
+        {DEPARTMENTS.map((department) => (
+          <Button
+            key={department}
+            variant={
+              selectedDepartment === department ? "contained" : "outlined"
+            }
+            onClick={() => handleDepartmentClick(department)}
+            sx={{
+              backgroundColor:
+                selectedDepartment === department
+                  ? department === "Asbestos & HAZMAT"
+                    ? "#2e7d32"
+                    : department === "Occupational Hygiene"
+                    ? "#ed6c02"
+                    : "#9c27b0"
+                  : "transparent",
+              color:
+                selectedDepartment === department
+                  ? "#fff"
+                  : department === "Asbestos & HAZMAT"
+                  ? "#2e7d32"
+                  : department === "Occupational Hygiene"
+                  ? "#ed6c02"
+                  : "#9c27b0",
+              borderColor:
+                department === "Asbestos & HAZMAT"
+                  ? "#2e7d32"
+                  : department === "Occupational Hygiene"
+                  ? "#ed6c02"
+                  : "#9c27b0",
+              "&:hover": {
+                backgroundColor:
+                  department === "Asbestos & HAZMAT"
+                    ? "#2e7d32"
+                    : department === "Occupational Hygiene"
+                    ? "#ed6c02"
+                    : "#9c27b0",
+                color: "#fff",
+              },
+            }}
+          >
+            {department}
+          </Button>
+        ))}
       </Box>
 
       {error && (
@@ -1030,7 +1102,7 @@ const Projects = () => {
         }}
       >
         <DataGrid
-          rows={projects}
+          rows={filteredProjects}
           columns={columns}
           getRowId={(row) => row._id || row.id}
           components={{
@@ -1040,6 +1112,8 @@ const Projects = () => {
           error={error}
           checkboxSelection
           disableRowSelectionOnClick
+          columnVisibilityModel={columnVisibilityModel}
+          onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
         />
       </Box>
 
@@ -1189,8 +1263,80 @@ const Projects = () => {
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  {renderUsersSelect(form.users, handleUsersChange, "users")}
+                  <Typography
+                    variant="subtitle1"
+                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  >
+                    Project Team
+                  </Typography>
                 </Grid>
+
+                <Grid item xs={12}>
+                  <Autocomplete
+                    multiple
+                    options={users}
+                    getOptionLabel={(option) =>
+                      `${option.firstName} ${option.lastName}`
+                    }
+                    value={form.users}
+                    onChange={(event, newValue) => {
+                      setForm((prev) => ({ ...prev, users: newValue }));
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Assigned Users"
+                        placeholder="Select users"
+                      />
+                    )}
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        <Chip
+                          label={`${option.firstName} ${option.lastName}`}
+                          {...getTagProps({ index })}
+                        />
+                      ))
+                    }
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  >
+                    Project Details
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    label="Start Date"
+                    name="startDate"
+                    type="date"
+                    value={form.startDate}
+                    onChange={handleChange}
+                    fullWidth
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    label="End Date"
+                    name="endDate"
+                    type="date"
+                    value={form.endDate}
+                    onChange={handleChange}
+                    fullWidth
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                </Grid>
+
                 <Grid item xs={12}>
                   <TextField
                     label="Description"
@@ -1199,6 +1345,46 @@ const Projects = () => {
                     onChange={handleChange}
                     multiline
                     rows={4}
+                    fullWidth
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  >
+                    Project Contact
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Contact Name"
+                    name="projectContact.name"
+                    value={form.projectContact?.name || ""}
+                    onChange={handleChange}
+                    fullWidth
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Contact Number"
+                    name="projectContact.number"
+                    value={form.projectContact?.number || ""}
+                    onChange={handleChange}
+                    fullWidth
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Contact Email"
+                    name="projectContact.email"
+                    type="email"
+                    value={form.projectContact?.email || ""}
+                    onChange={handleChange}
                     fullWidth
                   />
                 </Grid>

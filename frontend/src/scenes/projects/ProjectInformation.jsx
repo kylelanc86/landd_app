@@ -38,7 +38,11 @@ import {
 } from "../../components/JobStatus";
 import debounce from "lodash/debounce";
 
-const DEPARTMENTS = ["Asbestos & HAZMAT", "Occupational Hygiene"];
+const DEPARTMENTS = [
+  "Asbestos & HAZMAT",
+  "Occupational Hygiene",
+  "Client Supplied",
+];
 
 const CATEGORIES = [
   "Asbestos Materials Assessment",
@@ -85,6 +89,11 @@ const ProjectInformation = () => {
     users: [],
     categories: [],
     notes: "",
+    projectContact: {
+      name: "",
+      number: "",
+      email: "",
+    },
   });
 
   const [addressInput, setAddressInput] = useState("");
@@ -584,6 +593,21 @@ const ProjectInformation = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    value={form.status}
+                    onChange={handleChange}
+                    label="Status"
+                  >
+                    {ACTIVE_STATUSES.map(renderStatusMenuItem)}
+                    {INACTIVE_STATUSES.map(renderStatusMenuItem)}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
                 <Autocomplete
                   multiple
                   options={CATEGORIES}
@@ -607,41 +631,64 @@ const ProjectInformation = () => {
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={form.status}
-                    onChange={handleStatusChange}
-                    label="Status"
-                  >
-                    <MenuItem disabled>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Active Jobs
-                      </Typography>
-                    </MenuItem>
-                    {ACTIVE_STATUSES.map(renderStatusMenuItem)}
-                    <MenuItem disabled>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Inactive Jobs
-                      </Typography>
-                    </MenuItem>
-                    {INACTIVE_STATUSES.map(renderStatusMenuItem)}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Notes"
-                  name="notes"
-                  value={form.notes || ""}
+                  label="Description"
+                  name="description"
+                  value={form.description}
                   onChange={handleChange}
                   multiline
                   rows={4}
-                  placeholder="Add any additional notes or comments about the project..."
                 />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography
+                  variant="subtitle1"
+                  sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                >
+                  Project Contact
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Contact Name"
+                  name="projectContact.name"
+                  value={form.projectContact?.name || ""}
+                  onChange={handleChange}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Contact Number"
+                  name="projectContact.number"
+                  value={form.projectContact?.number || ""}
+                  onChange={handleChange}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Contact Email"
+                  name="projectContact.email"
+                  type="email"
+                  value={form.projectContact?.email || ""}
+                  onChange={handleChange}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography
+                  variant="subtitle1"
+                  sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                >
+                  Project Team
+                </Typography>
               </Grid>
 
               <Grid item xs={12}>
