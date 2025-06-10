@@ -18,6 +18,14 @@ const calendarEntrySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    backgroundColor: {
+      type: String,
+      required: true,
+    },
+    borderColor: {
+      type: String,
+      required: true,
+    },
     projectId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Project",

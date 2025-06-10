@@ -21,6 +21,8 @@ router.post("/", auth, async (req, res) => {
       start: req.body.start,
       end: req.body.end,
       allDay: req.body.allDay,
+      backgroundColor: req.body.backgroundColor,
+      borderColor: req.body.borderColor,
       projectId: req.body.extendedProps.projectId,
       client: req.body.extendedProps.client,
       userId: req.body.userId,
@@ -46,6 +48,8 @@ router.put("/:id", auth, async (req, res) => {
     entry.start = req.body.start;
     entry.end = req.body.end;
     entry.allDay = req.body.allDay;
+    entry.backgroundColor = req.body.backgroundColor;
+    entry.borderColor = req.body.borderColor;
     entry.projectId = req.body.extendedProps.projectId;
     entry.client = req.body.extendedProps.client;
     entry.userId = req.body.userId;
