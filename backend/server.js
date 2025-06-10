@@ -14,6 +14,7 @@ const usersRouter = require('./routes/users');
 const xeroRoutes = require('./routes/xero');
 const shiftRoutes = require('./routes/shifts');
 const timesheetRoutes = require('./routes/timesheets');
+const calendarEntriesRouter = require('./routes/calendarEntries');
 
 // Load environment variables
 dotenv.config();
@@ -70,6 +71,7 @@ connectDB()
     app.use('/api/xero', xeroRoutes);
     app.use('/api/air-monitoring-shifts', shiftRoutes);
     app.use('/api/timesheets', timesheetRoutes);
+    app.use('/api/calendar-entries', calendarEntriesRouter);
 
     // Error handling middleware
     app.use((err, req, res, next) => {
