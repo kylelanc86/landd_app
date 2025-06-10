@@ -303,10 +303,21 @@ const ProjectInformation = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    if (name.includes(".")) {
+      const [parent, child] = name.split(".");
+      setForm((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          [child]: value,
+        },
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleClientChange = (event, newValue) => {

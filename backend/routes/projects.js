@@ -75,7 +75,12 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       description: req.body.description,
-      users: req.body.users || []
+      users: req.body.users || [],
+      projectContact: req.body.projectContact || {
+        name: "",
+        number: "",
+        email: ""
+      }
     });
 
     console.log('Created project instance:', project.toObject());
@@ -151,6 +156,7 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     if (req.body.startDate) project.startDate = req.body.startDate;
     if (req.body.endDate) project.endDate = req.body.endDate;
     if (req.body.description) project.description = req.body.description;
+    if (req.body.projectContact) project.projectContact = req.body.projectContact;
     
     // Always update users array, defaulting to empty array if not provided
     project.users = Array.isArray(req.body.users) ? req.body.users : [];

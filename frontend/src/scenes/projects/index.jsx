@@ -99,6 +99,11 @@ const emptyForm = {
   address: "",
   users: [],
   status: ACTIVE_STATUSES[0],
+  projectContact: {
+    name: "",
+    number: "",
+    email: "",
+  },
 };
 
 const EditableStatusCell = ({ project, onStatusChange }) => {
@@ -417,7 +422,20 @@ const Projects = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState({
+    name: "",
+    client: "",
+    department: PROJECT_TYPES[0],
+    category: "",
+    address: "",
+    users: [],
+    status: ACTIVE_STATUSES[0],
+    projectContact: {
+      name: "",
+      number: "",
+      email: "",
+    },
+  });
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -449,6 +467,7 @@ const Projects = () => {
       return {};
     }
   });
+  const [showInactive, setShowInactive] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState("All");
 
   const fetchProjects = useCallback(async () => {
@@ -586,10 +605,22 @@ const Projects = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => {
+      if (name.includes("projectContact")) {
+        const [_, field] = name.split(".");
+        return {
+          ...prev,
+          projectContact: {
+            ...prev.projectContact,
+            [field]: value,
+          },
+        };
+      }
+      return {
+        ...prev,
+        [name]: value,
+      };
+    });
   };
 
   const handleUsersChange = (event, newValue) => {
@@ -602,7 +633,7 @@ const Projects = () => {
   const handleClientChange = (event, newValue) => {
     setForm((prev) => ({
       ...prev,
-      client: newValue,
+      client: newValue ? newValue._id : "",
     }));
   };
 
@@ -802,14 +833,36 @@ const Projects = () => {
     setSelectedDepartment(department);
   };
 
+  // Filter projects based on all criteria
   const filteredProjects = useMemo(() => {
-    if (selectedDepartment === "All") {
-      return projects;
+    let filtered = projects;
+
+    // Filter by department
+    if (selectedDepartment !== "All") {
+      filtered = filtered.filter(
+        (project) => project.department === selectedDepartment
+      );
     }
-    return projects.filter(
-      (project) => project.department === selectedDepartment
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter((project) =>
+        project.projectName.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filter by status
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((project) => project.status === statusFilter);
+    }
+
+    // Filter out inactive projects unless showInactive is true
+    filtered = filtered.filter(
+      (project) => showInactive || !INACTIVE_STATUSES.includes(project.status)
     );
-  }, [projects, selectedDepartment]);
+
+    return filtered;
+  }, [projects, selectedDepartment, searchTerm, statusFilter, showInactive]);
 
   const columns = [
     {
@@ -987,14 +1040,12 @@ const Projects = () => {
           <FormControlLabel
             control={
               <Switch
-                checked={activeFilter === "active"}
-                onChange={(e) =>
-                  setActiveFilter(e.target.checked ? "active" : "all")
-                }
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
                 color="primary"
               />
             }
-            label="Show Active Projects"
+            label="Show Inactive Projects"
           />
         </Stack>
       </Box>
@@ -1176,34 +1227,9 @@ const Projects = () => {
                           fullWidth
                         />
                       )}
-                      renderOption={(props, option) => (
-                        <li {...props}>
-                          <Box>
-                            <Typography variant="body1">
-                              {option.name}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {option.address}
-                            </Typography>
-                          </Box>
-                        </li>
-                      )}
                       isOptionEqualToValue={(option, value) =>
                         option._id === value._id
                       }
-                      filterOptions={(options, { inputValue }) => {
-                        const searchTerm = inputValue.toLowerCase();
-                        return options.filter(
-                          (option) =>
-                            option.name.toLowerCase().includes(searchTerm) ||
-                            (option.address || "")
-                              .toLowerCase()
-                              .includes(searchTerm)
-                        );
-                      }}
                     />
                     <Button
                       startIcon={<AddIcon />}
@@ -1278,24 +1304,15 @@ const Projects = () => {
                     getOptionLabel={(option) =>
                       `${option.firstName} ${option.lastName}`
                     }
-                    value={form.users}
-                    onChange={(event, newValue) => {
-                      setForm((prev) => ({ ...prev, users: newValue }));
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Assigned Users"
-                        placeholder="Select users"
-                      />
+                    value={users.filter((user) =>
+                      form.users.includes(user._id)
                     )}
-                    renderTags={(value, getTagProps) =>
-                      value.map((option, index) => (
-                        <Chip
-                          label={`${option.firstName} ${option.lastName}`}
-                          {...getTagProps({ index })}
-                        />
-                      ))
+                    onChange={handleUsersChange}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Users" required fullWidth />
+                    )}
+                    isOptionEqualToValue={(option, value) =>
+                      option._id === value._id
                     }
                   />
                 </Grid>
@@ -1362,9 +1379,11 @@ const Projects = () => {
                   <TextField
                     label="Contact Name"
                     name="projectContact.name"
-                    value={form.projectContact?.name || ""}
+                    value={form.projectContact.name}
                     onChange={handleChange}
                     fullWidth
+                    variant="outlined"
+                    size="small"
                   />
                 </Grid>
 
@@ -1372,9 +1391,11 @@ const Projects = () => {
                   <TextField
                     label="Contact Number"
                     name="projectContact.number"
-                    value={form.projectContact?.number || ""}
+                    value={form.projectContact.number}
                     onChange={handleChange}
                     fullWidth
+                    variant="outlined"
+                    size="small"
                   />
                 </Grid>
 
@@ -1382,10 +1403,11 @@ const Projects = () => {
                   <TextField
                     label="Contact Email"
                     name="projectContact.email"
-                    type="email"
-                    value={form.projectContact?.email || ""}
+                    value={form.projectContact.email}
                     onChange={handleChange}
                     fullWidth
+                    variant="outlined"
+                    size="small"
                   />
                 </Grid>
               </Grid>
