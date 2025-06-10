@@ -122,12 +122,17 @@ const Timesheets = () => {
         `/timesheets/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
       );
 
-      if (!Array.isArray(response.data)) {
+      // Handle both response structures
+      const entries = Array.isArray(response.data)
+        ? response.data
+        : response.data.entries || response.data.data || [];
+
+      if (!Array.isArray(entries)) {
         setTimeEntries([]);
         return;
       }
 
-      const processedEntries = response.data.map((entry) => {
+      const processedEntries = entries.map((entry) => {
         const entryDate = entry.date
           ? format(new Date(entry.date), "yyyy-MM-dd")
           : formattedDate;
@@ -149,6 +154,7 @@ const Timesheets = () => {
 
       setTimeEntries(processedEntries);
     } catch (error) {
+      console.error("Error fetching time entries:", error);
       setTimeEntries([]);
     } finally {
       setIsLoading(false);
@@ -166,9 +172,15 @@ const Timesheets = () => {
         `/timesheets/status/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
       );
 
-      const status = response.data?.[0]?.status || "incomplete";
+      // Handle both response structures
+      const statusData = Array.isArray(response.data)
+        ? response.data
+        : response.data.entries || response.data.data || [];
+
+      const status = statusData?.[0]?.status || "incomplete";
       setTimesheetStatus(status);
     } catch (error) {
+      console.error("Error fetching timesheet status:", error);
       setTimesheetStatus("incomplete");
     }
   };
