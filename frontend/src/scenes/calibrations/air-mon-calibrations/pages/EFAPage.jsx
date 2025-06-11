@@ -18,7 +18,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../../components/Header";
+import Header from "../../../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../../../theme";
 
 const EFAPage = () => {
   const theme = useTheme();

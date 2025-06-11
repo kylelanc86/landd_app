@@ -18,26 +18,28 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../../components/Header";
+import Header from "../../../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../../../theme";
 
-const PrimaryFlowmeterPage = () => {
+const GraticulePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
-      flowmeterId: "PFM-001",
+      graticuleId: "G-001",
       date: "2024-02-15",
-      reading: "2.0 L/min",
+      scale: "100 µm",
       status: "Pass",
       technician: "John Doe",
       nextCalibration: "2024-08-15",
     },
     {
       id: 2,
-      flowmeterId: "PFM-002",
+      graticuleId: "G-002",
       date: "2024-02-10",
-      reading: "1.8 L/min",
+      scale: "100 µm",
       status: "Pass",
       technician: "Jane Smith",
       nextCalibration: "2024-08-10",
@@ -63,8 +65,8 @@ const PrimaryFlowmeterPage = () => {
           <ArrowBackIcon />
         </IconButton>
         <Header
-          title="Primary Flowmeter Calibrations"
-          subtitle="Manage primary flowmeter calibration records"
+          title="Graticule Calibrations"
+          subtitle="Manage graticule calibration records"
         />
       </Box>
 
@@ -78,9 +80,9 @@ const PrimaryFlowmeterPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Flowmeter ID</TableCell>
+              <TableCell>Graticule ID</TableCell>
               <TableCell>Calibration Date</TableCell>
-              <TableCell>Reading</TableCell>
+              <TableCell>Scale</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Technician</TableCell>
               <TableCell>Next Calibration</TableCell>
@@ -90,9 +92,9 @@ const PrimaryFlowmeterPage = () => {
           <TableBody>
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
-                <TableCell>{calibration.flowmeterId}</TableCell>
+                <TableCell>{calibration.graticuleId}</TableCell>
                 <TableCell>{calibration.date}</TableCell>
-                <TableCell>{calibration.reading}</TableCell>
+                <TableCell>{calibration.scale}</TableCell>
                 <TableCell>
                   <Box
                     sx={{
@@ -134,4 +136,4 @@ const PrimaryFlowmeterPage = () => {
   );
 };
 
-export default PrimaryFlowmeterPage;
+export default GraticulePage;

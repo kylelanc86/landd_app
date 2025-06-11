@@ -18,15 +18,17 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../../components/Header";
+import Header from "../../../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../../../theme";
 
-const FlowmeterPage = () => {
+const AirPumpPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
-      flowmeterId: "FM-001",
+      pumpId: "AP-001",
       date: "2024-02-15",
       flowRate: "2.0 L/min",
       status: "Pass",
@@ -35,7 +37,7 @@ const FlowmeterPage = () => {
     },
     {
       id: 2,
-      flowmeterId: "FM-002",
+      pumpId: "AP-002",
       date: "2024-02-10",
       flowRate: "1.8 L/min",
       status: "Pass",
@@ -63,8 +65,8 @@ const FlowmeterPage = () => {
           <ArrowBackIcon />
         </IconButton>
         <Header
-          title="Flowmeter Calibrations"
-          subtitle="Manage flowmeter calibration records"
+          title="Air Pump Calibrations"
+          subtitle="Manage air pump calibration records"
         />
       </Box>
 
@@ -78,7 +80,7 @@ const FlowmeterPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Flowmeter ID</TableCell>
+              <TableCell>Pump ID</TableCell>
               <TableCell>Calibration Date</TableCell>
               <TableCell>Flow Rate</TableCell>
               <TableCell>Status</TableCell>
@@ -90,7 +92,7 @@ const FlowmeterPage = () => {
           <TableBody>
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
-                <TableCell>{calibration.flowmeterId}</TableCell>
+                <TableCell>{calibration.pumpId}</TableCell>
                 <TableCell>{calibration.date}</TableCell>
                 <TableCell>{calibration.flowRate}</TableCell>
                 <TableCell>
@@ -134,4 +136,4 @@ const FlowmeterPage = () => {
   );
 };
 
-export default FlowmeterPage;
+export default AirPumpPage;

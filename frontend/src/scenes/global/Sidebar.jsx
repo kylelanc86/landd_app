@@ -472,13 +472,13 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           <PermissionGate requiredPermissions={["fibre.view"]}>
             <Item
               title="Analysis"
-              to="/fibre/analysis"
+              to="/fibreID/analysis"
               icon={<ScienceIcon />}
               isCollapsed={isCollapsed}
             />
             <Item
               title="Calibrations"
-              to="/fibre/calibrations"
+              to="/fibreID/calibrations"
               icon={<AssessmentIcon />}
               isCollapsed={isCollapsed}
             />

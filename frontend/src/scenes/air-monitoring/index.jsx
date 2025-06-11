@@ -146,6 +146,21 @@ const AirMonitoring = () => {
     };
   }, [isDataFetched]);
 
+  const fetchProjects = useCallback(async () => {
+    try {
+      const response = await projectService.getAll();
+      if (response.data) {
+        setProjects(response.data);
+      }
+    } catch (error) {
+      console.error("Error fetching projects:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
   // Memoize the value getters to prevent unnecessary recalculations
   const projectIDValueGetter = useCallback((params) => {
     return params.row.projectID;
@@ -209,6 +224,10 @@ const AirMonitoring = () => {
 
       // Add the new job to the list
       setJobs((prevJobs) => [processedJob, ...prevJobs]);
+
+      // Refresh the projects list to get updated status
+      await fetchProjects();
+
       setOpenDialog(false);
       setSelectedProject(null);
       setForm(emptyForm);

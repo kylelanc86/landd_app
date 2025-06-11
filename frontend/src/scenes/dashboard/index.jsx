@@ -39,10 +39,12 @@ import SendIcon from "@mui/icons-material/Send";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { format } from "date-fns";
 import api from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [dailyTimesheetData, setDailyTimesheetData] = useState({
@@ -215,8 +217,11 @@ const Dashboard = () => {
         }m`,
         icon: <AccessTimeIcon />,
         bgcolor: tokens.primary[700],
-        path: "/timesheets/daily",
-        queryParams: { date: format(new Date(), "yyyy-MM-dd") },
+        path: "/timesheets",
+        queryParams: {
+          date: format(new Date(), "yyyy-MM-dd"),
+          userId: currentUser?._id,
+        },
         subtitle:
           dailyTimesheetData.status.charAt(0).toUpperCase() +
           dailyTimesheetData.status.slice(1),
@@ -285,7 +290,7 @@ const Dashboard = () => {
         queryParams: { status: "In progress" },
       },
     ],
-    [dailyTimesheetData, stats]
+    [dailyTimesheetData, stats, currentUser]
   );
 
   // Get ordered and visible widgets
@@ -342,9 +347,6 @@ const Dashboard = () => {
       </Box>
     );
   }
-
-  console.log("Debug - gridItems:", gridItems);
-  console.log("Debug - displayWidgets:", displayWidgets);
 
   return (
     <Box m="20px">

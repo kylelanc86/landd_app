@@ -18,26 +18,28 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../../components/Header";
+import Header from "../../../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../../../theme";
 
-const MicroscopePage = () => {
+const GraticulePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
-      microscopeId: "M-001",
+      graticuleId: "G-001",
       date: "2024-02-15",
-      magnification: "400x",
+      scale: "100 µm",
       status: "Pass",
       technician: "John Doe",
       nextCalibration: "2024-08-15",
     },
     {
       id: 2,
-      microscopeId: "M-002",
+      graticuleId: "G-002",
       date: "2024-02-10",
-      magnification: "400x",
+      scale: "100 µm",
       status: "Pass",
       technician: "Jane Smith",
       nextCalibration: "2024-08-10",
@@ -63,8 +65,8 @@ const MicroscopePage = () => {
           <ArrowBackIcon />
         </IconButton>
         <Header
-          title="Microscope Calibrations"
-          subtitle="Manage microscope calibration records"
+          title="Graticule Calibrations"
+          subtitle="Manage graticule calibration records"
         />
       </Box>
 
@@ -78,9 +80,9 @@ const MicroscopePage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Microscope ID</TableCell>
+              <TableCell>Graticule ID</TableCell>
               <TableCell>Calibration Date</TableCell>
-              <TableCell>Magnification</TableCell>
+              <TableCell>Scale</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Technician</TableCell>
               <TableCell>Next Calibration</TableCell>
@@ -90,9 +92,9 @@ const MicroscopePage = () => {
           <TableBody>
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
-                <TableCell>{calibration.microscopeId}</TableCell>
+                <TableCell>{calibration.graticuleId}</TableCell>
                 <TableCell>{calibration.date}</TableCell>
-                <TableCell>{calibration.magnification}</TableCell>
+                <TableCell>{calibration.scale}</TableCell>
                 <TableCell>
                   <Box
                     sx={{
@@ -134,4 +136,4 @@ const MicroscopePage = () => {
   );
 };
 
-export default MicroscopePage;
+export default GraticulePage;

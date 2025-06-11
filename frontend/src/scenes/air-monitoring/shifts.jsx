@@ -328,7 +328,7 @@ const Shifts = () => {
     {
       field: "sampleNumbers",
       headerName: "Sample Numbers",
-      flex: 0.3,
+      width: 200,
       renderCell: (params) => {
         const numbers = params.row.sampleNumbers || [];
         return numbers.length > 0 ? numbers.join(", ") : "No samples";

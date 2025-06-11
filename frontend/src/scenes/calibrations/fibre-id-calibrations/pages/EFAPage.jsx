@@ -18,26 +18,28 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../../components/Header";
+import Header from "../../../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../../../theme";
 
-const GraticulePage = () => {
+const EFAPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
-      graticuleId: "G-001",
+      filterId: "F-001",
       date: "2024-02-15",
-      scale: "100 µm",
+      area: "100 cm²",
       status: "Pass",
       technician: "John Doe",
       nextCalibration: "2024-08-15",
     },
     {
       id: 2,
-      graticuleId: "G-002",
+      filterId: "F-002",
       date: "2024-02-10",
-      scale: "100 µm",
+      area: "95 cm²",
       status: "Pass",
       technician: "Jane Smith",
       nextCalibration: "2024-08-10",
@@ -63,8 +65,8 @@ const GraticulePage = () => {
           <ArrowBackIcon />
         </IconButton>
         <Header
-          title="Graticule Calibrations"
-          subtitle="Manage graticule calibration records"
+          title="EFA Calibrations"
+          subtitle="Manage Effective Filter Area calibration records"
         />
       </Box>
 
@@ -78,9 +80,9 @@ const GraticulePage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Graticule ID</TableCell>
+              <TableCell>Filter ID</TableCell>
               <TableCell>Calibration Date</TableCell>
-              <TableCell>Scale</TableCell>
+              <TableCell>Area</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Technician</TableCell>
               <TableCell>Next Calibration</TableCell>
@@ -90,9 +92,9 @@ const GraticulePage = () => {
           <TableBody>
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
-                <TableCell>{calibration.graticuleId}</TableCell>
+                <TableCell>{calibration.filterId}</TableCell>
                 <TableCell>{calibration.date}</TableCell>
-                <TableCell>{calibration.scale}</TableCell>
+                <TableCell>{calibration.area}</TableCell>
                 <TableCell>
                   <Box
                     sx={{
@@ -134,4 +136,4 @@ const GraticulePage = () => {
   );
 };
 
-export default GraticulePage;
+export default EFAPage;

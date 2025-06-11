@@ -18,26 +18,28 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../../components/Header";
+import Header from "../../../../components/Header";
+import { DataGrid } from "@mui/x-data-grid";
+import { tokens } from "../../../../theme";
 
-const AirPumpPage = () => {
+const AcetoneVaporiserPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
-      pumpId: "AP-001",
+      vaporiserId: "AV-001",
       date: "2024-02-15",
-      flowRate: "2.0 L/min",
+      temperature: "25°C",
       status: "Pass",
       technician: "John Doe",
       nextCalibration: "2024-08-15",
     },
     {
       id: 2,
-      pumpId: "AP-002",
+      vaporiserId: "AV-002",
       date: "2024-02-10",
-      flowRate: "1.8 L/min",
+      temperature: "24°C",
       status: "Pass",
       technician: "Jane Smith",
       nextCalibration: "2024-08-10",
@@ -63,8 +65,8 @@ const AirPumpPage = () => {
           <ArrowBackIcon />
         </IconButton>
         <Header
-          title="Air Pump Calibrations"
-          subtitle="Manage air pump calibration records"
+          title="Acetone Vaporiser Calibrations"
+          subtitle="Manage acetone vaporiser calibration records"
         />
       </Box>
 
@@ -78,9 +80,9 @@ const AirPumpPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Pump ID</TableCell>
+              <TableCell>Vaporiser ID</TableCell>
               <TableCell>Calibration Date</TableCell>
-              <TableCell>Flow Rate</TableCell>
+              <TableCell>Temperature</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Technician</TableCell>
               <TableCell>Next Calibration</TableCell>
@@ -90,9 +92,9 @@ const AirPumpPage = () => {
           <TableBody>
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
-                <TableCell>{calibration.pumpId}</TableCell>
+                <TableCell>{calibration.vaporiserId}</TableCell>
                 <TableCell>{calibration.date}</TableCell>
-                <TableCell>{calibration.flowRate}</TableCell>
+                <TableCell>{calibration.temperature}</TableCell>
                 <TableCell>
                   <Box
                     sx={{
@@ -134,4 +136,4 @@ const AirPumpPage = () => {
   );
 };
 
-export default AirPumpPage;
+export default AcetoneVaporiserPage;

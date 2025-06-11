@@ -474,37 +474,30 @@ const Projects = () => {
     try {
       setLoading(true);
       const response = await projectService.getAll();
-      console.log("Raw projects from API:", response);
 
       // Extract the data array from the response
       const projectsData = response.data || [];
-      console.log("Projects data array:", projectsData);
 
       // Transform the projects data if it's an array
       const transformedProjects = Array.isArray(projectsData)
-        ? projectsData.map((project) => {
-            const transformed = {
-              ...project,
-              id: project._id,
-              projectName: project.name,
-              users: Array.isArray(project.users)
-                ? project.users.map((user) => ({
-                    _id: user._id,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                  }))
-                : [],
-              clientName: project.client?.name || "Unknown Client",
-              department: project.department || "N/A",
-              status: project.status || "Assigned",
-              categories: project.categories || [],
-            };
-            console.log("Transformed project:", transformed);
-            return transformed;
-          })
+        ? projectsData.map((project) => ({
+            ...project,
+            id: project._id,
+            projectName: project.name,
+            users: Array.isArray(project.users)
+              ? project.users.map((user) => ({
+                  _id: user._id,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                }))
+              : [],
+            clientName: project.client?.name || "Unknown Client",
+            department: project.department || "N/A",
+            status: project.status || "Assigned",
+            categories: project.categories || [],
+          }))
         : [];
 
-      console.log("Final transformed projects:", transformedProjects);
       setProjects(transformedProjects);
     } catch (err) {
       console.error("Error fetching projects:", err);
@@ -536,7 +529,6 @@ const Projects = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        console.log("Fetching users...");
         const token = localStorage.getItem("token");
         if (!token) {
           console.error("No authentication token found");
@@ -545,25 +537,17 @@ const Projects = () => {
         }
 
         const response = await userService.getAll();
-        console.log("Raw users from API:", response.data);
 
         // Filter out inactive users and transform the data
-        const activeUsers = response.data.filter((user) => {
-          console.log(
-            `User ${user.firstName} ${user.lastName} active status:`,
-            user.isActive
-          );
-          return user.isActive === true;
-        });
-
-        console.log("Filtered active users:", activeUsers);
+        const activeUsers = response.data.filter(
+          (user) => user.isActive === true
+        );
 
         const transformedUsers = activeUsers.map((user) => ({
           ...user,
           name: `${user.firstName} ${user.lastName}`,
         }));
 
-        console.log("Final transformed users:", transformedUsers);
         setUsers(transformedUsers);
         setLoadingUsers(false);
       } catch (err) {

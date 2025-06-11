@@ -12,34 +12,24 @@ const AllocatedJobsTable = () => {
   const [error, setError] = useState(null);
   const theme = useTheme();
 
-  // Debug logging for component lifecycle
-  useEffect(() => {
-    console.log("AllocatedJobsTable mounted/updated");
-    console.log("Current user state:", currentUser);
-  }, [currentUser]);
-
   useEffect(() => {
     const fetchAllocatedJobs = async () => {
       if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
-        console.log("Waiting for user data...");
         return;
       }
       setLoading(true);
       try {
         const response = await projectService.getAll();
-        console.log("All projects:", response);
 
         // Handle both response structures
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data.projects || response.data.data || [];
-        console.log("Projects data array:", projectsData);
 
         // Filter projects where the current user is assigned AND status is active
         const allocatedJobs = projectsData.filter((project) => {
           // Check if project.users exists and is an array
           if (!project.users || !Array.isArray(project.users)) {
-            console.log(`Project ${project.name} has no users array`);
             return false;
           }
 
@@ -49,23 +39,12 @@ const AllocatedJobsTable = () => {
             const userId =
               typeof user === "string" ? user : user.id || user._id;
             const currentUserId = currentUser.id || currentUser._id;
-            const isAssigned = userId === currentUserId;
-            console.log(`Checking user assignment for ${project.name}:`, {
-              userId,
-              currentUserId,
-              isAssigned,
-            });
-            return isAssigned;
+            return userId === currentUserId;
           });
 
           const isActive = ACTIVE_STATUSES.includes(project.status);
-          console.log(
-            `Project ${project.name} - Assigned: ${isAssigned}, Active: ${isActive}, Users:`,
-            project.users
-          );
           return isAssigned && isActive;
         });
-        console.log("Filtered active allocated jobs:", allocatedJobs);
 
         const formattedJobs = allocatedJobs.map((job) => ({
           id: job._id,
@@ -77,6 +56,7 @@ const AllocatedJobsTable = () => {
 
         setJobs(formattedJobs);
       } catch (err) {
+        console.error("Error fetching allocated jobs:", err);
         setError(err.message);
       } finally {
         setLoading(false);
