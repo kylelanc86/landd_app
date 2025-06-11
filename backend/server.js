@@ -29,10 +29,13 @@ const allowedOrigins = [
   'https://air-monitoring-frontend.onrender.com'
 ];
 
-console.log('CORS Configuration:', {
-  allowedOrigins,
-  nodeEnv: process.env.NODE_ENV
-});
+// Only log CORS configuration in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('CORS Configuration:', {
+    allowedOrigins,
+    nodeEnv: process.env.NODE_ENV
+  });
+}
 
 app.use(cors({
   origin: function(origin, callback) {
@@ -41,7 +44,6 @@ app.use(cors({
     
     // In development, allow all localhost origins
     if (process.env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
-      console.log('CORS allowed development request from:', origin);
       return callback(null, true);
     }
     
@@ -49,15 +51,16 @@ app.use(cors({
       console.log('CORS blocked request from:', origin);
       return callback(new Error('Not allowed by CORS'));
     }
-    console.log('CORS allowed request from:', origin);
     return callback(null, true);
   },
   credentials: true
 }));
 
-// Add request logging middleware
+// Add request logging middleware - only log non-GET requests and errors
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  if (req.method !== 'GET') {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  }
   next();
 });
 

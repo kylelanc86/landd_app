@@ -20,13 +20,13 @@ const api = axios.create({
 // Add request interceptor
 api.interceptors.request.use(
   (config) => {
-    console.log('API Request:', {
-      url: config.url,
-      method: config.method,
-      baseURL: config.baseURL,
-      headers: config.headers,
-      withCredentials: config.withCredentials
-    });
+    // Only log non-GET requests
+    if (config.method !== 'get') {
+      console.log('API Request:', {
+        url: config.url,
+        method: config.method
+      });
+    }
     const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -42,26 +42,25 @@ api.interceptors.request.use(
 // Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => {
-    console.log('API Response:', {
-      url: response.config.url,
-      status: response.status,
-      data: response.data,
-      headers: response.headers
-    });
+    // Only log non-GET responses
+    if (response.config.method !== 'get') {
+      console.log('API Response:', {
+        url: response.config.url,
+        status: response.status
+      });
+    }
     return response;
   },
   async (error) => {
+    // Always log errors
     console.error('API Response Error:', {
       url: error.config?.url,
       status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-      headers: error.response?.headers
+      message: error.message
     });
 
     // Handle token expiration
     if (error.response?.status === 401 && error.response?.data?.newToken) {
-      console.log('Token expired, received new token');
       const newToken = error.response.data.newToken;
       localStorage.setItem("token", newToken);
       
@@ -72,9 +71,13 @@ api.interceptors.response.use(
 
     // Handle other 401 errors (not token expiration)
     if (error.response?.status === 401) {
-      console.log('Unauthorized access, redirecting to login');
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+      const token = localStorage.getItem("token");
+      const currentUser = localStorage.getItem("currentUser");
+      
+      // Only redirect to login if we don't have a token or current user
+      if (!token && !currentUser) {
+        window.location.href = "/login";
+      }
     }
 
     return Promise.reject(error);

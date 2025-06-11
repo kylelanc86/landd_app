@@ -216,7 +216,7 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
       {
         table: {
           headerRows: 1,
-          widths: ['12%', '6%', '23%', '8%', '8%', '12%', '8%', '8%', '15%'],
+          widths: ['12%', '6%', '23%', '7%', '7%', '12%', '10%', '10%', '13%'],
           heights: 24,
           body: [
             [

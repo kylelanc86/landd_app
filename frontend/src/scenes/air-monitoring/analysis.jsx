@@ -269,6 +269,9 @@ const SampleForm = React.memo(
               }}
             >
               <Typography variant="subtitle1">Fibre Counts</Typography>
+              <Typography variant="subtitle2">"Spacebar" = 10 zeros, "/" = half fibre</Typography>
+
+              
               {!isReadOnly && (
                 <Button
                   startIcon={<ClearIcon />}

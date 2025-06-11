@@ -30,13 +30,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       users: project.users.filter(user => user !== null)
     }));
     
-    console.log('Projects with populated users:', JSON.stringify(projectsWithFilteredUsers.map(p => ({
-      id: p._id,
-      projectID: p.projectID,
-      name: p.name,
-      users: p.users
-    })), null, 2));
-    
     res.json(projectsWithFilteredUsers);
   } catch (err) {
     console.error('Error fetching projects:', err);
@@ -61,8 +54,6 @@ router.get('/:id', auth, checkPermission(['projects.view']), async (req, res) =>
 
 // Create project
 router.post('/', auth, checkPermission(['projects.create']), async (req, res) => {
-  console.log('Received project creation request with data:', req.body);
-  
   try {
     // Create new project instance
     const project = new Project({
@@ -82,12 +73,9 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
         email: ""
       }
     });
-
-    console.log('Created project instance:', project.toObject());
     
     // Save the project (this will trigger the pre-save hook)
     const newProject = await project.save();
-    console.log('Project saved successfully:', newProject.toObject());
     
     // Populate the users before sending response
     const populatedProject = await Project.findById(newProject._id)
@@ -111,8 +99,6 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
 // Update project
 router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) => {
   try {
-    console.log('Updating project with data:', req.body);
-    
     const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
@@ -160,7 +146,6 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     
     // Always update users array, defaulting to empty array if not provided
     project.users = Array.isArray(req.body.users) ? req.body.users : [];
-    console.log('Updated users array:', project.users);
 
     const updatedProject = await project.save();
     
@@ -169,7 +154,6 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
       .populate('client')
       .populate('users');
     
-    console.log('Updated project:', populatedProject.toObject());
     res.json(populatedProject);
   } catch (error) {
     console.error('Error updating project:', error);
