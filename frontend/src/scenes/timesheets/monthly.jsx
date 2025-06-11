@@ -96,9 +96,7 @@ const MonthlyTimesheet = () => {
         lastName: currentUser.lastName,
       },
     });
-    navigate(
-      `/timesheets/daily?date=${formattedDate}&userId=${currentUser._id}`
-    );
+    navigate(`/timesheets?date=${formattedDate}&userId=${currentUser._id}`);
   };
 
   const getStatusColor = (status) => {

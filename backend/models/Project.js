@@ -12,6 +12,11 @@ const projectSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  workOrder: {
+    type: String,
+    required: false,
+    trim: true
+  },
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Client',

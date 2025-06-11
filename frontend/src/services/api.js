@@ -168,7 +168,7 @@ export const projectService = {
       users: Array.isArray(data.users) ? data.users : (data.users ? [data.users] : [])
     };
     console.log('Project service update data:', updateData);
-    return api.patch(`/projects/${id}`, updateData);
+    return api.put(`/projects/${id}`, updateData);
   },
   delete: (id) => api.delete(`/projects/${id}`),
   getTimeLogs: (projectId) => api.get(`/projects/${projectId}/timelogs`),

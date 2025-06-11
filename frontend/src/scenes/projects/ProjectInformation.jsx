@@ -86,6 +86,7 @@ const ProjectInformation = () => {
     status: "Pending",
     address: "",
     description: "",
+    workOrder: "",
     users: [],
     categories: [],
     notes: "",
@@ -224,12 +225,8 @@ const ProjectInformation = () => {
       script.onload = () => {
         console.log("Google Maps script loaded successfully");
         const autocomplete =
-          new window.google.maps.places.AutocompleteService();
-        const places = new window.google.maps.places.PlacesService(
-          document.createElement("div")
-        );
+          new window.google.maps.places.AutocompleteSuggestion();
         setAutocompleteService(autocomplete);
-        setPlacesService(places);
       };
 
       script.onerror = (error) => {
@@ -244,12 +241,9 @@ const ProjectInformation = () => {
         }
       };
     } else {
-      const autocomplete = new window.google.maps.places.AutocompleteService();
-      const places = new window.google.maps.places.PlacesService(
-        document.createElement("div")
-      );
+      const autocomplete =
+        new window.google.maps.places.AutocompleteSuggestion();
       setAutocompleteService(autocomplete);
-      setPlacesService(places);
     }
   }, []);
 
@@ -278,27 +272,26 @@ const ProjectInformation = () => {
     }
   };
 
-  const handleAddressSelect = (placeId) => {
-    if (!placeId || !placesService) return;
+  const handleAddressSelect = async (placeId) => {
+    if (!placeId) return;
 
-    placesService.getDetails(
-      {
-        placeId,
+    try {
+      const place = new window.google.maps.places.Place({
+        id: placeId,
         fields: ["formatted_address", "geometry", "address_components"],
-      },
-      (place, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-          console.log("Selected place:", place);
-          setForm((prev) => ({
-            ...prev,
-            address: place.formatted_address,
-          }));
-          setAddressInput(place.formatted_address);
-        } else {
-          console.error("Error getting place details:", status);
-        }
-      }
-    );
+      });
+
+      const result = await place.fetchFields();
+      console.log("Selected place:", result);
+
+      setForm((prev) => ({
+        ...prev,
+        address: result.formatted_address,
+      }));
+      setAddressInput(result.formatted_address);
+    } catch (error) {
+      console.error("Error getting place details:", error);
+    }
   };
 
   const handleChange = (e) => {
@@ -526,6 +519,9 @@ const ProjectInformation = () => {
                     getOptionLabel={(option) => option.name}
                     value={form.client}
                     onChange={handleClientChange}
+                    isOptionEqualToValue={(option, value) =>
+                      option._id === value._id
+                    }
                     sx={{ flex: 1 }}
                     renderInput={(params) => (
                       <TextField {...params} label="Client" required />
@@ -644,6 +640,17 @@ const ProjectInformation = () => {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
+                  label="Work Order/Job Reference"
+                  name="workOrder"
+                  value={form.workOrder}
+                  onChange={handleChange}
+                  placeholder="Enter work order or job reference number"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
                   label="Description"
                   name="description"
                   value={form.description}
@@ -711,6 +718,9 @@ const ProjectInformation = () => {
                   }
                   value={form.users}
                   onChange={handleUsersChange}
+                  isOptionEqualToValue={(option, value) =>
+                    option._id === value._id
+                  }
                   renderInput={(params) => (
                     <TextField
                       {...params}

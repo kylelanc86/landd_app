@@ -248,10 +248,8 @@ const TimesheetReview = () => {
         date: formattedDate,
       });
 
-      // Navigate to the daily timesheet view with the correct user ID
-      navigate(
-        `/timesheets/daily?userId=${targetUserId}&date=${formattedDate}`
-      );
+      // Navigate to the timesheet view with the correct user ID
+      navigate(`/timesheets?userId=${targetUserId}&date=${formattedDate}`);
     } catch (error) {
       console.error("Error navigating to timesheet:", error);
       setError("Failed to open timesheet. Please try again.");

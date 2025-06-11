@@ -11,7 +11,7 @@ const Timesheet = require('../models/Timesheet');
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const projects = await Project.find()
-      .select('projectID name client department category status address startDate endDate description users createdAt updatedAt')
+      .select('projectID name client department category status address startDate endDate description workOrder users createdAt updatedAt')
       .populate({
         path: 'client',
         select: 'name'
@@ -27,7 +27,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     // Filter out null users from the populated array
     const projectsWithFilteredUsers = projects.map(project => ({
       ...project,
-      users: project.users.filter(user => user !== null)
+      users: Array.isArray(project.users) ? project.users.filter(user => user !== null) : []
     }));
     
     res.json(projectsWithFilteredUsers);
@@ -66,6 +66,7 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       description: req.body.description,
+      workOrder: req.body.workOrder,
       users: req.body.users || [],
       projectContact: req.body.projectContact || {
         name: "",
@@ -97,55 +98,26 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
 });
 
 // Update project
-router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) => {
+router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Check if status is being changed
-    if (req.body.status && req.body.status !== project.status) {
-      // Require additional permission for status changes
-      const rolePermissions = ROLE_PERMISSIONS[req.user.role] || [];
-      if (!rolePermissions.includes('projects.change_status')) {
-        return res.status(403).json({ 
-          message: 'You do not have permission to change project status',
-          required: ['projects.change_status']
-        });
-      }
-    }
-
-    // If users are being updated, validate that all users are active
-    if (req.body.users) {
-      const userIds = Array.isArray(req.body.users) ? req.body.users : [];
-      const users = await User.find({ _id: { $in: userIds } });
-      const inactiveUsers = users.filter(user => !user.isActive);
-      
-      if (inactiveUsers.length > 0) {
-        return res.status(400).json({ 
-          message: 'Cannot assign inactive users to projects',
-          inactiveUsers: inactiveUsers.map(user => ({
-            id: user._id,
-            name: `${user.firstName} ${user.lastName}`
-          }))
-        });
-      }
-    }
-
-    // Update fields
-    if (req.body.name) project.name = req.body.name;
-    if (req.body.department) project.department = req.body.department;
-    if (req.body.categories) project.categories = req.body.categories;
-    if (req.body.status) project.status = req.body.status;
-    if (req.body.address) project.address = req.body.address;
-    if (req.body.startDate) project.startDate = req.body.startDate;
-    if (req.body.endDate) project.endDate = req.body.endDate;
-    if (req.body.description) project.description = req.body.description;
-    if (req.body.projectContact) project.projectContact = req.body.projectContact;
-    
-    // Always update users array, defaulting to empty array if not provided
-    project.users = Array.isArray(req.body.users) ? req.body.users : [];
+    // Update project fields
+    project.name = req.body.name || project.name;
+    project.client = req.body.client || project.client;
+    project.department = req.body.department || project.department;
+    project.categories = req.body.categories || project.categories;
+    project.status = req.body.status || project.status;
+    project.address = req.body.address || project.address;
+    project.startDate = req.body.startDate || project.startDate;
+    project.endDate = req.body.endDate || project.endDate;
+    project.description = req.body.description || project.description;
+    project.workOrder = req.body.workOrder || project.workOrder;
+    project.users = req.body.users || project.users;
+    project.projectContact = req.body.projectContact || project.projectContact;
 
     const updatedProject = await project.save();
     
@@ -155,9 +127,9 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
       .populate('users');
     
     res.json(populatedProject);
-  } catch (error) {
-    console.error('Error updating project:', error);
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    console.error('Error updating project:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 

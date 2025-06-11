@@ -97,6 +97,7 @@ const emptyForm = {
   department: PROJECT_TYPES[0],
   category: "",
   address: "",
+  workOrder: "",
   users: [],
   status: ACTIVE_STATUSES[0],
   projectContact: {
@@ -428,6 +429,7 @@ const Projects = () => {
     department: PROJECT_TYPES[0],
     category: "",
     address: "",
+    workOrder: "",
     users: [],
     status: ACTIVE_STATUSES[0],
     projectContact: {
@@ -484,6 +486,7 @@ const Projects = () => {
             ...project,
             id: project._id,
             projectName: project.name,
+            workOrder: project.workOrder || "",
             users: Array.isArray(project.users)
               ? project.users.map((user) => ({
                   _id: user._id,
@@ -889,6 +892,13 @@ const Projects = () => {
       ),
     },
     {
+      field: "workOrder",
+      headerName: "Work Order/Job Reference",
+      flex: 1,
+      minWidth: 150,
+      hide: true, // Hidden by default
+    },
+    {
       field: "clientName",
       headerName: "Client",
       flex: 1,
@@ -1149,6 +1159,11 @@ const Projects = () => {
           disableRowSelectionOnClick
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: "projectID", sort: "desc" }],
+            },
+          }}
         />
       </Box>
 
@@ -1273,6 +1288,18 @@ const Projects = () => {
                   />
                 </Grid>
                 <Grid item xs={12}>
+                  <TextField
+                    label="Work Order/Job Reference"
+                    name="workOrder"
+                    value={form.workOrder}
+                    onChange={handleChange}
+                    fullWidth
+                    variant="outlined"
+                    size="small"
+                    placeholder="Enter work order or job reference number"
+                  />
+                </Grid>
+                <Grid item xs={12}>
                   <Typography
                     variant="subtitle1"
                     sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
@@ -1288,259 +1315,19 @@ const Projects = () => {
                     getOptionLabel={(option) =>
                       `${option.firstName} ${option.lastName}`
                     }
-                    value={users.filter((user) =>
-                      form.users.includes(user._id)
-                    )}
+                    value={form.users}
                     onChange={handleUsersChange}
                     renderInput={(params) => (
                       <TextField {...params} label="Users" required fullWidth />
                     )}
-                    isOptionEqualToValue={(option, value) =>
-                      option._id === value._id
-                    }
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
-                  >
-                    Project Details
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    label="Start Date"
-                    name="startDate"
-                    type="date"
-                    value={form.startDate}
-                    onChange={handleChange}
-                    fullWidth
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    label="End Date"
-                    name="endDate"
-                    type="date"
-                    value={form.endDate}
-                    onChange={handleChange}
-                    fullWidth
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <TextField
-                    label="Description"
-                    name="description"
-                    value={form.description}
-                    onChange={handleChange}
-                    multiline
-                    rows={4}
-                    fullWidth
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
-                  >
-                    Project Contact
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Contact Name"
-                    name="projectContact.name"
-                    value={form.projectContact.name}
-                    onChange={handleChange}
-                    fullWidth
-                    variant="outlined"
-                    size="small"
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Contact Number"
-                    name="projectContact.number"
-                    value={form.projectContact.number}
-                    onChange={handleChange}
-                    fullWidth
-                    variant="outlined"
-                    size="small"
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Contact Email"
-                    name="projectContact.email"
-                    value={form.projectContact.email}
-                    onChange={handleChange}
-                    fullWidth
-                    variant="outlined"
-                    size="small"
                   />
                 </Grid>
               </Grid>
             </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setDialogOpen(false)} color="secondary">
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary">
-              {selectedProject ? "Save Changes" : "Create Project"}
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-
-      {/* Add New Client Dialog */}
-      <Dialog
-        open={clientDialogOpen}
-        onClose={() => setClientDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Add New Client</DialogTitle>
-        <form onSubmit={handleNewClientSubmit}>
-          <DialogContent>
-            <Stack spacing={2}>
-              <TextField
-                label="Client Name"
-                name="name"
-                value={newClient.name}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, name: e.target.value })
-                }
-                required
-                fullWidth
-              />
-              <TextField
-                label="Invoice Email"
-                name="invoiceEmail"
-                type="email"
-                value={newClient.invoiceEmail}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, invoiceEmail: e.target.value })
-                }
-                required
-                fullWidth
-              />
-              <TextField
-                label="Phone"
-                name="phone"
-                value={newClient.phone}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, phone: e.target.value })
-                }
-                fullWidth
-              />
-              <TextField
-                label="Address"
-                name="address"
-                value={newClient.address}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, address: e.target.value })
-                }
-                fullWidth
-              />
-              <Typography
-                variant="subtitle1"
-                sx={{ mt: 2, fontWeight: "bold" }}
-              >
-                Primary Contact
-              </Typography>
-              <TextField
-                label="Contact Name"
-                name="contact1Name"
-                value={newClient.contact1Name}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, contact1Name: e.target.value })
-                }
-                required
-                fullWidth
-              />
-              <TextField
-                label="Contact Phone"
-                name="contact1Number"
-                value={newClient.contact1Number}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, contact1Number: e.target.value })
-                }
-                required
-                fullWidth
-              />
-              <TextField
-                label="Contact Email"
-                name="contact1Email"
-                type="email"
-                value={newClient.contact1Email}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, contact1Email: e.target.value })
-                }
-                required
-                fullWidth
-              />
-              <Typography
-                variant="subtitle1"
-                sx={{ mt: 2, fontWeight: "bold" }}
-              >
-                Secondary Contact (Optional)
-              </Typography>
-              <TextField
-                label="Contact Name"
-                name="contact2Name"
-                value={newClient.contact2Name}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, contact2Name: e.target.value })
-                }
-                fullWidth
-              />
-              <TextField
-                label="Contact Phone"
-                name="contact2Number"
-                value={newClient.contact2Number}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, contact2Number: e.target.value })
-                }
-                fullWidth
-              />
-              <TextField
-                label="Contact Email"
-                name="contact2Email"
-                type="email"
-                value={newClient.contact2Email}
-                onChange={(e) =>
-                  setNewClient({ ...newClient, contact2Email: e.target.value })
-                }
-                fullWidth
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => setClientDialogOpen(false)}
-              color="secondary"
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary">
-              Add Client
-            </Button>
+            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button type="submit">Save</Button>
           </DialogActions>
         </form>
       </Dialog>

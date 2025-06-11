@@ -180,11 +180,14 @@ const Clients = () => {
     const searchLower = search.toLowerCase();
     return (
       searchLower === "" ||
-      client.name.toLowerCase().includes(searchLower) ||
-      client.invoiceEmail.toLowerCase().includes(searchLower) ||
-      client.contact1Name.toLowerCase().includes(searchLower) ||
-      client.contact1Number.toLowerCase().includes(searchLower) ||
-      client.address.toLowerCase().includes(searchLower)
+      (client.name && client.name.toLowerCase().includes(searchLower)) ||
+      (client.invoiceEmail &&
+        client.invoiceEmail.toLowerCase().includes(searchLower)) ||
+      (client.contact1Name &&
+        client.contact1Name.toLowerCase().includes(searchLower)) ||
+      (client.contact1Number &&
+        client.contact1Number.toLowerCase().includes(searchLower)) ||
+      (client.address && client.address.toLowerCase().includes(searchLower))
     );
   });
 
