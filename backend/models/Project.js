@@ -64,7 +64,10 @@ const projectSchema = new mongoose.Schema({
     type: String,
     required: false
   },
-  description: String,
+  notes: {
+    type: String,
+    required: false
+  },
   projectContact: {
     name: {
       type: String,

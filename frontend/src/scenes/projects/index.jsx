@@ -95,11 +95,12 @@ const emptyForm = {
   name: "",
   client: "",
   department: PROJECT_TYPES[0],
-  category: "",
+  categories: [],
   address: "",
   workOrder: "",
   users: [],
   status: ACTIVE_STATUSES[0],
+  notes: "",
   projectContact: {
     name: "",
     number: "",
@@ -432,6 +433,7 @@ const Projects = () => {
     workOrder: "",
     users: [],
     status: ACTIVE_STATUSES[0],
+    notes: "",
     projectContact: {
       name: "",
       number: "",
@@ -869,13 +871,13 @@ const Projects = () => {
       ),
     },
     {
-      field: "projectName",
+      field: "name",
       headerName: "Project Name",
       flex: 1,
       minWidth: 200,
-      renderCell: ({ row: { projectName, _id } }) => (
+      renderCell: ({ row }) => (
         <Box
-          onClick={() => navigate(`/projects/${_id}`)}
+          onClick={() => navigate(`/projects/${row._id}`)}
           sx={{
             cursor: "pointer",
             "&:hover": { color: colors.blueAccent[500] },
@@ -887,7 +889,7 @@ const Projects = () => {
             alignItems: "center",
           }}
         >
-          {projectName}
+          {row.name}
         </Box>
       ),
     },
@@ -899,9 +901,12 @@ const Projects = () => {
       hide: true, // Hidden by default
     },
     {
-      field: "clientName",
+      field: "client",
       headerName: "Client",
       flex: 1,
+      renderCell: ({ row }) => (
+        <span>{row.client?.name || row.client || ""}</span>
+      ),
     },
     {
       field: "department",
@@ -1258,19 +1263,26 @@ const Projects = () => {
                 </Grid>
                 <Grid item xs={12}>
                   <FormControl fullWidth>
-                    <InputLabel>Category</InputLabel>
-                    <Select
-                      name="category"
-                      value={form.category}
-                      onChange={handleChange}
-                      label="Category"
-                    >
-                      {CATEGORIES.map((category) => (
-                        <MenuItem key={category} value={category}>
-                          {category}
-                        </MenuItem>
-                      ))}
-                    </Select>
+                    <Autocomplete
+                      multiple
+                      options={CATEGORIES}
+                      value={form.categories}
+                      onChange={(event, newValue) => {
+                        setForm((prev) => ({ ...prev, categories: newValue }));
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Categories"
+                          placeholder="Select categories"
+                        />
+                      )}
+                      renderTags={(value, getTagProps) =>
+                        value.map((option, index) => (
+                          <Chip label={option} {...getTagProps({ index })} />
+                        ))
+                      }
+                    />
                   </FormControl>
                 </Grid>
                 <Grid item xs={12}>
@@ -1300,6 +1312,18 @@ const Projects = () => {
                   />
                 </Grid>
                 <Grid item xs={12}>
+                  <TextField
+                    label="Notes"
+                    name="notes"
+                    value={form.notes}
+                    onChange={handleChange}
+                    fullWidth
+                    multiline
+                    rows={4}
+                    placeholder="Enter any additional notes about the project"
+                  />
+                </Grid>
+                <Grid item xs={12}>
                   <Typography
                     variant="subtitle1"
                     sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
@@ -1317,8 +1341,15 @@ const Projects = () => {
                     }
                     value={form.users}
                     onChange={handleUsersChange}
+                    isOptionEqualToValue={(option, value) =>
+                      option._id === value._id
+                    }
                     renderInput={(params) => (
-                      <TextField {...params} label="Users" required fullWidth />
+                      <TextField
+                        {...params}
+                        label="Users (Optional)"
+                        fullWidth
+                      />
                     )}
                   />
                 </Grid>

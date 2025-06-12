@@ -72,7 +72,8 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
         name: "",
         number: "",
         email: ""
-      }
+      },
+      notes: req.body.notes || ""
     });
     
     // Save the project (this will trigger the pre-save hook)
@@ -118,6 +119,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.workOrder = req.body.workOrder || project.workOrder;
     project.users = req.body.users || project.users;
     project.projectContact = req.body.projectContact || project.projectContact;
+    project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
 
     const updatedProject = await project.save();
     

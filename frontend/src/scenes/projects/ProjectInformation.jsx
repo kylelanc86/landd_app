@@ -85,7 +85,6 @@ const ProjectInformation = () => {
     department: "",
     status: "Pending",
     address: "",
-    description: "",
     workOrder: "",
     users: [],
     categories: [],
@@ -648,12 +647,12 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Description"
-                  name="description"
-                  value={form.description}
+                  label="Notes"
+                  name="notes"
+                  value={form.notes}
                   onChange={handleChange}
                   multiline
                   rows={4}
@@ -724,7 +723,7 @@ const ProjectInformation = () => {
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="Assigned Users"
+                      label="Assigned Users (Optional)"
                       placeholder="Select users"
                     />
                   )}
