@@ -4,13 +4,13 @@ import axios from 'axios';
 console.log('API Environment:', {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
-  defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://air-monitoring-backend.onrender.com/api",
-  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://air-monitoring-backend.onrender.com/api")
+  defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend.onrender.com/api",
+  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend.onrender.com/api")
 });
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://air-monitoring-backend.onrender.com/api"),
+  baseURL: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend.onrender.com/api"),
   headers: {
     "Content-Type": "application/json",
   },
@@ -24,7 +24,8 @@ api.interceptors.request.use(
     if (config.method !== 'get') {
       console.log('API Request:', {
         url: config.url,
-        method: config.method
+        method: config.method,
+        headers: config.headers
       });
     }
     const token = localStorage.getItem("token");
@@ -46,7 +47,8 @@ api.interceptors.response.use(
     if (response.config.method !== 'get') {
       console.log('API Response:', {
         url: response.config.url,
-        status: response.status
+        status: response.status,
+        headers: response.headers
       });
     }
     return response;
@@ -56,7 +58,8 @@ api.interceptors.response.use(
     console.error('API Response Error:', {
       url: error.config?.url,
       status: error.response?.status,
-      message: error.message
+      message: error.message,
+      headers: error.response?.headers
     });
 
     // Handle token expiration
