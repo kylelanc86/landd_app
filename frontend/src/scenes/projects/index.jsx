@@ -1127,7 +1127,6 @@ const Projects = () => {
 
       <Box
         m="40px 0 0 0"
-        height="75vh"
         sx={{
           "& .MuiDataGrid-root": {
             border: "none",
@@ -1169,6 +1168,7 @@ const Projects = () => {
               sortModel: [{ field: "projectID", sort: "desc" }],
             },
           }}
+          autoHeight
         />
       </Box>
 
