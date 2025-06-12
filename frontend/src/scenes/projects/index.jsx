@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Box,
   Typography,
@@ -60,6 +66,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import TruncatedCell from "../../components/TruncatedCell";
 import { Visibility, MoreVert } from "@mui/icons-material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import performanceMonitor from "../../utils/performanceMonitor";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -424,22 +431,7 @@ const Projects = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [form, setForm] = useState({
-    name: "",
-    client: "",
-    department: PROJECT_TYPES[0],
-    category: "",
-    address: "",
-    workOrder: "",
-    users: [],
-    status: ACTIVE_STATUSES[0],
-    notes: "",
-    projectContact: {
-      name: "",
-      number: "",
-      email: "",
-    },
-  });
+  const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -474,8 +466,49 @@ const Projects = () => {
   const [showInactive, setShowInactive] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState("All");
 
+  // Use refs to track component state
+  const isInitialLoadRef = useRef(true);
+  const hasFetchedRef = useRef(false);
+  const pageLoadTimerRef = useRef(null);
+  const renderStartTimeRef = useRef(null);
+
+  // Start page load monitoring only on initial mount
+  useEffect(() => {
+    if (isInitialLoadRef.current) {
+      pageLoadTimerRef.current =
+        performanceMonitor.startPageLoad("projects-page");
+      isInitialLoadRef.current = false;
+    }
+
+    // Cleanup function to handle navigation
+    return () => {
+      if (pageLoadTimerRef.current) {
+        performanceMonitor.endPageLoad("projects-page");
+        pageLoadTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Monitor data rendering
+  useEffect(() => {
+    if (!loading && projects.length > 0) {
+      renderStartTimeRef.current = performance.now();
+      performanceMonitor.startTimer("data-render");
+    }
+  }, [loading, projects]);
+
+  const handleRenderComplete = useCallback(() => {
+    if (renderStartTimeRef.current) {
+      performanceMonitor.endTimer("data-render");
+      renderStartTimeRef.current = null;
+    }
+  }, []);
+
   const fetchProjects = useCallback(async () => {
+    if (hasFetchedRef.current) return;
+
     try {
+      performanceMonitor.startTimer("fetch-projects");
       setLoading(true);
       const response = await projectService.getAll();
 
@@ -504,18 +537,26 @@ const Projects = () => {
         : [];
 
       setProjects(transformedProjects);
+      hasFetchedRef.current = true;
     } catch (err) {
       console.error("Error fetching projects:", err);
       setError(err.message);
       setProjects([]); // fallback to empty array on error
     } finally {
       setLoading(false);
+      performanceMonitor.endTimer("fetch-projects");
     }
   }, []);
 
+  // Only fetch projects on initial mount
   useEffect(() => {
     fetchProjects();
-  }, [fetchProjects]);
+
+    // Reset the fetch flag when component unmounts
+    return () => {
+      hasFetchedRef.current = false;
+    };
+  }, []);
 
   // Fetch clients and users when component mounts
   useEffect(() => {
@@ -822,36 +863,41 @@ const Projects = () => {
     setSelectedDepartment(department);
   };
 
-  // Filter projects based on all criteria
+  // Memoize filtered projects to prevent unnecessary recalculations
   const filteredProjects = useMemo(() => {
     let filtered = projects;
 
-    // Filter by department
-    if (selectedDepartment !== "All") {
-      filtered = filtered.filter(
-        (project) => project.department === selectedDepartment
-      );
-    }
-
-    // Filter by search term
     if (searchTerm) {
-      filtered = filtered.filter((project) =>
-        project.projectName.toLowerCase().includes(searchTerm.toLowerCase())
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (project) =>
+          project.name?.toLowerCase().includes(searchLower) ||
+          project.clientName?.toLowerCase().includes(searchLower) ||
+          project.workOrder?.toLowerCase().includes(searchLower)
       );
     }
 
-    // Filter by status
+    if (departmentFilter !== "all") {
+      filtered = filtered.filter(
+        (project) => project.department === departmentFilter
+      );
+    }
+
     if (statusFilter !== "all") {
       filtered = filtered.filter((project) => project.status === statusFilter);
     }
 
-    // Filter out inactive projects unless showInactive is true
-    filtered = filtered.filter(
-      (project) => showInactive || !INACTIVE_STATUSES.includes(project.status)
-    );
+    if (activeFilter !== "all") {
+      const isActive = activeFilter === "active";
+      filtered = filtered.filter((project) =>
+        isActive
+          ? ACTIVE_STATUSES.includes(project.status)
+          : INACTIVE_STATUSES.includes(project.status)
+      );
+    }
 
     return filtered;
-  }, [projects, selectedDepartment, searchTerm, statusFilter, showInactive]);
+  }, [projects, searchTerm, departmentFilter, statusFilter, activeFilter]);
 
   const columns = [
     {
@@ -873,8 +919,8 @@ const Projects = () => {
     {
       field: "name",
       headerName: "Project Name",
-      flex: 1,
-      minWidth: 200,
+      flex: 2,
+      minWidth: 300,
       renderCell: ({ row }) => (
         <Box
           onClick={() => navigate(`/projects/${row._id}`)}
@@ -1132,7 +1178,7 @@ const Projects = () => {
             border: "none",
           },
           "& .MuiDataGrid-cell": {
-            borderBottom: "none",
+            borderBottom: `1px solid ${theme.palette.divider}`,
           },
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: theme.palette.primary.dark,
@@ -1169,6 +1215,8 @@ const Projects = () => {
             },
           }}
           autoHeight
+          onStateChange={handleRenderComplete}
+          onRowsUpdated={handleRenderComplete}
         />
       </Box>
 
