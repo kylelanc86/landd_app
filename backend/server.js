@@ -26,7 +26,8 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:3000',
   'https://landd-app-frontend.onrender.com',
-  'https://air-monitoring-frontend.onrender.com'
+  'https://air-monitoring-frontend.onrender.com',
+  'https://landd-app-frontend1.onrender.com'  // Added new frontend domain
 ];
 
 // Log CORS configuration
@@ -75,6 +76,15 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
 // Connect to database
 connectDB()
   .then(() => {
@@ -94,7 +104,10 @@ connectDB()
     // Error handling middleware
     app.use((err, req, res, next) => {
       console.error(err.stack);
-      res.status(500).json({ message: 'Something went wrong!' });
+      res.status(500).json({ 
+        message: 'Something went wrong!',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+      });
     });
 
     // Start server
