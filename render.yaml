@@ -25,6 +25,6 @@ services:
     startCommand: cd frontend && serve -s build
     envVars:
       - key: REACT_APP_API_URL
-        value: https://air-monitoring-backend.onrender.com/api
+        value: https://https://landd-app-backend.onrender.com/api
       - key: NODE_ENV
         value: production 
