@@ -822,23 +822,25 @@ const Projects = () => {
   // UsersCell component for rendering user avatars
   const UsersCell = ({ users }) => {
     if (!users || users.length === 0) {
-      return (
-        <Typography variant="body2" color="textSecondary">
-          No users assigned
-        </Typography>
-      );
+      return <span>-</span>;
     }
 
     return (
       <Box sx={{ display: "flex", gap: 0.5 }}>
-        {users.map((user, idx) => (
+        {users.map((user, index) => (
           <Tooltip
-            key={user._id || idx}
+            key={user._id || index}
             title={`${user.firstName} ${user.lastName}`}
           >
-            <Avatar sx={{ width: 24, height: 24, fontSize: "0.75rem" }}>
-              {user.firstName?.[0]}
-              {user.lastName?.[0]}
+            <Avatar
+              sx={{
+                width: 24,
+                height: 24,
+                fontSize: "0.75rem",
+                bgcolor: getRandomColor(user),
+              }}
+            >
+              {getInitials(user)}
             </Avatar>
           </Tooltip>
         ))}

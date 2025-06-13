@@ -67,7 +67,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         .skip(skip)
         .limit(parseInt(limit))
         .populate('client', 'name')
-        .populate('department', 'name')
         .populate('users', 'firstName lastName');
 
       console.log('Query results:', { total, projectsCount: projects.length });
@@ -77,7 +76,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         data: projects.map(project => ({
           ...project.toObject(),
           client: project.client?.name || '',
-          department: project.department?.name || '',
+          department: project.department || '',
           assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || ''
         })),
         pagination: {
