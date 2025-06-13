@@ -22,55 +22,18 @@ dotenv.config();
 // Create Express app
 const app = express();
 
-// Middleware
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://landd-app-frontend.onrender.com',
-  'https://air-monitoring-frontend.onrender.com',
-  'https://landd-app-frontend1.onrender.com'  // Added new frontend domain
-];
-
-// Log CORS configuration
-console.log('CORS Configuration:', {
-  allowedOrigins,
-  nodeEnv: process.env.NODE_ENV
-});
-
+// Basic CORS setup for debugging
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      console.log('Request with no origin - allowing');
-      return callback(null, true);
-    }
-    
-    // Log all incoming origins
-    console.log('Incoming request origin:', origin);
-    
-    // In development, allow all localhost origins
-    if (process.env.NODE_ENV === 'development' && origin.startsWith('http://localhost:')) {
-      console.log('Development environment - allowing localhost');
-      return callback(null, true);
-    }
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      console.log('CORS blocked request from:', origin);
-      return callback(new Error('Not allowed by CORS'));
-    }
-    
-    console.log('CORS allowing request from:', origin);
-    return callback(null, true);
-  },
+  origin: true, // Allow all origins temporarily for debugging
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Add request logging middleware - only log non-GET requests and errors
+// Add request logging middleware
 app.use((req, res, next) => {
-  if (req.method !== 'GET') {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  }
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  console.log('Request Headers:', req.headers);
   next();
 });
 
@@ -81,7 +44,11 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
+    cors: {
+      origin: req.headers.origin,
+      allowed: true
+    }
   });
 });
 
@@ -103,10 +70,15 @@ connectDB()
 
     // Error handling middleware
     app.use((err, req, res, next) => {
-      console.error(err.stack);
+      console.error('Error:', err);
+      console.error('Request Headers:', req.headers);
       res.status(500).json({ 
         message: 'Something went wrong!',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+        cors: {
+          origin: req.headers.origin,
+          allowed: true
+        }
       });
     });
 
@@ -114,6 +86,7 @@ connectDB()
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
+      console.log('CORS is configured to allow all origins temporarily');
     });
   })
   .catch(err => {
