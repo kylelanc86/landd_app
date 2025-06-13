@@ -73,6 +73,17 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'LandD App Backend API',
+    status: 'running',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   const healthData = {
