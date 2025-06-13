@@ -2,12 +2,49 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 
-// Get all clients
+// Get all clients with search and pagination
 router.get('/', async (req, res) => {
   try {
-    const clients = await Client.find().sort({ name: 1 });
-    res.json(clients);
+    const { search, page = 1, limit = 25 } = req.query;
+    const query = {};
+
+    // Add search condition if search term is provided
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { invoiceEmail: { $regex: search, $options: 'i' } },
+        { contact1Name: { $regex: search, $options: 'i' } },
+        { contact1Number: { $regex: search, $options: 'i' } },
+        { address: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get total count for pagination
+    const total = await Client.countDocuments(query);
+
+    // Execute query with pagination
+    const clients = await Client.find(query)
+      .select('name invoiceEmail contact1Name contact1Number address')
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Send response with pagination metadata
+    res.json({
+      clients,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (err) {
+    console.error('Error fetching clients:', err);
     res.status(500).json({ message: err.message });
   }
 });

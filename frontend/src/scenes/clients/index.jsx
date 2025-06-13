@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, memo, useRef } from "react";
 import {
   Box,
   Button,
@@ -31,6 +31,7 @@ import {
   formatPhoneNumber,
   isValidAustralianMobile,
 } from "../../utils/formatters";
+import { debounce } from "lodash";
 
 const emptyForm = {
   name: "",
@@ -45,6 +46,8 @@ const emptyForm = {
 };
 
 const Clients = () => {
+  console.log("Clients component rendering");
+
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
@@ -58,22 +61,93 @@ const Clients = () => {
   const [editId, setEditId] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 25,
+    total: 0,
+    pages: 0,
+  });
+  const searchInputRef = useRef(null);
 
+  // Debug mount/unmount
   useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        const response = await clientService.getAll();
-        setClients(response.data);
-        setLoading(false);
-      } catch (err) {
-        setError("Failed to fetch clients");
-        setLoading(false);
-        console.error("Error fetching clients:", err);
-      }
-    };
+    console.log("Clients component mounted");
+    return () => console.log("Clients component unmounted");
+  }, []);
 
+  // Debug search state changes
+  useEffect(() => {
+    console.log("Search state changed:", { searchInput, search });
+  }, [searchInput, search]);
+
+  // Debug pagination changes
+  useEffect(() => {
+    console.log("Pagination state changed:", pagination);
+  }, [pagination]);
+
+  // Debounced search handler
+  const debouncedSearch = useCallback(
+    debounce((value) => {
+      setSearch(value);
+      setPagination((prev) => ({ ...prev, page: 1 }));
+    }, 300),
+    []
+  );
+
+  // Handle search input change
+  const handleSearchChange = useCallback(
+    (event) => {
+      const value = event.target.value;
+      setSearchInput(value);
+      debouncedSearch(value);
+    },
+    [debouncedSearch]
+  );
+
+  // Handle key press
+  const handleKeyPress = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  // Fetch clients with search and pagination
+  const fetchClients = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await clientService.getAll({
+        page: pagination.page,
+        limit: pagination.limit,
+        search: search,
+      });
+      setClients(response.data);
+      setPagination((prev) => ({
+        ...prev,
+        total: response.pagination.total,
+        pages: response.pagination.pages,
+      }));
+    } catch (err) {
+      console.error("Error fetching clients:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.page, pagination.limit, search]);
+
+  // Fetch clients when search or pagination changes
+  useEffect(() => {
     fetchClients();
+  }, [fetchClients]);
+
+  // Handle page change
+  const handlePageChange = useCallback((newPage) => {
+    setPagination((prev) => ({ ...prev, page: newPage }));
+  }, []);
+
+  // Handle page size change
+  const handlePageSizeChange = useCallback((newPageSize) => {
+    setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
   }, []);
 
   const handleChange = (e) => {
@@ -175,22 +249,6 @@ const Clients = () => {
     }
   };
 
-  // Filter clients based on search
-  const filteredClients = clients.filter((client) => {
-    const searchLower = search.toLowerCase();
-    return (
-      searchLower === "" ||
-      (client.name && client.name.toLowerCase().includes(searchLower)) ||
-      (client.invoiceEmail &&
-        client.invoiceEmail.toLowerCase().includes(searchLower)) ||
-      (client.contact1Name &&
-        client.contact1Name.toLowerCase().includes(searchLower)) ||
-      (client.contact1Number &&
-        client.contact1Number.toLowerCase().includes(searchLower)) ||
-      (client.address && client.address.toLowerCase().includes(searchLower))
-    );
-  });
-
   const columns = [
     { field: "name", headerName: "Client Name", flex: 1 },
     { field: "invoiceEmail", headerName: "Invoice Email", flex: 1 },
@@ -255,9 +313,10 @@ const Clients = () => {
         }}
       >
         <TextField
+          inputRef={searchInputRef}
           label="Search Clients"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={handleSearchChange}
           fullWidth
           InputProps={{
             startAdornment: (
@@ -274,7 +333,9 @@ const Clients = () => {
         height="75vh"
         sx={{
           "& .MuiDataGrid-root": { border: "none" },
-          "& .MuiDataGrid-cell": { borderBottom: "none" },
+          "& .MuiDataGrid-cell": {
+            borderBottom: `1px solid ${theme.palette.divider}`,
+          },
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: theme.palette.primary.dark,
             borderBottom: "none",
@@ -292,14 +353,24 @@ const Clients = () => {
         }}
       >
         <DataGrid
-          rows={filteredClients}
+          rows={clients}
           columns={columns}
           getRowId={(row) => row._id}
-          pageSize={10}
-          rowsPerPageOptions={[10]}
+          pageSize={pagination.limit}
+          page={pagination.page - 1}
+          rowCount={pagination.total}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          paginationMode="server"
+          loading={loading}
           autoHeight
           disableSelectionOnClick
           components={{ Toolbar: GridToolbar }}
+          keepNonExistentRowsSelected
+          disableColumnMenu
+          disableColumnFilter
+          disableColumnSelector
+          disableDensitySelector
         />
       </Box>
 
@@ -588,4 +659,4 @@ const Clients = () => {
   );
 };
 
-export default Clients;
+export default memo(Clients);

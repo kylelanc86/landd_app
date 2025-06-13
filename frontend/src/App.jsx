@@ -1,30 +1,23 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider, CssBaseline, Box } from "@mui/material";
 import { ColorModeContext, useMode } from "./theme";
+import { AuthProvider } from "./context/AuthContext";
+import { Suspense, lazy } from "react";
+import LoadingSpinner from "./components/LoadingSpinner";
+import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+import PermissionRoute from "./components/PermissionRoute";
+
+// Regular imports
 import Topbar from "./scenes/global/Topbar";
 import Sidebar from "./scenes/global/Sidebar";
 import Dashboard from "./scenes/dashboard";
 import Invoices from "./scenes/invoices";
-import Clients from "./scenes/clients";
 import Calendar from "./scenes/calendar";
-import { AuthProvider } from "./context/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
-import PermissionRoute from "./components/PermissionRoute";
 import Login from "./scenes/login";
 import ResetPassword from "./scenes/login/ResetPassword";
 import AirMonitoring from "./scenes/air-monitoring";
 import Shifts from "./scenes/air-monitoring/shifts";
-import Projects from "./scenes/projects";
-import SampleList from "./scenes/air-monitoring/air-monitoring-sample-list";
-import NewSample from "./scenes/air-monitoring/new-sample";
-import EditSample from "./scenes/air-monitoring/edit-sample";
-import Analysis from "./scenes/air-monitoring/analysis";
-import AsbestosAssessment from "./scenes/asbestos-assessment";
-import ResidentialAssessment from "./scenes/asbestos-assessment/ResidentialAssessment";
-import AssessmentSamples from "./scenes/asbestos-assessment/assessment-samples";
-import Users from "./scenes/users";
-import Profile from "./scenes/profile";
-import Layout from "./components/Layout";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
@@ -39,6 +32,25 @@ import GraticulePage from "./scenes/calibrations/air-mon-calibrations/pages/Grat
 import PrimaryFlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/PrimaryFlowmeterPage";
 import AnalysisPage from "./scenes/fibre/pages/AnalysisPage";
 import CalibrationsFibreID from "./scenes/calibrations/fibre-id-calibrations/index";
+
+// Lazy loaded components
+const Projects = lazy(() => import("./scenes/projects"));
+const SampleList = lazy(() =>
+  import("./scenes/air-monitoring/air-monitoring-sample-list")
+);
+const NewSample = lazy(() => import("./scenes/air-monitoring/new-sample"));
+const EditSample = lazy(() => import("./scenes/air-monitoring/edit-sample"));
+const Analysis = lazy(() => import("./scenes/air-monitoring/analysis"));
+const Users = lazy(() => import("./scenes/users"));
+const Profile = lazy(() => import("./scenes/profile"));
+const AsbestosAssessment = lazy(() => import("./scenes/asbestos-assessment"));
+const ResidentialAssessment = lazy(() =>
+  import("./scenes/asbestos-assessment/ResidentialAssessment")
+);
+const AssessmentSamples = lazy(() =>
+  import("./scenes/asbestos-assessment/assessment-samples")
+);
+const Clients = lazy(() => import("./scenes/clients"));
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -66,6 +78,18 @@ function App() {
                       <Routes>
                         <Route path="/" element={<Dashboard />} />
                         <Route
+                          path="/clients"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["clients.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Clients />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
                           path="/air-monitoring"
                           element={
                             <PermissionRoute
@@ -91,7 +115,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["jobs.view"]}
                             >
-                              <SampleList />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <SampleList />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -101,7 +127,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["jobs.create"]}
                             >
-                              <NewSample />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <NewSample />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -111,7 +139,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["jobs.edit"]}
                             >
-                              <EditSample />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <EditSample />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -121,7 +151,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["jobs.view"]}
                             >
-                              <Analysis />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Analysis />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -131,7 +163,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["projects.view"]}
                             >
-                              <Projects />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Projects />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -152,16 +186,6 @@ function App() {
                               requiredPermissions={["projects.create"]}
                             >
                               <ProjectInformation />
-                            </PermissionRoute>
-                          }
-                        />
-                        <Route
-                          path="/clients"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["clients.view"]}
-                            >
-                              <Clients />
                             </PermissionRoute>
                           }
                         />
@@ -191,38 +215,53 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["users.view"]}
                             >
-                              <Users />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Users />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
-                        <Route path="/profile" element={<Profile />} />
+                        <Route
+                          path="/profile"
+                          element={
+                            <Suspense fallback={<LoadingSpinner />}>
+                              <Profile />
+                            </Suspense>
+                          }
+                        />
                         <Route
                           path="/asbestos-assessment"
                           element={
                             <PermissionRoute
                               requiredPermissions={["asbestos.view"]}
                             >
-                              <AsbestosAssessment />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosAssessment />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
                         <Route
-                          path="/residential-assessment"
+                          path="/asbestos-assessment/residential"
                           element={
                             <PermissionRoute
                               requiredPermissions={["asbestos.view"]}
                             >
-                              <ResidentialAssessment />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ResidentialAssessment />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
                         <Route
-                          path="/asbestos-assessment/:id/samples"
+                          path="/asbestos-assessment/samples"
                           element={
                             <PermissionRoute
                               requiredPermissions={["asbestos.view"]}
                             >
-                              <AssessmentSamples />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AssessmentSamples />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />

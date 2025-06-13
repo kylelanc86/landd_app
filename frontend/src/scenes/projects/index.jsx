@@ -67,6 +67,8 @@ import TruncatedCell from "../../components/TruncatedCell";
 import { Visibility, MoreVert } from "@mui/icons-material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import performanceMonitor from "../../utils/performanceMonitor";
+import { debounce } from "lodash";
+import DownloadIcon from "@mui/icons-material/Download";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -435,10 +437,19 @@ const Projects = () => {
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 100,
+    total: 0,
+    pages: 0,
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("active");
+  const [sortModel, setSortModel] = useState([
+    { field: "projectID", sort: "desc" },
+  ]);
   const [newClient, setNewClient] = useState({
     name: "",
     email: "",
@@ -465,6 +476,10 @@ const Projects = () => {
   });
   const [showInactive, setShowInactive] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState("All");
+  const [paginationModel, setPaginationModel] = useState({
+    pageSize: 50,
+    page: 0,
+  });
 
   // Use refs to track component state
   const isInitialLoadRef = useRef(true);
@@ -505,57 +520,140 @@ const Projects = () => {
   }, []);
 
   const fetchProjects = useCallback(async () => {
-    if (hasFetchedRef.current) return;
-
     try {
       performanceMonitor.startTimer("fetch-projects");
       setLoading(true);
-      const response = await projectService.getAll();
 
-      // Extract the data array from the response
-      const projectsData = response.data || [];
+      const params = {
+        page: paginationModel.page + 1, // Convert to 1-based index
+        limit: paginationModel.pageSize,
+        sortBy: sortModel[0]?.field || "createdAt",
+        sortOrder: sortModel[0]?.sort || "desc",
+      };
 
-      // Transform the projects data if it's an array
-      const transformedProjects = Array.isArray(projectsData)
-        ? projectsData.map((project) => ({
-            ...project,
-            id: project._id,
-            projectName: project.name,
-            workOrder: project.workOrder || "",
-            users: Array.isArray(project.users)
-              ? project.users.map((user) => ({
-                  _id: user._id,
-                  firstName: user.firstName,
-                  lastName: user.lastName,
-                }))
-              : [],
-            clientName: project.client?.name || "Unknown Client",
-            department: project.department || "N/A",
-            status: project.status || "Assigned",
-            categories: project.categories || [],
-          }))
-        : [];
+      // Add filters if they're not set to 'all'
+      if (searchTerm) params.search = searchTerm;
+      if (departmentFilter !== "all") params.department = departmentFilter;
 
-      setProjects(transformedProjects);
-      hasFetchedRef.current = true;
+      // Handle status filters
+      if (activeFilter !== "all") {
+        // If active filter is set, use the appropriate status array
+        const statusArray =
+          activeFilter === "active" ? ACTIVE_STATUSES : INACTIVE_STATUSES;
+        params.status = statusArray.join(","); // Convert array to comma-separated string
+        console.log("Using status array:", statusArray);
+      } else if (statusFilter !== "all") {
+        // If specific status is selected, use that
+        params.status = statusFilter;
+        console.log("Using single status:", params.status);
+      }
+
+      console.log("Fetching projects with params:", params);
+      const response = await projectService.getAll(params);
+      console.log("API Response:", response);
+
+      // Handle both response structures
+      const projectsData = Array.isArray(response.data)
+        ? response.data
+        : response.data?.data || [];
+
+      setProjects(projectsData);
+      setPagination((prev) => ({
+        ...prev,
+        total: response.pagination?.total || 0,
+        pages: response.pagination?.pages || 0,
+      }));
     } catch (err) {
       console.error("Error fetching projects:", err);
       setError(err.message);
-      setProjects([]); // fallback to empty array on error
+      setProjects([]);
     } finally {
       setLoading(false);
       performanceMonitor.endTimer("fetch-projects");
     }
+  }, [
+    paginationModel,
+    searchTerm,
+    departmentFilter,
+    statusFilter,
+    activeFilter,
+    sortModel,
+  ]);
+
+  // Handle pagination model change
+  const handlePaginationModelChange = useCallback((newModel) => {
+    console.log("Pagination model changed:", newModel);
+    setPaginationModel(newModel);
   }, []);
 
-  // Only fetch projects on initial mount
+  // Fetch projects when filters or pagination change
   useEffect(() => {
     fetchProjects();
+  }, [fetchProjects]);
 
-    // Reset the fetch flag when component unmounts
-    return () => {
-      hasFetchedRef.current = false;
-    };
+  // Handle page change
+  const handlePageChange = useCallback((newPage) => {
+    setPagination((prev) => ({ ...prev, page: newPage }));
+  }, []);
+
+  // Handle page size change
+  const handlePageSizeChange = useCallback(
+    (newPageSize) => {
+      console.log("Page size changed to:", newPageSize);
+      setPagination((prev) => ({
+        ...prev,
+        limit: newPageSize,
+        page: 1, // Reset to first page when changing page size
+      }));
+      // Force a fetch with the new page size
+      fetchProjects();
+    },
+    [fetchProjects]
+  );
+
+  // Handle sort change
+  const handleSortModelChange = useCallback((newSortModel) => {
+    setSortModel(newSortModel);
+  }, []);
+
+  // Debounced search handler
+  const debouncedSearch = useCallback(
+    debounce((value) => {
+      setSearchTerm(value);
+      setPagination((prev) => ({ ...prev, page: 1 }));
+    }, 300),
+    []
+  );
+
+  // Handle search input change
+  const handleSearchChange = useCallback(
+    (event) => {
+      debouncedSearch(event.target.value);
+    },
+    [debouncedSearch]
+  );
+
+  // Handle filter changes
+  const handleFilterChange = useCallback((filterType, value) => {
+    console.log("Filter changed:", filterType, value);
+    switch (filterType) {
+      case "department":
+        setDepartmentFilter(value);
+        break;
+      case "status":
+        setStatusFilter(value);
+        // Reset active filter when specific status is selected
+        setActiveFilter("all");
+        break;
+      case "active":
+        setActiveFilter(value);
+        // Reset status filter when active/inactive is selected
+        setStatusFilter("all");
+        break;
+      default:
+        break;
+    }
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
   }, []);
 
   // Fetch clients and users when component mounts
@@ -845,182 +943,141 @@ const Projects = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleColumnVisibilityModelChange = (newModel) => {
-    console.log("Column visibility changed:", newModel);
+  const handleColumnVisibilityModelChange = useCallback((newModel) => {
     setColumnVisibilityModel(newModel);
-    try {
-      localStorage.setItem(
-        "projectsColumnVisibility",
-        JSON.stringify(newModel)
-      );
-    } catch (error) {
-      console.error("Error saving column visibility:", error);
-    }
-  };
+  }, []);
 
   const handleDepartmentClick = (department) => {
     console.log("Department filter clicked:", department);
     setSelectedDepartment(department);
   };
 
-  // Memoize filtered projects to prevent unnecessary recalculations
-  const filteredProjects = useMemo(() => {
-    let filtered = projects;
-
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (project) =>
-          project.name?.toLowerCase().includes(searchLower) ||
-          project.clientName?.toLowerCase().includes(searchLower) ||
-          project.workOrder?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    if (departmentFilter !== "all") {
-      filtered = filtered.filter(
-        (project) => project.department === departmentFilter
-      );
-    }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((project) => project.status === statusFilter);
-    }
-
-    if (activeFilter !== "all") {
-      const isActive = activeFilter === "active";
-      filtered = filtered.filter((project) =>
-        isActive
-          ? ACTIVE_STATUSES.includes(project.status)
-          : INACTIVE_STATUSES.includes(project.status)
-      );
-    }
-
-    return filtered;
-  }, [projects, searchTerm, departmentFilter, statusFilter, activeFilter]);
-
-  const columns = [
-    {
-      field: "projectID",
-      headerName: "Project ID",
-      flex: 0,
-      width: 105,
-      minWidth: 105,
-      maxWidth: 105,
-      renderCell: (params) => (
-        <Box
-          onClick={() => navigate(`/projects/${params.row._id}`)}
-          sx={{ cursor: "pointer" }}
-        >
-          {params.value}
-        </Box>
-      ),
-    },
-    {
-      field: "name",
-      headerName: "Project Name",
-      flex: 2,
-      minWidth: 300,
-      renderCell: ({ row }) => (
-        <Box
-          onClick={() => navigate(`/projects/${row._id}`)}
-          sx={{
-            cursor: "pointer",
-            "&:hover": { color: colors.blueAccent[500] },
-            whiteSpace: "normal",
-            wordWrap: "break-word",
-            lineHeight: 1.2,
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-          }}
-        >
-          {row.name}
-        </Box>
-      ),
-    },
-    {
-      field: "workOrder",
-      headerName: "Work Order/Job Reference",
-      flex: 1,
-      minWidth: 150,
-      hide: true, // Hidden by default
-    },
-    {
-      field: "client",
-      headerName: "Client",
-      flex: 1,
-      renderCell: ({ row }) => (
-        <span>{row.client?.name || row.client || ""}</span>
-      ),
-    },
-    {
-      field: "department",
-      headerName: "Department",
-      flex: 1,
-    },
-    {
-      field: "status",
-      headerName: "Status",
-      flex: 1,
-      width: 165,
-      minWidth: 165,
-      maxWidth: 165,
-      renderCell: (params) => (
-        <Box
-          sx={{
-            backgroundColor: getStatusColor(params.value),
-            color: "white",
-            padding: "4px 8px",
-            borderRadius: "4px",
-            fontSize: "0.75rem",
-          }}
-        >
-          {params.value}
-        </Box>
-      ),
-    },
-    {
-      field: "users",
-      headerName: "Users",
-      flex: 1,
-      width: 120,
-      minWidth: 120,
-      maxWidth: 120,
-      renderCell: (params) => <UsersCell users={params.row.users} />,
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      flex: 1,
-      renderCell: (params) => (
-        <Box>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<VisibilityIcon />}
+  // Memoize columns configuration
+  const columns = useMemo(
+    () => [
+      {
+        field: "projectID",
+        headerName: "Project ID",
+        flex: 0,
+        width: 105,
+        minWidth: 105,
+        maxWidth: 105,
+        renderCell: (params) => (
+          <Box
             onClick={() => navigate(`/projects/${params.row._id}`)}
-            sx={{ mr: 1 }}
+            sx={{ cursor: "pointer" }}
           >
-            Details
-          </Button>
-          <IconButton
-            onClick={() => handleDeleteClick(params.row)}
-            size="small"
-            color="error"
+            {params.value}
+          </Box>
+        ),
+      },
+      {
+        field: "name",
+        headerName: "Project Name",
+        flex: 2,
+        minWidth: 300,
+        renderCell: ({ row }) => (
+          <Box
+            onClick={() => navigate(`/projects/${row._id}`)}
+            sx={{
+              cursor: "pointer",
+              "&:hover": { color: colors.blueAccent[500] },
+              whiteSpace: "normal",
+              wordWrap: "break-word",
+              lineHeight: 1.2,
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+            }}
           >
-            <DeleteIcon />
-          </IconButton>
-        </Box>
-      ),
-    },
-  ];
+            {row.name}
+          </Box>
+        ),
+      },
+      {
+        field: "workOrder",
+        headerName: "Work Order/Job Reference",
+        flex: 1,
+        minWidth: 150,
+        hide: true, // Hidden by default
+      },
+      {
+        field: "client",
+        headerName: "Client",
+        flex: 1,
+        renderCell: ({ row }) => (
+          <span>{row.client?.name || row.client || ""}</span>
+        ),
+      },
+      {
+        field: "department",
+        headerName: "Department",
+        flex: 1,
+      },
+      {
+        field: "status",
+        headerName: "Status",
+        flex: 1,
+        width: 165,
+        minWidth: 165,
+        maxWidth: 165,
+        renderCell: (params) => (
+          <Box
+            sx={{
+              backgroundColor: getStatusColor(params.value),
+              color: "white",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              fontSize: "0.75rem",
+            }}
+          >
+            {params.value}
+          </Box>
+        ),
+      },
+      {
+        field: "users",
+        headerName: "Users",
+        flex: 1,
+        width: 120,
+        minWidth: 120,
+        maxWidth: 120,
+        renderCell: (params) => <UsersCell users={params.row.users} />,
+      },
+      {
+        field: "actions",
+        headerName: "Actions",
+        flex: 1,
+        renderCell: (params) => (
+          <Box>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<VisibilityIcon />}
+              onClick={() => navigate(`/projects/${params.row._id}`)}
+              sx={{ mr: 1 }}
+            >
+              Details
+            </Button>
+            <IconButton
+              onClick={() => handleDeleteClick(params.row)}
+              size="small"
+              color="error"
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Box>
+        ),
+      },
+    ],
+    [navigate]
+  );
 
   if (loading) return <Typography>Loading projects...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
-    <Box m="20px">
+    <Box m="20px 0px 20px 20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Header title="PROJECTS" subtitle="Managing your projects" />
         <Button
@@ -1049,25 +1106,12 @@ const Projects = () => {
         }}
       >
         <Stack direction="row" spacing={2} alignItems="center">
-          <TextField
-            label="Search Projects"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ flex: 1 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
           <FormControl sx={{ minWidth: 200 }}>
             <InputLabel>Status</InputLabel>
             <Select
               value={statusFilter}
               label="Status"
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="all">All Statuses</MenuItem>
               {ACTIVE_STATUSES.map((status) => (
@@ -1082,16 +1126,18 @@ const Projects = () => {
               ))}
             </Select>
           </FormControl>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Show Inactive Projects"
-          />
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Active Status</InputLabel>
+            <Select
+              value={activeFilter}
+              label="Active Status"
+              onChange={(e) => handleFilterChange("active", e.target.value)}
+            >
+              <MenuItem value="all">All Projects</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="inactive">Inactive</MenuItem>
+            </Select>
+          </FormControl>
         </Stack>
       </Box>
 
@@ -1197,11 +1243,17 @@ const Projects = () => {
         }}
       >
         <DataGrid
-          rows={filteredProjects}
+          rows={projects}
           columns={columns}
           getRowId={(row) => row._id || row.id}
           components={{
             Toolbar: GridToolbar,
+          }}
+          componentsProps={{
+            toolbar: {
+              showQuickFilter: true,
+              quickFilterProps: { debounceMs: 300 },
+            },
           }}
           loading={loading}
           error={error}
@@ -1209,14 +1261,28 @@ const Projects = () => {
           disableRowSelectionOnClick
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: "projectID", sort: "desc" }],
-            },
-          }}
+          paginationMode="server"
+          rowCount={pagination.total}
+          paginationModel={paginationModel}
+          onPaginationModelChange={handlePaginationModelChange}
+          pageSizeOptions={[25, 50, 100]}
+          onSortModelChange={handleSortModelChange}
+          sortModel={sortModel}
           autoHeight
-          onStateChange={handleRenderComplete}
-          onRowsUpdated={handleRenderComplete}
+          disableColumnMenu
+          disableSelectionOnClick
+          disableColumnFilter
+          disableColumnSelector
+          disableDensitySelector
+          disableColumnReorder
+          disableMultipleColumnsFiltering
+          disableMultipleColumnsSorting
+          disableMultipleSelection
+          disableExtendRowFullWidth
+          disableVirtualization={false}
+          rowBuffer={10}
+          rowThreshold={100}
+          columnBuffer={2}
         />
       </Box>
 

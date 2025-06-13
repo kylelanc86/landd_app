@@ -5,12 +5,14 @@ const projectSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    trim: true
+    trim: true,
+    index: true
   },
   name: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    index: true
   },
   workOrder: {
     type: String,
@@ -101,6 +103,16 @@ const projectSchema = new mongoose.Schema({
   }
 });
 
+// Create a single compound index that covers our main query pattern
+projectSchema.index({ 
+  status: 1, 
+  department: 1, 
+  createdAt: -1,
+  name: 1,
+  projectID: 1,
+  workOrder: 1
+});
+
 // Function to generate the next project ID
 async function generateNextProjectId() {
   try {
@@ -162,11 +174,17 @@ projectSchema.pre('validate', async function(next) {
       console.log('Setting projectID to:', newProjectId);
       this.projectID = newProjectId;
       console.log('Document after setting projectID:', this.toObject());
+    } else if (!this.projectID) {
+      console.error('Existing document missing projectID');
+      throw new Error('Project ID is required for existing documents');
     }
     next();
   } catch (error) {
     console.error('Error in pre-validate hook:', error);
-    next(error);
+    // Add more context to the error
+    const enhancedError = new Error(`Project validation failed: ${error.message}`);
+    enhancedError.originalError = error;
+    next(enhancedError);
   }
 });
 

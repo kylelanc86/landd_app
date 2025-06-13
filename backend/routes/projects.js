@@ -10,30 +10,108 @@ const Timesheet = require('../models/Timesheet');
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const projects = await Project.find()
-      .select('projectID name client department category status address startDate endDate description workOrder users createdAt updatedAt')
-      .populate({
-        path: 'client',
-        select: 'name'
-      })
-      .populate({
-        path: 'users',
-        select: 'firstName lastName email',
-        match: { isActive: true }
-      })
-      .lean()
-      .sort({ createdAt: -1 });
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      search,
+      department,
+      status
+    } = req.query;
+
+    console.log('Received request with params:', { page, limit, sortBy, sortOrder, search, department, status });
+
+    // Build query
+    const query = {};
+
+    // Add department filter if specified
+    if (department && department !== 'all') {
+      query.department = department;
+    }
+
+    // Add status filter if specified
+    if (status) {
+      try {
+        // Handle both string and array status values
+        const statusArray = status.includes(',') ? status.split(',') : [status];
+        query.status = { $in: statusArray };
+        console.log('Using status filter:', query.status);
+      } catch (error) {
+        console.error('Error processing status filter:', error);
+        throw new Error(`Invalid status filter: ${error.message}`);
+      }
+    }
+
+    // Add search filter if specified
+    if (search) {
+      query.$or = [
+        { projectName: { $regex: search, $options: 'i' } },
+        { projectID: { $regex: search, $options: 'i' } },
+        { workOrder: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    console.log('Final query:', JSON.stringify(query, null, 2));
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    // Filter out null users from the populated array
-    const projectsWithFilteredUsers = projects.map(project => ({
-      ...project,
-      users: Array.isArray(project.users) ? project.users.filter(user => user !== null) : []
-    }));
-    
-    res.json(projectsWithFilteredUsers);
-  } catch (err) {
-    console.error('Error fetching projects:', err);
-    res.status(500).json({ message: err.message });
+    try {
+      const total = await Project.countDocuments(query);
+      const pages = Math.ceil(total / parseInt(limit));
+
+      // Get projects with pagination and sorting
+      const projects = await Project.find(query)
+        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('client', 'name')
+        .populate('department', 'name')
+        .populate('users', 'firstName lastName');
+
+      console.log('Query results:', { total, projectsCount: projects.length });
+
+      // Transform the response
+      const response = {
+        data: projects.map(project => ({
+          ...project.toObject(),
+          client: project.client?.name || '',
+          department: project.department?.name || '',
+          assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || ''
+        })),
+        pagination: {
+          total,
+          pages,
+          page: parseInt(page),
+          limit: parseInt(limit),
+        }
+      };
+
+      console.log('Sending response with pagination:', response.pagination);
+      res.json(response);
+    } catch (error) {
+      console.error('Error executing database query:', error);
+      // Add more detailed error information
+      const errorDetails = {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        keyPattern: error.keyPattern,
+        keyValue: error.keyValue,
+        errors: error.errors
+      };
+      console.error('Detailed error information:', errorDetails);
+      throw new Error(`Database error: ${JSON.stringify(errorDetails)}`);
+    }
+  } catch (error) {
+    console.error('Error in GET /projects:', error);
+    // Send more detailed error response
+    res.status(500).json({ 
+      message: error.message,
+      details: error.stack,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 

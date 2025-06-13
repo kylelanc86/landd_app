@@ -1,16 +1,17 @@
 import axios from 'axios';
 
 // Log environment info
-console.log('API Environment:', {
+const config = {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
   defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend.onrender.com/api",
   currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend.onrender.com/api")
-});
+};
+console.log('Environment Info:', config);
 
 // Create axios instance
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend.onrender.com/api"),
+  baseURL: config.currentUrl,
   headers: {
     "Content-Type": "application/json",
   },
@@ -143,7 +144,21 @@ export const authService = {
 
 // Client service
 export const clientService = {
-  getAll: () => api.get('/clients'),
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.search) queryParams.append('search', params.search);
+
+    return api.get(`/clients?${queryParams.toString()}`).then(response => {
+      const data = response.data;
+      return {
+        ...response,
+        data: data.clients || [],
+        pagination: data.pagination
+      };
+    });
+  },
   getById: (id) => api.get(`/clients/${id}`),
   create: (data) => api.post('/clients', data),
   update: (id, data) => api.patch(`/clients/${id}`, data),
@@ -152,16 +167,30 @@ export const clientService = {
 
 // Project service
 export const projectService = {
-  getAll: () => api.get('/projects').then(response => {
-    // Handle both response structures
-    const data = response.data;
-    return {
-      ...response,
-      data: Array.isArray(data) 
-        ? data 
-        : (data.projects || data.data || [])
-    };
-  }),
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.search) queryParams.append('search', params.search);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.department) queryParams.append('department', params.department);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+
+    return api.get(`/projects?${queryParams.toString()}`).then(response => {
+      console.log('Raw API response:', response);
+      const data = response.data;
+      return {
+        data: data.data || [],
+        pagination: data.pagination || {
+          total: 0,
+          pages: 0,
+          page: parseInt(params.page) || 1,
+          limit: parseInt(params.limit) || 10
+        }
+      };
+    });
+  },
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => {
