@@ -185,6 +185,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const theme = useTheme();
   const { currentUser } = useAuth();
   const location = useLocation();
+  const showHidden = false; // Set to true to show hidden components
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -362,127 +363,132 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
-          <PermissionGate requiredPermissions={["invoices.view"]}>
-            <Item
-              title="Invoices"
-              to="/invoices"
-              icon={<ReceiptOutlinedIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-          <PermissionGate requiredPermissions={["calendar.view"]}>
-            <Item
-              title="Scheduler"
-              to="/calendar"
-              icon={<CalendarTodayOutlinedIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
 
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "10px 0 2px 10px",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-                paddingLeft: "10px",
-              }}
-            >
-              Air Monitoring
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
+          {showHidden && (
+            <>
+              <PermissionGate requiredPermissions={["invoices.view"]}>
+                <Item
+                  title="Invoices"
+                  to="/invoices"
+                  icon={<ReceiptOutlinedIcon />}
+                  isCollapsed={isCollapsed}
+                />
+              </PermissionGate>
+              <PermissionGate requiredPermissions={["calendar.view"]}>
+                <Item
+                  title="Scheduler"
+                  to="/calendar"
+                  icon={<CalendarTodayOutlinedIcon />}
+                  isCollapsed={isCollapsed}
+                />
+              </PermissionGate>
+
+              {!isCollapsed ? (
+                <Typography
+                  variant="h3"
+                  color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+                  sx={{
+                    m: "10px 0 2px 10px",
+                    fontSize: "1.2rem",
+                    fontWeight: "bold",
+                    opacity: 0.8,
+                    textAlign: "left",
+                    paddingLeft: "10px",
+                  }}
+                >
+                  Air Monitoring
+                </Typography>
+              ) : (
+                <SectionDivider isCollapsed={isCollapsed} />
+              )}
+
+              <PermissionGate requiredPermissions={["jobs.view"]}>
+                <Item
+                  title="Site Work"
+                  to="/air-monitoring"
+                  icon={<AirOutlinedIcon />}
+                  isCollapsed={isCollapsed}
+                />
+              </PermissionGate>
+
+              <PermissionGate requiredPermissions={["jobs.view"]}>
+                <Item
+                  title="Calibrations"
+                  to="/calibrations"
+                  icon={<ScienceIcon />}
+                  isCollapsed={isCollapsed}
+                />
+              </PermissionGate>
+
+              {!isCollapsed ? (
+                <Typography
+                  variant="h3"
+                  color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+                  sx={{
+                    m: "10px 0 2px 10px",
+                    fontSize: "1.2rem",
+                    fontWeight: "bold",
+                    opacity: 0.8,
+                    textAlign: "left",
+                    paddingLeft: "10px",
+                  }}
+                >
+                  Surveys
+                </Typography>
+              ) : (
+                <SectionDivider isCollapsed={isCollapsed} />
+              )}
+
+              <PermissionGate requiredPermissions={["asbestos.view"]}>
+                <Item
+                  title="Asbestos Assessment"
+                  to="/asbestos-assessment"
+                  icon={<AssessmentIcon />}
+                  isCollapsed={isCollapsed}
+                />
+                <Item
+                  title="Residential Assessment"
+                  to="/residential-assessment"
+                  icon={<HomeIcon />}
+                  isCollapsed={isCollapsed}
+                />
+              </PermissionGate>
+
+              {!isCollapsed ? (
+                <Typography
+                  variant="h3"
+                  color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+                  sx={{
+                    m: "10px 0 2px 10px",
+                    fontSize: "1.2rem",
+                    fontWeight: "bold",
+                    opacity: 0.8,
+                    textAlign: "left",
+                    paddingLeft: "10px",
+                  }}
+                >
+                  Fibre Identification
+                </Typography>
+              ) : (
+                <SectionDivider isCollapsed={isCollapsed} />
+              )}
+
+              <PermissionGate requiredPermissions={["fibre.view"]}>
+                <Item
+                  title="Analysis"
+                  to="/fibreID/analysis"
+                  icon={<ScienceIcon />}
+                  isCollapsed={isCollapsed}
+                />
+                <Item
+                  title="Calibrations"
+                  to="/fibreID/calibrations"
+                  icon={<AssessmentIcon />}
+                  isCollapsed={isCollapsed}
+                />
+              </PermissionGate>
+            </>
           )}
-
-          <PermissionGate requiredPermissions={["jobs.view"]}>
-            <Item
-              title="Site Work"
-              to="/air-monitoring"
-              icon={<AirOutlinedIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-
-          <PermissionGate requiredPermissions={["jobs.view"]}>
-            <Item
-              title="Calibrations"
-              to="/calibrations"
-              icon={<ScienceIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "10px 0 2px 10px",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-                paddingLeft: "10px",
-              }}
-            >
-              Surveys
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
-
-          <PermissionGate requiredPermissions={["asbestos.view"]}>
-            <Item
-              title="Asbestos Assessment"
-              to="/asbestos-assessment"
-              icon={<AssessmentIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Residential Assessment"
-              to="/residential-assessment"
-              icon={<HomeIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "10px 0 2px 10px",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-                paddingLeft: "10px",
-              }}
-            >
-              Fibre Identification
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
-
-          <PermissionGate requiredPermissions={["fibre.view"]}>
-            <Item
-              title="Analysis"
-              to="/fibreID/analysis"
-              icon={<ScienceIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Calibrations"
-              to="/fibreID/calibrations"
-              icon={<AssessmentIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
         </Box>
       </Menu>
     </ProSidebar>
