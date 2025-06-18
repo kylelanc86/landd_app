@@ -169,7 +169,6 @@ const MonthlyTimesheet = () => {
       >
         <Header
           title="Monthly Timesheet"
-          subtitle={`${format(selectedDate, "MMMM yyyy")}`}
         />
       </Box>
 

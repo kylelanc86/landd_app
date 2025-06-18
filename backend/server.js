@@ -22,20 +22,6 @@ dotenv.config();
 // Create Express app
 const app = express();
 
-// Catch-all CORS middleware (must be first)
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://landd-app-frontend1.onrender.com");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Credentials", "true");
-  
-  // Handle preflight
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
-  next();
-});
-
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
@@ -55,7 +41,7 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       console.log('Origin allowed:', origin);
       callback(null, true);
     } else {
@@ -114,9 +100,6 @@ app.get('/api/health', (req, res) => {
   res.status(200).json(healthData);
 });
 
-// Pre-flight OPTIONS handler
-app.options('*', cors(corsOptions));
-
 // Connect to database
 connectDB()
   .then(() => {
@@ -161,4 +144,4 @@ connectDB()
   .catch(err => {
     console.error('Failed to start server:', err);
     process.exit(1);
-  }); 
+  });

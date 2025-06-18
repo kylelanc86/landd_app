@@ -205,6 +205,11 @@ const Timesheets = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    console.log("=== TIMESHEET SUBMIT DEBUG ===");
+    console.log("Current selectedDate:", selectedDate);
+    console.log("Current selectedDate type:", typeof selectedDate);
+    console.log("Current selectedDate value:", selectedDate?.toISOString());
+
     if (!targetUserId) {
       alert("Error: No user ID available. Please try logging in again.");
       return;
@@ -233,8 +238,11 @@ const Timesheets = () => {
         }
       }
 
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
+      console.log("Formatted date being sent to backend:", formattedDate);
+
       const timesheetData = {
-        date: selectedDate,
+        date: formattedDate,
         userId: targetUserId,
         startTime: formData.startTime,
         endTime: formData.endTime,
@@ -247,6 +255,9 @@ const Timesheets = () => {
         timesheetData.projectId = formData.projectId;
         timesheetData.projectInputType = formData.projectInputType;
       }
+
+      console.log("Full timesheet data being sent:", timesheetData);
+      console.log("=== END TIMESHEET SUBMIT DEBUG ===");
 
       if (isEditing && editingEntryId) {
         await api.put(`/timesheets/${editingEntryId}`, timesheetData);
@@ -270,6 +281,7 @@ const Timesheets = () => {
       await fetchTimeEntries();
       await fetchTimesheetStatus();
     } catch (error) {
+      console.error("Error creating/updating timesheet entry:", error);
       alert(error.response?.data?.message || "Error saving time entry");
     }
   };
@@ -291,6 +303,12 @@ const Timesheets = () => {
       direction === "next"
         ? addDays(selectedDate, 1)
         : subDays(selectedDate, 1);
+    console.log("=== DATE NAVIGATION DEBUG ===");
+    console.log("Direction:", direction);
+    console.log("Old selectedDate:", selectedDate);
+    console.log("New selectedDate:", newDate);
+    console.log("New formatted date:", format(newDate, "yyyy-MM-dd"));
+    console.log("=== END DATE NAVIGATION DEBUG ===");
     setSelectedDate(newDate);
   };
 
@@ -501,10 +519,7 @@ const Timesheets = () => {
         alignItems="center"
         mb="20px"
       >
-        <Header
-          title="Daily Timesheet"
-          subtitle={`${format(selectedDate, "MMMM d, yyyy")}`}
-        />
+        <Header title="Daily Timesheet" />
         <Box display="flex" gap={2}>
           <Button
             variant="contained"
@@ -518,14 +533,6 @@ const Timesheets = () => {
             }}
           >
             Monthly View
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenDialog(true)}
-            disabled={timesheetStatus === "finalised"}
-          >
-            Add Time Entry
           </Button>
         </Box>
       </Box>
@@ -544,7 +551,13 @@ const Timesheets = () => {
             <IconButton onClick={() => handleDayChange("prev")}>
               <ArrowBackIosNewIcon />
             </IconButton>
-            <Typography variant="h5">
+            <Typography
+              variant="h6"
+              sx={{
+                fontSize: "1.1rem",
+                fontWeight: "500",
+              }}
+            >
               {format(selectedDate, "EEEE, MMMM d, yyyy")}
             </Typography>
             <IconButton onClick={() => handleDayChange("next")}>
@@ -582,6 +595,7 @@ const Timesheets = () => {
 
         <Box sx={{ height: "600px" }}>
           <FullCalendar
+            key={format(selectedDate, "yyyy-MM-dd")}
             plugins={[timeGridPlugin, interactionPlugin]}
             initialView="timeGridDay"
             initialDate={selectedDate}
@@ -601,6 +615,7 @@ const Timesheets = () => {
             droppable={timesheetStatus !== "finalised"}
             eventOverlap={false}
             firstDay={1}
+            headerToolbar={false}
             dayCellClassNames={(arg) => {
               return arg.date.getDay() === 0 || arg.date.getDay() === 6
                 ? "weekend-day"

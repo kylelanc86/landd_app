@@ -12,7 +12,6 @@ import {
   Divider,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import SettingsIcon from "@mui/icons-material/Settings";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
@@ -25,7 +24,7 @@ const Topbar = ({ toggleColorMode }) => {
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
 
-  const handleSettingsClick = (event) => setAnchorEl(event.currentTarget);
+  const handleProfileClick = (event) => setAnchorEl(event.currentTarget);
   const handleClose = () => {
     setAnchorEl(null);
   };
@@ -35,7 +34,7 @@ const Topbar = ({ toggleColorMode }) => {
     navigate("/login");
   };
 
-  const handleProfileClick = () => {
+  const handleProfileSettingsClick = () => {
     navigate("/profile");
     handleClose();
   };
@@ -106,11 +105,6 @@ const Topbar = ({ toggleColorMode }) => {
               )}
             </IconButton>
           </Tooltip>
-          <Tooltip title="Settings">
-            <IconButton onClick={handleSettingsClick} color="inherit">
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Profile">
             <IconButton onClick={handleProfileClick} color="inherit">
               <Avatar
@@ -131,7 +125,7 @@ const Topbar = ({ toggleColorMode }) => {
           onClose={handleClose}
           onClick={handleClose}
         >
-          <MenuItem onClick={handleProfileClick}>Profile</MenuItem>
+          <MenuItem onClick={handleProfileSettingsClick}>Profile</MenuItem>
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </Menu>
       </Toolbar>

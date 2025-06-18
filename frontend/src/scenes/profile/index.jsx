@@ -5,8 +5,6 @@ import {
   Typography,
   TextField,
   Button,
-  Switch,
-  FormControlLabel,
   Divider,
   Alert,
   CircularProgress,
@@ -25,11 +23,6 @@ const Profile = () => {
     phone: "",
     password: "",
     confirmPassword: "",
-    notifications: {
-      email: false,
-      sms: false,
-      systemUpdates: false,
-    },
   });
 
   // Initialize form data when currentUser changes
@@ -38,11 +31,6 @@ const Profile = () => {
       setFormData((prev) => ({
         ...prev,
         phone: currentUser.phone || "",
-        notifications: {
-          email: currentUser.notifications?.email || false,
-          sms: currentUser.notifications?.sms || false,
-          systemUpdates: currentUser.notifications?.systemUpdates || false,
-        },
       }));
     }
   }, [currentUser]);
@@ -52,16 +40,6 @@ const Profile = () => {
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-    }));
-  };
-
-  const handleNotificationChange = (name) => (e) => {
-    setFormData((prev) => ({
-      ...prev,
-      notifications: {
-        ...prev.notifications,
-        [name]: e.target.checked,
-      },
     }));
   };
 
@@ -97,7 +75,6 @@ const Profile = () => {
       const updatedUser = {
         ...currentUser,
         phone: formData.phone,
-        notifications: formData.notifications,
       };
 
       if (formData.password) {
@@ -225,53 +202,6 @@ const Profile = () => {
               >
                 {loading ? <CircularProgress size={24} /> : "Save Changes"}
               </Button>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Divider sx={{ my: 3 }} />
-            </Grid>
-
-            {/* Notification Settings Section */}
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                Notification Preferences
-              </Typography>
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.notifications.email}
-                    onChange={handleNotificationChange("email")}
-                  />
-                }
-                label="Email Notifications"
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.notifications.sms}
-                    onChange={handleNotificationChange("sms")}
-                  />
-                }
-                label="SMS Notifications"
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.notifications.systemUpdates}
-                    onChange={handleNotificationChange("systemUpdates")}
-                  />
-                }
-                label="System Updates"
-              />
             </Grid>
 
             <Grid item xs={12}>
