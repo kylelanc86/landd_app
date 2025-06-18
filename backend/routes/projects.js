@@ -174,6 +174,13 @@ router.get('/:id', auth, checkPermission(['projects.view']), async (req, res) =>
 // Create project
 router.post('/', auth, checkPermission(['projects.create']), async (req, res) => {
   try {
+    console.log('=== CREATING NEW PROJECT ===');
+    console.log('Request body:', req.body);
+    console.log('Client ID:', req.body.client);
+    console.log('Department:', req.body.department);
+    console.log('Users:', req.body.users);
+    console.log('============================');
+    
     // Create new project instance
     const project = new Project({
       name: req.body.name,
@@ -195,6 +202,8 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       notes: req.body.notes || ""
     });
     
+    console.log('Project instance created:', project);
+    
     // Save the project (this will trigger the pre-save hook)
     const newProject = await project.save();
     
@@ -206,8 +215,13 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
     res.status(201).json(populatedProject);
   } catch (err) {
     console.error('Error saving project:', err);
+    console.error('Error name:', err.name);
+    console.error('Error message:', err.message);
     if (err.errors) {
       console.error('Validation errors:', err.errors);
+      Object.keys(err.errors).forEach(key => {
+        console.error(`Validation error for ${key}:`, err.errors[key].message);
+      });
     }
     res.status(400).json({ 
       message: err.message,

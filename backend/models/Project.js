@@ -27,7 +27,7 @@ const projectSchema = new mongoose.Schema({
   department: {
     type: String,
     required: true,
-    enum: ['Asbestos & HAZMAT', 'Occupational Hygiene', 'Client Supplied']
+    enum: ['Asbestos & HAZMAT', 'Occupational Hygiene', 'Client Supplied', 'air_quality']
   },
   categories: [{
     type: String,
@@ -126,38 +126,38 @@ async function generateNextProjectId() {
     console.log('Found projects with projectIDs:', projects);
     
     if (projects.length === 0) {
-      console.log('No existing projects, starting with LDX00001');
-      return 'LDX00001';
+      console.log('No existing projects, starting with LDJ00001');
+      return 'LDJ00001';
     }
 
     // Get the highest project ID
     const highestProject = projects[0];
     if (!highestProject || !highestProject.projectID) {
-      console.log('No valid project ID found, starting with LDX00001');
-      return 'LDX00001';
+      console.log('No valid project ID found, starting with LDJ00001');
+      return 'LDJ00001';
     }
 
     const lastId = highestProject.projectID;
     console.log('Highest existing project ID:', lastId);
     
     // Extract the numeric part and increment
-    const numericPart = parseInt(lastId.replace('LDX', ''));
+    const numericPart = parseInt(lastId.replace('LDJ', ''));
     if (isNaN(numericPart)) {
-      console.log('Invalid project ID format, starting with LDX00001');
-      return 'LDX00001';
+      console.log('Invalid project ID format, starting with LDJ00001');
+      return 'LDJ00001';
     }
 
     const nextNumericPart = numericPart + 1;
     
-    // Format with leading zeros
-    const newId = `LDX${String(nextNumericPart).padStart(5, '0')}`;
+    // Format with leading zeros to ensure 5 digits
+    const newId = `LDJ${String(nextNumericPart).padStart(5, '0')}`;
     console.log('Generated new project ID:', newId);
     
     return newId;
   } catch (error) {
     console.error('Error generating project ID:', error);
     // Return a default ID if there's an error
-    return 'LDX00001';
+    return 'LDJ00001';
   }
 }
 

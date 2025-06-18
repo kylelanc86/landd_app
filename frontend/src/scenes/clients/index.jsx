@@ -16,6 +16,14 @@ import {
   IconButton,
   DialogContentText,
   InputAdornment,
+  Popover,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Checkbox,
+  Divider,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService } from "../../services/api";
@@ -27,6 +35,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import {
   formatPhoneNumber,
   isValidAustralianMobile,
@@ -70,6 +79,31 @@ const Clients = () => {
     pages: 0,
   });
   const searchInputRef = useRef(null);
+
+  // Column visibility state
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState(() => {
+    // Load column visibility from localStorage
+    const savedColumnVisibility = localStorage.getItem(
+      "clients-column-visibility"
+    );
+    if (savedColumnVisibility) {
+      try {
+        return JSON.parse(savedColumnVisibility);
+      } catch (error) {
+        console.error("Error parsing saved column visibility:", error);
+      }
+    }
+    // Default column visibility
+    return {
+      name: true,
+      invoiceEmail: true,
+      contact1Name: true,
+      contact1Number: true,
+      address: true,
+      actions: true,
+    };
+  });
+  const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
 
   // Debug mount/unmount
   useEffect(() => {
@@ -139,6 +173,13 @@ const Clients = () => {
   useEffect(() => {
     fetchClients();
   }, [fetchClients]);
+
+  // Maintain focus on search bar after results are loaded
+  useEffect(() => {
+    if (!loading && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [loading]);
 
   // Handle page change
   const handlePageChange = useCallback((newPage) => {
@@ -225,19 +266,23 @@ const Clients = () => {
     setEditDialogOpen(true);
   };
 
-  const handleDeleteClick = () => {
-    setClientToDelete(clients.find((client) => client._id === editId));
+  const handleDeleteClick = (client) => {
+    setClientToDelete(client);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     try {
-      await clientService.delete(editId);
-      setClients(clients.filter((client) => client._id !== editId));
+      await clientService.delete(clientToDelete._id);
+      setClients(clients.filter((client) => client._id !== clientToDelete._id));
       setDeleteDialogOpen(false);
-      setEditDialogOpen(false);
       setClientToDelete(null);
-      setEditId(null);
+      // Also close edit dialog if it's open
+      if (editDialogOpen) {
+        setEditDialogOpen(false);
+        setEditForm(emptyForm);
+        setEditId(null);
+      }
     } catch (err) {
       if (err.response) {
         alert(
@@ -247,6 +292,30 @@ const Clients = () => {
         );
       }
     }
+  };
+
+  // Column visibility handlers
+  const handleColumnVisibilityClick = (event) => {
+    setColumnVisibilityAnchor(event.currentTarget);
+  };
+
+  const handleColumnVisibilityClose = () => {
+    setColumnVisibilityAnchor(null);
+  };
+
+  const handleColumnToggle = (field) => {
+    setColumnVisibilityModel((prev) => {
+      const newModel = {
+        ...prev,
+        [field]: !prev[field],
+      };
+      // Save column visibility to localStorage
+      localStorage.setItem(
+        "clients-column-visibility",
+        JSON.stringify(newModel)
+      );
+      return newModel;
+    });
   };
 
   const columns = [
@@ -272,8 +341,18 @@ const Clients = () => {
           >
             <AttachMoneyIcon />
           </IconButton>
-          <IconButton onClick={() => handleEdit(params.row)}>
+          <IconButton
+            onClick={() => handleEdit(params.row)}
+            title="Edit Client"
+          >
             <EditIcon />
+          </IconButton>
+          <IconButton
+            onClick={() => handleDeleteClick(params.row)}
+            title="Delete Client"
+            color="error"
+          >
+            <DeleteIcon />
           </IconButton>
         </Box>
       ),
@@ -312,21 +391,96 @@ const Clients = () => {
           p: 2,
         }}
       >
-        <TextField
-          inputRef={searchInputRef}
-          label="Search Clients"
-          value={searchInput}
-          onChange={handleSearchChange}
-          fullWidth
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
+        <Stack direction="row" spacing={2} alignItems="center">
+          <TextField
+            inputRef={searchInputRef}
+            label="Search by Client Name"
+            value={searchInput}
+            onChange={handleSearchChange}
+            sx={{ flex: 1 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          {/* Column Visibility Button */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ViewColumnIcon />}
+            onClick={handleColumnVisibilityClick}
+            sx={{
+              height: 56, // Match the height of the search field
+              minWidth: 140,
+              color: colors.blueAccent[500],
+              borderColor: colors.blueAccent[500],
+              "&:hover": {
+                backgroundColor: colors.blueAccent[500],
+                color: "white",
+                borderColor: colors.blueAccent[500],
+              },
+            }}
+          >
+            Columns
+          </Button>
+        </Stack>
       </Box>
+
+      {/* Column Visibility Dropdown */}
+      <Popover
+        open={Boolean(columnVisibilityAnchor)}
+        anchorEl={columnVisibilityAnchor}
+        onClose={handleColumnVisibilityClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "left",
+        }}
+        PaperProps={{
+          sx: {
+            minWidth: 200,
+            maxHeight: 400,
+          },
+        }}
+      >
+        <Box sx={{ p: 1 }}>
+          <Typography variant="subtitle2" sx={{ p: 1, fontWeight: "bold" }}>
+            Show/Hide Columns
+          </Typography>
+          <Divider sx={{ mb: 1 }} />
+          <List dense>
+            {columns.map((column) => (
+              <ListItem key={column.field} disablePadding>
+                <ListItemButton
+                  dense
+                  onClick={() => handleColumnToggle(column.field)}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <Checkbox
+                      edge="start"
+                      checked={columnVisibilityModel[column.field] !== false}
+                      tabIndex={-1}
+                      disableRipple
+                      size="small"
+                    />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={column.headerName}
+                    primaryTypographyProps={{ fontSize: "0.875rem" }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Popover>
 
       <Box
         m="40px 0 0 0"
@@ -371,6 +525,8 @@ const Clients = () => {
           disableColumnFilter
           disableColumnSelector
           disableDensitySelector
+          columnVisibilityModel={columnVisibilityModel}
+          onColumnVisibilityModelChange={setColumnVisibilityModel}
         />
       </Box>
 
@@ -612,13 +768,6 @@ const Clients = () => {
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button
-              onClick={handleDeleteClick}
-              color="error"
-              startIcon={<DeleteIcon />}
-            >
-              Delete Client
-            </Button>
             <Box sx={{ flex: "1" }} />
             <Button onClick={() => setEditDialogOpen(false)} color="secondary">
               Cancel

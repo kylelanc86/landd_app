@@ -17,6 +17,8 @@ import {
   Select,
   IconButton,
   Chip,
+  Autocomplete,
+  InputAdornment,
 } from "@mui/material";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
@@ -27,6 +29,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   format,
   addDays,
@@ -41,6 +44,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import { debounce } from "lodash";
 
 const Timesheets = () => {
   const theme = useTheme();
@@ -55,6 +59,8 @@ const Timesheets = () => {
   const [projects, setProjects] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [filteredProjects, setFilteredProjects] = useState([]);
   const [formData, setFormData] = useState({
     startTime: "",
     endTime: "",
@@ -67,6 +73,8 @@ const Timesheets = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -287,15 +295,21 @@ const Timesheets = () => {
   };
 
   const handleDelete = async (entryId) => {
-    if (window.confirm("Are you sure you want to delete this entry?")) {
-      try {
-        await api.delete(`/timesheets/${entryId}`);
-        await fetchTimeEntries();
-        await fetchTimesheetStatus();
-      } catch (error) {
-        alert(error.response?.data?.message || "Error deleting time entry");
-      }
+    try {
+      await api.delete(`/timesheets/${entryId}`);
+      await fetchTimeEntries();
+      await fetchTimesheetStatus();
+      setDeleteConfirmOpen(false);
+      setEntryToDelete(null);
+    } catch (error) {
+      console.error("Error deleting time entry:", error);
+      // You could add a snackbar or toast notification here instead of alert
     }
+  };
+
+  const handleDeleteClick = (entryId) => {
+    setEntryToDelete(entryId);
+    setDeleteConfirmOpen(true);
   };
 
   const handleDayChange = (direction) => {
@@ -312,19 +326,33 @@ const Timesheets = () => {
     setSelectedDate(newDate);
   };
 
+  // Helper function to sort projects by projectID descending
+  const sortProjectsByID = (projectsList) => {
+    return [...projectsList].sort((a, b) => {
+      // Extract numeric part from projectID (e.g., "LDJ00001" -> 1)
+      const aNum = parseInt(a.projectID.replace(/\D/g, ""), 10);
+      const bNum = parseInt(b.projectID.replace(/\D/g, ""), 10);
+      return bNum - aNum; // Descending order
+    });
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
         const [projectsResponse] = await Promise.all([
-          api.get("/projects"),
+          api.get(
+            "/projects?status=Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent&limit=1000"
+          ),
           fetchTimeEntries(),
           fetchTimesheetStatus(),
         ]);
         const projectsData = Array.isArray(projectsResponse.data)
           ? projectsResponse.data
           : projectsResponse.data.projects || projectsResponse.data.data || [];
-        setProjects(projectsData);
+        const sortedProjects = sortProjectsByID(projectsData);
+        setProjects(sortedProjects);
+        setFilteredProjects(sortedProjects);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -336,6 +364,33 @@ const Timesheets = () => {
       fetchData();
     }
   }, [selectedDate, targetUserId]);
+
+  // Update filtered projects when projects change
+  useEffect(() => {
+    setFilteredProjects(projects);
+  }, [projects]);
+
+  // Debounced project search
+  const debouncedProjectSearch = debounce((searchTerm) => {
+    if (!searchTerm.trim()) {
+      setFilteredProjects(projects);
+      return;
+    }
+
+    const filtered = projects.filter(
+      (project) =>
+        project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        project.projectID.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    const sortedFiltered = sortProjectsByID(filtered);
+    setFilteredProjects(sortedFiltered);
+  }, 300);
+
+  // Handle project search input change
+  const handleProjectSearchChange = (event, newValue) => {
+    setProjectSearch(newValue);
+    debouncedProjectSearch(newValue);
+  };
 
   const getCalendarEvents = () => {
     return timeEntries.map((entry) => {
@@ -405,6 +460,7 @@ const Timesheets = () => {
     const startTime = format(info.start, "HH:mm");
     const endTime = format(info.end, "HH:mm");
 
+    setProjectSearch("");
     setFormData({
       startTime,
       endTime,
@@ -593,7 +649,43 @@ const Timesheets = () => {
           </Box>
         </Box>
 
-        <Box sx={{ height: "600px" }}>
+        <Box
+          sx={{
+            height: "600px",
+            "& .fc": {
+              fontFamily: theme.typography.fontFamily,
+            },
+            "& .fc-toolbar": {
+              backgroundColor: theme.palette.background.paper,
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            },
+            "& .fc-toolbar-title": {
+              color: theme.palette.text.primary,
+              fontWeight: 600,
+            },
+            "& .fc-button": {
+              backgroundColor: theme.palette.primary.main,
+              borderColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText,
+              "&:hover": {
+                backgroundColor: "primary.dark !important",
+                borderColor: "primary.dark !important",
+              },
+            },
+            "& .fc-timegrid-slot": {
+              borderColor: "divider",
+            },
+            "& .fc-event": {
+              cursor: "pointer",
+              "&:hover": {
+                opacity: 0.9,
+              },
+            },
+            "& .weekend-day": {
+              backgroundColor: theme.palette.grey[100],
+            },
+          }}
+        >
           <FullCalendar
             key={format(selectedDate, "yyyy-MM-dd")}
             plugins={[timeGridPlugin, interactionPlugin]}
@@ -616,6 +708,7 @@ const Timesheets = () => {
             eventOverlap={false}
             firstDay={1}
             headerToolbar={false}
+            allDaySlot={false}
             dayCellClassNames={(arg) => {
               return arg.date.getDay() === 0 || arg.date.getDay() === 6
                 ? "weekend-day"
@@ -668,39 +761,6 @@ const Timesheets = () => {
                 </Box>
               );
             }}
-            sx={{
-              "& .fc": {
-                backgroundColor: "background.paper",
-                borderRadius: "4px",
-              },
-              "& .fc-toolbar": {
-                padding: "16px",
-              },
-              "& .fc-toolbar-title": {
-                fontSize: "1.2rem !important",
-                fontWeight: "bold",
-              },
-              "& .fc-button": {
-                backgroundColor: "primary.main !important",
-                borderColor: "primary.main !important",
-                "&:hover": {
-                  backgroundColor: "primary.dark !important",
-                  borderColor: "primary.dark !important",
-                },
-              },
-              "& .fc-timegrid-slot": {
-                borderColor: "divider",
-              },
-              "& .fc-event": {
-                cursor: "pointer",
-                "&:hover": {
-                  opacity: 0.9,
-                },
-              },
-              "& .weekend-day": {
-                backgroundColor: theme.palette.grey[100],
-              },
-            }}
           />
         </Box>
       </Paper>
@@ -711,6 +771,7 @@ const Timesheets = () => {
           setOpenDialog(false);
           setIsEditing(false);
           setEditingEntryId(null);
+          setProjectSearch("");
           setFormData({
             startTime: "",
             endTime: "",
@@ -769,25 +830,47 @@ const Timesheets = () => {
               {!formData.isAdminWork && !formData.isBreak && (
                 <>
                   <Grid item xs={12}>
-                    <FormControl fullWidth>
-                      <InputLabel>Project</InputLabel>
-                      <Select
-                        value={formData.projectId}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            projectId: e.target.value,
-                          })
-                        }
-                        required
-                      >
-                        {projects.map((project) => (
-                          <MenuItem key={project._id} value={project._id}>
-                            {project.projectID}: {project.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <Autocomplete
+                      options={filteredProjects || []}
+                      getOptionLabel={(option) =>
+                        `${option.projectID}: ${option.name}`
+                      }
+                      value={
+                        projects.find((p) => p._id === formData.projectId) ||
+                        null
+                      }
+                      onChange={(event, newValue) => {
+                        setFormData({
+                          ...formData,
+                          projectId: newValue ? newValue._id : "",
+                        });
+                      }}
+                      onInputChange={handleProjectSearchChange}
+                      inputValue={projectSearch}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Search Projects"
+                          required
+                          InputProps={{
+                            ...params.InputProps,
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <SearchIcon />
+                              </InputAdornment>
+                            ),
+                          }}
+                        />
+                      )}
+                      filterOptions={(x) => x} // Disable built-in filtering since we handle it manually
+                      noOptionsText={`No projects found${
+                        projectSearch ? ` for "${projectSearch}"` : ""
+                      }`}
+                      loading={isLoading}
+                      isOptionEqualToValue={(option, value) =>
+                        option._id === value._id
+                      }
+                    />
                   </Grid>
                   <Grid item xs={12}>
                     <FormControl fullWidth>
@@ -832,6 +915,7 @@ const Timesheets = () => {
               setOpenDialog(false);
               setIsEditing(false);
               setEditingEntryId(null);
+              setProjectSearch("");
               setFormData({
                 startTime: "",
                 endTime: "",
@@ -848,14 +932,10 @@ const Timesheets = () => {
           {isEditing && (
             <Button
               onClick={() => {
-                if (
-                  window.confirm("Are you sure you want to delete this entry?")
-                ) {
-                  handleDelete(editingEntryId);
-                  setOpenDialog(false);
-                  setIsEditing(false);
-                  setEditingEntryId(null);
-                }
+                handleDeleteClick(editingEntryId);
+                setOpenDialog(false);
+                setIsEditing(false);
+                setEditingEntryId(null);
               }}
               color="error"
             >
@@ -864,6 +944,42 @@ const Timesheets = () => {
           )}
           <Button onClick={handleSubmit} variant="contained">
             {isEditing ? "Update" : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => {
+          setDeleteConfirmOpen(false);
+          setEntryToDelete(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this time entry? This action cannot
+            be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDeleteConfirmOpen(false);
+              setEntryToDelete(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => handleDelete(entryToDelete)}
+            color="error"
+            variant="contained"
+          >
+            Delete
           </Button>
         </DialogActions>
       </Dialog>

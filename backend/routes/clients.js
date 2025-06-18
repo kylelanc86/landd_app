@@ -10,13 +10,7 @@ router.get('/', async (req, res) => {
 
     // Add search condition if search term is provided
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { invoiceEmail: { $regex: search, $options: 'i' } },
-        { contact1Name: { $regex: search, $options: 'i' } },
-        { contact1Number: { $regex: search, $options: 'i' } },
-        { address: { $regex: search, $options: 'i' } }
-      ];
+      query.name = { $regex: search, $options: 'i' };
     }
 
     // Calculate pagination

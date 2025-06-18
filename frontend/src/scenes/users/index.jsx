@@ -30,6 +30,7 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { USER_LEVELS } from "../../data/userData";
 import Header from "../../components/Header";
@@ -70,6 +71,10 @@ const Users = () => {
   const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
   const colors = tokens;
+
+  // Delete user state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
 
   // Fetch users from the API on mount
   useEffect(() => {
@@ -287,8 +292,9 @@ const Users = () => {
             onClick={() =>
               handleStatusChange(params.row._id, !params.row.isActive)
             }
+            title={params.row.isActive ? "Deactivate User" : "Activate User"}
           >
-            <DeleteIcon />
+            {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
           </IconButton>
           {hasPermission(currentUser, "timesheets.approve") &&
             params.row._id !== currentUser._id && (

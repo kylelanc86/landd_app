@@ -43,6 +43,11 @@ import {
   Alert,
   LinearProgress,
   CircularProgress,
+  Popover,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -72,6 +77,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import performanceMonitor from "../../utils/performanceMonitor";
 import { debounce } from "lodash";
 import DownloadIcon from "@mui/icons-material/Download";
+import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -106,7 +112,7 @@ const CATEGORIES = [
 const emptyForm = {
   name: "",
   client: "",
-  department: PROJECT_TYPES[0],
+  department: DEPARTMENTS[0],
   categories: [],
   address: "",
   workOrder: "",
@@ -469,15 +475,29 @@ const Projects = () => {
   });
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState(null);
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState({
-    projectID: true,
-    name: true,
-    client: true,
-    status: true,
-    department: true,
-    users: true,
-    createdAt: true,
-    updatedAt: false,
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState(() => {
+    // Load column visibility from localStorage
+    const savedColumnVisibility = localStorage.getItem(
+      "projects-column-visibility"
+    );
+    if (savedColumnVisibility) {
+      try {
+        return JSON.parse(savedColumnVisibility);
+      } catch (error) {
+        console.error("Error parsing saved column visibility:", error);
+      }
+    }
+    // Default column visibility
+    return {
+      projectID: true,
+      name: true,
+      client: true,
+      status: true,
+      department: true,
+      users: true,
+      createdAt: true,
+      updatedAt: false,
+    };
   });
   const [showInactive, setShowInactive] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
@@ -502,6 +522,9 @@ const Projects = () => {
     pageSize: 50,
     page: 0,
   });
+
+  // Add state for column visibility dropdown
+  const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
 
   // Use refs to track component state
   const isInitialLoadRef = useRef(true);
@@ -719,6 +742,80 @@ const Projects = () => {
     [filters, paginationModel]
   );
 
+  // Create a new function that accepts pagination model as parameter
+  const fetchProjectsWithPagination = useCallback(
+    async (
+      paginationModelParam,
+      searchValue = filters.searchTerm,
+      isSearch = false
+    ) => {
+      try {
+        performanceMonitor.startTimer("fetch-projects");
+
+        // Use searchLoading for searches, main loading for initial load
+        if (isSearch) {
+          setSearchLoading(true);
+        } else {
+          setLoading(true);
+        }
+
+        const params = {
+          page: paginationModelParam.page + 1, // Convert to 1-based index
+          limit: paginationModelParam.pageSize,
+          sortBy: filters.sortModel[0]?.field || "createdAt",
+          sortOrder: filters.sortModel[0]?.sort || "desc",
+        };
+
+        // Add search term if provided
+        if (searchValue) {
+          params.search = searchValue;
+        }
+
+        if (filters.departmentFilter !== "all")
+          params.department = filters.departmentFilter;
+
+        // Handle status filters
+        if (filters.activeFilter !== "all") {
+          // If active filter is set, use the appropriate status array
+          const statusArray =
+            filters.activeFilter === "active"
+              ? ACTIVE_STATUSES
+              : INACTIVE_STATUSES;
+          params.status = statusArray.join(","); // Convert array to comma-separated string
+        } else if (filters.statusFilter !== "all") {
+          // If specific status is selected, use that
+          params.status = filters.statusFilter;
+        }
+
+        const response = await projectService.getAll(params);
+
+        // Handle both response structures
+        const projectsData = Array.isArray(response.data)
+          ? response.data
+          : response.data?.data || [];
+
+        setProjects(projectsData);
+        setPagination((prev) => ({
+          ...prev,
+          total: response.pagination?.total || 0,
+          pages: response.pagination?.pages || 0,
+        }));
+      } catch (err) {
+        console.error("Error fetching projects:", err);
+        setError(err.message);
+        setProjects([]);
+      } finally {
+        if (isSearch) {
+          setSearchLoading(false);
+        } else {
+          setLoading(false);
+        }
+        performanceMonitor.endTimer("fetch-projects");
+      }
+    },
+    [filters]
+  );
+
   // Move fetchProjects here so it is defined after fetchProjectsWithSearch
   const fetchProjects = useCallback(
     async (isSearch = false) => {
@@ -732,12 +829,14 @@ const Projects = () => {
   const debouncedSearch = useCallback(
     debounce((value) => {
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
-      // Manually trigger fetch with search flag and current value
-      setTimeout(() => {
-        fetchProjectsWithSearch(value, true);
-      }, 50);
+      // Use the new function with reset pagination
+      fetchProjectsWithPagination(
+        { page: 0, pageSize: paginationModel.pageSize },
+        value,
+        true
+      );
     }, 150), // Reduced from 300ms to 150ms for better responsiveness
-    []
+    [fetchProjectsWithPagination, paginationModel.pageSize]
   );
 
   // Handle filter changes
@@ -835,12 +934,13 @@ const Projects = () => {
 
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
 
-      // Trigger fetch with current filter values
-      setTimeout(() => {
-        fetchWithFilters();
-      }, 50);
+      // Use the new function with reset pagination
+      fetchProjectsWithPagination({
+        page: 0,
+        pageSize: paginationModel.pageSize,
+      });
     },
-    [updateFilter, filters, paginationModel]
+    [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
   );
 
   // Function to clear all filters
@@ -859,13 +959,29 @@ const Projects = () => {
 
     // Clear localStorage and URL parameters
     localStorage.removeItem("projects-filters");
+    localStorage.removeItem("projects-column-visibility");
     window.history.replaceState({}, "", window.location.pathname);
 
+    // Reset column visibility to default
+    const defaultColumnVisibility = {
+      projectID: true,
+      name: true,
+      client: true,
+      status: true,
+      department: true,
+      users: true,
+      createdAt: true,
+      updatedAt: false,
+    };
+    setColumnVisibilityModel(defaultColumnVisibility);
+
     // Trigger fetch with cleared filters
-    setTimeout(() => {
-      fetchProjectsWithSearch("", false);
-    }, 50);
-  }, [fetchProjectsWithSearch]);
+    fetchProjectsWithPagination(
+      { page: 0, pageSize: paginationModel.pageSize },
+      "",
+      false
+    );
+  }, [fetchProjectsWithPagination, paginationModel.pageSize]);
 
   // Handle search input change
   const handleSearchChange = useCallback(
@@ -971,9 +1087,16 @@ const Projects = () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await projectService.update(selectedProject.id, form);
+      const projectId = selectedProject?._id || selectedProject?.id;
+      if (!projectId) {
+        console.error("No project ID found for update");
+        setError("Cannot update project: No project ID found");
+        return;
+      }
+
+      const response = await projectService.update(projectId, form);
       setProjects(
-        projects.map((p) => (p.id === selectedProject.id ? response.data : p))
+        projects.map((p) => ((p._id || p.id) === projectId ? response.data : p))
       );
       setDialogOpen(false);
       setSelectedProject(null);
@@ -987,12 +1110,21 @@ const Projects = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      console.log("=== SUBMITTING PROJECT FORM ===");
+      console.log("Form data being sent:", form);
+      console.log("Form data type:", typeof form);
+      console.log("Client value:", form.client);
+      console.log("Department value:", form.department);
+      console.log("Users value:", form.users);
+      console.log("===============================");
+
       const response = await projectService.create(form);
       setProjects([...projects, response.data]);
       setDialogOpen(false);
       setForm(emptyForm);
     } catch (error) {
       console.error("Error creating project:", error);
+      console.error("Error response:", error.response?.data);
       setError("Failed to create project");
     }
   };
@@ -1033,7 +1165,7 @@ const Projects = () => {
 
   const handleStatusChange = async (projectId, newStatus) => {
     try {
-      const project = projects.find((p) => p.id === projectId);
+      const project = projects.find((p) => (p._id || p.id) === projectId);
       if (!project) return;
 
       const response = await projectService.update(projectId, {
@@ -1042,7 +1174,7 @@ const Projects = () => {
       });
 
       setProjects(
-        projects.map((p) => (p.id === projectId ? response.data : p))
+        projects.map((p) => ((p._id || p.id) === projectId ? response.data : p))
       );
     } catch (error) {
       console.error("Error updating project status:", error);
@@ -1052,7 +1184,7 @@ const Projects = () => {
 
   const handleRemoveUser = async (projectId, userId) => {
     try {
-      const project = projects.find((p) => p.id === projectId);
+      const project = projects.find((p) => (p._id || p.id) === projectId);
       if (!project) {
         console.error("Project not found:", projectId);
         return;
@@ -1065,7 +1197,7 @@ const Projects = () => {
       });
 
       setProjects(
-        projects.map((p) => (p.id === projectId ? response.data : p))
+        projects.map((p) => ((p._id || p.id) === projectId ? response.data : p))
       );
     } catch (error) {
       console.error("Error removing user:", error);
@@ -1075,12 +1207,28 @@ const Projects = () => {
 
   const handleDeleteProject = async () => {
     try {
-      await projectService.delete(selectedProject.id);
-      setProjects(projects.filter((p) => p.id !== selectedProject.id));
+      console.log("=== DELETING PROJECT ===");
+      console.log("Selected project:", selectedProject);
+      console.log(
+        "Project ID to delete:",
+        selectedProject?._id || selectedProject?.id
+      );
+      console.log("=========================");
+
+      const projectId = selectedProject?._id || selectedProject?.id;
+      if (!projectId) {
+        console.error("No project ID found for deletion");
+        setError("Cannot delete project: No project ID found");
+        return;
+      }
+
+      await projectService.delete(projectId);
+      setProjects(projects.filter((p) => (p._id || p.id) !== projectId));
       setDeleteDialogOpen(false);
       setSelectedProject(null);
     } catch (error) {
       console.error("Error deleting project:", error);
+      console.error("Error response:", error.response?.data);
       setError("Failed to delete project");
     }
   };
@@ -1215,6 +1363,30 @@ const Projects = () => {
     setColumnVisibilityModel(newModel);
   }, []);
 
+  // Add handlers for column visibility dropdown
+  const handleColumnVisibilityClick = (event) => {
+    setColumnVisibilityAnchor(event.currentTarget);
+  };
+
+  const handleColumnVisibilityClose = () => {
+    setColumnVisibilityAnchor(null);
+  };
+
+  const handleColumnToggle = (field) => {
+    setColumnVisibilityModel((prev) => {
+      const newModel = {
+        ...prev,
+        [field]: !prev[field],
+      };
+      // Save column visibility to localStorage
+      localStorage.setItem(
+        "projects-column-visibility",
+        JSON.stringify(newModel)
+      );
+      return newModel;
+    });
+  };
+
   const handleDepartmentClick = (department) => {
     console.log("Department filter clicked:", department);
     setSelectedDepartment(department);
@@ -1222,12 +1394,19 @@ const Projects = () => {
     // Convert department name to filter value
     const departmentValue = department === "All" ? "all" : department;
 
-    // Update the department filter
+    // Update the department filter using the existing filter update mechanism
     updateFilter("departmentFilter", departmentValue);
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
 
-    // Create a new function to fetch with the current department value
-    const fetchWithDepartment = async () => {
+    // Use the new function with reset pagination and updated department filter
+    // We need to create a temporary filters object with the new department value
+    const tempFilters = {
+      ...filters,
+      departmentFilter: departmentValue,
+    };
+
+    // Create a temporary fetch function that uses the updated department
+    const fetchWithUpdatedDepartment = async () => {
       try {
         performanceMonitor.startTimer("fetch-projects");
         setSearchLoading(true);
@@ -1235,13 +1414,13 @@ const Projects = () => {
         const params = {
           page: 1, // Reset to first page
           limit: paginationModel.pageSize,
-          sortBy: filters.sortModel[0]?.field || "createdAt",
-          sortOrder: filters.sortModel[0]?.sort || "desc",
+          sortBy: tempFilters.sortModel[0]?.field || "createdAt",
+          sortOrder: tempFilters.sortModel[0]?.sort || "desc",
         };
 
         // Add search term if provided
-        if (filters.searchTerm) {
-          params.search = filters.searchTerm;
+        if (tempFilters.searchTerm) {
+          params.search = tempFilters.searchTerm;
         }
 
         // Add department filter
@@ -1250,14 +1429,14 @@ const Projects = () => {
         }
 
         // Handle status filters
-        if (filters.activeFilter !== "all") {
+        if (tempFilters.activeFilter !== "all") {
           const statusArray =
-            filters.activeFilter === "active"
+            tempFilters.activeFilter === "active"
               ? ACTIVE_STATUSES
               : INACTIVE_STATUSES;
           params.status = statusArray.join(",");
-        } else if (filters.statusFilter !== "all") {
-          params.status = filters.statusFilter;
+        } else if (tempFilters.statusFilter !== "all") {
+          params.status = tempFilters.statusFilter;
         }
 
         const response = await projectService.getAll(params);
@@ -1282,22 +1461,18 @@ const Projects = () => {
       }
     };
 
-    // Trigger fetch with current department value
-    setTimeout(() => {
-      fetchWithDepartment();
-    }, 50);
+    // Execute the fetch immediately
+    fetchWithUpdatedDepartment();
   };
 
   // Handle pagination model change
   const handlePaginationModelChange = useCallback(
     (newModel) => {
       setPaginationModel(newModel);
-      // Trigger fetch for pagination changes with current search term
-      setTimeout(() => {
-        fetchProjectsWithSearch(filters.searchTerm, false);
-      }, 50);
+      // Use the new function with the updated pagination model
+      fetchProjectsWithPagination(newModel, filters.searchTerm, false);
     },
-    [fetchProjectsWithSearch, filters.searchTerm]
+    [fetchProjectsWithPagination, filters.searchTerm]
   );
 
   // Memoize columns configuration
@@ -1668,8 +1843,81 @@ const Projects = () => {
           >
             Clear Filters
           </Button>
+
+          {/* Column Visibility Button */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ViewColumnIcon />}
+            onClick={handleColumnVisibilityClick}
+            sx={{
+              height: 40, // Match the height of other components
+              minWidth: 140,
+              color: colors.blueAccent[500],
+              borderColor: colors.blueAccent[500],
+              "&:hover": {
+                backgroundColor: colors.blueAccent[500],
+                color: "white",
+                borderColor: colors.blueAccent[500],
+              },
+            }}
+          >
+            Columns
+          </Button>
         </Stack>
       </Box>
+
+      {/* Column Visibility Dropdown */}
+      <Popover
+        open={Boolean(columnVisibilityAnchor)}
+        anchorEl={columnVisibilityAnchor}
+        onClose={handleColumnVisibilityClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "left",
+        }}
+        PaperProps={{
+          sx: {
+            minWidth: 200,
+            maxHeight: 400,
+          },
+        }}
+      >
+        <Box sx={{ p: 1 }}>
+          <Typography variant="subtitle2" sx={{ p: 1, fontWeight: "bold" }}>
+            Show/Hide Columns
+          </Typography>
+          <Divider sx={{ mb: 1 }} />
+          <List dense>
+            {columns.map((column) => (
+              <ListItem key={column.field} disablePadding>
+                <ListItemButton
+                  dense
+                  onClick={() => handleColumnToggle(column.field)}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <Checkbox
+                      edge="start"
+                      checked={columnVisibilityModel[column.field] !== false}
+                      tabIndex={-1}
+                      disableRipple
+                      size="small"
+                    />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={column.headerName}
+                    primaryTypographyProps={{ fontSize: "0.875rem" }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Popover>
 
       {/* Department Filter Buttons */}
       <Box
@@ -1790,13 +2038,13 @@ const Projects = () => {
           onSortModelChange={handleSortModelChange}
           sortModel={filters.sortModel}
           autoHeight
-          disableColumnMenu
+          disableColumnMenu={true}
           disableSelectionOnClick
-          disableColumnFilter
-          disableColumnSelector
+          disableColumnFilter={true}
+          disableMultipleColumnsFiltering={true}
+          disableColumnSelector={true}
           disableDensitySelector
           disableColumnReorder
-          disableMultipleColumnsFiltering
           disableMultipleColumnsSorting
         />
       </Box>
@@ -1988,6 +2236,211 @@ const Projects = () => {
           <DialogActions>
             <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button type="submit">Save</Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the project "{selectedProject?.name}
+            "? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteProject}
+            color="error"
+            variant="contained"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* New Client Dialog */}
+      <Dialog
+        open={clientDialogOpen}
+        onClose={() => setClientDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Add New Client</DialogTitle>
+        <form onSubmit={handleNewClientSubmit}>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Client Name"
+                    name="name"
+                    value={newClient.name}
+                    onChange={(e) =>
+                      setNewClient({ ...newClient, name: e.target.value })
+                    }
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Email"
+                    name="email"
+                    value={newClient.email}
+                    onChange={(e) =>
+                      setNewClient({ ...newClient, email: e.target.value })
+                    }
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Phone"
+                    name="phone"
+                    value={newClient.phone}
+                    onChange={(e) =>
+                      setNewClient({ ...newClient, phone: e.target.value })
+                    }
+                    required
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Address"
+                    name="address"
+                    value={newClient.address}
+                    onChange={(e) =>
+                      setNewClient({ ...newClient, address: e.target.value })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Invoice Email"
+                    name="invoiceEmail"
+                    value={newClient.invoiceEmail}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        invoiceEmail: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                    Primary Contact
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Name"
+                    name="contact1Name"
+                    value={newClient.contact1Name}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        contact1Name: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Phone"
+                    name="contact1Number"
+                    value={newClient.contact1Number}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        contact1Number: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Email"
+                    name="contact1Email"
+                    value={newClient.contact1Email}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        contact1Email: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                    Secondary Contact (Optional)
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Name"
+                    name="contact2Name"
+                    value={newClient.contact2Name}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        contact2Name: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Phone"
+                    name="contact2Number"
+                    value={newClient.contact2Number}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        contact2Number: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Email"
+                    name="contact2Email"
+                    value={newClient.contact2Email}
+                    onChange={(e) =>
+                      setNewClient({
+                        ...newClient,
+                        contact2Email: e.target.value,
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setClientDialogOpen(false)}>Cancel</Button>
+            <Button type="submit" variant="contained">
+              Add Client
+            </Button>
           </DialogActions>
         </form>
       </Dialog>

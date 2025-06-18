@@ -280,7 +280,7 @@ export const userService = {
   getAll: () => api.get('/users?isActive=true'),
   getById: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
-  update: (id, data) => api.patch(`/users/${id}`, data),
+  update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`)
 };
 
