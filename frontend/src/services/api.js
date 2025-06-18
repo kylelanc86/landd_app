@@ -284,6 +284,12 @@ export const userService = {
   delete: (id) => api.delete(`/users/${id}`)
 };
 
+// User preferences service
+export const userPreferencesService = {
+  getPreferences: () => api.get('/users/preferences/me'),
+  updatePreferences: (preferences) => api.put('/users/preferences/me', preferences)
+};
+
 // Xero service
 export const xeroService = {
   getAuthUrl: () => api.get('/xero/auth-url'),

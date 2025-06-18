@@ -62,7 +62,12 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { projectService, clientService, userService } from "../../services/api";
+import {
+  projectService,
+  clientService,
+  userService,
+  userPreferencesService,
+} from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { colors } from "../../theme";
@@ -475,29 +480,15 @@ const Projects = () => {
   });
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState(null);
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState(() => {
-    // Load column visibility from localStorage
-    const savedColumnVisibility = localStorage.getItem(
-      "projects-column-visibility"
-    );
-    if (savedColumnVisibility) {
-      try {
-        return JSON.parse(savedColumnVisibility);
-      } catch (error) {
-        console.error("Error parsing saved column visibility:", error);
-      }
-    }
-    // Default column visibility
-    return {
-      projectID: true,
-      name: true,
-      client: true,
-      status: true,
-      department: true,
-      users: true,
-      createdAt: true,
-      updatedAt: false,
-    };
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState({
+    projectID: true,
+    name: true,
+    client: true,
+    status: true,
+    department: true,
+    users: true,
+    createdAt: true,
+    updatedAt: false,
   });
   const [showInactive, setShowInactive] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
@@ -1372,19 +1363,29 @@ const Projects = () => {
     setColumnVisibilityAnchor(null);
   };
 
-  const handleColumnToggle = (field) => {
-    setColumnVisibilityModel((prev) => {
-      const newModel = {
-        ...prev,
-        [field]: !prev[field],
-      };
-      // Save column visibility to localStorage
+  const handleColumnToggle = async (field) => {
+    const newModel = {
+      ...columnVisibilityModel,
+      [field]: !columnVisibilityModel[field],
+    };
+
+    setColumnVisibilityModel(newModel);
+
+    try {
+      // Save to database
+      await userPreferencesService.updatePreferences({
+        columnVisibility: {
+          projects: newModel,
+        },
+      });
+    } catch (error) {
+      console.error("Error saving column visibility preferences:", error);
+      // Fallback to localStorage if API fails
       localStorage.setItem(
         "projects-column-visibility",
         JSON.stringify(newModel)
       );
-      return newModel;
-    });
+    }
   };
 
   const handleDepartmentClick = (department) => {
@@ -1474,6 +1475,34 @@ const Projects = () => {
     },
     [fetchProjectsWithPagination, filters.searchTerm]
   );
+
+  // Load user preferences from database
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      try {
+        const response = await userPreferencesService.getPreferences();
+        if (response.data?.columnVisibility?.projects) {
+          setColumnVisibilityModel(response.data.columnVisibility.projects);
+        }
+      } catch (error) {
+        console.error("Error loading user preferences:", error);
+        // Fallback to localStorage if API fails
+        const savedColumnVisibility = localStorage.getItem(
+          "projects-column-visibility"
+        );
+        if (savedColumnVisibility) {
+          try {
+            const parsed = JSON.parse(savedColumnVisibility);
+            setColumnVisibilityModel(parsed);
+          } catch (parseError) {
+            console.error("Error parsing saved column visibility:", parseError);
+          }
+        }
+      }
+    };
+
+    loadUserPreferences();
+  }, []);
 
   // Memoize columns configuration
   const columns = useMemo(

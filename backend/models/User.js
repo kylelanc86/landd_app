@@ -69,6 +69,44 @@ const userSchema = new mongoose.Schema({
     type: Date,
     required: false,
   },
+  userPreferences: {
+    columnVisibility: {
+      projects: {
+        type: Object,
+        default: {
+          projectID: true,
+          name: true,
+          client: true,
+          status: true,
+          department: true,
+          users: true,
+          createdAt: true,
+          updatedAt: false,
+        }
+      },
+      clients: {
+        type: Object,
+        default: {
+          name: true,
+          invoiceEmail: true,
+          contact1Name: true,
+          contact1Number: true,
+          address: true,
+          actions: true,
+        }
+      }
+    },
+    filters: {
+      projects: {
+        type: Object,
+        default: {}
+      },
+      clients: {
+        type: Object,
+        default: {}
+      }
+    }
+  }
 }, {
   timestamps: true
 });

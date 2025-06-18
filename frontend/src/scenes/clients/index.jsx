@@ -26,7 +26,7 @@ import {
   Divider,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
-import { clientService } from "../../services/api";
+import { clientService, userPreferencesService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
@@ -81,29 +81,43 @@ const Clients = () => {
   const searchInputRef = useRef(null);
 
   // Column visibility state
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState(() => {
-    // Load column visibility from localStorage
-    const savedColumnVisibility = localStorage.getItem(
-      "clients-column-visibility"
-    );
-    if (savedColumnVisibility) {
-      try {
-        return JSON.parse(savedColumnVisibility);
-      } catch (error) {
-        console.error("Error parsing saved column visibility:", error);
-      }
-    }
-    // Default column visibility
-    return {
-      name: true,
-      invoiceEmail: true,
-      contact1Name: true,
-      contact1Number: true,
-      address: true,
-      actions: true,
-    };
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState({
+    name: true,
+    invoiceEmail: true,
+    contact1Name: true,
+    contact1Number: true,
+    address: true,
+    actions: true,
   });
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
+
+  // Load user preferences from database
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      try {
+        const response = await userPreferencesService.getPreferences();
+        if (response.data?.columnVisibility?.clients) {
+          setColumnVisibilityModel(response.data.columnVisibility.clients);
+        }
+      } catch (error) {
+        console.error("Error loading user preferences:", error);
+        // Fallback to localStorage if API fails
+        const savedColumnVisibility = localStorage.getItem(
+          "clients-column-visibility"
+        );
+        if (savedColumnVisibility) {
+          try {
+            const parsed = JSON.parse(savedColumnVisibility);
+            setColumnVisibilityModel(parsed);
+          } catch (parseError) {
+            console.error("Error parsing saved column visibility:", parseError);
+          }
+        }
+      }
+    };
+
+    loadUserPreferences();
+  }, []);
 
   // Debug mount/unmount
   useEffect(() => {
@@ -303,19 +317,29 @@ const Clients = () => {
     setColumnVisibilityAnchor(null);
   };
 
-  const handleColumnToggle = (field) => {
-    setColumnVisibilityModel((prev) => {
-      const newModel = {
-        ...prev,
-        [field]: !prev[field],
-      };
-      // Save column visibility to localStorage
+  const handleColumnToggle = async (field) => {
+    const newModel = {
+      ...columnVisibilityModel,
+      [field]: !columnVisibilityModel[field],
+    };
+
+    setColumnVisibilityModel(newModel);
+
+    try {
+      // Save to database
+      await userPreferencesService.updatePreferences({
+        columnVisibility: {
+          clients: newModel,
+        },
+      });
+    } catch (error) {
+      console.error("Error saving column visibility preferences:", error);
+      // Fallback to localStorage if API fails
       localStorage.setItem(
         "clients-column-visibility",
         JSON.stringify(newModel)
       );
-      return newModel;
-    });
+    }
   };
 
   const columns = [

@@ -131,4 +131,38 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Get user preferences
+router.get('/preferences/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('userPreferences');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user.userPreferences || {});
+  } catch (error) {
+    console.error('Error fetching user preferences:', error);
+    res.status(500).json({ message: 'Error fetching preferences' });
+  }
+});
+
+// Update user preferences
+router.put('/preferences/me', auth, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { userPreferences: req.body },
+      { new: true, runValidators: true }
+    ).select('userPreferences');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json(user.userPreferences || {});
+  } catch (error) {
+    console.error('Error updating user preferences:', error);
+    res.status(500).json({ message: 'Error updating preferences' });
+  }
+});
+
 module.exports = router; 
