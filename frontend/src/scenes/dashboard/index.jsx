@@ -114,9 +114,12 @@ const Dashboard = () => {
           : invoicesRes.data.data || [];
 
         // Use ACTIVE_STATUSES for active projects
-        const activeProjects = projects.filter((p) =>
-          ACTIVE_STATUSES.includes(p.status)
-        ).length;
+        const activeProjectsRes = await projectService.getAll({
+          status: ACTIVE_STATUSES.join(","),
+          limit: 1,
+        });
+        const activeProjects = activeProjectsRes.data.pagination?.total || 0;
+
         const reviewProjects = projects.filter(
           (p) => p.status === "Report sent for review"
         ).length;
