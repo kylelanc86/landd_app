@@ -20,7 +20,12 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       status
     } = req.query;
 
+    console.log('=== BACKEND PROJECTS REQUEST ===');
     console.log('Received request with params:', { page, limit, sortBy, sortOrder, search, department, status });
+    console.log('Search param type:', typeof search);
+    console.log('Search param value:', search);
+    console.log('Search param length:', search ? search.length : 0);
+    console.log('==============================');
 
     // Build query
     const query = {};
@@ -35,8 +40,33 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       try {
         // Handle both string and array status values
         const statusArray = status.includes(',') ? status.split(',') : [status];
-        query.status = { $in: statusArray };
-        console.log('Using status filter:', query.status);
+        
+        if (statusArray.includes('unknown')) {
+          // For unknown status, we need to find projects with statuses not in active or inactive arrays
+          // We'll need to handle this differently since we can't use $in for "not in"
+          const activeStatuses = [
+            'Assigned',
+            'In progress', 
+            'Samples submitted',
+            'Lab Analysis Complete',
+            'Report sent for review',
+            'Ready for invoicing',
+            'Invoice sent'
+          ];
+          const inactiveStatuses = [
+            'Job complete',
+            'On hold',
+            'Quote sent',
+            'Cancelled'
+          ];
+          const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
+          
+          query.status = { $nin: allKnownStatuses };
+          console.log('Using unknown status filter - excluding known statuses:', allKnownStatuses);
+        } else {
+          query.status = { $in: statusArray };
+          console.log('Using status filter:', query.status);
+        }
       } catch (error) {
         console.error('Error processing status filter:', error);
         throw new Error(`Invalid status filter: ${error.message}`);
@@ -45,14 +75,26 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
 
     // Add search filter if specified
     if (search) {
+      console.log('=== BUILDING SEARCH QUERY ===');
+      console.log('Search term received:', search);
+      console.log('Search term type:', typeof search);
+      console.log('Search term length:', search.length);
       query.$or = [
-        { projectName: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
         { projectID: { $regex: search, $options: 'i' } },
-        { workOrder: { $regex: search, $options: 'i' } },
+        { 'client.name': { $regex: search, $options: 'i' } },
       ];
+      console.log('Search query built:', query.$or);
+      console.log('==========================');
+    } else {
+      console.log('=== NO SEARCH TERM ===');
+      console.log('Search parameter is empty or not provided');
+      console.log('==========================');
     }
 
+    console.log('=== FINAL QUERY ===');
     console.log('Final query:', JSON.stringify(query, null, 2));
+    console.log('========================');
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);

@@ -168,19 +168,40 @@ export const clientService = {
 // Project service
 export const projectService = {
   getAll: (params = {}) => {
+    console.log("=== PROJECT SERVICE DEBUG ===");
+    console.log("Received params:", params);
+    console.log("Params type:", typeof params);
+    console.log("Search param:", params.search);
+    console.log("Search param type:", typeof params.search);
+    console.log("==========================");
+    
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
-    if (params.search) queryParams.append('search', params.search);
+    if (params.search) {
+      console.log("=== ADDING SEARCH TO QUERY ===");
+      console.log("Adding search param to query:", params.search);
+      queryParams.append('search', params.search);
+      console.log("==========================");
+    }
     if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
-    return api.get(`/projects?${queryParams.toString()}`).then(response => {
+    const url = `/projects?${queryParams.toString()}`;
+    console.log("=== MAKING PROJECT API CALL ===");
+    console.log("Full URL:", url);
+    console.log("Query params string:", queryParams.toString());
+    console.log("==========================");
+
+    return api.get(url).then(response => {
+      console.log('=== PROJECT API RESPONSE ===');
       console.log('Raw API response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response status:', response.status);
       const data = response.data;
-      return {
+      const result = {
         data: data.data || [],
         pagination: data.pagination || {
           total: 0,
@@ -189,6 +210,15 @@ export const projectService = {
           limit: parseInt(params.limit) || 10
         }
       };
+      console.log('Processed result:', result);
+      console.log('==========================');
+      return result;
+    }).catch(error => {
+      console.error('=== PROJECT API ERROR ===');
+      console.error('Error in projectService.getAll:', error);
+      console.error('Error response:', error.response);
+      console.error('==========================');
+      throw error;
     });
   },
   getById: (id) => api.get(`/projects/${id}`),

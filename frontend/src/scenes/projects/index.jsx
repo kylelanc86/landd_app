@@ -41,6 +41,8 @@ import {
   Avatar,
   Tooltip,
   Alert,
+  LinearProgress,
+  CircularProgress,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -54,10 +56,11 @@ import {
 } from "../../components/JobStatus";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "@mui/material";
-import { DataGrid, GridToolbar } from "@mui/x-data-grid";
+import { DataGrid } from "@mui/x-data-grid";
 import { projectService, clientService, userService } from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import { colors } from "../../theme";
 import AddIcon from "@mui/icons-material/Add";
 import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
@@ -426,9 +429,10 @@ const Projects = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
-    useJobStatus();
+    useJobStatus() || {};
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -465,17 +469,35 @@ const Projects = () => {
   });
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState(null);
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState(() => {
-    try {
-      const savedVisibility = localStorage.getItem("projectsColumnVisibility");
-      return savedVisibility ? JSON.parse(savedVisibility) : {};
-    } catch (error) {
-      console.error("Error loading column visibility:", error);
-      return {};
-    }
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState({
+    projectID: true,
+    name: true,
+    client: true,
+    status: true,
+    department: true,
+    users: true,
+    createdAt: true,
+    updatedAt: false,
   });
   const [showInactive, setShowInactive] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState("All");
+  const [selectedDepartment, setSelectedDepartment] = useState(() => {
+    // Load selected department from filters
+    const savedFilters = localStorage.getItem("projects-filters");
+    if (savedFilters) {
+      try {
+        const parsedFilters = JSON.parse(savedFilters);
+        if (
+          parsedFilters.departmentFilter &&
+          parsedFilters.departmentFilter !== "all"
+        ) {
+          return parsedFilters.departmentFilter;
+        }
+      } catch (error) {
+        console.error("Error parsing saved department filter:", error);
+      }
+    }
+    return "All";
+  });
   const [paginationModel, setPaginationModel] = useState({
     pageSize: 50,
     page: 0,
@@ -487,7 +509,15 @@ const Projects = () => {
   const pageLoadTimerRef = useRef(null);
   const renderStartTimeRef = useRef(null);
 
-  // Start page load monitoring only on initial mount
+  // Add ref to track current search term to prevent unnecessary API calls
+  const searchTermRef = useRef(searchTerm);
+  searchTermRef.current = searchTerm;
+
+  // Add ref to track search input focus
+  const searchInputRef = useRef(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Start page load monitoring only on initial load
   useEffect(() => {
     if (isInitialLoadRef.current) {
       pageLoadTimerRef.current =
@@ -519,77 +549,351 @@ const Projects = () => {
     }
   }, []);
 
-  const fetchProjects = useCallback(async () => {
-    try {
-      performanceMonitor.startTimer("fetch-projects");
-      setLoading(true);
+  // Combine all filters into a single state object to prevent multiple useEffect triggers
+  const [filters, setFilters] = useState(() => {
+    // Load filters from localStorage and URL parameters
+    const savedFilters = localStorage.getItem("projects-filters");
+    const urlParams = new URLSearchParams(window.location.search);
 
-      const params = {
-        page: paginationModel.page + 1, // Convert to 1-based index
-        limit: paginationModel.pageSize,
-        sortBy: sortModel[0]?.field || "createdAt",
-        sortOrder: sortModel[0]?.sort || "desc",
-      };
+    const defaultFilters = {
+      searchTerm: "",
+      departmentFilter: "all",
+      statusFilter: "all",
+      activeFilter: "active",
+      sortModel: [{ field: "projectID", sort: "desc" }],
+    };
 
-      // Add filters if they're not set to 'all'
-      if (searchTerm) params.search = searchTerm;
-      if (departmentFilter !== "all") params.department = departmentFilter;
-
-      // Handle status filters
-      if (activeFilter !== "all") {
-        // If active filter is set, use the appropriate status array
-        const statusArray =
-          activeFilter === "active" ? ACTIVE_STATUSES : INACTIVE_STATUSES;
-        params.status = statusArray.join(","); // Convert array to comma-separated string
-        console.log("Using status array:", statusArray);
-      } else if (statusFilter !== "all") {
-        // If specific status is selected, use that
-        params.status = statusFilter;
-        console.log("Using single status:", params.status);
+    if (savedFilters) {
+      try {
+        const parsedFilters = JSON.parse(savedFilters);
+        return {
+          ...defaultFilters,
+          ...parsedFilters,
+          // Override with URL parameters if they exist
+          searchTerm: urlParams.get("search") || parsedFilters.searchTerm || "",
+          departmentFilter:
+            urlParams.get("department") ||
+            parsedFilters.departmentFilter ||
+            "all",
+          statusFilter:
+            urlParams.get("status") || parsedFilters.statusFilter || "all",
+          activeFilter:
+            urlParams.get("active") || parsedFilters.activeFilter || "active",
+        };
+      } catch (error) {
+        console.error("Error parsing saved filters:", error);
+        return defaultFilters;
       }
-
-      console.log("Fetching projects with params:", params);
-      const response = await projectService.getAll(params);
-      console.log("API Response:", response);
-
-      // Handle both response structures
-      const projectsData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-
-      setProjects(projectsData);
-      setPagination((prev) => ({
-        ...prev,
-        total: response.pagination?.total || 0,
-        pages: response.pagination?.pages || 0,
-      }));
-    } catch (err) {
-      console.error("Error fetching projects:", err);
-      setError(err.message);
-      setProjects([]);
-    } finally {
-      setLoading(false);
-      performanceMonitor.endTimer("fetch-projects");
     }
-  }, [
-    paginationModel,
-    searchTerm,
-    departmentFilter,
-    statusFilter,
-    activeFilter,
-    sortModel,
-  ]);
 
-  // Handle pagination model change
-  const handlePaginationModelChange = useCallback((newModel) => {
-    console.log("Pagination model changed:", newModel);
-    setPaginationModel(newModel);
+    // Use URL parameters if no localStorage data
+    return {
+      ...defaultFilters,
+      searchTerm: urlParams.get("search") || "",
+      departmentFilter: urlParams.get("department") || "all",
+      statusFilter: urlParams.get("status") || "all",
+      activeFilter: urlParams.get("active") || "active",
+    };
+  });
+
+  // Function to save filters to localStorage and update URL
+  const saveFilters = useCallback((newFilters) => {
+    localStorage.setItem("projects-filters", JSON.stringify(newFilters));
+
+    // Update URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (newFilters.searchTerm) {
+      urlParams.set("search", newFilters.searchTerm);
+    } else {
+      urlParams.delete("search");
+    }
+    if (newFilters.departmentFilter !== "all") {
+      urlParams.set("department", newFilters.departmentFilter);
+    } else {
+      urlParams.delete("department");
+    }
+    if (newFilters.statusFilter !== "all") {
+      urlParams.set("status", newFilters.statusFilter);
+    } else {
+      urlParams.delete("status");
+    }
+    if (newFilters.activeFilter !== "active") {
+      urlParams.set("active", newFilters.activeFilter);
+    } else {
+      urlParams.delete("active");
+    }
+
+    // Update URL without reloading the page
+    window.history.replaceState(
+      {},
+      "",
+      `${window.location.pathname}${
+        urlParams.toString() ? "?" + urlParams.toString() : ""
+      }`
+    );
   }, []);
 
-  // Fetch projects when filters or pagination change
+  // Update individual filter functions to use the combined state
+  const updateFilter = useCallback(
+    (filterType, value) => {
+      setFilters((prev) => {
+        const newFilters = {
+          ...prev,
+          [filterType]: value,
+        };
+        // Save filters whenever they change
+        saveFilters(newFilters);
+        return newFilters;
+      });
+    },
+    [saveFilters]
+  );
+
+  // Separate function to fetch projects with a specific search term
+  const fetchProjectsWithSearch = useCallback(
+    async (searchValue, isSearch = false) => {
+      try {
+        performanceMonitor.startTimer("fetch-projects");
+
+        // Use searchLoading for searches, main loading for initial load
+        if (isSearch) {
+          setSearchLoading(true);
+        } else {
+          setLoading(true);
+        }
+
+        const params = {
+          page: paginationModel.page + 1, // Convert to 1-based index
+          limit: paginationModel.pageSize,
+          sortBy: filters.sortModel[0]?.field || "createdAt",
+          sortOrder: filters.sortModel[0]?.sort || "desc",
+        };
+
+        // Add search term if provided
+        if (searchValue) {
+          params.search = searchValue;
+        }
+
+        if (filters.departmentFilter !== "all")
+          params.department = filters.departmentFilter;
+
+        // Handle status filters
+        if (filters.activeFilter !== "all") {
+          // If active filter is set, use the appropriate status array
+          const statusArray =
+            filters.activeFilter === "active"
+              ? ACTIVE_STATUSES
+              : INACTIVE_STATUSES;
+          params.status = statusArray.join(","); // Convert array to comma-separated string
+        } else if (filters.statusFilter !== "all") {
+          // If specific status is selected, use that
+          params.status = filters.statusFilter;
+        }
+
+        const response = await projectService.getAll(params);
+
+        // Handle both response structures
+        const projectsData = Array.isArray(response.data)
+          ? response.data
+          : response.data?.data || [];
+
+        setProjects(projectsData);
+        setPagination((prev) => ({
+          ...prev,
+          total: response.pagination?.total || 0,
+          pages: response.pagination?.pages || 0,
+        }));
+      } catch (err) {
+        console.error("Error fetching projects:", err);
+        setError(err.message);
+        setProjects([]);
+      } finally {
+        if (isSearch) {
+          setSearchLoading(false);
+        } else {
+          setLoading(false);
+        }
+        performanceMonitor.endTimer("fetch-projects");
+      }
+    },
+    [filters, paginationModel]
+  );
+
+  // Move fetchProjects here so it is defined after fetchProjectsWithSearch
+  const fetchProjects = useCallback(
+    async (isSearch = false) => {
+      // Use the new function with the current search term from filters
+      return fetchProjectsWithSearch(filters.searchTerm, isSearch);
+    },
+    [filters.searchTerm, fetchProjectsWithSearch]
+  );
+
+  // Debounced search handler
+  const debouncedSearch = useCallback(
+    debounce((value) => {
+      setPaginationModel((prev) => ({ ...prev, page: 0 }));
+      // Manually trigger fetch with search flag and current value
+      setTimeout(() => {
+        fetchProjectsWithSearch(value, true);
+      }, 50);
+    }, 150), // Reduced from 300ms to 150ms for better responsiveness
+    []
+  );
+
+  // Handle filter changes
+  const handleFilterChange = useCallback(
+    (filterType, value) => {
+      // Create a new function to fetch with current filter values
+      const fetchWithFilters = async () => {
+        try {
+          performanceMonitor.startTimer("fetch-projects");
+          setSearchLoading(true);
+
+          const params = {
+            page: 1, // Reset to first page
+            limit: paginationModel.pageSize,
+            sortBy: filters.sortModel[0]?.field || "createdAt",
+            sortOrder: filters.sortModel[0]?.sort || "desc",
+          };
+
+          // Add search term if provided
+          if (filters.searchTerm) {
+            params.search = filters.searchTerm;
+          }
+
+          // Add department filter
+          if (filters.departmentFilter !== "all") {
+            params.department = filters.departmentFilter;
+          }
+
+          // Handle status filters based on the filter type being changed
+          if (filterType === "active") {
+            // If active filter is being changed, use the new value
+            if (value !== "all") {
+              const statusArray =
+                value === "active" ? ACTIVE_STATUSES : INACTIVE_STATUSES;
+              params.status = statusArray.join(",");
+            }
+          } else if (filterType === "status") {
+            // If status filter is being changed, use the new value
+            if (value !== "all") {
+              params.status = value;
+            }
+          } else {
+            // For other filter types, use current filter values
+            if (filters.activeFilter !== "all") {
+              const statusArray =
+                filters.activeFilter === "active"
+                  ? ACTIVE_STATUSES
+                  : INACTIVE_STATUSES;
+              params.status = statusArray.join(",");
+            } else if (filters.statusFilter !== "all") {
+              params.status = filters.statusFilter;
+            }
+          }
+
+          const response = await projectService.getAll(params);
+
+          const projectsData = Array.isArray(response.data)
+            ? response.data
+            : response.data?.data || [];
+
+          setProjects(projectsData);
+          setPagination((prev) => ({
+            ...prev,
+            total: response.pagination?.total || 0,
+            pages: response.pagination?.pages || 0,
+          }));
+        } catch (err) {
+          console.error("Error fetching projects:", err);
+          setError(err.message);
+          setProjects([]);
+        } finally {
+          setSearchLoading(false);
+          performanceMonitor.endTimer("fetch-projects");
+        }
+      };
+
+      // Update the appropriate filter
+      switch (filterType) {
+        case "department":
+          updateFilter("departmentFilter", value);
+          break;
+        case "status":
+          updateFilter("statusFilter", value);
+          // Reset active filter when specific status is selected
+          updateFilter("activeFilter", "all");
+          break;
+        case "active":
+          updateFilter("activeFilter", value);
+          // Reset status filter when active/inactive is selected to avoid invalid selections
+          updateFilter("statusFilter", "all");
+          break;
+        default:
+          break;
+      }
+
+      setPaginationModel((prev) => ({ ...prev, page: 0 }));
+
+      // Trigger fetch with current filter values
+      setTimeout(() => {
+        fetchWithFilters();
+      }, 50);
+    },
+    [updateFilter, filters, paginationModel]
+  );
+
+  // Function to clear all filters
+  const clearFilters = useCallback(() => {
+    const defaultFilters = {
+      searchTerm: "",
+      departmentFilter: "all",
+      statusFilter: "all",
+      activeFilter: "active",
+      sortModel: [{ field: "projectID", sort: "desc" }],
+    };
+
+    setFilters(defaultFilters);
+    setSelectedDepartment("All");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+
+    // Clear localStorage and URL parameters
+    localStorage.removeItem("projects-filters");
+    window.history.replaceState({}, "", window.location.pathname);
+
+    // Trigger fetch with cleared filters
+    setTimeout(() => {
+      fetchProjectsWithSearch("", false);
+    }, 50);
+  }, [fetchProjectsWithSearch]);
+
+  // Handle search input change
+  const handleSearchChange = useCallback(
+    (event) => {
+      const value = event.target.value;
+      // Immediately update the search term in state for better UX
+      updateFilter("searchTerm", value);
+      // Then trigger the debounced search
+      debouncedSearch(value);
+    },
+    [debouncedSearch, updateFilter]
+  );
+
+  // Fetch projects when pagination changes only
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    // Removed automatic fetch to prevent double API calls
+    // All fetches are now triggered manually in search and filter handlers
+  }, [paginationModel]);
+
+  // Restore focus to search input when search loading completes
+  useEffect(() => {
+    if (!searchLoading && searchFocused && searchInputRef.current) {
+      // Small delay to ensure the component has re-rendered
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [searchLoading, searchFocused]);
 
   // Handle page change
   const handlePageChange = useCallback((newPage) => {
@@ -597,64 +901,21 @@ const Projects = () => {
   }, []);
 
   // Handle page size change
-  const handlePageSizeChange = useCallback(
-    (newPageSize) => {
-      console.log("Page size changed to:", newPageSize);
-      setPagination((prev) => ({
-        ...prev,
-        limit: newPageSize,
-        page: 1, // Reset to first page when changing page size
-      }));
-      // Force a fetch with the new page size
-      fetchProjects();
-    },
-    [fetchProjects]
-  );
+  const handlePageSizeChange = useCallback((newPageSize) => {
+    setPagination((prev) => ({
+      ...prev,
+      limit: newPageSize,
+      page: 1, // Reset to first page when changing page size
+    }));
+  }, []);
 
   // Handle sort change
-  const handleSortModelChange = useCallback((newSortModel) => {
-    setSortModel(newSortModel);
-  }, []);
-
-  // Debounced search handler
-  const debouncedSearch = useCallback(
-    debounce((value) => {
-      setSearchTerm(value);
-      setPagination((prev) => ({ ...prev, page: 1 }));
-    }, 300),
-    []
-  );
-
-  // Handle search input change
-  const handleSearchChange = useCallback(
-    (event) => {
-      debouncedSearch(event.target.value);
+  const handleSortModelChange = useCallback(
+    (newSortModel) => {
+      updateFilter("sortModel", newSortModel);
     },
-    [debouncedSearch]
+    [updateFilter]
   );
-
-  // Handle filter changes
-  const handleFilterChange = useCallback((filterType, value) => {
-    console.log("Filter changed:", filterType, value);
-    switch (filterType) {
-      case "department":
-        setDepartmentFilter(value);
-        break;
-      case "status":
-        setStatusFilter(value);
-        // Reset active filter when specific status is selected
-        setActiveFilter("all");
-        break;
-      case "active":
-        setActiveFilter(value);
-        // Reset status filter when active/inactive is selected
-        setStatusFilter("all");
-        break;
-      default:
-        break;
-    }
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  }, []);
 
   // Fetch clients and users when component mounts
   useEffect(() => {
@@ -701,6 +962,11 @@ const Projects = () => {
     };
     fetchUsers();
   }, []);
+
+  // Initial fetch for projects when component mounts
+  useEffect(() => {
+    fetchProjects(false);
+  }, []); // Empty dependency array for initial load only
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -952,7 +1218,87 @@ const Projects = () => {
   const handleDepartmentClick = (department) => {
     console.log("Department filter clicked:", department);
     setSelectedDepartment(department);
+
+    // Convert department name to filter value
+    const departmentValue = department === "All" ? "all" : department;
+
+    // Update the department filter
+    updateFilter("departmentFilter", departmentValue);
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+
+    // Create a new function to fetch with the current department value
+    const fetchWithDepartment = async () => {
+      try {
+        performanceMonitor.startTimer("fetch-projects");
+        setSearchLoading(true);
+
+        const params = {
+          page: 1, // Reset to first page
+          limit: paginationModel.pageSize,
+          sortBy: filters.sortModel[0]?.field || "createdAt",
+          sortOrder: filters.sortModel[0]?.sort || "desc",
+        };
+
+        // Add search term if provided
+        if (filters.searchTerm) {
+          params.search = filters.searchTerm;
+        }
+
+        // Add department filter
+        if (departmentValue !== "all") {
+          params.department = departmentValue;
+        }
+
+        // Handle status filters
+        if (filters.activeFilter !== "all") {
+          const statusArray =
+            filters.activeFilter === "active"
+              ? ACTIVE_STATUSES
+              : INACTIVE_STATUSES;
+          params.status = statusArray.join(",");
+        } else if (filters.statusFilter !== "all") {
+          params.status = filters.statusFilter;
+        }
+
+        const response = await projectService.getAll(params);
+
+        const projectsData = Array.isArray(response.data)
+          ? response.data
+          : response.data?.data || [];
+
+        setProjects(projectsData);
+        setPagination((prev) => ({
+          ...prev,
+          total: response.pagination?.total || 0,
+          pages: response.pagination?.pages || 0,
+        }));
+      } catch (err) {
+        console.error("Error fetching projects:", err);
+        setError(err.message);
+        setProjects([]);
+      } finally {
+        setSearchLoading(false);
+        performanceMonitor.endTimer("fetch-projects");
+      }
+    };
+
+    // Trigger fetch with current department value
+    setTimeout(() => {
+      fetchWithDepartment();
+    }, 50);
   };
+
+  // Handle pagination model change
+  const handlePaginationModelChange = useCallback(
+    (newModel) => {
+      setPaginationModel(newModel);
+      // Trigger fetch for pagination changes with current search term
+      setTimeout(() => {
+        fetchProjectsWithSearch(filters.searchTerm, false);
+      }, 50);
+    },
+    [fetchProjectsWithSearch, filters.searchTerm]
+  );
 
   // Memoize columns configuration
   const columns = useMemo(
@@ -1075,11 +1421,110 @@ const Projects = () => {
     [navigate]
   );
 
+  // Fallback renderStatusSelect function in case the hook doesn't return it
+  const safeRenderStatusSelect =
+    renderStatusSelect ||
+    ((value, onChange, label = "Status") => (
+      <FormControl fullWidth required>
+        <InputLabel>{label}</InputLabel>
+        <Select name="status" value={value} onChange={onChange} label={label}>
+          <MenuItem disabled>
+            <Typography variant="subtitle2" color="text.secondary">
+              Active Jobs
+            </Typography>
+          </MenuItem>
+          {ACTIVE_STATUSES.map((status) => (
+            <MenuItem key={status} value={status}>
+              {status}
+            </MenuItem>
+          ))}
+          <Divider />
+          <MenuItem disabled>
+            <Typography variant="subtitle2" color="text.secondary">
+              Inactive Jobs
+            </Typography>
+          </MenuItem>
+          {INACTIVE_STATUSES.map((status) => (
+            <MenuItem key={status} value={status}>
+              {status}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    ));
+
+  // Fallback renderStatusCell function
+  const safeRenderStatusCell =
+    renderStatusCell ||
+    ((params) => (
+      <Box
+        sx={{
+          backgroundColor: getStatusColor(params.value),
+          color: "white",
+          padding: "4px 8px",
+          borderRadius: "4px",
+          fontSize: "0.75rem",
+        }}
+      >
+        {params.value}
+      </Box>
+    ));
+
+  // Fallback renderEditStatusCell function
+  const safeRenderEditStatusCell =
+    renderEditStatusCell ||
+    ((params) => (
+      <Box sx={{ width: "100%" }}>
+        <Select
+          value={params.value}
+          onChange={(e) => {
+            params.api.setEditCellValue(
+              {
+                id: params.id,
+                field: params.field,
+                value: e.target.value,
+              },
+              true
+            );
+          }}
+          sx={{ width: "100%" }}
+          size="small"
+        >
+          {ACTIVE_STATUSES.map((status) => (
+            <MenuItem key={status} value={status}>
+              {status}
+            </MenuItem>
+          ))}
+          {INACTIVE_STATUSES.map((status) => (
+            <MenuItem key={status} value={status}>
+              {status}
+            </MenuItem>
+          ))}
+        </Select>
+      </Box>
+    ));
+
   if (loading) return <Typography>Loading projects...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
     <Box m="20px 0px 20px 20px">
+      {/* Search Loading Animation - Only shows during searches */}
+      {searchLoading && (
+        <Box sx={{ width: "100%", mb: 2 }}>
+          <LinearProgress
+            sx={{
+              height: 3,
+              borderRadius: 1.5,
+              backgroundColor: "rgba(25, 118, 210, 0.1)",
+              "& .MuiLinearProgress-bar": {
+                backgroundColor: "#1976d2",
+              },
+            }}
+          />
+        </Box>
+      )}
+
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Header title="PROJECTS" subtitle="Managing your projects" />
         <Button
@@ -1108,30 +1553,35 @@ const Projects = () => {
         }}
       >
         <Stack direction="row" spacing={2} alignItems="center">
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={statusFilter}
-              label="Status"
-              onChange={(e) => handleFilterChange("status", e.target.value)}
-            >
-              <MenuItem value="all">All Statuses</MenuItem>
-              {ACTIVE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
-              {INACTIVE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {/* Search Input */}
+          <TextField
+            label="Search Projects"
+            variant="outlined"
+            size="small"
+            placeholder="Enter search term"
+            value={filters.searchTerm}
+            onChange={handleSearchChange}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ minWidth: 300 }}
+            ref={searchInputRef}
+            onFocus={() => {
+              setSearchFocused(true);
+            }}
+            onBlur={() => {
+              setSearchFocused(false);
+            }}
+          />
+
           <FormControl size="small" sx={{ minWidth: 200 }}>
             <InputLabel>Active Status</InputLabel>
             <Select
-              value={activeFilter}
+              value={filters.activeFilter}
               label="Active Status"
               onChange={(e) => handleFilterChange("active", e.target.value)}
             >
@@ -1140,6 +1590,84 @@ const Projects = () => {
               <MenuItem value="inactive">Inactive</MenuItem>
             </Select>
           </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={filters.statusFilter}
+              label="Status"
+              onChange={(e) => handleFilterChange("status", e.target.value)}
+            >
+              <MenuItem value="all">All Statuses</MenuItem>
+              <MenuItem value="unknown">Unknown Status (Debug)</MenuItem>
+              {filters.activeFilter === "active" && (
+                <>
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Active Statuses
+                    </Typography>
+                  </MenuItem>
+                  {ACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
+              {filters.activeFilter === "inactive" && (
+                <>
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Inactive Statuses
+                    </Typography>
+                  </MenuItem>
+                  {INACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
+              {filters.activeFilter === "all" && (
+                <>
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Active Statuses
+                    </Typography>
+                  </MenuItem>
+                  {ACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                  <Divider />
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Inactive Statuses
+                    </Typography>
+                  </MenuItem>
+                  {INACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
+            </Select>
+          </FormControl>
+
+          {/* Clear Filters Button */}
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={clearFilters}
+            sx={{
+              height: 40, // Match the height of other components
+              minWidth: 120,
+            }}
+          >
+            Clear Filters
+          </Button>
         </Stack>
       </Box>
 
@@ -1248,16 +1776,7 @@ const Projects = () => {
           rows={projects}
           columns={columns}
           getRowId={(row) => row._id || row.id}
-          components={{
-            Toolbar: GridToolbar,
-          }}
-          componentsProps={{
-            toolbar: {
-              showQuickFilter: true,
-              quickFilterProps: { debounceMs: 300 },
-            },
-          }}
-          loading={loading}
+          loading={loading && !searchLoading}
           error={error}
           checkboxSelection
           disableRowSelectionOnClick
@@ -1269,7 +1788,7 @@ const Projects = () => {
           onPaginationModelChange={handlePaginationModelChange}
           pageSizeOptions={[25, 50, 100]}
           onSortModelChange={handleSortModelChange}
-          sortModel={sortModel}
+          sortModel={filters.sortModel}
           autoHeight
           disableColumnMenu
           disableSelectionOnClick
@@ -1279,12 +1798,6 @@ const Projects = () => {
           disableColumnReorder
           disableMultipleColumnsFiltering
           disableMultipleColumnsSorting
-          disableMultipleSelection
-          disableExtendRowFullWidth
-          disableVirtualization={false}
-          rowBuffer={10}
-          rowThreshold={100}
-          columnBuffer={2}
         />
       </Box>
 
@@ -1403,7 +1916,7 @@ const Projects = () => {
                 </Grid>
                 <Grid item xs={12}>
                   <FormControl fullWidth required>
-                    {renderStatusSelect(form.status, handleChange)}
+                    {safeRenderStatusSelect(form.status, handleChange)}
                   </FormControl>
                 </Grid>
                 <Grid item xs={12}>
