@@ -101,7 +101,7 @@ const Dashboard = () => {
       try {
         // Fetch projects and invoices in parallel
         const [projectsRes, invoicesRes] = await Promise.all([
-          projectService.getAll(),
+          projectService.getAll({ limit: 1000 }),
           invoiceService.getAll(),
         ]);
 
@@ -233,7 +233,7 @@ const Dashboard = () => {
         icon: <AssignmentIcon />,
         bgcolor: tokens.primary[700],
         path: "/projects",
-        queryParams: { status: "active" },
+        queryParams: { active: "active" },
       },
       {
         id: "review",
@@ -251,7 +251,7 @@ const Dashboard = () => {
         icon: <ReceiptOutlinedIcon />,
         bgcolor: tokens.neutral[700],
         path: "/projects",
-        queryParams: { status: "Ready for invoicing" },
+        queryParams: { status: "Ready for invoicing", active: "all" },
       },
       {
         id: "outstanding",
