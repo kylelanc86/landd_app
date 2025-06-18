@@ -19,7 +19,7 @@ const AllocatedJobsTable = () => {
       }
       setLoading(true);
       try {
-        const response = await projectService.getAll({ limit: 1000 });
+        const response = await projectService.getAll({ limit: 10000 });
 
         // Handle both response structures
         const projectsData = Array.isArray(response.data)
@@ -33,59 +33,17 @@ const AllocatedJobsTable = () => {
             return false;
           }
 
-          // Debug: Log project details for Kyle Lancaster
           const currentUserId = currentUser.id || currentUser._id;
-          const currentUserName =
-            currentUser.firstName + " " + currentUser.lastName;
-
-          if (
-            currentUserName.toLowerCase().includes("kyle") ||
-            currentUserName.toLowerCase().includes("lancaster")
-          ) {
-            console.log("=== KYLE LANCASTER PROJECT DEBUG ===");
-            console.log("Project:", project.name, "ID:", project._id);
-            console.log("Project users:", project.users);
-            console.log("Current user ID:", currentUserId);
-            console.log("Current user name:", currentUserName);
-            console.log("Project status:", project.status);
-            console.log("Is active:", ACTIVE_STATUSES.includes(project.status));
-          }
 
           // Check if the current user is in the users array
           const isAssigned = project.users.some((user) => {
             // Handle both string IDs and user objects
             const userId =
               typeof user === "string" ? user : user.id || user._id;
-
-            // Debug for Kyle Lancaster
-            if (
-              currentUserName.toLowerCase().includes("kyle") ||
-              currentUserName.toLowerCase().includes("lancaster")
-            ) {
-              console.log("Comparing user IDs:", {
-                userId,
-                currentUserId,
-                match: userId === currentUserId,
-              });
-            }
-
             return userId === currentUserId;
           });
 
           const isActive = ACTIVE_STATUSES.includes(project.status);
-
-          // Debug for Kyle Lancaster
-          if (
-            currentUserName.toLowerCase().includes("kyle") ||
-            currentUserName.toLowerCase().includes("lancaster")
-          ) {
-            console.log("Project result:", {
-              isAssigned,
-              isActive,
-              included: isAssigned && isActive,
-            });
-            console.log("=====================================");
-          }
 
           return isAssigned && isActive;
         });
@@ -142,16 +100,7 @@ const AllocatedJobsTable = () => {
     },
   ];
 
-  // Debug render conditions
-  console.log("Render conditions:", {
-    hasCurrentUser: !!currentUser,
-    hasUserId: !!currentUser?.id,
-    loading,
-    jobsCount: jobs.length,
-  });
-
   if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
-    console.log("Rendering loading state - no user ID");
     return (
       <Box
         display="flex"

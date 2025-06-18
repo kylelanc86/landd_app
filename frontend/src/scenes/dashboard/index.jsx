@@ -101,7 +101,7 @@ const Dashboard = () => {
       try {
         // Fetch projects and invoices in parallel
         const [projectsRes, invoicesRes] = await Promise.all([
-          projectService.getAll({ limit: 1000 }),
+          projectService.getAll({ limit: 100000 }),
           invoiceService.getAll(),
         ]);
 
@@ -113,12 +113,30 @@ const Dashboard = () => {
           ? invoicesRes.data
           : invoicesRes.data.data || [];
 
-        // Use ACTIVE_STATUSES for active projects
-        const activeProjectsRes = await projectService.getAll({
-          status: ACTIVE_STATUSES.join(","),
-          limit: 1,
-        });
-        const activeProjects = activeProjectsRes.data.pagination?.total || 0;
+        // Count active projects from the full list
+        console.log("=== ACTIVE STATUS DEBUG ===");
+        console.log("Valid active statuses:", ACTIVE_STATUSES);
+
+        const activeProjects = projects.filter((p) => {
+          // Ensure we have a valid status and normalize it
+          if (!p.status) return false;
+          const normalizedStatus = p.status.trim();
+
+          // Debug each project's status
+          console.log("Project status:", {
+            original: p.status,
+            normalized: normalizedStatus,
+            isActive: ACTIVE_STATUSES.some(
+              (status) => status === normalizedStatus
+            ),
+          });
+
+          // Check if the normalized status is in ACTIVE_STATUSES
+          return ACTIVE_STATUSES.some((status) => status === normalizedStatus);
+        }).length;
+
+        console.log("Total active projects found:", activeProjects);
+        console.log("=========================");
 
         const reviewProjects = projects.filter(
           (p) => p.status === "Report sent for review"
@@ -245,7 +263,7 @@ const Dashboard = () => {
         icon: <RateReviewIcon />,
         bgcolor: tokens.secondary[700],
         path: "/projects",
-        queryParams: { status: "Report sent for review" },
+        queryParams: { status: "Report sent for review", active: "all" },
       },
       {
         id: "invoice",
@@ -272,7 +290,7 @@ const Dashboard = () => {
         icon: <ScienceIcon />,
         bgcolor: tokens.secondary[600],
         path: "/projects",
-        queryParams: { status: "Lab analysis complete" },
+        queryParams: { status: "Lab analysis complete", active: "all" },
       },
       {
         id: "samplesSubmitted",
@@ -281,7 +299,7 @@ const Dashboard = () => {
         icon: <SendIcon />,
         bgcolor: tokens.primary[500],
         path: "/projects",
-        queryParams: { status: "Samples submitted" },
+        queryParams: { status: "Samples submitted", active: "all" },
       },
       {
         id: "inProgress",
@@ -290,7 +308,7 @@ const Dashboard = () => {
         icon: <PlayArrowIcon />,
         bgcolor: tokens.neutral[600],
         path: "/projects",
-        queryParams: { status: "In progress" },
+        queryParams: { status: "In progress", active: "all" },
       },
     ],
     [dailyTimesheetData, stats, currentUser]

@@ -20,13 +20,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       status
     } = req.query;
 
-    console.log('=== BACKEND PROJECTS REQUEST ===');
-    console.log('Received request with params:', { page, limit, sortBy, sortOrder, search, department, status });
-    console.log('Search param type:', typeof search);
-    console.log('Search param value:', search);
-    console.log('Search param length:', search ? search.length : 0);
-    console.log('==============================');
-
     // Build query
     const query = {};
 
@@ -42,8 +35,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         const statusArray = status.includes(',') ? status.split(',') : [status];
         
         if (statusArray.includes('unknown')) {
-          // For unknown status, we need to find projects with statuses not in active or inactive arrays
-          // We'll need to handle this differently since we can't use $in for "not in"
           const activeStatuses = [
             'Assigned',
             'In progress', 
@@ -62,39 +53,22 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
           
           query.status = { $nin: allKnownStatuses };
-          console.log('Using unknown status filter - excluding known statuses:', allKnownStatuses);
         } else {
           query.status = { $in: statusArray };
-          console.log('Using status filter:', query.status);
         }
       } catch (error) {
-        console.error('Error processing status filter:', error);
         throw new Error(`Invalid status filter: ${error.message}`);
       }
     }
 
     // Add search filter if specified
     if (search) {
-      console.log('=== BUILDING SEARCH QUERY ===');
-      console.log('Search term received:', search);
-      console.log('Search term type:', typeof search);
-      console.log('Search term length:', search.length);
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { projectID: { $regex: search, $options: 'i' } },
         { 'client.name': { $regex: search, $options: 'i' } },
       ];
-      console.log('Search query built:', query.$or);
-      console.log('==========================');
-    } else {
-      console.log('=== NO SEARCH TERM ===');
-      console.log('Search parameter is empty or not provided');
-      console.log('==========================');
     }
-
-    console.log('=== FINAL QUERY ===');
-    console.log('Final query:', JSON.stringify(query, null, 2));
-    console.log('========================');
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -110,8 +84,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         .limit(parseInt(limit))
         .populate('client', 'name')
         .populate('users', 'firstName lastName');
-
-      console.log('Query results:', { total, projectsCount: projects.length });
 
       // Transform the response
       const response = {
@@ -129,30 +101,12 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         }
       };
 
-      console.log('Sending response with pagination:', response.pagination);
       res.json(response);
     } catch (error) {
-      console.error('Error executing database query:', error);
-      // Add more detailed error information
-      const errorDetails = {
-        message: error.message,
-        name: error.name,
-        code: error.code,
-        keyPattern: error.keyPattern,
-        keyValue: error.keyValue,
-        errors: error.errors
-      };
-      console.error('Detailed error information:', errorDetails);
-      throw new Error(`Database error: ${JSON.stringify(errorDetails)}`);
+      throw new Error(`Database error: ${error.message}`);
     }
   } catch (error) {
-    console.error('Error in GET /projects:', error);
-    // Send more detailed error response
-    res.status(500).json({ 
-      message: error.message,
-      details: error.stack,
-      timestamp: new Date().toISOString()
-    });
+    res.status(500).json({ message: error.message });
   }
 });
 

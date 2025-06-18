@@ -21,14 +21,6 @@ const api = axios.create({
 // Add request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Only log non-GET requests
-    if (config.method !== 'get') {
-      console.log('API Request:', {
-        url: config.url,
-        method: config.method,
-        headers: config.headers
-      });
-    }
     const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -44,25 +36,9 @@ api.interceptors.request.use(
 // Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => {
-    // Only log non-GET responses
-    if (response.config.method !== 'get') {
-      console.log('API Response:', {
-        url: response.config.url,
-        status: response.status,
-        headers: response.headers
-      });
-    }
     return response;
   },
   async (error) => {
-    // Always log errors
-    console.error('API Response Error:', {
-      url: error.config?.url,
-      status: error.response?.status,
-      message: error.message,
-      headers: error.response?.headers
-    });
-
     // Handle token expiration
     if (error.response?.status === 401 && error.response?.data?.newToken) {
       const newToken = error.response.data.newToken;
@@ -91,45 +67,15 @@ api.interceptors.response.use(
 // Auth service
 export const authService = {
   login: (credentials) => {
-    console.log("Auth Debug - API: Login attempt with credentials:", { email: credentials.email });
-    return api.post('/auth/login', credentials)
-      .then(response => {
-        console.log("Auth Debug - API: Login response received:", {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-          data: response.data
-        });
-        return response;
-      })
-      .catch(error => {
-        console.error("Auth Debug - API: Login failed:", {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          message: error.response?.data?.message || error.message,
-          data: error.response?.data,
-          error: error
-        });
-        throw error;
-      });
+    return api.post('/auth/login', credentials);
   },
   register: (userData) => api.post('/auth/register', userData),
   getCurrentUser: () => {
     const token = localStorage.getItem('token');
     if (!token) {
-      console.log('Auth Debug - No token available for getCurrentUser');
       return Promise.reject(new Error('No token available'));
     }
-    console.log('Auth Debug - Fetching current user with token:', token.substring(0, 10) + '...');
-    return api.get('/auth/me')
-      .then(response => {
-        console.log('Auth Debug - getCurrentUser response:', response.data);
-        return response;
-      })
-      .catch(error => {
-        console.error('Auth Debug - getCurrentUser error:', error);
-        throw error;
-      });
+    return api.get('/auth/me');
   },
   updateUser: (userData) => {
     const token = localStorage.getItem('token');
@@ -168,58 +114,16 @@ export const clientService = {
 // Project service
 export const projectService = {
   getAll: (params = {}) => {
-    console.log("=== PROJECT SERVICE DEBUG ===");
-    console.log("Received params:", params);
-    console.log("Params type:", typeof params);
-    console.log("Search param:", params.search);
-    console.log("Search param type:", typeof params.search);
-    console.log("==========================");
-    
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
-    if (params.search) {
-      console.log("=== ADDING SEARCH TO QUERY ===");
-      console.log("Adding search param to query:", params.search);
-      queryParams.append('search', params.search);
-      console.log("==========================");
-    }
+    if (params.search) queryParams.append('search', params.search);
     if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
-    const url = `/projects?${queryParams.toString()}`;
-    console.log("=== MAKING PROJECT API CALL ===");
-    console.log("Full URL:", url);
-    console.log("Query params string:", queryParams.toString());
-    console.log("==========================");
-
-    return api.get(url).then(response => {
-      console.log('=== PROJECT API RESPONSE ===');
-      console.log('Raw API response:', response);
-      console.log('Response data:', response.data);
-      console.log('Response status:', response.status);
-      const data = response.data;
-      const result = {
-        data: data.data || [],
-        pagination: data.pagination || {
-          total: 0,
-          pages: 0,
-          page: parseInt(params.page) || 1,
-          limit: parseInt(params.limit) || 10
-        }
-      };
-      console.log('Processed result:', result);
-      console.log('==========================');
-      return result;
-    }).catch(error => {
-      console.error('=== PROJECT API ERROR ===');
-      console.error('Error in projectService.getAll:', error);
-      console.error('Error response:', error.response);
-      console.error('==========================');
-      throw error;
-    });
+    return api.get(`/projects?${queryParams.toString()}`);
   },
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
@@ -229,7 +133,6 @@ export const projectService = {
       ...data,
       users: Array.isArray(data.users) ? data.users : (data.users ? [data.users] : [])
     };
-    console.log('Project service update data:', updateData);
     return api.put(`/projects/${id}`, updateData);
   },
   delete: (id) => api.delete(`/projects/${id}`),

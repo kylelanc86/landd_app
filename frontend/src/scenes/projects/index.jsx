@@ -577,6 +577,10 @@ const Projects = () => {
       sortModel: [{ field: "projectID", sort: "desc" }],
     };
 
+    // Read status and active from URL
+    const urlStatus = urlParams.get("status");
+    const urlActive = urlParams.get("active");
+
     if (savedFilters) {
       try {
         const parsedFilters = JSON.parse(savedFilters);
@@ -590,23 +594,29 @@ const Projects = () => {
             parsedFilters.departmentFilter ||
             "all",
           statusFilter:
-            urlParams.get("status") || parsedFilters.statusFilter || "all",
+            urlStatus ||
+            urlParams.get("status") ||
+            parsedFilters.statusFilter ||
+            "all",
           activeFilter:
-            urlParams.get("active") || parsedFilters.activeFilter || "active",
+            urlActive ||
+            urlParams.get("active") ||
+            parsedFilters.activeFilter ||
+            "active",
         };
       } catch (error) {
         console.error("Error parsing saved filters:", error);
-        return defaultFilters;
+        return {
+          ...defaultFilters,
+          statusFilter: urlStatus || defaultFilters.statusFilter,
+          activeFilter: urlActive || defaultFilters.activeFilter,
+        };
       }
     }
-
-    // Use URL parameters if no localStorage data
     return {
       ...defaultFilters,
-      searchTerm: urlParams.get("search") || "",
-      departmentFilter: urlParams.get("department") || "all",
-      statusFilter: urlParams.get("status") || "all",
-      activeFilter: urlParams.get("active") || "active",
+      statusFilter: urlStatus || defaultFilters.statusFilter,
+      activeFilter: urlActive || defaultFilters.activeFilter,
     };
   });
 
@@ -663,13 +673,14 @@ const Projects = () => {
     [saveFilters]
   );
 
-  // Separate function to fetch projects with a specific search term
-  const fetchProjectsWithSearch = useCallback(
-    async (searchValue, isSearch = false) => {
+  // Function to fetch projects with pagination
+  const fetchProjectsWithPagination = useCallback(
+    async (
+      paginationModel,
+      searchValue = filters.searchTerm,
+      isSearch = false
+    ) => {
       try {
-        performanceMonitor.startTimer("fetch-projects");
-
-        // Use searchLoading for searches, main loading for initial load
         if (isSearch) {
           setSearchLoading(true);
         } else {
@@ -677,7 +688,7 @@ const Projects = () => {
         }
 
         const params = {
-          page: paginationModel.page + 1, // Convert to 1-based index
+          page: paginationModel.page + 1,
           limit: paginationModel.pageSize,
           sortBy: filters.sortModel[0]?.field || "createdAt",
           sortOrder: filters.sortModel[0]?.sort || "desc",
@@ -688,132 +699,58 @@ const Projects = () => {
           params.search = searchValue;
         }
 
-        if (filters.departmentFilter !== "all")
+        // Add department filter
+        if (filters.departmentFilter !== "all") {
           params.department = filters.departmentFilter;
+        }
 
-        // Handle status filters
+        // Add status filter
         if (filters.activeFilter !== "all") {
-          // If active filter is set, use the appropriate status array
           const statusArray =
             filters.activeFilter === "active"
               ? ACTIVE_STATUSES
               : INACTIVE_STATUSES;
-          params.status = statusArray.join(","); // Convert array to comma-separated string
+          params.status = statusArray.join(",");
         } else if (filters.statusFilter !== "all") {
-          // If specific status is selected, use that
           params.status = filters.statusFilter;
         }
 
         const response = await projectService.getAll(params);
 
-        // Handle both response structures
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
 
         setProjects(projectsData);
-        setPagination((prev) => ({
-          ...prev,
-          total: response.pagination?.total || 0,
-          pages: response.pagination?.pages || 0,
-        }));
+        setPagination({
+          total: response.data.pagination?.total || 0,
+          pages: response.data.pagination?.pages || 0,
+          page: paginationModel.page,
+          limit: paginationModel.pageSize,
+        });
       } catch (err) {
         console.error("Error fetching projects:", err);
         setError(err.message);
         setProjects([]);
       } finally {
-        if (isSearch) {
-          setSearchLoading(false);
-        } else {
-          setLoading(false);
-        }
-        performanceMonitor.endTimer("fetch-projects");
-      }
-    },
-    [filters, paginationModel]
-  );
-
-  // Create a new function that accepts pagination model as parameter
-  const fetchProjectsWithPagination = useCallback(
-    async (
-      paginationModelParam,
-      searchValue = filters.searchTerm,
-      isSearch = false
-    ) => {
-      try {
-        performanceMonitor.startTimer("fetch-projects");
-
-        // Use searchLoading for searches, main loading for initial load
-        if (isSearch) {
-          setSearchLoading(true);
-        } else {
-          setLoading(true);
-        }
-
-        const params = {
-          page: paginationModelParam.page + 1, // Convert to 1-based index
-          limit: paginationModelParam.pageSize,
-          sortBy: filters.sortModel[0]?.field || "createdAt",
-          sortOrder: filters.sortModel[0]?.sort || "desc",
-        };
-
-        // Add search term if provided
-        if (searchValue) {
-          params.search = searchValue;
-        }
-
-        if (filters.departmentFilter !== "all")
-          params.department = filters.departmentFilter;
-
-        // Handle status filters
-        if (filters.activeFilter !== "all") {
-          // If active filter is set, use the appropriate status array
-          const statusArray =
-            filters.activeFilter === "active"
-              ? ACTIVE_STATUSES
-              : INACTIVE_STATUSES;
-          params.status = statusArray.join(","); // Convert array to comma-separated string
-        } else if (filters.statusFilter !== "all") {
-          // If specific status is selected, use that
-          params.status = filters.statusFilter;
-        }
-
-        const response = await projectService.getAll(params);
-
-        // Handle both response structures
-        const projectsData = Array.isArray(response.data)
-          ? response.data
-          : response.data?.data || [];
-
-        setProjects(projectsData);
-        setPagination((prev) => ({
-          ...prev,
-          total: response.pagination?.total || 0,
-          pages: response.pagination?.pages || 0,
-        }));
-      } catch (err) {
-        console.error("Error fetching projects:", err);
-        setError(err.message);
-        setProjects([]);
-      } finally {
-        if (isSearch) {
-          setSearchLoading(false);
-        } else {
-          setLoading(false);
-        }
-        performanceMonitor.endTimer("fetch-projects");
+        setLoading(false);
+        setSearchLoading(false);
       }
     },
     [filters]
   );
 
-  // Move fetchProjects here so it is defined after fetchProjectsWithSearch
+  // Move fetchProjects here so it is defined after fetchProjectsWithPagination
   const fetchProjects = useCallback(
     async (isSearch = false) => {
-      // Use the new function with the current search term from filters
-      return fetchProjectsWithSearch(filters.searchTerm, isSearch);
+      // Use fetchProjectsWithPagination with current pagination model
+      return fetchProjectsWithPagination(
+        paginationModel,
+        filters.searchTerm,
+        isSearch
+      );
     },
-    [filters.searchTerm, fetchProjectsWithSearch]
+    [filters.searchTerm, fetchProjectsWithPagination, paginationModel]
   );
 
   // Debounced search handler
@@ -1803,7 +1740,6 @@ const Projects = () => {
               onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="all">All Statuses</MenuItem>
-              <MenuItem value="unknown">Unknown Status (Debug)</MenuItem>
               {filters.activeFilter === "active" && (
                 <>
                   <MenuItem disabled>
@@ -2062,19 +1998,27 @@ const Projects = () => {
           paginationMode="server"
           rowCount={pagination.total}
           paginationModel={paginationModel}
-          onPaginationModelChange={handlePaginationModelChange}
+          onPaginationModelChange={(newModel) => {
+            setPaginationModel(newModel);
+            fetchProjectsWithPagination(newModel);
+          }}
           pageSizeOptions={[25, 50, 100]}
           onSortModelChange={handleSortModelChange}
           sortModel={filters.sortModel}
           autoHeight
-          disableColumnMenu={true}
+          disableColumnMenu={false}
           disableSelectionOnClick
-          disableColumnFilter={true}
+          disableColumnFilter={false}
           disableMultipleColumnsFiltering={true}
-          disableColumnSelector={true}
-          disableDensitySelector
-          disableColumnReorder
-          disableMultipleColumnsSorting
+          disableColumnSelector={false}
+          disableDensitySelector={false}
+          disableColumnReorder={false}
+          disableMultipleColumnsSorting={true}
+          initialState={{
+            pagination: {
+              paginationModel: { pageSize: 50, page: 0 },
+            },
+          }}
         />
       </Box>
 
