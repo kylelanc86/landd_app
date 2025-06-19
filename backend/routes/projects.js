@@ -251,4 +251,123 @@ router.get('/:id/timelogs', auth, checkPermission(['projects.view']), async (req
   }
 });
 
+// Get projects assigned to current user
+router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      sortBy = 'projectID',
+      sortOrder = 'desc',
+      status
+    } = req.query;
+
+    const userId = req.user.id;
+
+    // Build query for user's assigned projects
+    const query = {
+      users: userId
+    };
+
+    // Add status filter if specified
+    if (status) {
+      try {
+        const statusArray = status.includes(',') ? status.split(',') : [status];
+        query.status = { $in: statusArray };
+      } catch (error) {
+        throw new Error(`Invalid status filter: ${error.message}`);
+      }
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    try {
+      const total = await Project.countDocuments(query);
+      const pages = Math.ceil(total / parseInt(limit));
+
+      // Get projects with pagination and sorting
+      const projects = await Project.find(query)
+        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .populate('client', 'name')
+        .select('projectID name department status client users createdAt');
+
+      // Transform the response
+      const response = {
+        data: projects.map(project => ({
+          _id: project._id,
+          projectID: project.projectID,
+          name: project.name,
+          department: project.department || '',
+          status: project.status,
+          client: project.client?.name || '',
+          users: project.users,
+          createdAt: project.createdAt
+        })),
+        pagination: {
+          total,
+          pages,
+          page: parseInt(page),
+          limit: parseInt(limit),
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      throw new Error(`Database error: ${error.message}`);
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get project statistics for dashboard
+router.get('/stats/dashboard', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const stats = await Project.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Convert to object format
+    const statsObject = stats.reduce((acc, stat) => {
+      acc[stat._id] = stat.count;
+      return acc;
+    }, {});
+
+    // Calculate active projects count
+    const activeStatuses = [
+      'Assigned',
+      'In progress', 
+      'Samples submitted',
+      'Lab Analysis Complete',
+      'Report sent for review',
+      'Ready for invoicing',
+      'Invoice sent'
+    ];
+
+    const activeProjects = stats.filter(stat => 
+      activeStatuses.includes(stat._id)
+    ).reduce((sum, stat) => sum + stat.count, 0);
+
+    res.json({
+      activeProjects,
+      reviewProjects: statsObject['Report sent for review'] || 0,
+      invoiceProjects: statsObject['Ready for invoicing'] || 0,
+      labCompleteProjects: statsObject['Lab Analysis Complete'] || 0,
+      samplesSubmittedProjects: statsObject['Samples submitted'] || 0,
+      inProgressProjects: statsObject['In progress'] || 0,
+      totalProjects: Object.values(statsObject).reduce((sum, count) => sum + count, 0)
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

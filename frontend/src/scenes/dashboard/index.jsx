@@ -99,73 +99,23 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch projects and invoices in parallel
-        const [projectsRes, invoicesRes] = await Promise.all([
-          projectService.getAll({ limit: 100000 }),
+        // Fetch dashboard stats and invoices in parallel
+        const [statsRes, invoicesRes] = await Promise.all([
+          projectService.getDashboardStats(),
           invoiceService.getAll(),
         ]);
 
-        // Handle both response structures
-        const projects = Array.isArray(projectsRes.data)
-          ? projectsRes.data
-          : projectsRes.data.projects || projectsRes.data.data || [];
         const invoices = Array.isArray(invoicesRes.data)
           ? invoicesRes.data
           : invoicesRes.data.data || [];
-
-        // Count active projects from the full list
-        console.log("=== ACTIVE STATUS DEBUG ===");
-        console.log("Valid active statuses:", ACTIVE_STATUSES);
-
-        const activeProjects = projects.filter((p) => {
-          // Ensure we have a valid status and normalize it
-          if (!p.status) return false;
-          const normalizedStatus = p.status.trim();
-
-          // Debug each project's status
-          console.log("Project status:", {
-            original: p.status,
-            normalized: normalizedStatus,
-            isActive: ACTIVE_STATUSES.some(
-              (status) => status === normalizedStatus
-            ),
-          });
-
-          // Check if the normalized status is in ACTIVE_STATUSES
-          return ACTIVE_STATUSES.some((status) => status === normalizedStatus);
-        }).length;
-
-        console.log("Total active projects found:", activeProjects);
-        console.log("=========================");
-
-        const reviewProjects = projects.filter(
-          (p) => p.status === "Report sent for review"
-        ).length;
-        const invoiceProjects = projects.filter(
-          (p) => p.status === "Ready for invoicing"
-        ).length;
-        const labCompleteProjects = projects.filter(
-          (p) => p.status === "Lab analysis complete"
-        ).length;
-        const samplesSubmittedProjects = projects.filter(
-          (p) => p.status === "Samples submitted"
-        ).length;
-        const inProgressProjects = projects.filter(
-          (p) => p.status === "In progress"
-        ).length;
 
         const outstandingInvoices = invoices.filter(
           (inv) => inv.status === "unpaid"
         ).length;
 
         setStats({
-          activeProjects,
-          reviewProjects,
-          invoiceProjects,
+          ...statsRes.data,
           outstandingInvoices,
-          labCompleteProjects,
-          samplesSubmittedProjects,
-          inProgressProjects,
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);

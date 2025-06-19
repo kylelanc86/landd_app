@@ -125,6 +125,17 @@ export const projectService = {
 
     return api.get(`/projects?${queryParams.toString()}`);
   },
+  getAssignedToMe: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+
+    return api.get(`/projects/assigned/me?${queryParams.toString()}`);
+  },
+  getDashboardStats: () => api.get('/projects/stats/dashboard'),
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => {

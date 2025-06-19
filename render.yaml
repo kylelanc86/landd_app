@@ -1,7 +1,7 @@
 services:
   # Backend service
   - type: web
-    name: air-monitoring-backend
+    name: landd_app-backend1
     env: node
     buildCommand: cd backend && npm install && npm run build
     startCommand: cd backend && npm start
@@ -21,7 +21,7 @@ services:
 
   # Frontend service
   - type: web
-    name: air-monitoring-frontend
+    name: landd_app-frontend1
     env: node
     buildCommand: cd frontend && npm install && npm run build
     startCommand: cd frontend && serve -s build

@@ -113,6 +113,12 @@ projectSchema.index({
   workOrder: 1
 });
 
+// Add index for user-assigned projects queries
+projectSchema.index({ users: 1, status: 1, projectID: -1 });
+
+// Add index for projectID sorting
+projectSchema.index({ projectID: -1 });
+
 // Function to generate the next project ID
 async function generateNextProjectId() {
   try {
