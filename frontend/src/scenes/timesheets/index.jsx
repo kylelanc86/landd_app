@@ -79,15 +79,6 @@ const Timesheets = () => {
 
   useEffect(() => {
     if (!currentUser?._id) {
-      setTargetUserId(currentUser?._id);
-      return;
-    }
-
-    setTargetUserId(currentUser._id);
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!targetUserId) {
       return;
     }
 
@@ -95,27 +86,38 @@ const Timesheets = () => {
     const dateParam = searchParams.get("date");
     const userIdParam = searchParams.get("userId");
 
+    // Set the target user ID - prioritize URL parameter over current user
+    const newTargetUserId = userIdParam || currentUser._id;
+    setTargetUserId(newTargetUserId);
+
+    // Set the selected date if provided in URL
     if (dateParam) {
       setSelectedDate(new Date(dateParam));
     }
-    if (userIdParam && userIdParam !== targetUserId) {
-      setTargetUserId(userIdParam);
-    }
-  }, [targetUserId]);
+  }, [currentUser?._id, window.location.search]);
 
+  // Update URL when state changes (but don't trigger infinite loop)
   useEffect(() => {
     if (!targetUserId) {
       return;
     }
 
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("date", format(selectedDate, "yyyy-MM-dd"));
-    searchParams.set("userId", targetUserId);
-    window.history.replaceState(
-      {},
-      "",
-      `${window.location.pathname}?${searchParams.toString()}`
-    );
+    const currentDate = searchParams.get("date");
+    const currentUserId = searchParams.get("userId");
+
+    const newDate = format(selectedDate, "yyyy-MM-dd");
+
+    // Only update URL if values have actually changed
+    if (currentDate !== newDate || currentUserId !== targetUserId) {
+      searchParams.set("date", newDate);
+      searchParams.set("userId", targetUserId);
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}?${searchParams.toString()}`
+      );
+    }
   }, [selectedDate, targetUserId]);
 
   const fetchTimeEntries = async () => {
@@ -336,17 +338,30 @@ const Timesheets = () => {
     });
   };
 
+  // Fetch data when targetUserId or selectedDate changes
   useEffect(() => {
+    if (!targetUserId) {
+      return;
+    }
+
     const fetchData = async () => {
-      setIsLoading(true);
       try {
-        const [projectsResponse] = await Promise.all([
-          api.get(
-            "/projects?status=Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent&limit=1000"
-          ),
-          fetchTimeEntries(),
-          fetchTimesheetStatus(),
-        ]);
+        await Promise.all([fetchTimeEntries(), fetchTimesheetStatus()]);
+      } catch (error) {
+        console.error("Error fetching timesheet data:", error);
+      }
+    };
+
+    fetchData();
+  }, [targetUserId, selectedDate]);
+
+  // Fetch projects separately to avoid infinite loop
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const projectsResponse = await api.get(
+          "/projects?status=Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent&limit=1000"
+        );
         const projectsData = Array.isArray(projectsResponse.data)
           ? projectsResponse.data
           : projectsResponse.data.projects || projectsResponse.data.data || [];
@@ -354,16 +369,12 @@ const Timesheets = () => {
         setProjects(sortedProjects);
         setFilteredProjects(sortedProjects);
       } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setIsLoading(false);
+        console.error("Error fetching projects:", error);
       }
     };
 
-    if (targetUserId) {
-      fetchData();
-    }
-  }, [selectedDate, targetUserId]);
+    fetchProjects();
+  }, []); // Only run once on mount
 
   // Update filtered projects when projects change
   useEffect(() => {
