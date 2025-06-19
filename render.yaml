@@ -16,6 +16,8 @@ services:
         value: 7d
       - key: PORT
         value: 5000
+      - key: FRONTEND_URL
+        value: https://landd-app-frontend1.onrender.com
 
   # Frontend service
   - type: web
@@ -25,6 +27,6 @@ services:
     startCommand: cd frontend && serve -s build
     envVars:
       - key: REACT_APP_API_URL
-        value: https://https://landd-app-backend.onrender.com/api
+        value: https://landd-app-backend1.onrender.com/api
       - key: NODE_ENV
         value: production 
