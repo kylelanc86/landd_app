@@ -5,14 +5,12 @@ const projectSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    trim: true,
-    index: true
+    trim: true
   },
   name: {
     type: String,
     required: true,
-    trim: true,
-    index: true
+    trim: true
   },
   workOrder: {
     type: String,
@@ -103,7 +101,24 @@ const projectSchema = new mongoose.Schema({
   }
 });
 
-// Create a single compound index that covers our main query pattern
+// Essential compound indexes only
+// 1. Main query pattern: status + department + date
+projectSchema.index({ 
+  status: 1, 
+  department: 1, 
+  createdAt: -1
+});
+
+// 2. Client projects with date sorting
+projectSchema.index({ client: 1, createdAt: -1 });
+
+// 3. User-assigned projects
+projectSchema.index({ users: 1, createdAt: -1 });
+
+// 4. User projects with status and projectID
+projectSchema.index({ users: 1, status: 1, projectID: -1 });
+
+// 5. Comprehensive index for complex queries (includes projectID and name)
 projectSchema.index({ 
   status: 1, 
   department: 1, 
@@ -112,12 +127,6 @@ projectSchema.index({
   projectID: 1,
   workOrder: 1
 });
-
-// Add index for user-assigned projects queries
-projectSchema.index({ users: 1, status: 1, projectID: -1 });
-
-// Add index for projectID sorting
-projectSchema.index({ projectID: -1 });
 
 // Function to generate the next project ID
 async function generateNextProjectId() {

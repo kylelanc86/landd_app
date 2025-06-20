@@ -94,11 +94,25 @@ const Login = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "background.default",
+        backgroundImage: "url('/login_back.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        position: "relative",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.4)", // Dark overlay for better text readability
+          zIndex: 1,
+        },
       }}
     >
       <Paper
-        elevation={3}
+        elevation={8}
         sx={{
           p: 4,
           width: "100%",
@@ -106,6 +120,10 @@ const Login = () => {
           display: "flex",
           flexDirection: "column",
           gap: 2,
+          position: "relative",
+          zIndex: 2,
+          backgroundColor: "rgba(0, 0, 0, 0.95)", // Slightly transparent white
+          backdropFilter: "blur(10px)", // Glass effect
         }}
       >
         <Typography variant="h4" component="h1" align="center" gutterBottom>
@@ -186,7 +204,7 @@ const Login = () => {
         >
           Contact admin {" "}
           <Link href="mailto:kylelanc86@gmail.com" color="primary">
-            here
+             here
           </Link>
         </Typography>
       </Paper>

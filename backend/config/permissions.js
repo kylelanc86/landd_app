@@ -44,6 +44,7 @@ const ROLE_PERMISSIONS = {
     'projects.view',
     'projects.create',
     'projects.edit',
+    'users.view',
     'jobs.view',
     'jobs.create',
     'jobs.edit',
