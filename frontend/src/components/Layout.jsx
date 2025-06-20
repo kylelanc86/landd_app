@@ -23,6 +23,21 @@ const Layout = ({ children, toggleColorMode, mode }) => {
           backgroundColor: "background.default",
           display: "flex",
           flexDirection: "column",
+          position: "relative",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundImage: "url('/layout-back.bmp')",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundAttachment: "fixed",
+            zIndex: 0,
+          },
         }}
       >
         <Topbar toggleColorMode={toggleColorMode} mode={mode} />
@@ -32,9 +47,21 @@ const Layout = ({ children, toggleColorMode, mode }) => {
             mt: "30px", // Match the Topbar height
             p: 3,
             overflow: "auto",
+            position: "relative",
+            zIndex: 1,
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.3)", // Semi-transparent overlay for better readability
+              zIndex: 0,
+            },
           }}
         >
-          {children}
+          <Box sx={{ position: "relative", zIndex: 1 }}>{children}</Box>
         </Box>
       </Box>
     </Box>
