@@ -770,53 +770,56 @@ const Projects = () => {
   // Handle filter changes
   const handleFilterChange = useCallback(
     (filterType, value) => {
-      // Create a new function to fetch with current filter values
-      const fetchWithFilters = async () => {
+      // Create a new function to fetch with updated filter values
+      const fetchWithUpdatedFilters = async () => {
         try {
           performanceMonitor.startTimer("fetch-projects");
           setSearchLoading(true);
 
+          // Create updated filters object with the new value
+          const updatedFilters = { ...filters };
+          switch (filterType) {
+            case "department":
+              updatedFilters.departmentFilter = value;
+              break;
+            case "status":
+              updatedFilters.statusFilter = value;
+              updatedFilters.activeFilter = "all"; // Reset active filter
+              break;
+            case "active":
+              updatedFilters.activeFilter = value;
+              updatedFilters.statusFilter = "all"; // Reset status filter
+              break;
+            default:
+              break;
+          }
+
           const params = {
             page: 1, // Reset to first page
             limit: paginationModel.pageSize,
-            sortBy: filters.sortModel[0]?.field || "createdAt",
-            sortOrder: filters.sortModel[0]?.sort || "desc",
+            sortBy: updatedFilters.sortModel[0]?.field || "createdAt",
+            sortOrder: updatedFilters.sortModel[0]?.sort || "desc",
           };
 
           // Add search term if provided
-          if (filters.searchTerm) {
-            params.search = filters.searchTerm;
+          if (updatedFilters.searchTerm) {
+            params.search = updatedFilters.searchTerm;
           }
 
           // Add department filter
-          if (filters.departmentFilter !== "all") {
-            params.department = filters.departmentFilter;
+          if (updatedFilters.departmentFilter !== "all") {
+            params.department = updatedFilters.departmentFilter;
           }
 
-          // Handle status filters based on the filter type being changed
-          if (filterType === "active") {
-            // If active filter is being changed, use the new value
-            if (value !== "all") {
-              const statusArray =
-                value === "active" ? ACTIVE_STATUSES : INACTIVE_STATUSES;
-              params.status = statusArray.join(",");
-            }
-          } else if (filterType === "status") {
-            // If status filter is being changed, use the new value
-            if (value !== "all") {
-              params.status = value;
-            }
-          } else {
-            // For other filter types, use current filter values
-            if (filters.activeFilter !== "all") {
-              const statusArray =
-                filters.activeFilter === "active"
-                  ? ACTIVE_STATUSES
-                  : INACTIVE_STATUSES;
-              params.status = statusArray.join(",");
-            } else if (filters.statusFilter !== "all") {
-              params.status = filters.statusFilter;
-            }
+          // Handle status filters using the updated filter values
+          if (updatedFilters.activeFilter !== "all") {
+            const statusArray =
+              updatedFilters.activeFilter === "active"
+                ? ACTIVE_STATUSES
+                : INACTIVE_STATUSES;
+            params.status = statusArray.join(",");
+          } else if (updatedFilters.statusFilter !== "all") {
+            params.status = updatedFilters.statusFilter;
           }
 
           const response = await projectService.getAll(params);
@@ -828,8 +831,8 @@ const Projects = () => {
           setProjects(projectsData);
           setPagination((prev) => ({
             ...prev,
-            total: response.pagination?.total || 0,
-            pages: response.pagination?.pages || 0,
+            total: response.data.pagination?.total || 0,
+            pages: response.data.pagination?.pages || 0,
           }));
         } catch (err) {
           console.error("Error fetching projects:", err);
@@ -862,13 +865,10 @@ const Projects = () => {
 
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
 
-      // Use the new function with reset pagination
-      fetchProjectsWithPagination({
-        page: 0,
-        pageSize: paginationModel.pageSize,
-      });
+      // Use the new function with updated filters
+      fetchWithUpdatedFilters();
     },
-    [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
+    [updateFilter, filters, paginationModel]
   );
 
   // Function to clear all filters

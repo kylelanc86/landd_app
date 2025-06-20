@@ -234,16 +234,16 @@ const Users = () => {
 
   const columns = [
     {
-      field: "firstName",
-      headerName: "First Name",
-      flex: 1,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
-    },
-    {
-      field: "lastName",
-      headerName: "Last Name",
-      flex: 1,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
+      field: "name",
+      headerName: "Name",
+      flex: 1.5,
+      maxWidth: 180,
+      renderCell: (params) => {
+        const fullName = `${params.row.firstName || ""} ${
+          params.row.lastName || ""
+        }`.trim();
+        return <TruncatedCell value={fullName} />;
+      },
     },
     {
       field: "email",
@@ -252,15 +252,10 @@ const Users = () => {
       renderCell: (params) => <TruncatedCell value={params.value} />,
     },
     {
-      field: "phone",
-      headerName: "Phone",
-      flex: 1,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
-    },
-    {
       field: "role",
       headerName: "User Level",
       flex: 1,
+      minWidth: 120,
       renderCell: (params) => {
         const role = params.row.role || "employee";
         const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
@@ -271,6 +266,7 @@ const Users = () => {
       field: "isActive",
       headerName: "Status",
       flex: 1,
+      maxWidth: 100,
       renderCell: (params) => (
         <Chip
           label={params.value ? "Active" : "Inactive"}
@@ -283,6 +279,7 @@ const Users = () => {
       field: "actions",
       headerName: "Actions",
       flex: 1,
+      minWidth: 250,
       renderCell: (params) => (
         <Box>
           <IconButton onClick={() => handleEditUser(params.row)}>
@@ -359,7 +356,9 @@ const Users = () => {
           height="75vh"
           sx={{
             "& .MuiDataGrid-root": { border: "none" },
-            "& .MuiDataGrid-cell": { borderBottom: "none" },
+            "& .MuiDataGrid-cell": {
+              borderBottom: `1px solid ${theme.palette.divider}`,
+            },
             "& .MuiDataGrid-columnHeaders": {
               backgroundColor: theme.palette.primary.dark,
               borderBottom: "none",

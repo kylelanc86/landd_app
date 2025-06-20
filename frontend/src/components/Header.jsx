@@ -1,7 +1,7 @@
 import { Box, Typography, useTheme } from "@mui/material";
 import { tokens } from "../theme";
 
-const Header = ({ title, subtitle }) => {
+const Header = ({ title, subtitle, secondarySubtitle }) => {
   const theme = useTheme();
   const colors = tokens;
 
@@ -24,9 +24,15 @@ const Header = ({ title, subtitle }) => {
             ? colors.secondary[500]
             : colors.secondary[700]
         }
+        sx={{ mb: secondarySubtitle ? "2px" : 0 }}
       >
         {subtitle}
       </Typography>
+      {secondarySubtitle && (
+        <Typography variant="h6" color="white">
+          {secondarySubtitle}
+        </Typography>
+      )}
     </Box>
   );
 };

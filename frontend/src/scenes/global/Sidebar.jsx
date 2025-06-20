@@ -80,7 +80,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
   const theme = useTheme();
   const location = useLocation();
   const [showText, setShowText] = useState(!isCollapsed);
-  
+
   const isActive =
     to === "/asbestos-assessment" || to === "/asbestos-assessment/residential"
       ? location.pathname === to
@@ -96,7 +96,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
       const timer = setTimeout(() => {
         setShowText(true);
       }, 200); // 200ms delay - adjust this value as needed
-      
+
       return () => clearTimeout(timer);
     }
   }, [isCollapsed]);
@@ -106,11 +106,11 @@ const Item = ({ title, to, icon, isCollapsed }) => {
       icon={
         isCollapsed ? (
           <Box
-            sx={{ 
-              display: "flex", 
-              justifyContent: "center", 
+            sx={{
+              display: "flex",
+              justifyContent: "center",
               width: "100%",
-              paddingLeft: "20px"
+              paddingLeft: "20px",
             }}
           >
             {icon}
@@ -151,7 +151,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
           alignItems: "center",
           justifyContent: isCollapsed ? "center" : "flex-start",
           padding: isCollapsed ? "2px 0" : "4px 0",
-          textAlign: isCollapsed ? "center" : "left", 
+          textAlign: isCollapsed ? "center" : "left",
         }}
       >
         {!isCollapsed && showText && (
@@ -207,7 +207,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   const theme = useTheme();
   const { currentUser } = useAuth();
   const location = useLocation();
-  const showHidden = false; // Set to true to show hidden components
+  const showHidden = true; // Set to true to show hidden components
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -234,7 +234,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       }
     `;
     document.head.appendChild(style);
-  
+
     return () => {
       document.head.removeChild(style);
     };
@@ -416,14 +416,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
                   sx={{
                     m: "10px 0 2px 10px",
-                    fontSize: "1.2rem",
+                    fontSize: "1rem",
                     fontWeight: "bold",
                     opacity: 0.8,
                     textAlign: "left",
                     paddingLeft: "10px",
                   }}
                 >
-                  Air Monitoring
+                  AIR MONITORING
                 </Typography>
               ) : (
                 <SectionDivider isCollapsed={isCollapsed} />
@@ -453,14 +453,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
                   sx={{
                     m: "10px 0 2px 10px",
-                    fontSize: "1.2rem",
+                    fontSize: "1rem",
                     fontWeight: "bold",
                     opacity: 0.8,
                     textAlign: "left",
                     paddingLeft: "10px",
                   }}
                 >
-                  Surveys
+                  SURVEYS
                 </Typography>
               ) : (
                 <SectionDivider isCollapsed={isCollapsed} />
@@ -487,14 +487,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
                   sx={{
                     m: "10px 0 2px 10px",
-                    fontSize: "1.2rem",
+                    fontSize: "1rem",
                     fontWeight: "bold",
                     opacity: 0.8,
                     textAlign: "left",
                     paddingLeft: "10px",
                   }}
                 >
-                  Fibre Identification
+                  FIBRE IDENTIFICATION
                 </Typography>
               ) : (
                 <SectionDivider isCollapsed={isCollapsed} />

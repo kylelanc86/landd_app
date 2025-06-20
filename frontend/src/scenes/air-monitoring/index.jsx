@@ -50,6 +50,19 @@ import performanceMonitor from "../../utils/performanceMonitor";
 
 const JOBS_KEY = "ldc_jobs";
 
+const ASBESTOS_REMOVALISTS = [
+  "AGH",
+  "Aztech Services",
+  "Capstone",
+  "Crown Asbestos Removals",
+  "Empire Contracting",
+  "Glade Group",
+  "IAR",
+  "Jesco",
+  "Ozbestos",
+  "Spec Services",
+];
+
 const emptyForm = {
   projectId: "",
   projectName: "",
@@ -148,12 +161,25 @@ const AirMonitoring = () => {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await projectService.getAll();
-      if (response.data) {
-        setProjects(response.data);
+      // Fetch all active projects without pagination limits
+      const response = await projectService.getAll({
+        limit: 1000, // Set a high limit to get all projects
+        status:
+          "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent, Quote sent", // Include all active statuses
+      });
+      // Ensure we always set an array, even if the response structure is different
+      if (response && response.data) {
+        // Handle both array and paginated response structures
+        const projectsData = Array.isArray(response.data)
+          ? response.data
+          : response.data.data || [];
+        setProjects(projectsData);
+      } else {
+        setProjects([]);
       }
     } catch (error) {
       console.error("Error fetching projects:", error);
+      setProjects([]); // Ensure we always have an array
     }
   }, []);
 
@@ -399,18 +425,22 @@ const AirMonitoring = () => {
       field: "projectID",
       headerName: "Project ID",
       flex: 1,
+      minWidth: 100,
+      maxWidth: 120,
       valueGetter: projectIDValueGetter,
     },
     {
       field: "projectName",
       headerName: "Project",
       flex: 1,
+      minWidth: 230,
       valueGetter: projectNameValueGetter,
     },
     {
       field: "asbestosRemovalist",
       headerName: "Asbestos Removalist",
       flex: 1,
+      maxWidth: 220,
       valueGetter: (params) => {
         if (typeof params === "string") return params;
         return params?.row?.asbestosRemovalist || "Not assigned";
@@ -420,6 +450,8 @@ const AirMonitoring = () => {
       field: "status",
       headerName: "Status",
       flex: 1,
+      minWidth: 130,
+      maxWidth: 130,
       renderCell: (params) => (
         <Box
           onClick={(e) => handleStatusClick(e, params.row)}
@@ -450,6 +482,8 @@ const AirMonitoring = () => {
       field: "actions",
       headerName: "Actions",
       flex: 1,
+      minWidth: 200,
+      maxWidth: 200,
       renderCell: (params) => {
         if (!params?.row) return null;
 
@@ -504,7 +538,7 @@ const AirMonitoring = () => {
     <Box m="20px">
       <Header
         title="Air Monitoring"
-        subtitle="Manage air monitoring jobs and samples"
+        subtitle="Manage air monitoring jobs"
       />
 
       {/* Add New Job Button and Show Completed Toggle */}
@@ -638,7 +672,7 @@ const AirMonitoring = () => {
             )}
             <FormControl fullWidth sx={{ mb: 2 }}>
               <Autocomplete
-                options={projects}
+                options={Array.isArray(projects) ? projects : []}
                 getOptionLabel={(option) =>
                   `${option.projectID} - ${option.name}`
                 }
@@ -699,18 +733,24 @@ const AirMonitoring = () => {
               </>
             )}
 
-            <TextField
-              fullWidth
-              label="Asbestos Removalist"
-              name="asbestosRemovalist"
-              value={form.asbestosRemovalist}
-              onChange={(e) => {
-                handleChange(e);
-                setError(null); // Clear error when input changes
-              }}
-              required
-              sx={{ mb: 2 }}
-            />
+            <FormControl fullWidth required sx={{ mb: 2 }}>
+              <InputLabel>Asbestos Removalist</InputLabel>
+              <Select
+                name="asbestosRemovalist"
+                value={form.asbestosRemovalist}
+                onChange={(e) => {
+                  handleChange(e);
+                  setError(null); // Clear error when input changes
+                }}
+                label="Asbestos Removalist"
+              >
+                {ASBESTOS_REMOVALISTS.map((removalist) => (
+                  <MenuItem key={removalist} value={removalist}>
+                    {removalist}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog}>Cancel</Button>

@@ -271,6 +271,11 @@ const Shifts = () => {
     }
   };
 
+  // Check if all shifts are complete
+  const allShiftsComplete =
+    shifts.length > 0 &&
+    shifts.every((shift) => shift.status === "shift_complete");
+
   const columns = [
     {
       field: "date",
@@ -722,30 +727,31 @@ const Shifts = () => {
       >
         <Box>
           <Header
-            title="Managing Your Shifts"
-            subtitle={`Project: ${
-              projectDetails?.projectID || "Loading..."
-            } - ${projectDetails?.name || "Loading..."}`}
+            title="Manage Air Monitoring Shifts"
+            subtitle={`Project: ${projectDetails?.projectID || "Loading..."}`}
+            secondarySubtitle={projectDetails?.name || "Loading..."}
           />
         </Box>
         <Box display="flex" gap={2}>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleCompleteJob}
-            sx={{
-              backgroundColor: theme.palette.success.main,
-              color: theme.palette.common.white,
-              fontSize: "14px",
-              fontWeight: "bold",
-              padding: "10px 20px",
-              "&:hover": {
-                backgroundColor: theme.palette.success.dark,
-              },
-            }}
-          >
-            Complete Job
-          </Button>
+          {allShiftsComplete && (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleCompleteJob}
+              sx={{
+                backgroundColor: theme.palette.success.main,
+                color: theme.palette.common.white,
+                fontSize: "14px",
+                fontWeight: "bold",
+                padding: "10px 20px",
+                "&:hover": {
+                  backgroundColor: theme.palette.success.dark,
+                },
+              }}
+            >
+              Complete Job
+            </Button>
+          )}
           <Button
             variant="contained"
             startIcon={<AddIcon />}
