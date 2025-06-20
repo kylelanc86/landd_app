@@ -36,6 +36,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import {
   formatPhoneNumber,
   isValidAustralianMobile,
@@ -52,6 +53,7 @@ const emptyForm = {
   contact2Name: "",
   contact2Number: "",
   contact2Email: "",
+  written_off: false,
 };
 
 const Clients = () => {
@@ -87,6 +89,7 @@ const Clients = () => {
     contact1Name: true,
     contact1Number: true,
     address: true,
+    written_off: true,
     actions: true,
   });
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
@@ -275,6 +278,7 @@ const Clients = () => {
       contact2Name: client.contact2Name || "",
       contact2Number: client.contact2Number || "",
       contact2Email: client.contact2Email || "",
+      written_off: client.written_off || false,
     });
     setEditId(client._id);
     setEditDialogOpen(true);
@@ -343,16 +347,105 @@ const Clients = () => {
   };
 
   const columns = [
-    { field: "name", headerName: "Client Name", flex: 1 },
-    { field: "invoiceEmail", headerName: "Invoice Email", flex: 1 },
-    { field: "contact1Name", headerName: "Primary Contact", flex: 1 },
+    {
+      field: "name",
+      headerName: "Client Name",
+      flex: 1,
+      renderCell: (params) => (
+        <Typography
+          sx={{
+            color: params.row.written_off ? "red" : "inherit",
+            fontWeight: params.row.written_off ? "bold" : "normal",
+          }}
+        >
+          {params.row.name}
+        </Typography>
+      ),
+    },
+    {
+      field: "invoiceEmail",
+      headerName: "Invoice Email",
+      flex: 1,
+      renderCell: (params) => (
+        <Typography
+          sx={{
+            color: params.row.written_off ? "red" : "inherit",
+            fontWeight: params.row.written_off ? "bold" : "normal",
+          }}
+        >
+          {params.row.invoiceEmail}
+        </Typography>
+      ),
+    },
+    {
+      field: "contact1Name",
+      headerName: "Primary Contact",
+      flex: 1,
+      renderCell: (params) => (
+        <Typography
+          sx={{
+            color: params.row.written_off ? "red" : "inherit",
+            fontWeight: params.row.written_off ? "bold" : "normal",
+          }}
+        >
+          {params.row.contact1Name}
+        </Typography>
+      ),
+    },
     {
       field: "contact1Number",
       headerName: "Primary Phone",
       flex: 1,
       valueGetter: (params) => formatPhoneNumber(params.row.contact1Number),
+      renderCell: (params) => (
+        <Typography
+          sx={{
+            color: params.row.written_off ? "red" : "inherit",
+            fontWeight: params.row.written_off ? "bold" : "normal",
+          }}
+        >
+          {formatPhoneNumber(params.row.contact1Number)}
+        </Typography>
+      ),
     },
-    { field: "address", headerName: "Address", flex: 1 },
+    {
+      field: "address",
+      headerName: "Address",
+      flex: 1,
+      renderCell: (params) => (
+        <Typography
+          sx={{
+            color: params.row.written_off ? "red" : "inherit",
+            fontWeight: params.row.written_off ? "bold" : "normal",
+          }}
+        >
+          {params.row.address}
+        </Typography>
+      ),
+    },
+    {
+      field: "written_off",
+      headerName: "Written Off",
+      flex: 0.5,
+      renderCell: (params) => (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          {params.row.written_off && (
+            <CheckCircleIcon
+              sx={{
+                color: "red",
+                fontSize: 24,
+              }}
+            />
+          )}
+        </Box>
+      ),
+    },
     {
       field: "actions",
       headerName: "Actions",
@@ -665,6 +758,27 @@ const Clients = () => {
                 onChange={handleChange}
                 fullWidth
               />
+              <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
+                <Checkbox
+                  name="written_off"
+                  checked={form.written_off}
+                  onChange={(e) =>
+                    setForm({ ...form, written_off: e.target.checked })
+                  }
+                  sx={{
+                    color: "red",
+                    "&.Mui-checked": {
+                      color: "red",
+                    },
+                  }}
+                />
+                <Typography
+                  variant="body1"
+                  sx={{ color: "red", fontWeight: "bold" }}
+                >
+                  WRITTEN OFF?
+                </Typography>
+              </Box>
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -789,6 +903,27 @@ const Clients = () => {
                 onChange={handleEditChange}
                 fullWidth
               />
+              <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
+                <Checkbox
+                  name="written_off"
+                  checked={editForm.written_off}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, written_off: e.target.checked })
+                  }
+                  sx={{
+                    color: "red",
+                    "&.Mui-checked": {
+                      color: "red",
+                    },
+                  }}
+                />
+                <Typography
+                  variant="body1"
+                  sx={{ color: "red", fontWeight: "bold" }}
+                >
+                  WRITTEN OFF?
+                </Typography>
+              </Box>
             </Stack>
           </DialogContent>
           <DialogActions>

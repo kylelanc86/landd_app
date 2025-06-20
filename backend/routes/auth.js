@@ -4,6 +4,24 @@ const User = require('../models/User');
 const auth = require('../middleware/auth');
 const crypto = require('crypto');
 const { sendMail } = require('../services/mailer');
+const fetch = require('node-fetch'); // Add this at the top
+
+
+// Update the loadLogoAsBase64 function
+async function loadLogoAsBase64() {
+  try {
+    const response = await fetch(`${process.env.FRONTEND_URL}/logo.png`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+    return `data:image/png;base64,${base64}`;
+  } catch (error) {
+    console.error('Error loading logo:', error);
+    return null;
+  }
+}
 
 // Register new user
 router.post('/register', async (req, res) => {
@@ -180,6 +198,7 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     // Send email
+    const logoBase64 = await loadLogoAsBase64();
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     console.log('Attempting to send email to:', user.email);
     console.log('Email configuration:', {
@@ -192,22 +211,28 @@ router.post('/forgot-password', async (req, res) => {
 
     try {
       await sendMail({
+        from: "L&D APP ADMIN",
         to: user.email,
         subject: 'Password Reset Request - L&D Consulting',
         text: `You requested a password reset. Click the link to reset your password: ${resetUrl}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <h1 style="color: #1976d2; font-size: 24px; margin: 0; padding: 0;">L&D Consulting</h1>
-              <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+              <div style="text-align: left;">
+                <h1 style="color:rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+              </div>
+              <div style="text-align: right;">
+                ${logoBase64 ? `<img src="${logoBase64}" alt="L&D Consulting Logo" style="height: 60px; width: 150px;">` : ''}
+              </div>
             </div>
             <div style="color: #333; line-height: 1.6;">
-              <h2 style="color: #1976d2; margin-bottom: 20px;">Password Reset Request</h2>
+              <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Password Reset Request</h2>
               <p>Hello,</p>
               <p>We received a request to reset the password for your L&D Consulting account. If you didn't make this request, you can safely ignore this email.</p>
               <p>To reset your password, click the button below:</p>
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${resetUrl}" style="background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
+                <a href="${resetUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
               </div>
               <p>This link will expire in 1 hour for security reasons.</p>
               <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>

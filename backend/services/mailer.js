@@ -34,7 +34,7 @@ async function sendMail({ to, subject, text, html }) {
   
   try {
     const info = await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: "L&D APP ADMIN", // Custom name
       to,
       subject,
       text,

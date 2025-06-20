@@ -79,17 +79,39 @@ const getRandomColor = (user) => {
 const Item = ({ title, to, icon, isCollapsed }) => {
   const theme = useTheme();
   const location = useLocation();
+  const [showText, setShowText] = useState(!isCollapsed);
+  
   const isActive =
     to === "/asbestos-assessment" || to === "/asbestos-assessment/residential"
       ? location.pathname === to
       : location.pathname === to || location.pathname.startsWith(`${to}/`);
+
+  // Handle text visibility with delay
+  useEffect(() => {
+    if (isCollapsed) {
+      // Hide text immediately when collapsing
+      setShowText(false);
+    } else {
+      // Show text after a small delay when expanding
+      const timer = setTimeout(() => {
+        setShowText(true);
+      }, 200); // 200ms delay - adjust this value as needed
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isCollapsed]);
 
   return (
     <MenuItem
       icon={
         isCollapsed ? (
           <Box
-            sx={{ display: "flex", justifyContent: "center", width: "100%" }}
+            sx={{ 
+              display: "flex", 
+              justifyContent: "center", 
+              width: "100%",
+              paddingLeft: "20px"
+            }}
           >
             {icon}
           </Box>
@@ -111,7 +133,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
             : tokens.primary[100]
           : "transparent",
         borderRadius: "4px",
-        margin: "1px 8px",
+        margin: isCollapsed ? "1px 0" : "1px 8px",
         padding: isCollapsed ? "2px" : "2px 10px",
         display: "flex",
         justifyContent: isCollapsed ? "center" : "flex-start",
@@ -129,10 +151,10 @@ const Item = ({ title, to, icon, isCollapsed }) => {
           alignItems: "center",
           justifyContent: isCollapsed ? "center" : "flex-start",
           padding: isCollapsed ? "2px 0" : "4px 0",
-          textAlign: isCollapsed ? "center" : "left",
+          textAlign: isCollapsed ? "center" : "left", 
         }}
       >
-        {!isCollapsed && (
+        {!isCollapsed && showText && (
           <Typography
             sx={{
               fontWeight: isActive ? "bold" : "normal",
@@ -205,9 +227,14 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           theme.palette.mode === "dark" ? "#2d2d2d" : "#e0e0e0"
         } !important;
       }
+      
+      /* Simple icon centering for collapsed state */
+      .pro-sidebar.collapsed .pro-icon-wrapper {
+        text-align: center !important;
+      }
     `;
     document.head.appendChild(style);
-
+  
     return () => {
       document.head.removeChild(style);
     };
@@ -330,18 +357,18 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
 
           {!isCollapsed ? (
             <Typography
-              variant="h3"
+              variant="h4"
               color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
               sx={{
                 m: "10px 0 2px 10px",
-                fontSize: "1.2rem",
+                fontSize: "1rem",
                 fontWeight: "bold",
                 opacity: 0.8,
                 textAlign: "left",
                 paddingLeft: "10px",
               }}
             >
-              Project Management
+              PROJECT MANAGEMENT
             </Typography>
           ) : (
             <SectionDivider isCollapsed={isCollapsed} />

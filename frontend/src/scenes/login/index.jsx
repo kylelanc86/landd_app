@@ -184,7 +184,10 @@ const Login = () => {
           align="center"
           sx={{ mt: 2 }}
         >
-          Email Admin for Access Issues
+          Contact admin {" "}
+          <Link href="mailto:kylelanc86@gmail.com" color="primary">
+            here
+          </Link>
         </Typography>
       </Paper>
 

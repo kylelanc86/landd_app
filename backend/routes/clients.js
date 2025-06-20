@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
 
     // Execute query with pagination
     const clients = await Client.find(query)
-      .select('name invoiceEmail contact1Name contact1Number address')
+      .select('name invoiceEmail contact1Name contact1Number address written_off')
       .sort({ name: 1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -62,12 +62,13 @@ router.post('/', async (req, res) => {
     name: req.body.name,
     invoiceEmail: req.body.invoiceEmail,
     address: req.body.address,
-    contact1Name: req.body.contact1Name,
-    contact1Number: req.body.contact1Number,
-    contact1Email: req.body.contact1Email,
-    contact2Name: req.body.contact2Name,
-    contact2Number: req.body.contact2Number,
-    contact2Email: req.body.contact2Email
+    contact1Name: req.body.contact1Name || "-",
+    contact1Number: req.body.contact1Number || "-",
+    contact1Email: req.body.contact1Email || "-",
+    contact2Name: req.body.contact2Name || "-",
+    contact2Number: req.body.contact2Number || "-",
+    contact2Email: req.body.contact2Email || "-",
+    written_off: req.body.written_off || false
   });
 
   try {

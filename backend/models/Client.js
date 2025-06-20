@@ -37,6 +37,10 @@ const clientSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
+  written_off: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now
