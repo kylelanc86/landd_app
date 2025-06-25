@@ -29,7 +29,8 @@ const corsOptions = {
       'http://localhost:3000',
       'https://landd-app-frontend.onrender.com',
       'https://air-monitoring-frontend.onrender.com',
-      'https://landd-app-frontend1.onrender.com'
+      'https://landd-app-frontend1.onrender.com',
+      'https://app.landd.com.au'
     ];
     
     // Log the incoming origin

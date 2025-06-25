@@ -199,8 +199,11 @@ router.post('/forgot-password', async (req, res) => {
 
     // Send email
     const logoBase64 = await loadLogoAsBase64();
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    // Use the requesting origin for the reset URL, or fall back to FRONTEND_URL
+    const frontendUrl = req.headers.origin || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${frontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     console.log('Attempting to send email to:', user.email);
+    console.log('Using frontend URL for reset:', frontendUrl);
     console.log('Email configuration:', {
       host: process.env.EMAIL_HOST,
       port: process.env.EMAIL_PORT,

@@ -232,6 +232,17 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       .pro-sidebar.collapsed .pro-icon-wrapper {
         text-align: center !important;
       }
+
+      /* Reduce spacing between menu items */
+      .pro-menu-item {
+        margin: 2px 0 !important;
+        padding: 2px 8px !important;
+      }
+
+      /* Remove padding from logo container */
+      .pro-inner-item {
+        padding: 5px 15px !important;
+      }
     `;
     document.head.appendChild(style);
 
@@ -360,12 +371,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               variant="h4"
               color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
               sx={{
-                m: "10px 0 2px 10px",
+                m: "12px 10px 0px 10px",
                 fontSize: "1rem",
                 fontWeight: "bold",
                 opacity: 0.8,
                 textAlign: "left",
-                paddingLeft: "10px",
               }}
             >
               PROJECT MANAGEMENT
@@ -415,12 +425,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   variant="h3"
                   color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
                   sx={{
-                    m: "10px 0 2px 10px",
+                    m: "12px 10px 0px 10px",
                     fontSize: "1rem",
                     fontWeight: "bold",
                     opacity: 0.8,
                     textAlign: "left",
-                    paddingLeft: "10px",
                   }}
                 >
                   AIR MONITORING
@@ -452,12 +461,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   variant="h3"
                   color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
                   sx={{
-                    m: "10px 0 2px 10px",
+                    m: "12px 10px 0px 10px",
                     fontSize: "1rem",
                     fontWeight: "bold",
                     opacity: 0.8,
                     textAlign: "left",
-                    paddingLeft: "10px",
                   }}
                 >
                   SURVEYS
@@ -486,12 +494,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                   variant="h3"
                   color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
                   sx={{
-                    m: "10px 0 2px 10px",
+                    m: "12px 10px 0px 10px",
                     fontSize: "1rem",
                     fontWeight: "bold",
                     opacity: 0.8,
                     textAlign: "left",
-                    paddingLeft: "10px",
                   }}
                 >
                   FIBRE IDENTIFICATION

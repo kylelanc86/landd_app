@@ -17,7 +17,7 @@ services:
       - key: PORT
         value: 5000
       - key: FRONTEND_URL
-        value: https://landd-app-frontend1.onrender.com
+        value: https://app.landd.com.au
 
   # Frontend service
   - type: web

@@ -1537,6 +1537,8 @@ const Projects = () => {
         field: "actions",
         headerName: "Actions",
         flex: 1,
+        minWidth: 160,
+        maxWidth: 160,
         renderCell: (params) => (
           <Box>
             <Button

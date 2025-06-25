@@ -30,6 +30,7 @@ import MicroscopePage from "./scenes/calibrations/air-mon-calibrations/pages/Mic
 import AcetoneVaporiserPage from "./scenes/calibrations/air-mon-calibrations/pages/AcetoneVaporiserPage";
 import GraticulePage from "./scenes/calibrations/air-mon-calibrations/pages/GraticulePage";
 import PrimaryFlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/PrimaryFlowmeterPage";
+import EquipmentList from "./scenes/calibrations/air-mon-calibrations/pages/EquipmentList";
 import AnalysisPage from "./scenes/fibre/pages/AnalysisPage";
 import CalibrationsFibreID from "./scenes/calibrations/fibre-id-calibrations/index";
 
@@ -372,6 +373,16 @@ function App() {
                               requiredPermissions={["calibrations.view"]}
                             >
                               <PrimaryFlowmeterPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/calibrations/equipment-list"
+                          element={
+                            <ProtectedRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <EquipmentList />
                             </ProtectedRoute>
                           }
                         />
