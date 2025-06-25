@@ -401,25 +401,27 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             />
           </PermissionGate>
 
+          <PermissionGate requiredPermissions={["invoices.view"]}>
+            <Item
+              title="Invoices"
+              to="/invoices"
+              icon={<ReceiptOutlinedIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          <PermissionGate requiredPermissions={["calendar.view"]}>
+            <Item
+              title="Scheduler"
+              to="/calendar"
+              icon={<CalendarTodayOutlinedIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+
+          {/* HIDDEN SECTIONS - Commented out to hide unwanted menu items */}
+          {/*
           {showHidden && (
             <>
-              <PermissionGate requiredPermissions={["invoices.view"]}>
-                <Item
-                  title="Invoices"
-                  to="/invoices"
-                  icon={<ReceiptOutlinedIcon />}
-                  isCollapsed={isCollapsed}
-                />
-              </PermissionGate>
-              <PermissionGate requiredPermissions={["calendar.view"]}>
-                <Item
-                  title="Scheduler"
-                  to="/calendar"
-                  icon={<CalendarTodayOutlinedIcon />}
-                  isCollapsed={isCollapsed}
-                />
-              </PermissionGate>
-
               {!isCollapsed ? (
                 <Typography
                   variant="h3"
@@ -523,6 +525,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               </PermissionGate>
             </>
           )}
+          */}
         </Box>
       </Menu>
     </ProSidebar>
