@@ -24,6 +24,7 @@ import TimesheetReview from "./scenes/timesheets/review";
 import MonthlyTimesheet from "./scenes/timesheets/monthly";
 import Calibrations from "./scenes/calibrations/air-mon-calibrations";
 import AirPumpPage from "./scenes/calibrations/air-mon-calibrations/pages/AirPumpPage";
+import AirPumpCalibrationPage from "./scenes/calibrations/air-mon-calibrations/pages/AirPumpCalibrationPage";
 import FlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/FlowmeterPage";
 import EFAPage from "./scenes/calibrations/air-mon-calibrations/pages/EFAPage";
 import MicroscopePage from "./scenes/calibrations/air-mon-calibrations/pages/MicroscopePage";
@@ -313,6 +314,16 @@ function App() {
                               requiredPermissions={["calibrations.view"]}
                             >
                               <AirPumpPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/calibrations/air-mon-calibrations/pump/:pumpId"
+                          element={
+                            <ProtectedRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <AirPumpCalibrationPage />
                             </ProtectedRoute>
                           }
                         />

@@ -102,6 +102,21 @@ airPumpSchema.pre('save', function(next) {
     this.pumpReference = this.pumpReference.toUpperCase();
   }
   
+  // Parse and set calibration date if it's a string
+  if (this.calibrationDate && typeof this.calibrationDate === 'string') {
+    // Handle dd/mm/yyyy format
+    const dateParts = this.calibrationDate.split('/');
+    if (dateParts.length === 3) {
+      const day = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed
+      const year = parseInt(dateParts[2]);
+      this.calibrationDate = new Date(year, month, day);
+    } else {
+      // Try standard date parsing
+      this.calibrationDate = new Date(this.calibrationDate);
+    }
+  }
+  
   // Calculate calibration due date as one year after calibration date
   if (this.calibrationDate) {
     const dueDate = new Date(this.calibrationDate);
@@ -111,5 +126,42 @@ airPumpSchema.pre('save', function(next) {
   
   next();
 });
+
+// Static method to fix existing data with date parsing issues
+airPumpSchema.statics.fixDateIssues = async function() {
+  const pumps = await this.find({});
+  let updatedCount = 0;
+  
+  for (const pump of pumps) {
+    let needsUpdate = false;
+    
+    // Fix calibration date if it's a string
+    if (pump.calibrationDate && typeof pump.calibrationDate === 'string') {
+      const dateParts = pump.calibrationDate.split('/');
+      if (dateParts.length === 3) {
+        const day = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1;
+        const year = parseInt(dateParts[2]);
+        pump.calibrationDate = new Date(year, month, day);
+        needsUpdate = true;
+      }
+    }
+    
+    // Recalculate calibration due date
+    if (pump.calibrationDate) {
+      const dueDate = new Date(pump.calibrationDate);
+      dueDate.setFullYear(dueDate.getFullYear() + 1);
+      pump.calibrationDue = dueDate;
+      needsUpdate = true;
+    }
+    
+    if (needsUpdate) {
+      await pump.save();
+      updatedCount++;
+    }
+  }
+  
+  return updatedCount;
+};
 
 module.exports = mongoose.model('AirPump', airPumpSchema); 

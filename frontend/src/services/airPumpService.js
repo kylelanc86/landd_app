@@ -51,6 +51,18 @@ const airPumpService = {
       params: { ...params, status }
     });
     return response.data;
+  },
+
+  // Fix date parsing issues
+  fixDates: async () => {
+    const response = await api.post('/air-pumps/fix-dates');
+    return response.data;
+  },
+
+  // Update inactive statuses to out of service
+  updateInactiveStatus: async () => {
+    const response = await api.post('/air-pumps/update-inactive-status');
+    return response.data;
   }
 };
 

@@ -241,4 +241,36 @@ router.get('/stats/overview', auth, checkPermission(['calibrations.view']), asyn
   }
 });
 
+// Fix date parsing issues in existing data
+router.post('/fix-dates', auth, checkPermission(['calibrations.edit']), async (req, res) => {
+  try {
+    const updatedCount = await AirPump.fixDateIssues();
+    res.json({ 
+      message: `Successfully updated ${updatedCount} air pumps with date fixes`,
+      updatedCount 
+    });
+  } catch (error) {
+    console.error('Error fixing date issues:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update all "Inactive" statuses to "Out of Service"
+router.post('/update-inactive-status', auth, checkPermission(['calibrations.edit']), async (req, res) => {
+  try {
+    const result = await AirPump.updateMany(
+      { status: "Inactive" },
+      { status: "Out of Service" }
+    );
+    
+    res.json({ 
+      message: `Successfully updated ${result.modifiedCount} air pumps from "Inactive" to "Out of Service"`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Error updating inactive statuses:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

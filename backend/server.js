@@ -16,6 +16,7 @@ const shiftRoutes = require('./routes/shifts');
 const timesheetRoutes = require('./routes/timesheets');
 const calendarEntriesRouter = require('./routes/calendarEntries');
 const airPumpRoutes = require('./routes/airPumps');
+const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
 
 // Load environment variables
 dotenv.config();
@@ -118,6 +119,7 @@ connectDB()
     app.use('/api/timesheets', timesheetRoutes);
     app.use('/api/calendar-entries', calendarEntriesRouter);
     app.use('/api/air-pumps', airPumpRoutes);
+    app.use('/api/air-pump-calibrations', airPumpCalibrationRoutes);
 
     // Error handling middleware
     app.use((err, req, res, next) => {

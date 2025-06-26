@@ -19,6 +19,12 @@ const PERMISSIONS = {
   'jobs.delete': 'Delete jobs',
   'jobs.authorize_reports': 'Authorize job reports',
   
+  // Calibration permissions
+  'calibrations.view': 'View calibrations',
+  'calibrations.create': 'Create calibrations',
+  'calibrations.edit': 'Edit calibrations',
+  'calibrations.delete': 'Delete calibrations',
+  
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
@@ -37,6 +43,10 @@ const ROLE_PERMISSIONS = {
     'jobs.create',
     'jobs.edit',
     'jobs.authorize_reports',
+    'calibrations.view',
+    'calibrations.create',
+    'calibrations.edit',
+    'calibrations.delete',
     'invoices.approve',
     'timesheets.approve',
   ],
@@ -48,6 +58,9 @@ const ROLE_PERMISSIONS = {
     'jobs.view',
     'jobs.create',
     'jobs.edit',
+    'calibrations.view',
+    'calibrations.create',
+    'calibrations.edit',
   ], // Employees can view, create and edit projects but not change status
 };
 
