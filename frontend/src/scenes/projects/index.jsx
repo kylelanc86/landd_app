@@ -784,7 +784,6 @@ const Projects = () => {
               break;
             case "status":
               updatedFilters.statusFilter = value;
-              updatedFilters.activeFilter = "all"; // Reset active filter
               break;
             case "active":
               updatedFilters.activeFilter = value;
@@ -851,8 +850,6 @@ const Projects = () => {
           break;
         case "status":
           updateFilter("statusFilter", value);
-          // Reset active filter when specific status is selected
-          updateFilter("activeFilter", "all");
           break;
         case "active":
           updateFilter("activeFilter", value);
@@ -1742,59 +1739,27 @@ const Projects = () => {
               onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="all">All Statuses</MenuItem>
-              {filters.activeFilter === "active" && (
-                <>
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Statuses
-                    </Typography>
-                  </MenuItem>
-                  {ACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </>
-              )}
-              {filters.activeFilter === "inactive" && (
-                <>
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Inactive Statuses
-                    </Typography>
-                  </MenuItem>
-                  {INACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </>
-              )}
-              {filters.activeFilter === "all" && (
-                <>
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Statuses
-                    </Typography>
-                  </MenuItem>
-                  {ACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                  <Divider />
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Inactive Statuses
-                    </Typography>
-                  </MenuItem>
-                  {INACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </>
-              )}
+              <MenuItem disabled>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Active Statuses
+                </Typography>
+              </MenuItem>
+              {ACTIVE_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status}
+                </MenuItem>
+              ))}
+              <Divider />
+              <MenuItem disabled>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Inactive Statuses
+                </Typography>
+              </MenuItem>
+              {INACTIVE_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 
