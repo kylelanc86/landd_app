@@ -30,3 +30,7 @@ services:
         value: https://landd-app-backend1.onrender.com/api
       - key: NODE_ENV
         value: production 
+  
+  envVars:
+  - key: REACT_APP_GOOGLE_MAPS_API_KEY
+    sync: false  # Set this in Render dashboard
