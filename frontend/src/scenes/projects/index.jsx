@@ -1360,8 +1360,8 @@ const Projects = () => {
         setProjects(projectsData);
         setPagination((prev) => ({
           ...prev,
-          total: response.pagination?.total || 0,
-          pages: response.pagination?.pages || 0,
+          total: response.data?.pagination?.total || 0,
+          pages: response.data?.pagination?.pages || 0,
         }));
       } catch (err) {
         console.error("Error fetching projects:", err);
