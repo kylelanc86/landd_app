@@ -392,6 +392,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
+
           <PermissionGate requiredPermissions={["clients.view"]}>
             <Item
               title="Clients"
@@ -409,6 +410,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
+
           <PermissionGate requiredPermissions={["calendar.view"]}>
             <Item
               title="Scheduler"
@@ -418,6 +420,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             />
           </PermissionGate>
 
+          {/* HIDDEN SECTIONS - Commented out to hide unwanted menu items */}
+          {/*
           {!isCollapsed ? (
             <Typography
               variant="h3"
@@ -519,6 +523,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
+          */}
         </Box>
       </Menu>
     </ProSidebar>
