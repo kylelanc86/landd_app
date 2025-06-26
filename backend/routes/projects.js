@@ -28,39 +28,48 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       query.department = department;
     }
 
-    // Add status filter if specified
-    if (status) {
+    // Define active and inactive statuses
+    const activeStatuses = [
+      'Assigned',
+      'In progress', 
+      'Samples submitted',
+      'Lab Analysis Complete',
+      'Report sent for review',
+      'Ready for invoicing',
+      'Invoice sent'
+    ];
+    const inactiveStatuses = [
+      'Job complete',
+      'On hold',
+      'Quote sent',
+      'Cancelled'
+    ];
+
+    // Handle status filtering
+    if (status && status !== 'all') {
       try {
-        // Handle both string and array status values
-        const statusArray = status.includes(',') ? status.split(',') : [status];
-        
-        if (statusArray.includes('unknown')) {
-          const activeStatuses = [
-            'Assigned',
-            'In progress', 
-            'Samples submitted',
-            'Lab Analysis Complete',
-            'Report sent for review',
-            'Ready for invoicing',
-            'Invoice sent'
-          ];
-          const inactiveStatuses = [
-            'Job complete',
-            'On hold',
-            'Quote sent',
-            'Cancelled'
-          ];
-          const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
-          
-          query.status = { $nin: allKnownStatuses };
+        if (status === 'all_active') {
+          // Filter for all active statuses
+          query.status = { $in: activeStatuses };
+        } else if (status === 'all_inactive') {
+          // Filter for all inactive statuses
+          query.status = { $in: inactiveStatuses };
         } else {
-          query.status = { $in: statusArray };
+          // Handle specific status or comma-separated list
+          const statusArray = status.includes(',') ? status.split(',') : [status];
+          
+          if (statusArray.includes('unknown')) {
+            const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
+            query.status = { $nin: allKnownStatuses };
+          } else {
+            query.status = { $in: statusArray };
+          }
         }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
       }
     }
-
+    
     // Add search filter if specified
     if (search) {
       query.$or = [
@@ -143,6 +152,7 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       categories: req.body.categories || [],
       status: req.body.status,
       address: req.body.address,
+      d_Date: req.body.d_Date,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       description: req.body.description,
@@ -200,6 +210,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.categories = req.body.categories || project.categories;
     project.status = req.body.status || project.status;
     project.address = req.body.address || project.address;
+    project.d_Date = req.body.d_Date !== undefined ? req.body.d_Date : project.d_Date;
     project.startDate = req.body.startDate || project.startDate;
     project.endDate = req.body.endDate || project.endDate;
     project.description = req.body.description || project.description;
@@ -342,16 +353,6 @@ router.get('/stats/dashboard', auth, checkPermission(['projects.view']), async (
     }, {});
 
     // Calculate active projects count
-    const activeStatuses = [
-      'Assigned',
-      'In progress', 
-      'Samples submitted',
-      'Lab Analysis Complete',
-      'Report sent for review',
-      'Ready for invoicing',
-      'Invoice sent'
-    ];
-
     const activeProjects = stats.filter(stat => 
       activeStatuses.includes(stat._id)
     ).reduce((sum, stat) => sum + stat.count, 0);

@@ -85,6 +85,7 @@ const ProjectInformation = () => {
     department: "",
     status: "Pending",
     address: "",
+    d_Date: "",
     workOrder: "",
     users: [],
     categories: [],
@@ -500,6 +501,60 @@ const ProjectInformation = () => {
                 </Typography>
               </Grid>
 
+              {form.d_Date && (
+                <Grid item xs={12}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <Typography variant="h6" color="text.secondary">
+                      Due Date:{" "}
+                      {new Date(form.d_Date).toLocaleDateString("en-AU", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </Typography>
+                    {(() => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const due = new Date(form.d_Date);
+                      due.setHours(0, 0, 0, 0);
+                      const diffTime = due.getTime() - today.getTime();
+                      const diffDays = Math.ceil(
+                        diffTime / (1000 * 60 * 60 * 24)
+                      );
+
+                      if (diffDays === 0) {
+                        return (
+                          <Chip
+                            label="Due today"
+                            color="warning"
+                            variant="filled"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        );
+                      } else if (diffDays < 0) {
+                        return (
+                          <Chip
+                            label={`${Math.abs(diffDays)} days overdue`}
+                            color="error"
+                            variant="filled"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        );
+                      } else {
+                        return (
+                          <Chip
+                            label={`${diffDays} days left`}
+                            color="success"
+                            variant="filled"
+                          />
+                        );
+                      }
+                    })()}
+                  </Box>
+                </Grid>
+              )}
+
               <Grid item xs={12} md={6}>
                 <TextField
                   label="Project Name"
@@ -577,6 +632,24 @@ const ProjectInformation = () => {
                       <Typography>{option.description}</Typography>
                     </li>
                   )}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Due Date"
+                  name="d_Date"
+                  type="date"
+                  value={
+                    form.d_Date
+                      ? new Date(form.d_Date).toISOString().split("T")[0]
+                      : ""
+                  }
+                  onChange={handleChange}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
                 />
               </Grid>
 
