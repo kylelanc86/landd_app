@@ -366,24 +366,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             />
           </PermissionGate>
 
-          {!isCollapsed ? (
-            <Typography
-              variant="h4"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "12px 10px 0px 10px",
-                fontSize: "1rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-              }}
-            >
-              PROJECT MANAGEMENT
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
-
           <PermissionGate requiredPermissions={["projects.view"]}>
             <Item
               title="Projects"
