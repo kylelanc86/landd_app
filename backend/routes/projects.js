@@ -101,7 +101,8 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           ...project.toObject(),
           client: project.client?.name || '',
           department: project.department || '',
-          assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || ''
+          assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || '',
+          d_Date: project.d_Date
         })),
         pagination: {
           total,
@@ -304,7 +305,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         .skip(skip)
         .limit(parseInt(limit))
         .populate('client', 'name')
-        .select('projectID name department status client users createdAt');
+        .select('projectID name department status client users createdAt d_Date');
 
       // Transform the response
       const response = {
@@ -316,7 +317,8 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           status: project.status,
           client: project.client?.name || '',
           users: project.users,
-          createdAt: project.createdAt
+          createdAt: project.createdAt,
+          d_Date: project.d_Date
         })),
         pagination: {
           total,
