@@ -12,6 +12,7 @@ import {
   IconButton,
   Button,
   useTheme,
+  Chip,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -19,43 +20,98 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import Header from "../../../../components/Header";
-import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../../../theme";
 
 const AirPumpPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const [calibrations, setCalibrations] = useState([
+  const [pumps, setPumps] = useState([
     {
       id: 1,
-      pumpId: "AP-001",
-      date: "2024-02-15",
-      flowRate: "2.0 L/min",
-      status: "Pass",
-      technician: "John Doe",
-      nextCalibration: "2024-08-15",
+      pumpReference: "L&D-AP-001",
+      pumpDetails: "SKC AirChek 2000 Personal Air Sampler",
+      calibrationDate: "2024-02-15",
+      calibrationDue: "2024-08-15",
+      maxFlowrate: "5.0 L/min",
+      status: "Active",
     },
     {
       id: 2,
-      pumpId: "AP-002",
-      date: "2024-02-10",
-      flowRate: "1.8 L/min",
-      status: "Pass",
-      technician: "Jane Smith",
-      nextCalibration: "2024-08-10",
+      pumpReference: "L&D-AP-002",
+      pumpDetails: "SKC AirChek 2000 Personal Air Sampler",
+      calibrationDate: "2024-02-10",
+      calibrationDue: "2024-08-10",
+      maxFlowrate: "5.0 L/min",
+      status: "Active",
+    },
+    {
+      id: 3,
+      pumpReference: "L&D-AP-003",
+      pumpDetails: "Gilian 5000 Personal Air Sampler",
+      calibrationDate: "2024-01-20",
+      calibrationDue: "2024-07-20",
+      maxFlowrate: "7.0 L/min",
+      status: "Maintenance",
+    },
+    {
+      id: 4,
+      pumpReference: "L&D-AP-004",
+      pumpDetails: "SKC AirChek 2000 Personal Air Sampler",
+      calibrationDate: "2024-03-05",
+      calibrationDue: "2024-09-05",
+      maxFlowrate: "5.0 L/min",
+      status: "Retired",
     },
   ]);
 
   const handleAdd = () => {
-    console.log("Add new calibration");
+    console.log("Add new pump");
   };
 
   const handleEdit = (id) => {
-    console.log("Edit calibration:", id);
+    console.log("Edit pump:", id);
   };
 
   const handleDelete = (id) => {
-    console.log("Delete calibration:", id);
+    console.log("Delete pump:", id);
+  };
+
+  const getCalibrationStatus = (dueDate) => {
+    const today = new Date();
+    const due = new Date(dueDate);
+    const diffTime = due - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return { status: "Overdue", color: "error" };
+    } else if (diffDays <= 30) {
+      return { status: "Due Soon", color: "warning" };
+    } else {
+      return { status: "Valid", color: "success" };
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "Active":
+        return "success";
+      case "Maintenance":
+        return "warning";
+      case "Retired":
+        return "error";
+      case "Out of Service":
+        return "error";
+      default:
+        return "default";
+    }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("en-AU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   };
 
   return (
@@ -72,63 +128,88 @@ const AirPumpPage = () => {
 
       <Box display="flex" justifyContent="flex-end" mb="20px">
         <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-          Add Calibration
+          Add Pump
         </Button>
       </Box>
 
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
         <Table>
           <TableHead>
-            <TableRow>
-              <TableCell>Pump ID</TableCell>
-              <TableCell>Calibration Date</TableCell>
-              <TableCell>Flow Rate</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Technician</TableCell>
-              <TableCell>Next Calibration</TableCell>
-              <TableCell>Actions</TableCell>
+            <TableRow sx={{ backgroundColor: theme.palette.primary.main }}>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                L&D Pump Reference
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Pump Details
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Calibration Date
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Calibration Due
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Max Flowrate
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Status
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {calibrations.map((calibration) => (
-              <TableRow key={calibration.id}>
-                <TableCell>{calibration.pumpId}</TableCell>
-                <TableCell>{calibration.date}</TableCell>
-                <TableCell>{calibration.flowRate}</TableCell>
-                <TableCell>
-                  <Box
-                    sx={{
-                      backgroundColor:
-                        calibration.status === "Pass"
-                          ? theme.palette.success.main
-                          : theme.palette.error.main,
-                      color: "white",
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      display: "inline-block",
-                    }}
-                  >
-                    {calibration.status}
-                  </Box>
-                </TableCell>
-                <TableCell>{calibration.technician}</TableCell>
-                <TableCell>{calibration.nextCalibration}</TableCell>
-                <TableCell>
-                  <IconButton
-                    onClick={() => handleEdit(calibration.id)}
-                    size="small"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    onClick={() => handleDelete(calibration.id)}
-                    size="small"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
+            {pumps.map((pump) => {
+              const calibrationStatus = getCalibrationStatus(
+                pump.calibrationDue
+              );
+              return (
+                <TableRow key={pump.id} hover>
+                  <TableCell sx={{ fontWeight: "bold" }}>
+                    {pump.pumpReference}
+                  </TableCell>
+                  <TableCell>{pump.pumpDetails}</TableCell>
+                  <TableCell>{formatDate(pump.calibrationDate)}</TableCell>
+                  <TableCell>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <span>{formatDate(pump.calibrationDue)}</span>
+                      <Chip
+                        label={calibrationStatus.status}
+                        color={calibrationStatus.color}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Box>
+                  </TableCell>
+                  <TableCell>{pump.maxFlowrate}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={pump.status}
+                      color={getStatusColor(pump.status)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <IconButton
+                      onClick={() => handleEdit(pump.id)}
+                      size="small"
+                      color="primary"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      onClick={() => handleDelete(pump.id)}
+                      size="small"
+                      color="error"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
