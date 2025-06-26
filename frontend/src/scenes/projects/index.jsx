@@ -704,14 +704,12 @@ const Projects = () => {
           params.department = filters.departmentFilter;
         }
 
-        // Add status filter
+        // Send both active and status filters
         if (filters.activeFilter !== "all") {
-          const statusArray =
-            filters.activeFilter === "active"
-              ? ACTIVE_STATUSES
-              : INACTIVE_STATUSES;
-          params.status = statusArray.join(",");
-        } else if (filters.statusFilter !== "all") {
+          params.active = filters.activeFilter;
+        }
+
+        if (filters.statusFilter !== "all") {
           params.status = filters.statusFilter;
         }
 
@@ -787,7 +785,6 @@ const Projects = () => {
               break;
             case "active":
               updatedFilters.activeFilter = value;
-              updatedFilters.statusFilter = "all"; // Reset status filter
               break;
             default:
               break;
@@ -810,14 +807,12 @@ const Projects = () => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // Handle status filters using the updated filter values
+          // Send both active and status filters
           if (updatedFilters.activeFilter !== "all") {
-            const statusArray =
-              updatedFilters.activeFilter === "active"
-                ? ACTIVE_STATUSES
-                : INACTIVE_STATUSES;
-            params.status = statusArray.join(",");
-          } else if (updatedFilters.statusFilter !== "all") {
+            params.active = updatedFilters.activeFilter;
+          }
+
+          if (updatedFilters.statusFilter !== "all") {
             params.status = updatedFilters.statusFilter;
           }
 
@@ -853,8 +848,6 @@ const Projects = () => {
           break;
         case "active":
           updateFilter("activeFilter", value);
-          // Reset status filter when active/inactive is selected to avoid invalid selections
-          updateFilter("statusFilter", "all");
           break;
         default:
           break;
@@ -1739,27 +1732,59 @@ const Projects = () => {
               onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="all">All Statuses</MenuItem>
-              <MenuItem disabled>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Active Statuses
-                </Typography>
-              </MenuItem>
-              {ACTIVE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
-              <Divider />
-              <MenuItem disabled>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Inactive Statuses
-                </Typography>
-              </MenuItem>
-              {INACTIVE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
+              {filters.activeFilter === "all" && (
+                <>
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Active Statuses
+                    </Typography>
+                  </MenuItem>
+                  {ACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                  <Divider />
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Inactive Statuses
+                    </Typography>
+                  </MenuItem>
+                  {INACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
+              {filters.activeFilter === "active" && (
+                <>
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Active Statuses
+                    </Typography>
+                  </MenuItem>
+                  {ACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
+              {filters.activeFilter === "inactive" && (
+                <>
+                  <MenuItem disabled>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Inactive Statuses
+                    </Typography>
+                  </MenuItem>
+                  {INACTIVE_STATUSES.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
             </Select>
           </FormControl>
 
