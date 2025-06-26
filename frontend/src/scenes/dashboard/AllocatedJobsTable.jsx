@@ -41,6 +41,7 @@ const AllocatedJobsTable = () => {
         name: job.name,
         department: job.department || "N/A",
         status: job.status,
+        d_Date: job.d_Date,
       }));
 
       setJobs(formattedJobs);
@@ -76,6 +77,46 @@ const AllocatedJobsTable = () => {
       field: "department",
       headerName: "Department",
       flex: 1.5,
+    },
+    {
+      field: "d_Date",
+      headerName: "Due Date",
+      flex: 1.5,
+      renderCell: (params) => {
+        if (!params.value) {
+          return (
+            <span style={{ color: "#666", fontStyle: "italic" }}>
+              No due date
+            </span>
+          );
+        }
+
+        const dueDate = new Date(params.value);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        dueDate.setHours(0, 0, 0, 0);
+
+        const diffTime = dueDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let statusText = "";
+        let color = "#000";
+
+        if (diffDays < 0) {
+          statusText = `${Math.abs(diffDays)} day${
+            Math.abs(diffDays) === 1 ? "" : "s"
+          } overdue`;
+          color = "#d32f2f"; // Red for overdue
+        } else if (diffDays === 0) {
+          statusText = "Due today";
+          color = "#ed6c02"; // Orange for due today
+        } else {
+          statusText = `${diffDays} day${diffDays === 1 ? "" : "s"} left`;
+          color = "#2e7d32"; // Green for plenty of time
+        }
+
+        return <span style={{ color, fontWeight: "bold" }}>{statusText}</span>;
+      },
     },
     {
       field: "status",

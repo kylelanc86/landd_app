@@ -7,6 +7,24 @@ const { ROLE_PERMISSIONS } = require('../config/permissions');
 const User = require('../models/User');
 const Timesheet = require('../models/Timesheet');
 
+// Define active and inactive statuses at module level
+const activeStatuses = [
+  'Assigned',
+  'In progress', 
+  'Samples submitted',
+  'Lab Analysis Complete',
+  'Report sent for review',
+  'Ready for invoicing',
+  'Invoice sent'
+];
+
+const inactiveStatuses = [
+  'Job complete',
+  'On hold',
+  'Quote sent',
+  'Cancelled'
+];
+
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
@@ -27,23 +45,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     if (department && department !== 'all') {
       query.department = department;
     }
-
-    // Define active and inactive statuses
-    const activeStatuses = [
-      'Assigned',
-      'In progress', 
-      'Samples submitted',
-      'Lab Analysis Complete',
-      'Report sent for review',
-      'Ready for invoicing',
-      'Invoice sent'
-    ];
-    const inactiveStatuses = [
-      'Job complete',
-      'On hold',
-      'Quote sent',
-      'Cancelled'
-    ];
 
     // Handle status filtering
     if (status && status !== 'all') {
@@ -100,7 +101,8 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           ...project.toObject(),
           client: project.client?.name || '',
           department: project.department || '',
-          assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || ''
+          assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || '',
+          d_Date: project.d_Date
         })),
         pagination: {
           total,
@@ -303,7 +305,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         .skip(skip)
         .limit(parseInt(limit))
         .populate('client', 'name')
-        .select('projectID name department status client users createdAt');
+        .select('projectID name department status client users createdAt d_Date');
 
       // Transform the response
       const response = {
@@ -315,7 +317,8 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           status: project.status,
           client: project.client?.name || '',
           users: project.users,
-          createdAt: project.createdAt
+          createdAt: project.createdAt,
+          d_Date: project.d_Date
         })),
         pagination: {
           total,

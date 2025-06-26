@@ -548,6 +548,13 @@ const Projects = () => {
   const searchInputRef = useRef(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
+  // Google Places Autocomplete state
+  const [addressInput, setAddressInput] = useState("");
+  const [addressOptions, setAddressOptions] = useState([]);
+  const [isAddressLoading, setIsAddressLoading] = useState(false);
+  const [autocompleteService, setAutocompleteService] = useState(null);
+  const [placesService, setPlacesService] = useState(null);
+
   // Start page load monitoring only on initial load
   useEffect(() => {
     if (isInitialLoadRef.current) {
@@ -1071,6 +1078,79 @@ const Projects = () => {
     }));
   };
 
+  // Google Places Autocomplete handlers
+  const handleAddressInputChange = async (value) => {
+    setAddressInput(value);
+
+    if (!value || value.length < 3 || !autocompleteService) {
+      setAddressOptions([]);
+      return;
+    }
+
+    setIsAddressLoading(true);
+    try {
+      autocompleteService.getPlacePredictions(
+        {
+          input: value,
+          componentRestrictions: { country: "au" },
+          types: ["address"],
+        },
+        (predictions, status) => {
+          console.log(
+            "Projects - Address predictions:",
+            predictions,
+            "Status:",
+            status
+          );
+          if (
+            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            predictions
+          ) {
+            setAddressOptions(predictions);
+          } else {
+            console.log("Projects - No predictions found or error:", status);
+            setAddressOptions([]);
+          }
+          setIsAddressLoading(false);
+        }
+      );
+    } catch (error) {
+      console.error("Projects - Error fetching address predictions:", error);
+      setAddressOptions([]);
+      setIsAddressLoading(false);
+    }
+  };
+
+  const handleAddressSelect = async (placeId) => {
+    if (!placeId || !placesService) return;
+
+    try {
+      placesService.getDetails(
+        {
+          placeId: placeId,
+          fields: ["formatted_address", "geometry", "address_components"],
+        },
+        (place, status) => {
+          console.log("Projects - Selected place:", place, "Status:", status);
+          if (
+            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            place
+          ) {
+            setForm((prev) => ({
+              ...prev,
+              address: place.formatted_address,
+            }));
+            setAddressInput(place.formatted_address);
+          } else {
+            console.error("Projects - Error getting place details:", status);
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Projects - Error getting place details:", error);
+    }
+  };
+
   const handleStatusChange = async (projectId, newStatus) => {
     try {
       const project = projects.find((p) => (p._id || p.id) === projectId);
@@ -1413,6 +1493,65 @@ const Projects = () => {
     };
 
     loadUserPreferences();
+  }, []);
+
+  // Initialize Google Places Autocomplete
+  useEffect(() => {
+    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+    console.log("Projects - Environment variables:", {
+      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
+        ? "API Key Found"
+        : "API Key Missing",
+      NODE_ENV: process.env.NODE_ENV,
+    });
+
+    if (!apiKey) {
+      console.error(
+        "Google Maps API key is missing. Please check your .env file."
+      );
+      return;
+    }
+
+    if (!window.google) {
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+
+      script.onload = () => {
+        console.log("Projects - Google Maps script loaded successfully");
+        // Initialize the autocomplete service
+        const autocompleteService =
+          new window.google.maps.places.AutocompleteService();
+        const placesService = new window.google.maps.places.PlacesService(
+          document.createElement("div")
+        );
+        setAutocompleteService(autocompleteService);
+        setPlacesService(placesService);
+      };
+
+      script.onerror = (error) => {
+        console.error("Projects - Error loading Google Maps script:", error);
+      };
+
+      document.head.appendChild(script);
+
+      return () => {
+        if (document.head.contains(script)) {
+          document.head.removeChild(script);
+        }
+      };
+    } else {
+      console.log("Projects - Google Maps already loaded");
+      // Initialize the autocomplete service
+      const autocompleteService =
+        new window.google.maps.places.AutocompleteService();
+      const placesService = new window.google.maps.places.PlacesService(
+        document.createElement("div")
+      );
+      setAutocompleteService(autocompleteService);
+      setPlacesService(placesService);
+    }
   }, []);
 
   // Memoize columns configuration
@@ -2188,12 +2327,50 @@ const Projects = () => {
                   </FormControl>
                 </Grid>
                 <Grid item xs={12}>
-                  <TextField
-                    label="Address"
-                    name="address"
-                    value={form.address}
-                    onChange={handleChange}
-                    fullWidth
+                  <Autocomplete
+                    freeSolo
+                    options={addressOptions}
+                    getOptionLabel={(option) =>
+                      typeof option === "string" ? option : option.description
+                    }
+                    inputValue={addressInput}
+                    onInputChange={(_, value) =>
+                      handleAddressInputChange(value)
+                    }
+                    onChange={(_, value) => {
+                      if (value && value.place_id) {
+                        handleAddressSelect(value.place_id);
+                      } else if (typeof value === "string") {
+                        // Handle manual text input
+                        setForm((prev) => ({ ...prev, address: value }));
+                        setAddressInput(value);
+                      }
+                    }}
+                    loading={isAddressLoading}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        label="Address (Optional)"
+                        name="address"
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {isAddressLoading ? (
+                                <CircularProgress color="inherit" size={20} />
+                              ) : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                    renderOption={(props, option) => (
+                      <li {...props}>
+                        <Typography>{option.description}</Typography>
+                      </li>
+                    )}
                   />
                 </Grid>
                 <Grid item xs={12}>

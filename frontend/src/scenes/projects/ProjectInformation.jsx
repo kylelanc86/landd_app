@@ -58,8 +58,8 @@ const CATEGORIES = [
   "Other",
 ];
 
-// Temporary API key for testing - REMOVE THIS IN PRODUCTION
-const GOOGLE_MAPS_API_KEY = "AIzaSyB41DRubKWUHP7t3vqphB1qVhV6x9x9x9x"; // Replace with your actual API key
+// Remove the hardcoded API key - use environment variable instead
+// const GOOGLE_MAPS_API_KEY = "AIzaSyB41DRubKWUHP7t3vqphB1qVhV6x9x9x9x"; // Replace with your actual API key
 
 const ProjectInformation = () => {
   const { id } = useParams();
@@ -204,9 +204,10 @@ const ProjectInformation = () => {
   useEffect(() => {
     const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
     console.log("Environment variables:", {
-      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey,
+      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
+        ? "API Key Found"
+        : "API Key Missing",
       NODE_ENV: process.env.NODE_ENV,
-      all: process.env,
     });
 
     if (!apiKey) {
@@ -224,9 +225,14 @@ const ProjectInformation = () => {
 
       script.onload = () => {
         console.log("Google Maps script loaded successfully");
-        const autocomplete =
-          new window.google.maps.places.AutocompleteSuggestion();
-        setAutocompleteService(autocomplete);
+        // Initialize the autocomplete service
+        const autocompleteService =
+          new window.google.maps.places.AutocompleteService();
+        const placesService = new window.google.maps.places.PlacesService(
+          document.createElement("div")
+        );
+        setAutocompleteService(autocompleteService);
+        setPlacesService(placesService);
       };
 
       script.onerror = (error) => {
@@ -241,9 +247,15 @@ const ProjectInformation = () => {
         }
       };
     } else {
-      const autocomplete =
-        new window.google.maps.places.AutocompleteSuggestion();
-      setAutocompleteService(autocomplete);
+      console.log("Google Maps already loaded");
+      // Initialize the autocomplete service
+      const autocompleteService =
+        new window.google.maps.places.AutocompleteService();
+      const placesService = new window.google.maps.places.PlacesService(
+        document.createElement("div")
+      );
+      setAutocompleteService(autocompleteService);
+      setPlacesService(placesService);
     }
   }, []);
 
@@ -257,38 +269,58 @@ const ProjectInformation = () => {
 
     setIsAddressLoading(true);
     try {
-      const response = await autocompleteService.getPlacePredictions({
-        input: value,
-        componentRestrictions: { country: "au" },
-        types: ["address"],
-      });
-      console.log("Address predictions:", response);
-      setAddressOptions(response.predictions || []);
+      autocompleteService.getPlacePredictions(
+        {
+          input: value,
+          componentRestrictions: { country: "au" },
+          types: ["address"],
+        },
+        (predictions, status) => {
+          console.log("Address predictions:", predictions, "Status:", status);
+          if (
+            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            predictions
+          ) {
+            setAddressOptions(predictions);
+          } else {
+            console.log("No predictions found or error:", status);
+            setAddressOptions([]);
+          }
+          setIsAddressLoading(false);
+        }
+      );
     } catch (error) {
       console.error("Error fetching address predictions:", error);
       setAddressOptions([]);
-    } finally {
       setIsAddressLoading(false);
     }
   };
 
   const handleAddressSelect = async (placeId) => {
-    if (!placeId) return;
+    if (!placeId || !placesService) return;
 
     try {
-      const place = new window.google.maps.places.Place({
-        id: placeId,
-        fields: ["formatted_address", "geometry", "address_components"],
-      });
-
-      const result = await place.fetchFields();
-      console.log("Selected place:", result);
-
-      setForm((prev) => ({
-        ...prev,
-        address: result.formatted_address,
-      }));
-      setAddressInput(result.formatted_address);
+      placesService.getDetails(
+        {
+          placeId: placeId,
+          fields: ["formatted_address", "geometry", "address_components"],
+        },
+        (place, status) => {
+          console.log("Selected place:", place, "Status:", status);
+          if (
+            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            place
+          ) {
+            setForm((prev) => ({
+              ...prev,
+              address: place.formatted_address,
+            }));
+            setAddressInput(place.formatted_address);
+          } else {
+            console.error("Error getting place details:", status);
+          }
+        }
+      );
     } catch (error) {
       console.error("Error getting place details:", error);
     }
@@ -603,6 +635,10 @@ const ProjectInformation = () => {
                   onChange={(_, value) => {
                     if (value && value.place_id) {
                       handleAddressSelect(value.place_id);
+                    } else if (typeof value === "string") {
+                      // Handle manual text input
+                      setForm((prev) => ({ ...prev, address: value }));
+                      setAddressInput(value);
                     }
                   }}
                   loading={isAddressLoading}
@@ -612,8 +648,6 @@ const ProjectInformation = () => {
                       fullWidth
                       label="Address (Optional)"
                       name="address"
-                      value={form.address}
-                      onChange={handleChange}
                       InputProps={{
                         ...params.InputProps,
                         endAdornment: (
