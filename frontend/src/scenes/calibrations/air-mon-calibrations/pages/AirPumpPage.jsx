@@ -58,7 +58,7 @@ const AirPumpPage = () => {
     switch (status) {
       case "Active":
         return "success";
-      case "Inactive":
+      case "Out of Service":
         return "error";
       default:
         return "default";

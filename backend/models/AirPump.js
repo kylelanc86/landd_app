@@ -96,11 +96,19 @@ airPumpSchema.methods.getCalibrationStatus = function() {
   }
 };
 
-// Pre-save middleware to ensure pumpReference is uppercase
+// Pre-save middleware to ensure pumpReference is uppercase and calculate calibration due date
 airPumpSchema.pre('save', function(next) {
   if (this.pumpReference) {
     this.pumpReference = this.pumpReference.toUpperCase();
   }
+  
+  // Calculate calibration due date as one year after calibration date
+  if (this.calibrationDate) {
+    const dueDate = new Date(this.calibrationDate);
+    dueDate.setFullYear(dueDate.getFullYear() + 1);
+    this.calibrationDue = dueDate;
+  }
+  
   next();
 });
 

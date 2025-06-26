@@ -166,6 +166,7 @@ router.put('/:id', auth, checkPermission(['calibrations.edit']), async (req, res
     // Update lastCalibratedBy if calibration date is being updated
     if (req.body.calibrationDate) {
       pump.lastCalibratedBy = req.user.id;
+      // The pre-save middleware will automatically recalculate calibrationDue
     }
 
     const updatedPump = await pump.save();
