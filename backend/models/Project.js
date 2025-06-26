@@ -64,6 +64,10 @@ const projectSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  d_Date: {
+    type: Date,
+    required: false
+  },
   notes: {
     type: String,
     required: false

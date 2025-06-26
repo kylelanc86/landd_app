@@ -17,8 +17,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       sortOrder = 'desc',
       search,
       department,
-      status,
-      active
+      status
     } = req.query;
 
     // Build query
@@ -46,40 +45,31 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       'Cancelled'
     ];
 
-    // Handle combined active and status filtering
-    if (active && active !== 'all' && status && status !== 'all') {
-      // Both filters are set - filter by active group AND specific status
-      const statusArray = status.includes(',') ? status.split(',') : [status];
-      const activeGroup = active === 'active' ? activeStatuses : inactiveStatuses;
-      
-      // Find intersection of the specific statuses and the active group
-      const validStatuses = statusArray.filter(s => activeGroup.includes(s));
-      if (validStatuses.length > 0) {
-        query.status = { $in: validStatuses };
-      } else {
-        // No valid statuses in the intersection, return empty result
-        query.status = { $in: [] };
-      }
-    } else if (active && active !== 'all') {
-      // Only active filter is set
-      const statusGroup = active === 'active' ? activeStatuses : inactiveStatuses;
-      query.status = { $in: statusGroup };
-    } else if (status && status !== 'all') {
-      // Only status filter is set (existing logic)
+    // Handle status filtering
+    if (status && status !== 'all') {
       try {
-        const statusArray = status.includes(',') ? status.split(',') : [status];
-        
-        if (statusArray.includes('unknown')) {
-          const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
-          query.status = { $nin: allKnownStatuses };
+        if (status === 'all_active') {
+          // Filter for all active statuses
+          query.status = { $in: activeStatuses };
+        } else if (status === 'all_inactive') {
+          // Filter for all inactive statuses
+          query.status = { $in: inactiveStatuses };
         } else {
-          query.status = { $in: statusArray };
+          // Handle specific status or comma-separated list
+          const statusArray = status.includes(',') ? status.split(',') : [status];
+          
+          if (statusArray.includes('unknown')) {
+            const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
+            query.status = { $nin: allKnownStatuses };
+          } else {
+            query.status = { $in: statusArray };
+          }
         }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
       }
     }
-
+    
     // Add search filter if specified
     if (search) {
       query.$or = [
@@ -162,6 +152,7 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       categories: req.body.categories || [],
       status: req.body.status,
       address: req.body.address,
+      d_Date: req.body.d_Date,
       startDate: req.body.startDate,
       endDate: req.body.endDate,
       description: req.body.description,
@@ -219,6 +210,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.categories = req.body.categories || project.categories;
     project.status = req.body.status || project.status;
     project.address = req.body.address || project.address;
+    project.d_Date = req.body.d_Date !== undefined ? req.body.d_Date : project.d_Date;
     project.startDate = req.body.startDate || project.startDate;
     project.endDate = req.body.endDate || project.endDate;
     project.description = req.body.description || project.description;

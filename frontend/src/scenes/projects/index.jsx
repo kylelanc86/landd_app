@@ -120,6 +120,7 @@ const emptyForm = {
   department: DEPARTMENTS[0],
   categories: [],
   address: "",
+  d_Date: "",
   workOrder: "",
   users: [],
   status: ACTIVE_STATUSES[0],
@@ -407,30 +408,46 @@ const getRandomColor = (user) => {
 const getStatusColor = (status) => {
   switch (status) {
     case "Assigned":
-      return "#2196f3"; // Blue
+      return "#1976d2"; // Blue
     case "In progress":
-      return "#ff9800"; // Orange
+      return "#ed6c02"; // Orange
     case "Samples submitted":
       return "#9c27b0"; // Purple
     case "Lab Analysis Complete":
-      return "#4caf50"; // Green
+      return "#2e7d32"; // Green
     case "Report sent for review":
-      return "#f44336"; // Red
+      return "#d32f2f"; // Red
     case "Ready for invoicing":
-      return "#795548"; // Brown
+      return "#7b1fa2"; // Deep Purple
     case "Invoice sent":
-      return "#607d8b"; // Blue Grey
+      return "#388e3c"; // Dark Green
     case "Job complete":
-      return "#4caf50"; // Green
+      return "#424242"; // Grey
     case "On hold":
-      return "#ffeb3b"; // Yellow
+      return "#f57c00"; // Dark Orange
     case "Quote sent":
-      return "#00bcd4"; // Cyan
+      return "#1976d2"; // Blue
     case "Cancelled":
-      return "#f44336"; // Red
+      return "#d32f2f"; // Red
     default:
-      return "#bdbdbd"; // Grey
+      return "#757575"; // Default grey
   }
+};
+
+// Helper function to calculate days difference
+const calculateDaysDifference = (dueDate) => {
+  if (!dueDate) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset time to start of day
+
+  const due = new Date(dueDate);
+  due.setHours(0, 0, 0, 0); // Reset time to start of day
+
+  const diffTime = due.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return diffDays;
 };
 
 // Main Projects component
@@ -461,7 +478,6 @@ const Projects = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activeFilter, setActiveFilter] = useState("active");
   const [sortModel, setSortModel] = useState([
     { field: "projectID", sort: "desc" },
   ]);
@@ -484,6 +500,7 @@ const Projects = () => {
     projectID: true,
     name: true,
     client: true,
+    d_Date: true,
     status: true,
     department: true,
     users: true,
@@ -573,7 +590,6 @@ const Projects = () => {
       searchTerm: "",
       departmentFilter: "all",
       statusFilter: "all",
-      activeFilter: "active",
       sortModel: [{ field: "projectID", sort: "desc" }],
     };
 
@@ -598,25 +614,18 @@ const Projects = () => {
             urlParams.get("status") ||
             parsedFilters.statusFilter ||
             "all",
-          activeFilter:
-            urlActive ||
-            urlParams.get("active") ||
-            parsedFilters.activeFilter ||
-            "active",
         };
       } catch (error) {
         console.error("Error parsing saved filters:", error);
         return {
           ...defaultFilters,
           statusFilter: urlStatus || defaultFilters.statusFilter,
-          activeFilter: urlActive || defaultFilters.activeFilter,
         };
       }
     }
     return {
       ...defaultFilters,
       statusFilter: urlStatus || defaultFilters.statusFilter,
-      activeFilter: urlActive || defaultFilters.activeFilter,
     };
   });
 
@@ -640,11 +649,6 @@ const Projects = () => {
       urlParams.set("status", newFilters.statusFilter);
     } else {
       urlParams.delete("status");
-    }
-    if (newFilters.activeFilter !== "active") {
-      urlParams.set("active", newFilters.activeFilter);
-    } else {
-      urlParams.delete("active");
     }
 
     // Update URL without reloading the page
@@ -704,11 +708,7 @@ const Projects = () => {
           params.department = filters.departmentFilter;
         }
 
-        // Send both active and status filters
-        if (filters.activeFilter !== "all") {
-          params.active = filters.activeFilter;
-        }
-
+        // Add status filter
         if (filters.statusFilter !== "all") {
           params.status = filters.statusFilter;
         }
@@ -783,9 +783,6 @@ const Projects = () => {
             case "status":
               updatedFilters.statusFilter = value;
               break;
-            case "active":
-              updatedFilters.activeFilter = value;
-              break;
             default:
               break;
           }
@@ -807,11 +804,7 @@ const Projects = () => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // Send both active and status filters
-          if (updatedFilters.activeFilter !== "all") {
-            params.active = updatedFilters.activeFilter;
-          }
-
+          // Add status filter
           if (updatedFilters.statusFilter !== "all") {
             params.status = updatedFilters.statusFilter;
           }
@@ -846,9 +839,6 @@ const Projects = () => {
         case "status":
           updateFilter("statusFilter", value);
           break;
-        case "active":
-          updateFilter("activeFilter", value);
-          break;
         default:
           break;
       }
@@ -867,7 +857,6 @@ const Projects = () => {
       searchTerm: "",
       departmentFilter: "all",
       statusFilter: "all",
-      activeFilter: "active",
       sortModel: [{ field: "projectID", sort: "desc" }],
     };
 
@@ -885,6 +874,7 @@ const Projects = () => {
       projectID: true,
       name: true,
       client: true,
+      d_Date: true,
       status: true,
       department: true,
       users: true,
@@ -1357,13 +1347,7 @@ const Projects = () => {
         }
 
         // Handle status filters
-        if (tempFilters.activeFilter !== "all") {
-          const statusArray =
-            tempFilters.activeFilter === "active"
-              ? ACTIVE_STATUSES
-              : INACTIVE_STATUSES;
-          params.status = statusArray.join(",");
-        } else if (tempFilters.statusFilter !== "all") {
+        if (tempFilters.statusFilter !== "all") {
           params.status = tempFilters.statusFilter;
         }
 
@@ -1454,7 +1438,9 @@ const Projects = () => {
         field: "name",
         headerName: "Project Name",
         flex: 2,
-        minWidth: 300,
+        minWidth: 190,
+        maxWidth: 400,
+
         renderCell: ({ row }) => (
           <Box
             onClick={() => navigate(`/projects/${row._id}`)}
@@ -1484,9 +1470,122 @@ const Projects = () => {
         field: "client",
         headerName: "Client",
         flex: 1,
+        minWidth: 140,
+        maxWidth: 220,
         renderCell: ({ row }) => (
-          <span>{row.client?.name || row.client || ""}</span>
+          <Typography
+            variant="body2"
+            sx={{
+              whiteSpace: "normal",
+              wordWrap: "break-word",
+              lineHeight: 1.2,
+              maxHeight: "2.4em", // 2 lines * 1.2 line height
+              overflow: "hidden",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              width: "100%",
+            }}
+          >
+            {row.client?.name || row.client || ""}
+          </Typography>
         ),
+      },
+      {
+        field: "d_Date",
+        headerName: "Due Date",
+        flex: 1,
+        minWidth: 100,
+        maxWidth: 120,
+        renderCell: ({ row }) => {
+          const daysDiff = calculateDaysDifference(row.d_Date);
+
+          if (!row.d_Date) {
+            return (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  whiteSpace: "normal",
+                  wordWrap: "break-word",
+                  lineHeight: 1.2,
+                  maxHeight: "2.4em", // 2 lines * 1.2 line height
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  width: "100%",
+                }}
+              >
+                No due date
+              </Typography>
+            );
+          }
+
+          if (daysDiff === 0) {
+            return (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "#f57c00",
+                  fontWeight: "bold",
+                  whiteSpace: "normal",
+                  wordWrap: "break-word",
+                  lineHeight: 1.2,
+                  maxHeight: "2.4em",
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  width: "100%",
+                }}
+              >
+                Due today
+              </Typography>
+            );
+          } else if (daysDiff < 0) {
+            return (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "#d32f2f",
+                  fontWeight: "bold",
+                  whiteSpace: "normal",
+                  wordWrap: "break-word",
+                  lineHeight: 1.2,
+                  maxHeight: "2.4em",
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  width: "100%",
+                }}
+              >
+                {Math.abs(daysDiff)} days overdue
+              </Typography>
+            );
+          } else {
+            return (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "#2e7d32",
+                  whiteSpace: "normal",
+                  wordWrap: "break-word",
+                  lineHeight: 1.2,
+                  maxHeight: "2.4em",
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  width: "100%",
+                }}
+              >
+                {daysDiff} days left
+              </Typography>
+            );
+          }
+        },
       },
       {
         field: "department",
@@ -1497,8 +1596,7 @@ const Projects = () => {
         field: "status",
         headerName: "Status",
         flex: 1,
-        width: 165,
-        minWidth: 165,
+        minWidth: 60,
         maxWidth: 165,
         renderCell: (params) => (
           <Box
@@ -1518,8 +1616,7 @@ const Projects = () => {
         field: "users",
         headerName: "Users",
         flex: 1,
-        width: 120,
-        minWidth: 120,
+        minWidth: 60,
         maxWidth: 120,
         renderCell: (params) => <UsersCell users={params.row.users} />,
       },
@@ -1527,7 +1624,7 @@ const Projects = () => {
         field: "actions",
         headerName: "Actions",
         flex: 1,
-        minWidth: 160,
+        minWidth: 120,
         maxWidth: 160,
         renderCell: (params) => (
           <Box>
@@ -1712,19 +1809,6 @@ const Projects = () => {
           />
 
           <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Active Status</InputLabel>
-            <Select
-              value={filters.activeFilter}
-              label="Active Status"
-              onChange={(e) => handleFilterChange("active", e.target.value)}
-            >
-              <MenuItem value="all">All Projects</MenuItem>
-              <MenuItem value="active">Active</MenuItem>
-              <MenuItem value="inactive">Inactive</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 200 }}>
             <InputLabel>Status</InputLabel>
             <Select
               value={filters.statusFilter}
@@ -1732,59 +1816,30 @@ const Projects = () => {
               onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="all">All Statuses</MenuItem>
-              {filters.activeFilter === "all" && (
-                <>
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Statuses
-                    </Typography>
-                  </MenuItem>
-                  {ACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                  <Divider />
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Inactive Statuses
-                    </Typography>
-                  </MenuItem>
-                  {INACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </>
-              )}
-              {filters.activeFilter === "active" && (
-                <>
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Active Statuses
-                    </Typography>
-                  </MenuItem>
-                  {ACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </>
-              )}
-              {filters.activeFilter === "inactive" && (
-                <>
-                  <MenuItem disabled>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Inactive Statuses
-                    </Typography>
-                  </MenuItem>
-                  {INACTIVE_STATUSES.map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status}
-                    </MenuItem>
-                  ))}
-                </>
-              )}
+              <MenuItem value="all_active">All Active</MenuItem>
+              <MenuItem value="all_inactive">All Inactive</MenuItem>
+              <Divider />
+              <MenuItem disabled>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Active Statuses
+                </Typography>
+              </MenuItem>
+              {ACTIVE_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status}
+                </MenuItem>
+              ))}
+              <Divider />
+              <MenuItem disabled>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Inactive Statuses
+                </Typography>
+              </MenuItem>
+              {INACTIVE_STATUSES.map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 
@@ -2139,6 +2194,19 @@ const Projects = () => {
                     value={form.address}
                     onChange={handleChange}
                     fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    label="Due Date"
+                    name="d_Date"
+                    type="date"
+                    value={form.d_Date || ""}
+                    onChange={handleChange}
+                    fullWidth
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
                   />
                 </Grid>
                 <Grid item xs={12}>
