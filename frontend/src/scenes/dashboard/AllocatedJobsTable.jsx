@@ -99,12 +99,6 @@ const AllocatedJobsTable = () => {
         const diffTime = dueDate - today;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-        const formattedDate = dueDate.toLocaleDateString("en-AU", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        });
-
         let statusText = "";
         let color = "#000";
 
@@ -116,26 +110,12 @@ const AllocatedJobsTable = () => {
         } else if (diffDays === 0) {
           statusText = "Due today";
           color = "#ed6c02"; // Orange for due today
-        } else if (diffDays <= 7) {
-          statusText = `${diffDays} day${diffDays === 1 ? "" : "s"} left`;
-          color = "#ed6c02"; // Orange for due soon
         } else {
           statusText = `${diffDays} day${diffDays === 1 ? "" : "s"} left`;
           color = "#2e7d32"; // Green for plenty of time
         }
 
-        return (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-            }}
-          >
-            <span style={{ fontWeight: "bold" }}>{formattedDate}</span>
-            <span style={{ color, fontSize: "0.8em" }}>{statusText}</span>
-          </div>
-        );
+        return <span style={{ color, fontWeight: "bold" }}>{statusText}</span>;
       },
     },
     {
