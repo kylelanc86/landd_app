@@ -7,6 +7,24 @@ const { ROLE_PERMISSIONS } = require('../config/permissions');
 const User = require('../models/User');
 const Timesheet = require('../models/Timesheet');
 
+// Define active and inactive statuses at module level
+const activeStatuses = [
+  'Assigned',
+  'In progress', 
+  'Samples submitted',
+  'Lab Analysis Complete',
+  'Report sent for review',
+  'Ready for invoicing',
+  'Invoice sent'
+];
+
+const inactiveStatuses = [
+  'Job complete',
+  'On hold',
+  'Quote sent',
+  'Cancelled'
+];
+
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
@@ -27,23 +45,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     if (department && department !== 'all') {
       query.department = department;
     }
-
-    // Define active and inactive statuses
-    const activeStatuses = [
-      'Assigned',
-      'In progress', 
-      'Samples submitted',
-      'Lab Analysis Complete',
-      'Report sent for review',
-      'Ready for invoicing',
-      'Invoice sent'
-    ];
-    const inactiveStatuses = [
-      'Job complete',
-      'On hold',
-      'Quote sent',
-      'Cancelled'
-    ];
 
     // Handle status filtering
     if (status && status !== 'all') {
