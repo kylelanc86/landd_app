@@ -403,7 +403,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           </PermissionGate>
 
           {/* HIDDEN SECTIONS - Commented out to hide unwanted menu items */}
-          {/*
           {!isCollapsed ? (
             <Typography
               variant="h3"
@@ -505,7 +504,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
-          */}
         </Box>
       </Menu>
     </ProSidebar>
