@@ -25,44 +25,7 @@ import { tokens } from "../../../../theme";
 const AirPumpPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const [pumps, setPumps] = useState([
-    {
-      id: 1,
-      pumpReference: "L&D-AP-001",
-      pumpDetails: "SKC AirChek 2000 Personal Air Sampler",
-      calibrationDate: "2024-02-15",
-      calibrationDue: "2024-08-15",
-      maxFlowrate: "5.0 L/min",
-      status: "Active",
-    },
-    {
-      id: 2,
-      pumpReference: "L&D-AP-002",
-      pumpDetails: "SKC AirChek 2000 Personal Air Sampler",
-      calibrationDate: "2024-02-10",
-      calibrationDue: "2024-08-10",
-      maxFlowrate: "5.0 L/min",
-      status: "Active",
-    },
-    {
-      id: 3,
-      pumpReference: "L&D-AP-003",
-      pumpDetails: "Gilian 5000 Personal Air Sampler",
-      calibrationDate: "2024-01-20",
-      calibrationDue: "2024-07-20",
-      maxFlowrate: "7.0 L/min",
-      status: "Maintenance",
-    },
-    {
-      id: 4,
-      pumpReference: "L&D-AP-004",
-      pumpDetails: "SKC AirChek 2000 Personal Air Sampler",
-      calibrationDate: "2024-03-05",
-      calibrationDue: "2024-09-05",
-      maxFlowrate: "5.0 L/min",
-      status: "Retired",
-    },
-  ]);
+  const [pumps, setPumps] = useState([]);
 
   const handleAdd = () => {
     console.log("Add new pump");
@@ -95,11 +58,7 @@ const AirPumpPage = () => {
     switch (status) {
       case "Active":
         return "success";
-      case "Maintenance":
-        return "warning";
-      case "Retired":
-        return "error";
-      case "Out of Service":
+      case "Inactive":
         return "error";
       default:
         return "default";

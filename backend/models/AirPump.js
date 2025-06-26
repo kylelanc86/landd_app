@@ -28,7 +28,7 @@ const airPumpSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Active', 'Maintenance', 'Retired', 'Out of Service'],
+    enum: ['Active', 'Out of Service'],
     default: 'Active'
   },
   notes: {

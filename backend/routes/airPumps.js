@@ -230,9 +230,7 @@ router.get('/stats/overview', auth, checkPermission(['calibrations.view']), asyn
     res.json({
       totalPumps,
       activePumps: statsObject['Active'] || 0,
-      maintenancePumps: statsObject['Maintenance'] || 0,
-      retiredPumps: statsObject['Retired'] || 0,
-      outOfServicePumps: statsObject['Out of Service'] || 0,
+      inactivePumps: statsObject['Inactive'] || 0,
       overduePumps,
       dueSoonPumps
     });
