@@ -355,33 +355,6 @@ const AsbestosClearanceList = () => {
               },
             },
             {
-              field: "LAA",
-              headerName: "LAA",
-              flex: 1,
-              minWidth: 120,
-              renderCell: (params) => {
-                const laaName = params.row.LAA;
-                if (!laaName) return "N/A";
-
-                // Extract initials from full name
-                const names = laaName.split(" ");
-                const initials = names
-                  .map((name) => name.charAt(0))
-                  .join("")
-                  .toUpperCase();
-                return initials;
-              },
-            },
-            {
-              field: "asbestosRemovalist",
-              headerName: "Removalist",
-              flex: 1,
-              minWidth: 120,
-              renderCell: (params) => {
-                return params.row.asbestosRemovalist || "N/A";
-              },
-            },
-            {
               field: "projectId.name",
               headerName: "Site Name",
               flex: 1.5,
