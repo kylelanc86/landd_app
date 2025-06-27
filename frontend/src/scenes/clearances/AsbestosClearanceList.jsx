@@ -32,6 +32,19 @@ import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import performanceMonitor from "../../utils/performanceMonitor";
 
+const ASBESTOS_REMOVALISTS = [
+  "AGH",
+  "Aztech Services",
+  "Capstone",
+  "Crown Asbestos Removals",
+  "Empire Contracting",
+  "Glade Group",
+  "IAR",
+  "Jesco",
+  "Ozbestos",
+  "Spec Services",
+];
+
 const AsbestosClearanceList = () => {
   const theme = useTheme();
   const colors = tokens;
@@ -329,15 +342,6 @@ const AsbestosClearanceList = () => {
               },
             },
             {
-              field: "projectId.name",
-              headerName: "Site Name",
-              flex: 1.5,
-              minWidth: 200,
-              renderCell: (params) => {
-                return params.row.projectId?.name || "N/A";
-              },
-            },
-            {
               field: "clearanceDate",
               headerName: "Clearance Date",
               flex: 1,
@@ -375,6 +379,15 @@ const AsbestosClearanceList = () => {
               minWidth: 120,
               renderCell: (params) => {
                 return params.row.asbestosRemovalist || "N/A";
+              },
+            },
+            {
+              field: "projectId.name",
+              headerName: "Site Name",
+              flex: 1.5,
+              minWidth: 200,
+              renderCell: (params) => {
+                return params.row.projectId?.name || "N/A";
               },
             },
             {
@@ -551,15 +564,22 @@ const AsbestosClearanceList = () => {
                     ))}
                 </Select>
               </FormControl>
-              <TextField
-                label="Asbestos Removalist"
-                value={form.asbestosRemovalist}
-                onChange={(e) =>
-                  setForm({ ...form, asbestosRemovalist: e.target.value })
-                }
-                required
-                fullWidth
-              />
+              <FormControl fullWidth required>
+                <InputLabel>Asbestos Removalist</InputLabel>
+                <Select
+                  value={form.asbestosRemovalist}
+                  label="Asbestos Removalist"
+                  onChange={(e) =>
+                    setForm({ ...form, asbestosRemovalist: e.target.value })
+                  }
+                >
+                  {ASBESTOS_REMOVALISTS.map((removalist) => (
+                    <MenuItem key={removalist} value={removalist}>
+                      {removalist}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 label="Areas (comma-separated)"
                 value={Array.isArray(form.areas) ? form.areas.join(", ") : ""}
@@ -680,15 +700,22 @@ const AsbestosClearanceList = () => {
                     ))}
                 </Select>
               </FormControl>
-              <TextField
-                label="Asbestos Removalist"
-                value={form.asbestosRemovalist}
-                onChange={(e) =>
-                  setForm({ ...form, asbestosRemovalist: e.target.value })
-                }
-                required
-                fullWidth
-              />
+              <FormControl fullWidth required>
+                <InputLabel>Asbestos Removalist</InputLabel>
+                <Select
+                  value={form.asbestosRemovalist}
+                  label="Asbestos Removalist"
+                  onChange={(e) =>
+                    setForm({ ...form, asbestosRemovalist: e.target.value })
+                  }
+                >
+                  {ASBESTOS_REMOVALISTS.map((removalist) => (
+                    <MenuItem key={removalist} value={removalist}>
+                      {removalist}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 label="Areas (comma-separated)"
                 value={Array.isArray(form.areas) ? form.areas.join(", ") : ""}
