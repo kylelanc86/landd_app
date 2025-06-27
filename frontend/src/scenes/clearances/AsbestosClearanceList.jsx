@@ -24,7 +24,6 @@ import { useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloseIcon from "@mui/icons-material/Close";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import userService from "../../services/userService";
@@ -51,8 +50,9 @@ const AsbestosClearanceList = () => {
   const [form, setForm] = useState({
     projectId: "",
     clearanceDate: "",
-    status: "pending",
+    status: "in progress",
     LAA: "",
+    asbestosRemovalist: "",
     areas: [],
     notes: "",
   });
@@ -73,6 +73,13 @@ const AsbestosClearanceList = () => {
           projectService.getAll(),
           userService.getAll(),
         ]);
+
+      console.log("Projects response:", projectsResponse);
+      console.log("Projects data:", projectsResponse.data);
+      console.log(
+        "Projects array check:",
+        Array.isArray(projectsResponse.data)
+      );
 
       setClearances(clearancesResponse.clearances || []);
       setProjects(
@@ -106,6 +113,7 @@ const AsbestosClearanceList = () => {
         LAA: selectedUser
           ? `${selectedUser.firstName} ${selectedUser.lastName}`
           : form.LAA,
+        asbestosRemovalist: form.asbestosRemovalist,
         areas: form.areas,
         notes: form.notes,
       };
@@ -121,8 +129,9 @@ const AsbestosClearanceList = () => {
       setForm({
         projectId: "",
         clearanceDate: "",
-        status: "pending",
+        status: "in progress",
         LAA: "",
+        asbestosRemovalist: "",
         areas: [],
         notes: "",
       });
@@ -145,6 +154,7 @@ const AsbestosClearanceList = () => {
         : "",
       status: clearance.status,
       LAA: user ? user._id : "",
+      asbestosRemovalist: clearance.asbestosRemovalist || "",
       areas: Array.isArray(clearance.areas) ? clearance.areas : [],
       notes: clearance.notes,
     });
@@ -164,6 +174,7 @@ const AsbestosClearanceList = () => {
         LAA: selectedUser
           ? `${selectedUser.firstName} ${selectedUser.lastName}`
           : form.LAA,
+        asbestosRemovalist: form.asbestosRemovalist,
         areas: form.areas,
         notes: form.notes,
       };
@@ -179,8 +190,9 @@ const AsbestosClearanceList = () => {
       setForm({
         projectId: "",
         clearanceDate: "",
-        status: "pending",
+        status: "in progress",
         LAA: "",
+        asbestosRemovalist: "",
         areas: [],
         notes: "",
       });
@@ -208,14 +220,10 @@ const AsbestosClearanceList = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "completed":
+      case "complete":
         return theme.palette.success.main;
-      case "in_progress":
+      case "in progress":
         return theme.palette.info.main;
-      case "pending":
-        return theme.palette.warning.main;
-      case "failed":
-        return theme.palette.error.main;
       default:
         return theme.palette.grey[500];
     }
@@ -361,6 +369,15 @@ const AsbestosClearanceList = () => {
               },
             },
             {
+              field: "asbestosRemovalist",
+              headerName: "Removalist",
+              flex: 1,
+              minWidth: 120,
+              renderCell: (params) => {
+                return params.row.asbestosRemovalist || "N/A";
+              },
+            },
+            {
               field: "areas",
               headerName: "Areas",
               flex: 1,
@@ -379,7 +396,7 @@ const AsbestosClearanceList = () => {
               renderCell: (params) => {
                 return (
                   <Chip
-                    label={params.row.status.replace("_", " ")}
+                    label={params.row.status}
                     sx={{
                       backgroundColor: getStatusColor(params.row.status),
                       color: theme.palette.common.white,
@@ -397,14 +414,22 @@ const AsbestosClearanceList = () => {
               renderCell: ({ row }) => {
                 return (
                   <Box display="flex" alignItems="center" gap={1}>
-                    <IconButton
+                    <Button
                       size="small"
+                      variant="outlined"
                       onClick={() => navigate(`/clearances/${row._id}/reports`)}
-                      title="View Reports"
-                      sx={{ color: theme.palette.info.main }}
+                      title="Clearance Items"
+                      sx={{
+                        color: theme.palette.info.main,
+                        borderColor: theme.palette.info.main,
+                        fontSize: "0.75rem",
+                        py: 0.5,
+                        px: 1,
+                        minWidth: "auto",
+                      }}
                     >
-                      <VisibilityIcon fontSize="small" />
-                    </IconButton>
+                      Items
+                    </Button>
                     <IconButton
                       size="small"
                       onClick={() => handleEditClearance(row)}
@@ -527,6 +552,15 @@ const AsbestosClearanceList = () => {
                 </Select>
               </FormControl>
               <TextField
+                label="Asbestos Removalist"
+                value={form.asbestosRemovalist}
+                onChange={(e) =>
+                  setForm({ ...form, asbestosRemovalist: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <TextField
                 label="Areas (comma-separated)"
                 value={Array.isArray(form.areas) ? form.areas.join(", ") : ""}
                 onChange={(e) =>
@@ -553,7 +587,12 @@ const AsbestosClearanceList = () => {
             <Button
               type="submit"
               variant="contained"
-              disabled={!form.projectId || !form.clearanceDate || !form.LAA}
+              disabled={
+                !form.projectId ||
+                !form.clearanceDate ||
+                !form.LAA ||
+                !form.asbestosRemovalist
+              }
             >
               Add Clearance
             </Button>
@@ -642,6 +681,15 @@ const AsbestosClearanceList = () => {
                 </Select>
               </FormControl>
               <TextField
+                label="Asbestos Removalist"
+                value={form.asbestosRemovalist}
+                onChange={(e) =>
+                  setForm({ ...form, asbestosRemovalist: e.target.value })
+                }
+                required
+                fullWidth
+              />
+              <TextField
                 label="Areas (comma-separated)"
                 value={Array.isArray(form.areas) ? form.areas.join(", ") : ""}
                 onChange={(e) =>
@@ -668,7 +716,12 @@ const AsbestosClearanceList = () => {
             <Button
               type="submit"
               variant="contained"
-              disabled={!form.projectId || !form.clearanceDate || !form.LAA}
+              disabled={
+                !form.projectId ||
+                !form.clearanceDate ||
+                !form.LAA ||
+                !form.asbestosRemovalist
+              }
             >
               Save Changes
             </Button>

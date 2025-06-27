@@ -19,7 +19,7 @@ const jobSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'in_progress', 'completed', 'cancelled'],
-    default: 'pending'
+    default: 'in_progress'
   },
   asbestosRemovalist: {
     type: String,

@@ -1,24 +1,24 @@
 import React from "react";
-import { Box, Typography, Paper, Container } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
+import Header from "../../../components/Header";
 
 const MouldAssessment = () => {
+  const theme = useTheme();
+
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Mould Assessment
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+      <Header title="Mould Assessment" subtitle="Manage mould assessment jobs" />
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="60vh"
+      >
+        <Typography variant="h6" color="text.secondary">
+          Mould Assessment functionality coming soon...
         </Typography>
-        <Paper sx={{ p: 3, mt: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Mould Assessment
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            This page will contain mould assessment functionality. Content will
-            be implemented shortly.
-          </Typography>
-        </Paper>
       </Box>
-    </Container>
+    </Box>
   );
 };
 

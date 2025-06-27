@@ -131,12 +131,11 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 // Delete asbestos clearance
 router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res) => {
   try {
-    const clearance = await AsbestosClearance.findById(req.params.id);
+    const clearance = await AsbestosClearance.findByIdAndDelete(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
-    await clearance.remove();
     res.json({ message: "Asbestos clearance deleted successfully" });
   } catch (error) {
     console.error("Error deleting asbestos clearance:", error);

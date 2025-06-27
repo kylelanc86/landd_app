@@ -27,6 +27,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
+import { equipmentService } from "../../services/equipmentService";
 
 const EquipmentList = () => {
   const theme = useTheme();
@@ -39,46 +40,39 @@ const EquipmentList = () => {
   const [editDialog, setEditDialog] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [form, setForm] = useState({
-    name: "",
-    type: "",
-    serialNumber: "",
-    location: "",
+    equipmentReference: "",
+    equipmentType: "",
+    section: "",
+    brandModel: "",
     status: "active",
-    notes: "",
+    lastCalibration: "",
+    calibrationDue: "",
+    calibrationFrequency: "",
   });
 
-  useEffect(() => {
-    fetchEquipment();
-  }, []);
+  const [filters, setFilters] = useState({
+    search: "",
+    equipmentType: "",
+    section: "",
+    status: "",
+  });
 
   const fetchEquipment = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // TODO: Implement API call to fetch equipment
-      const mockEquipment = [
-        {
-          _id: "1",
-          name: "Air Pump 001",
-          type: "Air Pump",
-          serialNumber: "AP001",
-          location: "Lab A",
-          status: "active",
-          notes: "Primary air pump",
-        },
-        {
-          _id: "2",
-          name: "Microscope 001",
-          type: "Microscope",
-          serialNumber: "M001",
-          location: "Lab B",
-          status: "active",
-          notes: "Primary microscope",
-        },
-      ];
-
-      setEquipment(mockEquipment);
+      const response = await equipmentService.getAll({
+        limit: 100,
+        ...filters,
+      });
+      console.log("Equipment data:", response);
+      console.log("First equipment item:", response.equipment?.[0]);
+      console.log(
+        "Equipment fields:",
+        response.equipment?.[0] ? Object.keys(response.equipment[0]) : []
+      );
+      setEquipment(response.equipment || []);
     } catch (err) {
       console.error("Error fetching equipment:", err);
       setError(err.message || "Failed to fetch equipment");
@@ -87,21 +81,33 @@ const EquipmentList = () => {
     }
   };
 
+  const handleFilterChange = (field, value) => {
+    setFilters((prev) => ({ ...prev, [field]: value }));
+  };
+
+  useEffect(() => {
+    fetchEquipment();
+  }, [filters]);
+
   const handleAddEquipment = async (e) => {
     e.preventDefault();
     try {
-      // TODO: Implement API call to create equipment
-      console.log("New equipment data:", form);
+      await equipmentService.create(form);
 
       setAddDialog(false);
       setForm({
-        name: "",
-        type: "",
-        serialNumber: "",
-        location: "",
+        equipmentReference: "",
+        equipmentType: "",
+        section: "",
+        brandModel: "",
         status: "active",
-        notes: "",
+        lastCalibration: "",
+        calibrationDue: "",
+        calibrationFrequency: "",
       });
+
+      // Refresh the equipment list
+      fetchEquipment();
     } catch (err) {
       console.error("Error adding equipment:", err);
       setError(err.message || "Failed to add equipment");
@@ -111,12 +117,18 @@ const EquipmentList = () => {
   const handleEditEquipment = (equipment) => {
     setSelectedEquipment(equipment);
     setForm({
-      name: equipment.name,
-      type: equipment.type,
-      serialNumber: equipment.serialNumber,
-      location: equipment.location,
+      equipmentReference: equipment.equipmentReference,
+      equipmentType: equipment.equipmentType,
+      section: equipment.section,
+      brandModel: equipment.brandModel,
       status: equipment.status,
-      notes: equipment.notes,
+      lastCalibration: equipment.lastCalibration
+        ? new Date(equipment.lastCalibration).toISOString().split("T")[0]
+        : "",
+      calibrationDue: equipment.calibrationDue
+        ? new Date(equipment.calibrationDue).toISOString().split("T")[0]
+        : "",
+      calibrationFrequency: equipment.calibrationFrequency,
     });
     setEditDialog(true);
   };
@@ -124,19 +136,23 @@ const EquipmentList = () => {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     try {
-      // TODO: Implement API call to update equipment
-      console.log("Update equipment data:", form);
+      await equipmentService.update(selectedEquipment._id, form);
 
       setEditDialog(false);
       setSelectedEquipment(null);
       setForm({
-        name: "",
-        type: "",
-        serialNumber: "",
-        location: "",
+        equipmentReference: "",
+        equipmentType: "",
+        section: "",
+        brandModel: "",
         status: "active",
-        notes: "",
+        lastCalibration: "",
+        calibrationDue: "",
+        calibrationFrequency: "",
       });
+
+      // Refresh the equipment list
+      fetchEquipment();
     } catch (err) {
       console.error("Error editing equipment:", err);
       setError(err.message || "Failed to edit equipment");
@@ -145,11 +161,27 @@ const EquipmentList = () => {
 
   const handleDeleteEquipment = async (equipmentId) => {
     try {
-      // TODO: Implement API call to delete equipment
-      console.log("Deleting equipment:", equipmentId);
+      await equipmentService.delete(equipmentId);
+
+      // Refresh the equipment list
+      fetchEquipment();
     } catch (err) {
       console.error("Error deleting equipment:", err);
       setError(err.message || "Failed to delete equipment");
+    }
+  };
+
+  const getCalibrationStatus = (calibrationDue) => {
+    const dueDate = new Date(calibrationDue);
+    const today = new Date();
+    const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilDue < 0) {
+      return { status: "Overdue", color: theme.palette.error.main };
+    } else if (daysUntilDue <= 30) {
+      return { status: "Due Soon", color: theme.palette.warning.main };
+    } else {
+      return { status: "OK", color: theme.palette.success.main };
     }
   };
 
@@ -157,11 +189,9 @@ const EquipmentList = () => {
     switch (status) {
       case "active":
         return theme.palette.success.main;
-      case "inactive":
-        return theme.palette.grey[500];
-      case "maintenance":
+      case "calibration due":
         return theme.palette.warning.main;
-      case "broken":
+      case "out-of-service":
         return theme.palette.error.main;
       default:
         return theme.palette.grey[500];
@@ -223,6 +253,92 @@ const EquipmentList = () => {
         </Typography>
       )}
 
+      {/* Filters */}
+      <Box
+        sx={{
+          mb: 3,
+          p: 2,
+          backgroundColor: theme.palette.background.paper,
+          borderRadius: 1,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Filters
+        </Typography>
+        <Box display="flex" gap={2} flexWrap="wrap">
+          <TextField
+            label="Search"
+            value={filters.search}
+            onChange={(e) => handleFilterChange("search", e.target.value)}
+            size="small"
+            sx={{ minWidth: 200 }}
+            placeholder="Search by reference or brand/model"
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Equipment Type</InputLabel>
+            <Select
+              value={filters.equipmentType}
+              label="Equipment Type"
+              onChange={(e) =>
+                handleFilterChange("equipmentType", e.target.value)
+              }
+            >
+              <MenuItem value="">All Types</MenuItem>
+              {equipmentService.getEquipmentTypes().map((type) => (
+                <MenuItem key={type} value={type}>
+                  {type}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Section</InputLabel>
+            <Select
+              value={filters.section}
+              label="Section"
+              onChange={(e) => handleFilterChange("section", e.target.value)}
+            >
+              <MenuItem value="">All Sections</MenuItem>
+              {equipmentService.getSections().map((section) => (
+                <MenuItem key={section} value={section}>
+                  {section}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={filters.status}
+              label="Status"
+              onChange={(e) => handleFilterChange("status", e.target.value)}
+            >
+              <MenuItem value="">All Status</MenuItem>
+              {equipmentService.getStatusOptions().map((status) => (
+                <MenuItem key={status} value={status}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="outlined"
+            onClick={() =>
+              setFilters({
+                search: "",
+                equipmentType: "",
+                section: "",
+                status: "",
+              })
+            }
+            size="small"
+          >
+            Clear Filters
+          </Button>
+        </Box>
+      </Box>
+
       {/* Equipment Table */}
       <Box
         m="40px 0 0 0"
@@ -256,28 +372,28 @@ const EquipmentList = () => {
           rows={equipment}
           columns={[
             {
-              field: "name",
-              headerName: "Equipment Name",
+              field: "equipmentReference",
+              headerName: "Equipment Ref",
               flex: 1,
               minWidth: 150,
             },
             {
-              field: "type",
-              headerName: "Type",
+              field: "equipmentType",
+              headerName: "Equipment Type",
+              flex: 1,
+              minWidth: 150,
+            },
+            {
+              field: "section",
+              headerName: "Section",
               flex: 1,
               minWidth: 120,
             },
             {
-              field: "serialNumber",
-              headerName: "Serial Number",
+              field: "brandModel",
+              headerName: "Brand/Model",
               flex: 1,
-              minWidth: 120,
-            },
-            {
-              field: "location",
-              headerName: "Location",
-              flex: 1,
-              minWidth: 120,
+              minWidth: 150,
             },
             {
               field: "status",
@@ -285,15 +401,43 @@ const EquipmentList = () => {
               flex: 1,
               minWidth: 120,
               renderCell: (params) => {
+                const status = getStatusColor(params.row.status);
                 return (
-                  <Chip
-                    label={params.row.status}
-                    sx={{
-                      backgroundColor: getStatusColor(params.row.status),
-                      color: theme.palette.common.white,
-                      fontWeight: "bold",
-                    }}
-                  />
+                  <Box>
+                    <Typography variant="body2" sx={{ color: status }}>
+                      {params.row.status.charAt(0).toUpperCase() +
+                        params.row.status.slice(1)}
+                    </Typography>
+                  </Box>
+                );
+              },
+            },
+            {
+              field: "calibrationDue",
+              headerName: "Calibration Due",
+              flex: 1,
+              minWidth: 150,
+              renderCell: (params) => {
+                if (!params.row.calibrationDue) {
+                  return "-";
+                }
+                const status = getCalibrationStatus(params.row.calibrationDue);
+                return (
+                  <Box>
+                    <Typography variant="body2">
+                      {new Date(params.row.calibrationDue).toLocaleDateString()}
+                    </Typography>
+                    <Chip
+                      label={status.status}
+                      size="small"
+                      sx={{
+                        backgroundColor: status.color,
+                        color: theme.palette.common.white,
+                        fontSize: "0.7rem",
+                        height: "20px",
+                      }}
+                    />
+                  </Box>
                 );
               },
             },
@@ -379,32 +523,52 @@ const EquipmentList = () => {
             )}
             <Stack spacing={3}>
               <TextField
-                label="Equipment Name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Type"
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Serial Number"
-                value={form.serialNumber}
+                label="Equipment Reference"
+                value={form.equipmentReference}
                 onChange={(e) =>
-                  setForm({ ...form, serialNumber: e.target.value })
+                  setForm({ ...form, equipmentReference: e.target.value })
                 }
                 required
                 fullWidth
               />
+              <FormControl fullWidth required>
+                <InputLabel>Equipment Type</InputLabel>
+                <Select
+                  value={form.equipmentType}
+                  label="Equipment Type"
+                  onChange={(e) =>
+                    setForm({ ...form, equipmentType: e.target.value })
+                  }
+                >
+                  {equipmentService.getEquipmentTypes().map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth required>
+                <InputLabel>Section</InputLabel>
+                <Select
+                  value={form.section}
+                  label="Section"
+                  onChange={(e) =>
+                    setForm({ ...form, section: e.target.value })
+                  }
+                >
+                  {equipmentService.getSections().map((section) => (
+                    <MenuItem key={section} value={section}>
+                      {section}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
-                label="Location"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                label="Brand/Model"
+                value={form.brandModel}
+                onChange={(e) =>
+                  setForm({ ...form, brandModel: e.target.value })
+                }
                 required
                 fullWidth
               />
@@ -415,19 +579,45 @@ const EquipmentList = () => {
                   label="Status"
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
                 >
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="inactive">Inactive</MenuItem>
-                  <MenuItem value="maintenance">Maintenance</MenuItem>
-                  <MenuItem value="broken">Broken</MenuItem>
+                  {equipmentService.getStatusOptions().map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               <TextField
-                label="Notes"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                label="Last Calibration Date"
+                type="date"
+                value={form.lastCalibration}
+                onChange={(e) =>
+                  setForm({ ...form, lastCalibration: e.target.value })
+                }
+                required
                 fullWidth
-                multiline
-                rows={3}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Calibration Due Date"
+                type="date"
+                value={form.calibrationDue}
+                onChange={(e) =>
+                  setForm({ ...form, calibrationDue: e.target.value })
+                }
+                required
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Calibration Frequency (months)"
+                type="number"
+                value={form.calibrationFrequency}
+                onChange={(e) =>
+                  setForm({ ...form, calibrationFrequency: e.target.value })
+                }
+                required
+                fullWidth
+                inputProps={{ min: 1, max: 60 }}
               />
             </Stack>
           </DialogContent>
@@ -437,7 +627,14 @@ const EquipmentList = () => {
               type="submit"
               variant="contained"
               disabled={
-                !form.name || !form.type || !form.serialNumber || !form.location
+                !form.equipmentReference ||
+                !form.equipmentType ||
+                !form.section ||
+                !form.brandModel ||
+                !form.status ||
+                !form.lastCalibration ||
+                !form.calibrationDue ||
+                !form.calibrationFrequency
               }
             >
               Add Equipment
@@ -482,32 +679,52 @@ const EquipmentList = () => {
             )}
             <Stack spacing={3}>
               <TextField
-                label="Equipment Name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Type"
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Serial Number"
-                value={form.serialNumber}
+                label="Equipment Reference"
+                value={form.equipmentReference}
                 onChange={(e) =>
-                  setForm({ ...form, serialNumber: e.target.value })
+                  setForm({ ...form, equipmentReference: e.target.value })
                 }
                 required
                 fullWidth
               />
+              <FormControl fullWidth required>
+                <InputLabel>Equipment Type</InputLabel>
+                <Select
+                  value={form.equipmentType}
+                  label="Equipment Type"
+                  onChange={(e) =>
+                    setForm({ ...form, equipmentType: e.target.value })
+                  }
+                >
+                  {equipmentService.getEquipmentTypes().map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth required>
+                <InputLabel>Section</InputLabel>
+                <Select
+                  value={form.section}
+                  label="Section"
+                  onChange={(e) =>
+                    setForm({ ...form, section: e.target.value })
+                  }
+                >
+                  {equipmentService.getSections().map((section) => (
+                    <MenuItem key={section} value={section}>
+                      {section}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
-                label="Location"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                label="Brand/Model"
+                value={form.brandModel}
+                onChange={(e) =>
+                  setForm({ ...form, brandModel: e.target.value })
+                }
                 required
                 fullWidth
               />
@@ -518,19 +735,45 @@ const EquipmentList = () => {
                   label="Status"
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
                 >
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="inactive">Inactive</MenuItem>
-                  <MenuItem value="maintenance">Maintenance</MenuItem>
-                  <MenuItem value="broken">Broken</MenuItem>
+                  {equipmentService.getStatusOptions().map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               <TextField
-                label="Notes"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                label="Last Calibration Date"
+                type="date"
+                value={form.lastCalibration}
+                onChange={(e) =>
+                  setForm({ ...form, lastCalibration: e.target.value })
+                }
+                required
                 fullWidth
-                multiline
-                rows={3}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Calibration Due Date"
+                type="date"
+                value={form.calibrationDue}
+                onChange={(e) =>
+                  setForm({ ...form, calibrationDue: e.target.value })
+                }
+                required
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Calibration Frequency (months)"
+                type="number"
+                value={form.calibrationFrequency}
+                onChange={(e) =>
+                  setForm({ ...form, calibrationFrequency: e.target.value })
+                }
+                required
+                fullWidth
+                inputProps={{ min: 1, max: 60 }}
               />
             </Stack>
           </DialogContent>
@@ -540,7 +783,14 @@ const EquipmentList = () => {
               type="submit"
               variant="contained"
               disabled={
-                !form.name || !form.type || !form.serialNumber || !form.location
+                !form.equipmentReference ||
+                !form.equipmentType ||
+                !form.section ||
+                !form.brandModel ||
+                !form.status ||
+                !form.lastCalibration ||
+                !form.calibrationDue ||
+                !form.calibrationFrequency
               }
             >
               Save Changes

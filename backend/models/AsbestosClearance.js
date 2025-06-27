@@ -13,10 +13,14 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "in_progress", "completed", "failed"],
-      default: "pending",
+      enum: ["in progress", "complete"],
+      default: "in progress",
     },
     LAA: {
+      type: String,
+      required: true,
+    },
+    asbestosRemovalist: {
       type: String,
       required: true,
     },

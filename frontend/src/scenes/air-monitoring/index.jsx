@@ -68,7 +68,7 @@ const emptyForm = {
   projectName: "",
   client: "",
   asbestosRemovalist: "",
-  status: "pending",
+  status: "in_progress",
 };
 
 const AirMonitoring = () => {
@@ -222,7 +222,7 @@ const AirMonitoring = () => {
       const newJob = {
         name: selectedProject.name,
         project: selectedProject._id,
-        status: "pending",
+        status: "in_progress",
         startDate: new Date(),
         asbestosRemovalist: form.asbestosRemovalist,
         description: `Air monitoring job for ${selectedProject.name}`,
@@ -244,7 +244,7 @@ const AirMonitoring = () => {
         _id: response.data._id,
         projectID: selectedProject.projectID,
         projectName: selectedProject.name,
-        status: "pending",
+        status: "in_progress",
         asbestosRemovalist: response.data.asbestosRemovalist,
       };
 
@@ -464,8 +464,6 @@ const AirMonitoring = () => {
                 ? theme.palette.success.main
                 : params.row.status === "in_progress"
                 ? theme.palette.info.main
-                : params.row.status === "pending"
-                ? theme.palette.warning.main
                 : theme.palette.grey[500],
             color: theme.palette.common.white,
             "&:hover": {
@@ -536,10 +534,7 @@ const AirMonitoring = () => {
 
   return (
     <Box m="20px">
-      <Header
-        title="Air Monitoring"
-        subtitle="Manage air monitoring jobs"
-      />
+      <Header title="Air Monitoring" subtitle="Manage air monitoring jobs" />
 
       {/* Add New Job Button and Show Completed Toggle */}
       <Box
@@ -801,9 +796,6 @@ const AirMonitoring = () => {
         open={Boolean(statusMenu)}
         onClose={handleStatusClose}
       >
-        <MenuItem onClick={() => handleStatusChange("pending")}>
-          Pending
-        </MenuItem>
         <MenuItem onClick={() => handleStatusChange("in_progress")}>
           In Progress
         </MenuItem>

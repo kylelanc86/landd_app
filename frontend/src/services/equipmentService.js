@@ -7,7 +7,7 @@ export const equipmentService = {
   getAll: async (params = {}) => {
     try {
       const response = await api.get(BASE_URL, { params });
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -17,7 +17,7 @@ export const equipmentService = {
   getById: async (id) => {
     try {
       const response = await api.get(`${BASE_URL}/${id}`);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -27,7 +27,7 @@ export const equipmentService = {
   create: async (data) => {
     try {
       const response = await api.post(BASE_URL, data);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -37,7 +37,7 @@ export const equipmentService = {
   update: async (id, data) => {
     try {
       const response = await api.put(`${BASE_URL}/${id}`, data);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -47,7 +47,7 @@ export const equipmentService = {
   delete: async (id) => {
     try {
       const response = await api.delete(`${BASE_URL}/${id}`);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -57,7 +57,7 @@ export const equipmentService = {
   getStats: async () => {
     try {
       const response = await api.get(`${BASE_URL}/stats/overview`);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -69,7 +69,7 @@ export const equipmentService = {
       const response = await api.get(`${BASE_URL}/calibrations/due`, {
         params: { days }
       });
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -79,7 +79,7 @@ export const equipmentService = {
   getTypes: async () => {
     try {
       const response = await api.get(`${BASE_URL}/types/list`);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
@@ -89,9 +89,35 @@ export const equipmentService = {
   getLabs: async () => {
     try {
       const response = await api.get(`${BASE_URL}/labs/list`);
-      return response;
+      return response.data;
     } catch (error) {
       throw error;
     }
-  }
+  },
+
+  // Get equipment type options (static)
+  getEquipmentTypes: () => [
+    "Acetone Vaporiser",
+    "Air pump",
+    "Bubble flowmeter",
+    "Fume Hood",
+    "Furnace",
+    "Graticule",
+    "Microscope",
+    "Pneumatic tester",
+    "Site flowmeter"
+  ],
+
+  // Get section options (static)
+  getSections: () => [
+    "Air Monitoring",
+    "Fibre ID"
+  ],
+
+  // Get status options (static)
+  getStatusOptions: () => [
+    "active",
+    "calibration due",
+    "out-of-service"
+  ]
 }; 

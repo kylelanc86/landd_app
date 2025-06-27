@@ -1,24 +1,24 @@
 import React from "react";
-import { Box, Typography, Paper, Container } from "@mui/material";
+import { Box, Typography, useTheme } from "@mui/material";
+import Header from "../../../components/Header";
 
 const LeadAssessment = () => {
+  const theme = useTheme();
+
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Lead Assessment
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+      <Header title="Lead Assessment" subtitle="Manage lead assessment jobs" />
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="60vh"
+      >
+        <Typography variant="h6" color="text.secondary">
+          Lead Assessment functionality coming soon...
         </Typography>
-        <Paper sx={{ p: 3, mt: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            Lead Assessment
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            This page will contain lead assessment functionality. Content will
-            be implemented shortly.
-          </Typography>
-        </Paper>
       </Box>
-    </Container>
+    </Box>
   );
 };
 
