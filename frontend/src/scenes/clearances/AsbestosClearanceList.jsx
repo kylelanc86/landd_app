@@ -66,7 +66,6 @@ const AsbestosClearanceList = () => {
     status: "in progress",
     LAA: "",
     asbestosRemovalist: "",
-    areas: [],
     notes: "",
   });
 
@@ -127,7 +126,6 @@ const AsbestosClearanceList = () => {
           ? `${selectedUser.firstName} ${selectedUser.lastName}`
           : form.LAA,
         asbestosRemovalist: form.asbestosRemovalist,
-        areas: form.areas,
         notes: form.notes,
       };
 
@@ -145,7 +143,6 @@ const AsbestosClearanceList = () => {
         status: "in progress",
         LAA: "",
         asbestosRemovalist: "",
-        areas: [],
         notes: "",
       });
     } catch (err) {
@@ -168,7 +165,6 @@ const AsbestosClearanceList = () => {
       status: clearance.status,
       LAA: user ? user._id : "",
       asbestosRemovalist: clearance.asbestosRemovalist || "",
-      areas: Array.isArray(clearance.areas) ? clearance.areas : [],
       notes: clearance.notes,
     });
     setEditDialogOpen(true);
@@ -188,7 +184,6 @@ const AsbestosClearanceList = () => {
           ? `${selectedUser.firstName} ${selectedUser.lastName}`
           : form.LAA,
         asbestosRemovalist: form.asbestosRemovalist,
-        areas: form.areas,
         notes: form.notes,
       };
 
@@ -206,7 +201,6 @@ const AsbestosClearanceList = () => {
         status: "in progress",
         LAA: "",
         asbestosRemovalist: "",
-        areas: [],
         notes: "",
       });
     } catch (err) {
@@ -364,14 +358,13 @@ const AsbestosClearanceList = () => {
               },
             },
             {
-              field: "areas",
-              headerName: "Areas",
+              field: "items",
+              headerName: "Items",
               flex: 1,
-              minWidth: 150,
+              minWidth: 100,
               renderCell: (params) => {
-                const areas = params.row.areas || [];
-                if (areas.length === 0) return "N/A";
-                return areas.join(", ");
+                const itemsCount = params.row.items || 0;
+                return itemsCount;
               },
             },
             {
@@ -554,18 +547,6 @@ const AsbestosClearanceList = () => {
                 </Select>
               </FormControl>
               <TextField
-                label="Areas (comma-separated)"
-                value={Array.isArray(form.areas) ? form.areas.join(", ") : ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    areas: e.target.value.split(",").map((area) => area.trim()),
-                  })
-                }
-                fullWidth
-                helperText="Enter areas separated by commas"
-              />
-              <TextField
                 label="Notes"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -689,18 +670,6 @@ const AsbestosClearanceList = () => {
                   ))}
                 </Select>
               </FormControl>
-              <TextField
-                label="Areas (comma-separated)"
-                value={Array.isArray(form.areas) ? form.areas.join(", ") : ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    areas: e.target.value.split(",").map((area) => area.trim()),
-                  })
-                }
-                fullWidth
-                helperText="Enter areas separated by commas"
-              />
               <TextField
                 label="Notes"
                 value={form.notes}

@@ -30,6 +30,7 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
       .populate("projectId", "projectID name")
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName")
+      .populate("items")
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -55,7 +56,8 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
     const clearance = await AsbestosClearance.findById(req.params.id)
       .populate("projectId", "projectID name")
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
+      .populate("updatedBy", "firstName lastName")
+      .populate("items");
 
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
@@ -71,7 +73,7 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, status, LAA, asbestosRemovalist, areas, notes } = req.body;
+    const { projectId, clearanceDate, status, LAA, asbestosRemovalist, notes } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
@@ -79,7 +81,6 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       status: status || "in progress",
       LAA,
       asbestosRemovalist,
-      areas: areas || [],
       notes,
       createdBy: req.user.id,
     });
@@ -88,7 +89,8 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
     
     const populatedClearance = await AsbestosClearance.findById(savedClearance._id)
       .populate("projectId", "projectID name")
-      .populate("createdBy", "firstName lastName");
+      .populate("createdBy", "firstName lastName")
+      .populate("items");
 
     res.status(201).json(populatedClearance);
   } catch (error) {
@@ -100,7 +102,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, status, LAA, asbestosRemovalist, areas, notes } = req.body;
+    const { projectId, clearanceDate, status, LAA, asbestosRemovalist, notes } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -112,7 +114,6 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.status = status || clearance.status;
     clearance.LAA = LAA || clearance.LAA;
     clearance.asbestosRemovalist = asbestosRemovalist || clearance.asbestosRemovalist;
-    clearance.areas = areas || clearance.areas;
     clearance.notes = notes || clearance.notes;
     clearance.updatedBy = req.user.id;
 
@@ -121,7 +122,8 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate("projectId", "projectID name")
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
+      .populate("updatedBy", "firstName lastName")
+      .populate("items");
 
     res.json(populatedClearance);
   } catch (error) {

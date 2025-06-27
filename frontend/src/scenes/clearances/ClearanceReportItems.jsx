@@ -270,8 +270,13 @@ const ClearanceReports = () => {
         notes: itemForm.notes,
       };
 
-      // TODO: Add service call to create clearance item
-      console.log("New item data:", newItemData);
+      // Create the clearance report item
+      await asbestosClearanceReportService.create(newItemData);
+
+      // Refresh the reports list
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      setReports(reportsResponse);
 
       setAddItemDialog(false);
       setItemForm({
@@ -307,8 +312,13 @@ const ClearanceReports = () => {
         notes: itemForm.notes,
       };
 
-      // TODO: Add service call to update clearance item
-      console.log("Update item data:", updateData);
+      // Update the clearance report item
+      await asbestosClearanceReportService.update(selectedItem._id, updateData);
+
+      // Refresh the reports list
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      setReports(reportsResponse);
 
       setEditItemDialog(false);
       setSelectedItem(null);
@@ -326,8 +336,13 @@ const ClearanceReports = () => {
 
   const handleDeleteItem = async (itemId) => {
     try {
-      // TODO: Add service call to delete clearance item
-      console.log("Deleting item:", itemId);
+      // Delete the clearance report item
+      await asbestosClearanceReportService.delete(itemId);
+
+      // Refresh the reports list
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      setReports(reportsResponse);
     } catch (err) {
       console.error("Error deleting item:", err);
       setError(err.message || "Failed to delete item");
@@ -477,30 +492,30 @@ const ClearanceReports = () => {
           rows={reports}
           columns={[
             {
-              field: "clearanceLocation",
+              field: "locationDescription",
               headerName: "Location",
               flex: 1,
               minWidth: 150,
               renderCell: (params) => {
-                return new Date(params.row.clearanceDate).toLocaleDateString();
+                return params.row.locationDescription || "N/A";
               },
             },
             {
-              field: "clearanceMaterial",
+              field: "materialDescription",
               headerName: "Material Description",
               flex: 1,
               minWidth: 150,
               renderCell: (params) => {
-                return new Date(params.row.clearanceDate).toLocaleDateString();
+                return params.row.materialDescription || "N/A";
               },
             },
             {
-              field: "itemPhoto",
+              field: "photograph",
               headerName: "Item Photographs",
               flex: 1,
               minWidth: 150,
               renderCell: (params) => {
-                return new Date(params.row.clearanceDate).toLocaleDateString();
+                return params.row.photograph ? "Photo Available" : "No Photo";
               },
             },
             {
@@ -513,32 +528,16 @@ const ClearanceReports = () => {
                   <Box display="flex" alignItems="center" gap={1}>
                     <IconButton
                       size="small"
-                      onClick={() => handleEditReport(row)}
-                      title="Edit Report"
+                      onClick={() => handleEditItem(row)}
+                      title="Edit Item"
                       sx={{ color: theme.palette.primary.main }}
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
                     <IconButton
                       size="small"
-                      onClick={() => handlePrintReport(row)}
-                      title="Print Report"
-                      sx={{ color: theme.palette.info.main }}
-                    >
-                      <PrintIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDownloadReport(row)}
-                      title="Download Report"
-                      sx={{ color: theme.palette.success.main }}
-                    >
-                      <DownloadIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteReport(row._id)}
-                      title="Delete Report"
+                      onClick={() => handleDeleteItem(row._id)}
+                      title="Delete Item"
                       sx={{ color: theme.palette.error.main }}
                     >
                       <DeleteIcon fontSize="small" />
@@ -554,7 +553,7 @@ const ClearanceReports = () => {
           error={error}
           components={{
             NoRowsOverlay: () => (
-              <Box sx={{ p: 2, textAlign: "center" }}>No reports found</Box>
+              <Box sx={{ p: 2, textAlign: "center" }}>No items found</Box>
             ),
             ErrorOverlay: () => (
               <Box sx={{ p: 2, textAlign: "center", color: "error.main" }}>

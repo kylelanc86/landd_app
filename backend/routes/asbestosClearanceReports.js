@@ -136,12 +136,11 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 // Delete clearance report
 router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res) => {
   try {
-    const report = await AsbestosClearanceReport.findById(req.params.id);
+    const report = await AsbestosClearanceReport.findByIdAndDelete(req.params.id);
     if (!report) {
       return res.status(404).json({ message: "Clearance report not found" });
     }
 
-    await report.remove();
     res.json({ message: "Clearance report deleted successfully" });
   } catch (error) {
     console.error("Error deleting clearance report:", error);
