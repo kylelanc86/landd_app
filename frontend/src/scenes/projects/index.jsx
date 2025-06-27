@@ -83,6 +83,7 @@ import performanceMonitor from "../../utils/performanceMonitor";
 import { debounce } from "lodash";
 import DownloadIcon from "@mui/icons-material/Download";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
+import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -554,6 +555,7 @@ const Projects = () => {
   const [isAddressLoading, setIsAddressLoading] = useState(false);
   const [autocompleteService, setAutocompleteService] = useState(null);
   const [placesService, setPlacesService] = useState(null);
+  const [googleMaps, setGoogleMaps] = useState(null);
 
   // Start page load monitoring only on initial load
   useEffect(() => {
@@ -562,15 +564,115 @@ const Projects = () => {
         performanceMonitor.startPageLoad("projects-page");
       isInitialLoadRef.current = false;
     }
-
-    // Cleanup function to handle navigation
-    return () => {
-      if (pageLoadTimerRef.current) {
-        performanceMonitor.endPageLoad("projects-page");
-        pageLoadTimerRef.current = null;
-      }
-    };
   }, []);
+
+  // Initialize Google Places Autocomplete
+  useEffect(() => {
+    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+    console.log("Projects - Environment variables:", {
+      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
+        ? "API Key Found"
+        : "API Key Missing",
+      NODE_ENV: process.env.NODE_ENV,
+    });
+
+    if (!apiKey) {
+      console.error(
+        "Google Maps API key is missing. Please check your .env file."
+      );
+      return;
+    }
+
+    loadGoogleMapsApi(apiKey)
+      .then((google) => {
+        console.log("Projects - Google Maps loaded successfully");
+        setGoogleMaps(google);
+        // Initialize the autocomplete service
+        const autocompleteService =
+          new google.maps.places.AutocompleteService();
+        const placesService = new google.maps.places.PlacesService(
+          document.createElement("div")
+        );
+        setAutocompleteService(autocompleteService);
+        setPlacesService(placesService);
+      })
+      .catch((error) => {
+        console.error("Projects - Error loading Google Maps script:", error);
+      });
+  }, []);
+
+  // Google Places Autocomplete handlers
+  const handleAddressInputChange = async (value) => {
+    setAddressInput(value);
+
+    if (!value || value.length < 3 || !autocompleteService || !googleMaps) {
+      setAddressOptions([]);
+      return;
+    }
+
+    setIsAddressLoading(true);
+    try {
+      autocompleteService.getPlacePredictions(
+        {
+          input: value,
+          componentRestrictions: { country: "au" },
+          types: ["address"],
+        },
+        (predictions, status) => {
+          console.log(
+            "Projects - Address predictions:",
+            predictions,
+            "Status:",
+            status
+          );
+          if (
+            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
+            predictions
+          ) {
+            setAddressOptions(predictions);
+          } else {
+            console.log("Projects - No predictions found or error:", status);
+            setAddressOptions([]);
+          }
+          setIsAddressLoading(false);
+        }
+      );
+    } catch (error) {
+      console.error("Projects - Error fetching address predictions:", error);
+      setAddressOptions([]);
+      setIsAddressLoading(false);
+    }
+  };
+
+  const handleAddressSelect = async (placeId) => {
+    if (!placeId || !placesService || !googleMaps) return;
+
+    try {
+      placesService.getDetails(
+        {
+          placeId: placeId,
+          fields: ["formatted_address", "geometry", "address_components"],
+        },
+        (place, status) => {
+          console.log("Projects - Selected place:", place, "Status:", status);
+          if (
+            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
+            place
+          ) {
+            setForm((prev) => ({
+              ...prev,
+              address: place.formatted_address,
+            }));
+            setAddressInput(place.formatted_address);
+          } else {
+            console.error("Projects - Error getting place details:", status);
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Projects - Error getting place details:", error);
+    }
+  };
 
   // Monitor data rendering
   useEffect(() => {
@@ -1078,79 +1180,6 @@ const Projects = () => {
     }));
   };
 
-  // Google Places Autocomplete handlers
-  const handleAddressInputChange = async (value) => {
-    setAddressInput(value);
-
-    if (!value || value.length < 3 || !autocompleteService) {
-      setAddressOptions([]);
-      return;
-    }
-
-    setIsAddressLoading(true);
-    try {
-      autocompleteService.getPlacePredictions(
-        {
-          input: value,
-          componentRestrictions: { country: "au" },
-          types: ["address"],
-        },
-        (predictions, status) => {
-          console.log(
-            "Projects - Address predictions:",
-            predictions,
-            "Status:",
-            status
-          );
-          if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
-            predictions
-          ) {
-            setAddressOptions(predictions);
-          } else {
-            console.log("Projects - No predictions found or error:", status);
-            setAddressOptions([]);
-          }
-          setIsAddressLoading(false);
-        }
-      );
-    } catch (error) {
-      console.error("Projects - Error fetching address predictions:", error);
-      setAddressOptions([]);
-      setIsAddressLoading(false);
-    }
-  };
-
-  const handleAddressSelect = async (placeId) => {
-    if (!placeId || !placesService) return;
-
-    try {
-      placesService.getDetails(
-        {
-          placeId: placeId,
-          fields: ["formatted_address", "geometry", "address_components"],
-        },
-        (place, status) => {
-          console.log("Projects - Selected place:", place, "Status:", status);
-          if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
-            place
-          ) {
-            setForm((prev) => ({
-              ...prev,
-              address: place.formatted_address,
-            }));
-            setAddressInput(place.formatted_address);
-          } else {
-            console.error("Projects - Error getting place details:", status);
-          }
-        }
-      );
-    } catch (error) {
-      console.error("Projects - Error getting place details:", error);
-    }
-  };
-
   const handleStatusChange = async (projectId, newStatus) => {
     try {
       const project = projects.find((p) => (p._id || p.id) === projectId);
@@ -1493,65 +1522,6 @@ const Projects = () => {
     };
 
     loadUserPreferences();
-  }, []);
-
-  // Initialize Google Places Autocomplete
-  useEffect(() => {
-    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-    console.log("Projects - Environment variables:", {
-      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
-        ? "API Key Found"
-        : "API Key Missing",
-      NODE_ENV: process.env.NODE_ENV,
-    });
-
-    if (!apiKey) {
-      console.error(
-        "Google Maps API key is missing. Please check your .env file."
-      );
-      return;
-    }
-
-    if (!window.google) {
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-
-      script.onload = () => {
-        console.log("Projects - Google Maps script loaded successfully");
-        // Initialize the autocomplete service
-        const autocompleteService =
-          new window.google.maps.places.AutocompleteService();
-        const placesService = new window.google.maps.places.PlacesService(
-          document.createElement("div")
-        );
-        setAutocompleteService(autocompleteService);
-        setPlacesService(placesService);
-      };
-
-      script.onerror = (error) => {
-        console.error("Projects - Error loading Google Maps script:", error);
-      };
-
-      document.head.appendChild(script);
-
-      return () => {
-        if (document.head.contains(script)) {
-          document.head.removeChild(script);
-        }
-      };
-    } else {
-      console.log("Projects - Google Maps already loaded");
-      // Initialize the autocomplete service
-      const autocompleteService =
-        new window.google.maps.places.AutocompleteService();
-      const placesService = new window.google.maps.places.PlacesService(
-        document.createElement("div")
-      );
-      setAutocompleteService(autocompleteService);
-      setPlacesService(placesService);
-    }
   }, []);
 
   // Memoize columns configuration

@@ -57,20 +57,20 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           query.status = { $in: inactiveStatuses };
         } else {
           // Handle specific status or comma-separated list
-          const statusArray = status.includes(',') ? status.split(',') : [status];
-          
-          if (statusArray.includes('unknown')) {
-            const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
-            query.status = { $nin: allKnownStatuses };
-          } else {
-            query.status = { $in: statusArray };
+        const statusArray = status.includes(',') ? status.split(',') : [status];
+        
+        if (statusArray.includes('unknown')) {
+          const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
+          query.status = { $nin: allKnownStatuses };
+        } else {
+          query.status = { $in: statusArray };
           }
         }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
       }
     }
-    
+
     // Add search filter if specified
     if (search) {
       query.$or = [

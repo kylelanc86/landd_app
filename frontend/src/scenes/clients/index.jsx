@@ -356,6 +356,7 @@ const Clients = () => {
           sx={{
             color: params.row.written_off ? "red" : "inherit",
             fontWeight: params.row.written_off ? "bold" : "normal",
+            fontSize: "0.875rem",
           }}
         >
           {params.row.name}
@@ -371,6 +372,7 @@ const Clients = () => {
           sx={{
             color: params.row.written_off ? "red" : "inherit",
             fontWeight: params.row.written_off ? "bold" : "normal",
+            fontSize: "0.875rem",
           }}
         >
           {params.row.invoiceEmail}
@@ -386,6 +388,7 @@ const Clients = () => {
           sx={{
             color: params.row.written_off ? "red" : "inherit",
             fontWeight: params.row.written_off ? "bold" : "normal",
+            fontSize: "0.875rem",
           }}
         >
           {params.row.contact1Name}
@@ -402,6 +405,7 @@ const Clients = () => {
           sx={{
             color: params.row.written_off ? "red" : "inherit",
             fontWeight: params.row.written_off ? "bold" : "normal",
+            fontSize: "0.875rem",
           }}
         >
           {formatPhoneNumber(params.row.contact1Number)}
@@ -417,6 +421,7 @@ const Clients = () => {
           sx={{
             color: params.row.written_off ? "red" : "inherit",
             fontWeight: params.row.written_off ? "bold" : "normal",
+            fontSize: "0.875rem",
           }}
         >
           {params.row.address}
@@ -439,7 +444,7 @@ const Clients = () => {
             <CheckCircleIcon
               sx={{
                 color: "red",
-                fontSize: 24,
+                fontSize: 20,
               }}
             />
           )}
@@ -606,10 +611,12 @@ const Clients = () => {
           "& .MuiDataGrid-root": { border: "none" },
           "& .MuiDataGrid-cell": {
             borderBottom: `1px solid ${theme.palette.divider}`,
+            fontSize: "0.875rem",
           },
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: theme.palette.primary.dark,
             borderBottom: "none",
+            fontSize: "0.875rem",
           },
           "& .MuiDataGrid-virtualScroller": {
             backgroundColor: theme.palette.background.default,
@@ -617,6 +624,7 @@ const Clients = () => {
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
             backgroundColor: theme.palette.primary.dark,
+            fontSize: "0.875rem",
           },
           "& .MuiCheckbox-root": {
             color: `${theme.palette.secondary.main} !important`,

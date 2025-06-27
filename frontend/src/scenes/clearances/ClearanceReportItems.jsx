@@ -1,0 +1,1027 @@
+import React, { useState, useEffect } from "react";
+import {
+  Box,
+  Typography,
+  useTheme,
+  Paper,
+  Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Stack,
+  Grid,
+  Card,
+  CardContent,
+  Divider,
+  Chip,
+  Alert,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
+import { DataGrid } from "@mui/x-data-grid";
+import { useParams, useNavigate } from "react-router-dom";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import PrintIcon from "@mui/icons-material/Print";
+import DownloadIcon from "@mui/icons-material/Download";
+import CloseIcon from "@mui/icons-material/Close";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import asbestosClearanceService from "../../services/asbestosClearanceService";
+import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
+import userService from "../../services/userService";
+import Header from "../../components/Header";
+import { tokens } from "../../theme";
+import performanceMonitor from "../../utils/performanceMonitor";
+
+const ClearanceReports = () => {
+  const theme = useTheme();
+  const colors = tokens;
+  const navigate = useNavigate();
+  const { clearanceId } = useParams();
+
+  const [clearance, setClearance] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [addReportDialog, setAddReportDialog] = useState(false);
+  const [editReportDialog, setEditReportDialog] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [addItemDialog, setAddItemDialog] = useState(false);
+  const [editItemDialog, setEditItemDialog] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [clearanceItems, setClearanceItems] = useState([]);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [form, setForm] = useState({
+    clearanceDate: "",
+    status: "in_progress",
+    LAA: "",
+    notes: "",
+  });
+  const [itemForm, setItemForm] = useState({
+    locationDescription: "",
+    materialDescription: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    performanceMonitor.startPageLoad("Clearance Reports");
+    fetchClearanceData();
+    fetchUsers();
+  }, [clearanceId]);
+
+  const fetchClearanceData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch clearance details
+      const clearanceResponse = await asbestosClearanceService.getById(
+        clearanceId
+      );
+      console.log("Clearance response:", clearanceResponse);
+      console.log("Project ID data:", clearanceResponse?.projectId);
+      setClearance(clearanceResponse);
+
+      // Fetch reports for this clearance
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      console.log("Reports response:", reportsResponse);
+      setReports(reportsResponse);
+
+      performanceMonitor.endPageLoad("Clearance Reports");
+    } catch (err) {
+      console.error("Error fetching clearance data:", err);
+      setError(err.message || "Failed to fetch clearance data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const usersResponse = await userService.getAll();
+      console.log("Users response:", usersResponse);
+      setUsers(usersResponse.data || []);
+    } catch (err) {
+      console.error("Error fetching users:", err);
+      // Don't set error here as it's not critical for the main functionality
+    }
+  };
+
+  const handleAddReport = async (e) => {
+    e.preventDefault();
+    try {
+      const selectedUser = users.find((user) => user._id === form.LAA);
+      const newReportData = {
+        clearanceId: clearanceId,
+        clearanceDate: form.clearanceDate,
+        status: form.status,
+        LAA: selectedUser
+          ? `${selectedUser.firstName} ${selectedUser.lastName}`
+          : form.LAA,
+        notes: form.notes,
+      };
+
+      const response = await asbestosClearanceReportService.create(
+        newReportData
+      );
+      console.log("New report created:", response);
+
+      // Refresh the reports list
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      setReports(reportsResponse);
+
+      setAddReportDialog(false);
+      setForm({
+        clearanceDate: "",
+        status: "in_progress",
+        LAA: "",
+        notes: "",
+      });
+    } catch (err) {
+      console.error("Error adding report:", err);
+      setError(err.message || "Failed to add report");
+    }
+  };
+
+  const handleEditReport = (report) => {
+    setSelectedReport(report);
+    // Find the user by name for editing
+    const user = users.find(
+      (u) => `${u.firstName} ${u.lastName}` === report.LAA
+    );
+    setForm({
+      clearanceDate: report.clearanceDate,
+      status: report.status,
+      LAA: user ? user._id : "",
+      notes: report.notes,
+    });
+    setEditReportDialog(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    try {
+      const selectedUser = users.find((user) => user._id === form.LAA);
+      const updateData = {
+        clearanceDate: form.clearanceDate,
+        status: form.status,
+        LAA: selectedUser
+          ? `${selectedUser.firstName} ${selectedUser.lastName}`
+          : form.LAA,
+        notes: form.notes,
+      };
+
+      await asbestosClearanceReportService.update(
+        selectedReport._id,
+        updateData
+      );
+
+      // Refresh the reports list
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      setReports(reportsResponse);
+
+      setEditReportDialog(false);
+      setSelectedReport(null);
+      setForm({
+        clearanceDate: "",
+        status: "in_progress",
+        LAA: "",
+        notes: "",
+      });
+    } catch (err) {
+      console.error("Error editing report:", err);
+      setError(err.message || "Failed to edit report");
+    }
+  };
+
+  const handleDeleteReport = async (reportId) => {
+    try {
+      await asbestosClearanceReportService.delete(reportId);
+
+      // Refresh the reports list
+      const reportsResponse =
+        await asbestosClearanceReportService.getByClearanceId(clearanceId);
+      setReports(reportsResponse);
+    } catch (err) {
+      console.error("Error deleting report:", err);
+      setError(err.message || "Failed to delete report");
+    }
+  };
+
+  const handlePrintReport = (report) => {
+    // TODO: Implement print functionality
+    console.log("Printing report:", report);
+  };
+
+  const handleDownloadReport = (report) => {
+    // TODO: Implement download functionality
+    console.log("Downloading report:", report);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "completed":
+        return theme.palette.success.main;
+      case "in_progress":
+        return theme.palette.info.main;
+      case "pending":
+        return theme.palette.warning.main;
+      case "failed":
+        return theme.palette.error.main;
+      default:
+        return theme.palette.grey[500];
+    }
+  };
+
+  const getReportTypeLabel = (type) => {
+    switch (type) {
+      case "clearance_certificate":
+        return "Clearance Certificate";
+      case "final_report":
+        return "Final Report";
+      case "interim_report":
+        return "Interim Report";
+      default:
+        return type;
+    }
+  };
+
+  // Clearance Item Handlers
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    try {
+      const newItemData = {
+        clearanceId: clearanceId,
+        locationDescription: itemForm.locationDescription,
+        materialDescription: itemForm.materialDescription,
+        photograph: photoPreview,
+        notes: itemForm.notes,
+      };
+
+      // TODO: Add service call to create clearance item
+      console.log("New item data:", newItemData);
+
+      setAddItemDialog(false);
+      setItemForm({
+        locationDescription: "",
+        materialDescription: "",
+        notes: "",
+      });
+      setPhotoPreview(null);
+    } catch (err) {
+      console.error("Error adding item:", err);
+      setError(err.message || "Failed to add item");
+    }
+  };
+
+  const handleEditItem = (item) => {
+    setSelectedItem(item);
+    setItemForm({
+      locationDescription: item.locationDescription,
+      materialDescription: item.materialDescription,
+      notes: item.notes,
+    });
+    setPhotoPreview(item.photograph);
+    setEditItemDialog(true);
+  };
+
+  const handleSaveEditItem = async (e) => {
+    e.preventDefault();
+    try {
+      const updateData = {
+        locationDescription: itemForm.locationDescription,
+        materialDescription: itemForm.materialDescription,
+        photograph: photoPreview,
+        notes: itemForm.notes,
+      };
+
+      // TODO: Add service call to update clearance item
+      console.log("Update item data:", updateData);
+
+      setEditItemDialog(false);
+      setSelectedItem(null);
+      setItemForm({
+        locationDescription: "",
+        materialDescription: "",
+        notes: "",
+      });
+      setPhotoPreview(null);
+    } catch (err) {
+      console.error("Error editing item:", err);
+      setError(err.message || "Failed to edit item");
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    try {
+      // TODO: Add service call to delete clearance item
+      console.log("Deleting item:", itemId);
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      setError(err.message || "Failed to delete item");
+    }
+  };
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      // Check file size (limit to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Photo file size must be less than 5MB");
+        return;
+      }
+
+      // Check file type
+      if (!file.type.startsWith("image/")) {
+        setError("Please select a valid image file");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPhotoPreview(e.target.result);
+        setError(null); // Clear any previous errors
+      };
+      reader.onerror = () => {
+        setError("Failed to read the photo file");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Detect if device is mobile/tablet
+  const isMobileDevice = () => {
+    return (
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      ) ||
+      (navigator.maxTouchPoints && navigator.maxTouchPoints > 2)
+    );
+  };
+
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box m="20px">
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate("/clearances/asbestos")}
+        sx={{ mb: 4 }}
+      >
+        Back to Clearances
+      </Button>
+
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb="20px"
+      >
+        <Box>
+          <Header
+            title="Clearance Items"
+            subtitle={`Project: ${
+              clearance?.projectId?.projectID || "Loading..."
+            }`}
+            secondarySubtitle={clearance?.projectId?.name || "Loading..."}
+          />
+        </Box>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setAddItemDialog(true)}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.common.white,
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Add Clearance Item
+          </Button>
+        </Box>
+      </Box>
+
+      {error && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
+
+      {/* Reports Table */}
+      <Box
+        m="40px 0 0 0"
+        height="75vh"
+        sx={{
+          "& .MuiDataGrid-root": {
+            border: "none",
+          },
+          "& .MuiDataGrid-cell": {
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-columnHeaders": {
+            backgroundColor: theme.palette.primary.main,
+            borderBottom: "none",
+          },
+          "& .MuiDataGrid-columnHeader": {
+            whiteSpace: "normal",
+            lineHeight: "1.2",
+            padding: "8px",
+          },
+          "& .MuiDataGrid-virtualScroller": {
+            backgroundColor: theme.palette.background.default,
+          },
+          "& .MuiDataGrid-footerContainer": {
+            borderTop: "none",
+            backgroundColor: theme.palette.primary.main,
+          },
+        }}
+      >
+        <DataGrid
+          rows={reports}
+          columns={[
+            {
+              field: "clearanceLocation",
+              headerName: "Location",
+              flex: 1,
+              minWidth: 150,
+              renderCell: (params) => {
+                return new Date(params.row.clearanceDate).toLocaleDateString();
+              },
+            },
+            {
+              field: "clearanceMaterial",
+              headerName: "Material Description",
+              flex: 1,
+              minWidth: 150,
+              renderCell: (params) => {
+                return new Date(params.row.clearanceDate).toLocaleDateString();
+              },
+            },
+            {
+              field: "itemPhoto",
+              headerName: "Item Photographs",
+              flex: 1,
+              minWidth: 150,
+              renderCell: (params) => {
+                return new Date(params.row.clearanceDate).toLocaleDateString();
+              },
+            },
+            {
+              field: "actions",
+              headerName: "Actions",
+              flex: 1.5,
+              minWidth: 200,
+              renderCell: ({ row }) => {
+                return (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleEditReport(row)}
+                      title="Edit Report"
+                      sx={{ color: theme.palette.primary.main }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handlePrintReport(row)}
+                      title="Print Report"
+                      sx={{ color: theme.palette.info.main }}
+                    >
+                      <PrintIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDownloadReport(row)}
+                      title="Download Report"
+                      sx={{ color: theme.palette.success.main }}
+                    >
+                      <DownloadIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDeleteReport(row._id)}
+                      title="Delete Report"
+                      sx={{ color: theme.palette.error.main }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                );
+              },
+            },
+          ]}
+          getRowId={(row) => row._id}
+          loading={loading}
+          disableRowSelectionOnClick
+          error={error}
+          components={{
+            NoRowsOverlay: () => (
+              <Box sx={{ p: 2, textAlign: "center" }}>No reports found</Box>
+            ),
+            ErrorOverlay: () => (
+              <Box sx={{ p: 2, textAlign: "center", color: "error.main" }}>
+                {error || "An error occurred"}
+              </Box>
+            ),
+          }}
+        />
+      </Box>
+
+      {/* Add Report Dialog */}
+      <Dialog
+        open={addReportDialog}
+        onClose={() => setAddReportDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add New Report</DialogTitle>
+        <form onSubmit={handleAddReport}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <TextField
+                label="Clearance Date"
+                type="date"
+                value={form.clearanceDate}
+                onChange={(e) =>
+                  setForm({ ...form, clearanceDate: e.target.value })
+                }
+                required
+                fullWidth
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+              <FormControl fullWidth required>
+                <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
+                <Select
+                  value={form.LAA}
+                  label="LAA (Licensed Asbestos Assessor)"
+                  onChange={(e) => setForm({ ...form, LAA: e.target.value })}
+                >
+                  {users.map((user) => (
+                    <MenuItem key={user._id} value={user._id}>
+                      {user.firstName} {user.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Notes"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                multiline
+                rows={3}
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAddReportDialog(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={!form.clearanceDate || !form.LAA}
+            >
+              Add Report
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Edit Report Dialog */}
+      <Dialog
+        open={editReportDialog}
+        onClose={() => setEditReportDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Edit Report</DialogTitle>
+        <form onSubmit={handleSaveEdit}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <TextField
+                label="Clearance Date"
+                type="date"
+                value={form.clearanceDate}
+                onChange={(e) =>
+                  setForm({ ...form, clearanceDate: e.target.value })
+                }
+                required
+                fullWidth
+                InputLabelProps={{
+                  shrink: true,
+                }}
+              />
+              <FormControl fullWidth required>
+                <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
+                <Select
+                  value={form.LAA}
+                  label="LAA (Licensed Asbestos Assessor)"
+                  onChange={(e) => setForm({ ...form, LAA: e.target.value })}
+                >
+                  {users.map((user) => (
+                    <MenuItem key={user._id} value={user._id}>
+                      {user.firstName} {user.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                label="Notes"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                multiline
+                rows={3}
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditReportDialog(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={!form.clearanceDate || !form.LAA}
+            >
+              Save Changes
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Add Clearance Item Dialog */}
+      <Dialog
+        open={addItemDialog}
+        onClose={() => setAddItemDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Add New Clearance Item</Typography>
+            <IconButton onClick={() => setAddItemDialog(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <Box component="form" onSubmit={handleAddItem}>
+          <DialogContent>
+            {error && (
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 2,
+                  backgroundColor: theme.palette.error.light,
+                  color: theme.palette.error.contrastText,
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="body2">{error}</Typography>
+              </Box>
+            )}
+            <Stack spacing={3}>
+              <TextField
+                label="Location Description"
+                value={itemForm.locationDescription}
+                onChange={(e) =>
+                  setItemForm({
+                    ...itemForm,
+                    locationDescription: e.target.value,
+                  })
+                }
+                required
+                fullWidth
+                multiline
+                rows={2}
+              />
+              <TextField
+                label="Material Description"
+                value={itemForm.materialDescription}
+                onChange={(e) =>
+                  setItemForm({
+                    ...itemForm,
+                    materialDescription: e.target.value,
+                  })
+                }
+                required
+                fullWidth
+                multiline
+                rows={2}
+              />
+              <Box>
+                <Typography variant="subtitle1" gutterBottom>
+                  Photograph
+                </Typography>
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {isMobileDevice() ? (
+                    <>
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        startIcon={<PhotoCameraIcon />}
+                        sx={{ mb: 2 }}
+                      >
+                        Take Photo (Camera)
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handlePhotoChange}
+                        />
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        startIcon={<PhotoCameraIcon />}
+                        sx={{ mb: 2 }}
+                      >
+                        Choose from Gallery
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          onChange={handlePhotoChange}
+                        />
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      component="label"
+                      startIcon={<PhotoCameraIcon />}
+                      sx={{ mb: 2 }}
+                    >
+                      Choose Photo
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                      />
+                    </Button>
+                  )}
+                </Box>
+                {photoPreview && (
+                  <Box sx={{ mt: 2 }}>
+                    <img
+                      src={photoPreview}
+                      alt="Preview"
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "200px",
+                        borderRadius: "4px",
+                      }}
+                    />
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      onClick={() => setPhotoPreview(null)}
+                      sx={{ mt: 1 }}
+                    >
+                      Remove Photo
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+              <TextField
+                label="Notes"
+                value={itemForm.notes}
+                onChange={(e) =>
+                  setItemForm({ ...itemForm, notes: e.target.value })
+                }
+                fullWidth
+                multiline
+                rows={3}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAddItemDialog(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={
+                !itemForm.locationDescription || !itemForm.materialDescription
+              }
+            >
+              Add Item
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      {/* Edit Clearance Item Dialog */}
+      <Dialog
+        open={editItemDialog}
+        onClose={() => setEditItemDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Edit Clearance Item</Typography>
+            <IconButton onClick={() => setEditItemDialog(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <Box component="form" onSubmit={handleSaveEditItem}>
+          <DialogContent>
+            {error && (
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 2,
+                  backgroundColor: theme.palette.error.light,
+                  color: theme.palette.error.contrastText,
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="body2">{error}</Typography>
+              </Box>
+            )}
+            <Stack spacing={3}>
+              <TextField
+                label="Location Description"
+                value={itemForm.locationDescription}
+                onChange={(e) =>
+                  setItemForm({
+                    ...itemForm,
+                    locationDescription: e.target.value,
+                  })
+                }
+                required
+                fullWidth
+                multiline
+                rows={2}
+              />
+              <TextField
+                label="Material Description"
+                value={itemForm.materialDescription}
+                onChange={(e) =>
+                  setItemForm({
+                    ...itemForm,
+                    materialDescription: e.target.value,
+                  })
+                }
+                required
+                fullWidth
+                multiline
+                rows={2}
+              />
+              <Box>
+                <Typography variant="subtitle1" gutterBottom>
+                  Photograph
+                </Typography>
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {isMobileDevice() ? (
+                    <>
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        startIcon={<PhotoCameraIcon />}
+                        sx={{ mb: 2 }}
+                      >
+                        Take Photo (Camera)
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handlePhotoChange}
+                        />
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        startIcon={<PhotoCameraIcon />}
+                        sx={{ mb: 2 }}
+                      >
+                        Choose from Gallery
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          onChange={handlePhotoChange}
+                        />
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      component="label"
+                      startIcon={<PhotoCameraIcon />}
+                      sx={{ mb: 2 }}
+                    >
+                      Choose Photo
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                      />
+                    </Button>
+                  )}
+                </Box>
+                {photoPreview && (
+                  <Box sx={{ mt: 2 }}>
+                    <img
+                      src={photoPreview}
+                      alt="Preview"
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "200px",
+                        borderRadius: "4px",
+                      }}
+                    />
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      onClick={() => setPhotoPreview(null)}
+                      sx={{ mt: 1 }}
+                    >
+                      Remove Photo
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+              <TextField
+                label="Notes"
+                value={itemForm.notes}
+                onChange={(e) =>
+                  setItemForm({ ...itemForm, notes: e.target.value })
+                }
+                fullWidth
+                multiline
+                rows={3}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditItemDialog(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={
+                !itemForm.locationDescription || !itemForm.materialDescription
+              }
+            >
+              Save Changes
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default ClearanceReports;

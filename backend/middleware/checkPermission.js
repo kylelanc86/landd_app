@@ -9,13 +9,18 @@ const checkPermission = (requiredPermissions = [], requireAll = false) => {
         return res.status(401).json({ message: 'Unauthorized' });
       }
 
+      // Convert string to array if needed
+      const permissionsArray = Array.isArray(requiredPermissions) 
+        ? requiredPermissions 
+        : [requiredPermissions];
+
       // If no permissions are required, allow access
-      if (requiredPermissions.length === 0) {
+      if (permissionsArray.length === 0) {
         return next();
       }
 
       // Filter out non-restricted permissions
-      const restrictedPermissions = requiredPermissions.filter(
+      const restrictedPermissions = permissionsArray.filter(
         permission => Object.keys(PERMISSIONS).includes(permission)
       );
 

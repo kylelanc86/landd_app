@@ -82,7 +82,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
   const [showText, setShowText] = useState(!isCollapsed);
 
   const isActive =
-    to === "/asbestos-assessment" || to === "/asbestos-assessment/residential"
+    to === "/asbestos-assessment"
       ? location.pathname === to
       : location.pathname === to || location.pathname.startsWith(`${to}/`);
 
@@ -110,7 +110,8 @@ const Item = ({ title, to, icon, isCollapsed }) => {
               display: "flex",
               justifyContent: "center",
               width: "100%",
-              paddingLeft: "20px",
+              paddingLeft: "10px",
+              paddingRight: "10px",
             }}
           >
             {icon}
@@ -150,7 +151,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
           display: "flex",
           alignItems: "center",
           justifyContent: isCollapsed ? "center" : "flex-start",
-          padding: isCollapsed ? "2px 0" : "4px 0",
+          padding: isCollapsed ? "2px 0" : "0 0",
           textAlign: isCollapsed ? "center" : "left",
         }}
       >
@@ -167,7 +168,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
                 : tokens.grey[700],
               whiteSpace: "normal",
               wordBreak: "break-word",
-              fontSize: "0.9rem",
+              fontSize: "0.8rem",
               lineHeight: 1.2,
               textAlign: "left",
             }}
@@ -415,42 +416,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 textAlign: "left",
               }}
             >
-              AIR MONITORING
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
-
-          <PermissionGate requiredPermissions={["jobs.view"]}>
-            <Item
-              title="Site Work"
-              to="/air-monitoring"
-              icon={<AirOutlinedIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-
-          <PermissionGate requiredPermissions={["jobs.view"]}>
-            <Item
-              title="Calibrations"
-              to="/calibrations"
-              icon={<ScienceIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "12px 10px 0px 10px",
-                fontSize: "1rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-              }}
-            >
               SURVEYS
             </Typography>
           ) : (
@@ -460,14 +425,58 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
           <PermissionGate requiredPermissions={["asbestos.view"]}>
             <Item
               title="Asbestos Assessment"
-              to="/asbestos-assessment"
+              to="/surveys/asbestos"
+              icon={<HomeIcon />}
+              isCollapsed={isCollapsed}
+            />
+            <Item
+              title="Lead Assessment"
+              to="/surveys/lead"
+              icon={<HomeIcon />}
+              isCollapsed={isCollapsed}
+            />
+            <Item
+              title="Mould Assessment"
+              to="/surveys/mould"
+              icon={<HomeIcon />}
+              isCollapsed={isCollapsed}
+            />
+          </PermissionGate>
+          {!isCollapsed ? (
+            <Typography
+              variant="h3"
+              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+              sx={{
+                m: "12px 10px 0px 10px",
+                fontSize: "1rem",
+                fontWeight: "bold",
+                opacity: 0.8,
+                textAlign: "left",
+              }}
+            >
+              CLEARANCES
+            </Typography>
+          ) : (
+            <SectionDivider isCollapsed={isCollapsed} />
+          )}
+
+          <PermissionGate requiredPermissions={["asbestos.view"]}>
+            <Item
+              title="Asbestos Clearance"
+              to="/clearances/asbestos"
               icon={<AssessmentIcon />}
               isCollapsed={isCollapsed}
             />
             <Item
-              title="Residential Assessment"
-              to="/residential-assessment"
-              icon={<HomeIcon />}
+              title="Lead Clearance"
+              to="/clearances/lead"
+              icon={<AssessmentIcon />}
+              isCollapsed={isCollapsed}
+            />
+            <Item
+              title="Mould Validation"
+              to="/clearances/mould"
+              icon={<AssessmentIcon />}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>
@@ -484,7 +493,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 textAlign: "left",
               }}
             >
-              FIBRE IDENTIFICATION
+              LABORATORY
             </Typography>
           ) : (
             <SectionDivider isCollapsed={isCollapsed} />
@@ -492,15 +501,27 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
 
           <PermissionGate requiredPermissions={["fibre.view"]}>
             <Item
-              title="Analysis"
-              to="/fibreID/analysis"
+              title="Air Monitoring"
+              to="/air-monitoring"
+              icon={<AirOutlinedIcon />}
+              isCollapsed={isCollapsed}
+            />
+            <Item
+              title="Fibre ID Analysis"
+              to="/fibreID"
               icon={<ScienceIcon />}
               isCollapsed={isCollapsed}
             />
             <Item
               title="Calibrations"
-              to="/fibreID/calibrations"
-              icon={<AssessmentIcon />}
+              to="/calibrations"
+              icon={<ScienceIcon />}
+              isCollapsed={isCollapsed}
+            />
+            <Item
+              title="Laboratory Equipment"
+              to="/laboratory-equipment"
+              icon={<ScienceIcon />}
               isCollapsed={isCollapsed}
             />
           </PermissionGate>

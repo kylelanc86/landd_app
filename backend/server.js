@@ -17,6 +17,9 @@ const timesheetRoutes = require('./routes/timesheets');
 const calendarEntriesRouter = require('./routes/calendarEntries');
 const airPumpRoutes = require('./routes/airPumps');
 const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
+const equipmentRoutes = require('./routes/equipment');
+const asbestosClearanceRoutes = require('./routes/asbestosClearances');
+const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
 
 // Load environment variables
 dotenv.config();
@@ -29,8 +32,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:3000',
-      'https://landd-app-frontend.onrender.com',
-      'https://air-monitoring-frontend.onrender.com',
+
       'https://landd-app-frontend1.onrender.com',
       'https://app.landd.com.au'
     ];
@@ -120,6 +122,9 @@ connectDB()
     app.use('/api/calendar-entries', calendarEntriesRouter);
     app.use('/api/air-pumps', airPumpRoutes);
     app.use('/api/air-pump-calibrations', airPumpCalibrationRoutes);
+    app.use('/api/equipment', equipmentRoutes);
+    app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
+    app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
 
     // Error handling middleware
     app.use((err, req, res, next) => {

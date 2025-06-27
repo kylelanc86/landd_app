@@ -1,6 +1,6 @@
 import api from './axios';
 
-const BASE_URL = '/api/air-pump-calibrations';
+const BASE_URL = '/air-pump-calibrations';
 
 export const airPumpCalibrationService = {
   // Get all calibrations for a specific pump

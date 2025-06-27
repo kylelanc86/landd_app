@@ -420,23 +420,31 @@ const Timesheets = () => {
       let title = "";
       let backgroundColor = "";
       let borderColor = "";
+      let textColor = "";
+      let className = "";
 
       if (entry.isBreak) {
         title = `Break${entry.description ? ` - ${entry.description}` : ""}`;
-        backgroundColor = theme.palette.warning.main;
+        backgroundColor = `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`;
         borderColor = theme.palette.warning.dark;
+        textColor = theme.palette.warning.contrastText;
+        className = "break-event";
       } else if (entry.isAdminWork) {
         title = `Admin Work${
           entry.description ? ` - ${entry.description}` : ""
         }`;
-        backgroundColor = theme.palette.info.main;
+        backgroundColor = `linear-gradient(135deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%)`;
         borderColor = theme.palette.info.dark;
+        textColor = theme.palette.info.contrastText;
+        className = "admin-event";
       } else {
         title = `${projectName} - ${
           entry.projectInputType?.replace("_", " ") || ""
         }${entry.description ? `, ${entry.description}` : ""}`;
-        backgroundColor = theme.palette.primary.main;
+        backgroundColor = `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`;
         borderColor = theme.palette.primary.dark;
+        textColor = theme.palette.primary.contrastText;
+        className = "project-event";
       }
 
       const event = {
@@ -446,6 +454,8 @@ const Timesheets = () => {
         end: endDateTime,
         backgroundColor,
         borderColor,
+        textColor,
+        className,
         extendedProps: {
           description: entry.description,
           projectId: projectId,
@@ -584,7 +594,14 @@ const Timesheets = () => {
         display="flex"
         justifyContent="space-between"
         alignItems="center"
-        mb="20px"
+        mb={3}
+        sx={{
+          p: 2,
+          backgroundColor: theme.palette.background.paper,
+          borderRadius: 2,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          border: `1px solid ${theme.palette.divider}`,
+        }}
       >
         <Header title="Daily Timesheet" />
         <Box display="flex" gap={2}>
@@ -592,10 +609,18 @@ const Timesheets = () => {
             variant="contained"
             onClick={() => navigate("/timesheets/monthly")}
             sx={{
-              backgroundColor: theme.palette.primary.main,
-              color: theme.palette.common.white,
+              backgroundColor: theme.palette.secondary.main,
+              color: theme.palette.secondary.contrastText,
+              borderRadius: "12px",
+              fontWeight: 600,
+              textTransform: "none",
+              px: 3,
+              py: 1.5,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
               "&:hover": {
-                backgroundColor: theme.palette.primary.dark,
+                backgroundColor: theme.palette.secondary.dark,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
+                transform: "translateY(-1px)",
               },
             }}
           >
@@ -606,32 +631,61 @@ const Timesheets = () => {
 
       <Paper
         elevation={3}
-        sx={{ p: 2, backgroundColor: theme.palette.background.alt }}
+        sx={{
+          p: 3,
+          backgroundColor: theme.palette.background.alt,
+          borderRadius: 3,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
+          border: `1px solid ${theme.palette.divider}`,
+        }}
       >
         <Box
           display="flex"
           justifyContent="space-between"
           alignItems="center"
-          mb={2}
+          mb={3}
         >
           <Box display="flex" alignItems="center" gap={2}>
-            <IconButton onClick={() => handleDayChange("prev")}>
+            <IconButton
+              onClick={() => handleDayChange("prev")}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                color: theme.palette.primary.contrastText,
+                "&:hover": {
+                  backgroundColor: theme.palette.primary.dark,
+                },
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              }}
+            >
               <ArrowBackIosNewIcon />
             </IconButton>
             <Typography
-              variant="h6"
+              variant="h4"
               sx={{
-                fontSize: "1.1rem",
-                fontWeight: "500",
+                fontWeight: 700,
+                color: theme.palette.primary.main,
+                textShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                minWidth: "300px",
+                textAlign: "center",
               }}
             >
               {format(selectedDate, "EEEE, MMMM d, yyyy")}
             </Typography>
-            <IconButton onClick={() => handleDayChange("next")}>
+            <IconButton
+              onClick={() => handleDayChange("next")}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                color: theme.palette.primary.contrastText,
+                "&:hover": {
+                  backgroundColor: theme.palette.primary.dark,
+                },
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              }}
+            >
               <ArrowForwardIosIcon />
             </IconButton>
           </Box>
-          <Box display="flex" gap={1}>
+          <Box display="flex" gap={2}>
             <Button
               variant={
                 timesheetStatus === "finalised" ? "contained" : "outlined"
@@ -643,17 +697,52 @@ const Timesheets = () => {
                   timesheetStatus === "finalised" ? "incomplete" : "finalised"
                 )
               }
+              sx={{
+                borderRadius: "12px",
+                fontWeight: 600,
+                textTransform: "none",
+                px: 3,
+                py: 1,
+                boxShadow:
+                  timesheetStatus === "finalised"
+                    ? "0 4px 12px rgba(76, 175, 80, 0.3)"
+                    : "none",
+                "&:hover": {
+                  boxShadow:
+                    timesheetStatus === "finalised"
+                      ? "0 6px 16px rgba(76, 175, 80, 0.4)"
+                      : "0 2px 8px rgba(0,0,0,0.1)",
+                },
+              }}
             >
               {timesheetStatus === "finalised" ? "Unfinalise" : "Finalise"}
             </Button>
             <Button
               variant={timesheetStatus === "absent" ? "contained" : "outlined"}
+              color="error"
               startIcon={<EventBusyIcon />}
               onClick={() =>
                 handleStatusUpdate(
                   timesheetStatus === "absent" ? "incomplete" : "absent"
                 )
               }
+              sx={{
+                borderRadius: "12px",
+                fontWeight: 600,
+                textTransform: "none",
+                px: 3,
+                py: 1,
+                boxShadow:
+                  timesheetStatus === "absent"
+                    ? "0 4px 12px rgba(244, 67, 54, 0.3)"
+                    : "none",
+                "&:hover": {
+                  boxShadow:
+                    timesheetStatus === "absent"
+                      ? "0 6px 16px rgba(244, 67, 54, 0.4)"
+                      : "0 2px 8px rgba(0,0,0,0.1)",
+                },
+              }}
             >
               {timesheetStatus === "absent" ? "Mark Present" : "Mark Absent"}
             </Button>
@@ -665,35 +754,117 @@ const Timesheets = () => {
             height: "600px",
             "& .fc": {
               fontFamily: theme.typography.fontFamily,
+              backgroundColor: theme.palette.background.paper,
+              borderRadius: 2,
+              overflow: "hidden",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
             },
             "& .fc-toolbar": {
-              backgroundColor: theme.palette.background.paper,
-              borderBottom: `1px solid ${theme.palette.divider}`,
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText,
+              padding: "12px 16px",
+              borderBottom: `2px solid ${theme.palette.primary.dark}`,
             },
             "& .fc-toolbar-title": {
-              color: theme.palette.text.primary,
+              fontSize: "1.25rem",
               fontWeight: 600,
             },
             "& .fc-button": {
-              backgroundColor: theme.palette.primary.main,
-              borderColor: theme.palette.primary.main,
-              color: theme.palette.primary.contrastText,
+              backgroundColor: theme.palette.secondary.main,
+              borderColor: theme.palette.secondary.main,
+              color: theme.palette.secondary.contrastText,
+              fontWeight: 500,
+              textTransform: "none",
+              borderRadius: "8px",
+              padding: "8px 16px",
               "&:hover": {
-                backgroundColor: "primary.dark !important",
-                borderColor: "primary.dark !important",
+                backgroundColor: theme.palette.secondary.dark,
+                borderColor: theme.palette.secondary.dark,
+              },
+              "&:focus": {
+                boxShadow: `0 0 0 2px ${theme.palette.secondary.light}`,
               },
             },
             "& .fc-timegrid-slot": {
-              borderColor: "divider",
+              borderColor: theme.palette.divider,
+              backgroundColor: theme.palette.background.default,
+            },
+            "& .fc-timegrid-slot-label": {
+              backgroundColor: theme.palette.primary.light,
+              color: theme.palette.primary.contrastText,
+              fontWeight: 600,
+              fontSize: "0.875rem",
+              borderColor: theme.palette.primary.main,
+            },
+            "& .fc-timegrid-axis": {
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText,
+              fontWeight: 600,
+              borderColor: theme.palette.primary.dark,
+            },
+            "& .fc-timegrid-col-events": {
+              backgroundColor: theme.palette.background.paper,
             },
             "& .fc-event": {
-              cursor: "pointer",
+              borderRadius: "6px",
+              border: "none",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+              transition: "all 0.2s ease-in-out",
               "&:hover": {
-                opacity: 0.9,
+                boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
+                transform: "translateY(-1px)",
               },
             },
+            "& .fc-event-main": {
+              padding: "4px 8px",
+              fontSize: "0.875rem",
+              fontWeight: 500,
+            },
+            "& .fc-event-time": {
+              fontWeight: 600,
+              fontSize: "0.75rem",
+            },
+            "& .fc-event-title": {
+              fontSize: "0.875rem",
+            },
+            "& .fc-now-indicator-line": {
+              borderColor: theme.palette.error.main,
+              borderWidth: "2px",
+            },
+            "& .fc-now-indicator-arrow": {
+              borderColor: theme.palette.error.main,
+              borderWidth: "4px",
+            },
+            "& .fc-highlight": {
+              backgroundColor: theme.palette.primary.light,
+              opacity: 0.3,
+              borderRadius: "4px",
+            },
             "& .weekend-day": {
+              backgroundColor: theme.palette.grey[50],
+            },
+            "& .fc-timegrid-slot-minor": {
+              borderColor: theme.palette.divider,
+            },
+            "& .fc-timegrid-slot-minor .fc-timegrid-slot-label": {
               backgroundColor: theme.palette.grey[100],
+              color: theme.palette.text.secondary,
+              fontSize: "0.75rem",
+            },
+            "& .break-event": {
+              background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%) !important`,
+              borderLeft: `4px solid ${theme.palette.warning.dark} !important`,
+              boxShadow: `0 2px 8px ${theme.palette.warning.main}40 !important`,
+            },
+            "& .admin-event": {
+              background: `linear-gradient(135deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%) !important`,
+              borderLeft: `4px solid ${theme.palette.info.dark} !important`,
+              boxShadow: `0 2px 8px ${theme.palette.info.main}40 !important`,
+            },
+            "& .project-event": {
+              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%) !important`,
+              borderLeft: `4px solid ${theme.palette.primary.dark} !important`,
+              boxShadow: `0 2px 8px ${theme.palette.primary.main}40 !important`,
             },
           }}
         >
@@ -765,9 +936,44 @@ const Timesheets = () => {
               };
 
               return (
-                <Box sx={{ p: 0.5 }}>
-                  <Typography variant="body2" noWrap>
+                <Box
+                  sx={{
+                    p: 1,
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    "& .event-title": {
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      lineHeight: 1.2,
+                      color: theme.palette.common.white,
+                      textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                    },
+                    "& .event-subtitle": {
+                      fontSize: "0.7rem",
+                      opacity: 0.9,
+                      marginTop: "2px",
+                    },
+                    "& .event-time": {
+                      fontSize: "0.65rem",
+                      opacity: 0.8,
+                      marginTop: "2px",
+                      fontWeight: 500,
+                    },
+                  }}
+                >
+                  <Typography className="event-title" noWrap>
                     {formatEventContent()}
+                  </Typography>
+                  {eventInfo.event.extendedProps.description && (
+                    <Typography className="event-subtitle" noWrap>
+                      {eventInfo.event.extendedProps.description}
+                    </Typography>
+                  )}
+                  <Typography className="event-time">
+                    {format(eventInfo.event.start, "HH:mm")} -{" "}
+                    {format(eventInfo.event.end, "HH:mm")}
                   </Typography>
                 </Box>
               );

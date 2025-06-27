@@ -25,6 +25,12 @@ const PERMISSIONS = {
   'calibrations.edit': 'Edit calibrations',
   'calibrations.delete': 'Delete calibrations',
   
+  // Equipment permissions
+  'equipment.view': 'View equipment',
+  'equipment.create': 'Create equipment',
+  'equipment.edit': 'Edit equipment',
+  'equipment.delete': 'Delete equipment',
+  
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
@@ -47,6 +53,10 @@ const ROLE_PERMISSIONS = {
     'calibrations.create',
     'calibrations.edit',
     'calibrations.delete',
+    'equipment.view',
+    'equipment.create',
+    'equipment.edit',
+    'equipment.delete',
     'invoices.approve',
     'timesheets.approve',
   ],
@@ -61,6 +71,9 @@ const ROLE_PERMISSIONS = {
     'calibrations.view',
     'calibrations.create',
     'calibrations.edit',
+    'equipment.view',
+    'equipment.create',
+    'equipment.edit',
   ], // Employees can view, create and edit projects but not change status
 };
 

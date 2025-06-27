@@ -167,29 +167,60 @@ const MonthlyTimesheet = () => {
         alignItems="center"
         mb="20px"
       >
-        <Header
-          title="Monthly Timesheet"
-        />
+        <Header title="Monthly Timesheet" />
       </Box>
 
       <Paper
         elevation={3}
-        sx={{ p: 2, backgroundColor: theme.palette.background.alt }}
+        sx={{
+          p: 3,
+          backgroundColor: theme.palette.background.alt,
+          borderRadius: 3,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
+          border: `1px solid ${theme.palette.divider}`,
+        }}
       >
         <Box
           display="flex"
           justifyContent="space-between"
           alignItems="center"
-          mb={2}
+          mb={3}
         >
           <Box display="flex" alignItems="center" gap={2}>
-            <IconButton onClick={() => handleMonthChange("prev")}>
+            <IconButton
+              onClick={() => handleMonthChange("prev")}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                color: theme.palette.primary.contrastText,
+                "&:hover": {
+                  backgroundColor: theme.palette.primary.dark,
+                },
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              }}
+            >
               <ArrowBackIosNewIcon />
             </IconButton>
-            <Typography variant="h5">
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 700,
+                color: theme.palette.primary.main,
+                textShadow: "0 1px 2px rgba(0,0,0,0.1)",
+              }}
+            >
               {format(selectedDate, "MMMM yyyy")}
             </Typography>
-            <IconButton onClick={() => handleMonthChange("next")}>
+            <IconButton
+              onClick={() => handleMonthChange("next")}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                color: theme.palette.primary.contrastText,
+                "&:hover": {
+                  backgroundColor: theme.palette.primary.dark,
+                },
+                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              }}
+            >
               <ArrowForwardIosIcon />
             </IconButton>
           </Box>
@@ -201,12 +232,16 @@ const MonthlyTimesheet = () => {
             <Grid item xs={12 / 7} key={day}>
               <Box
                 sx={{
-                  p: 1,
+                  p: 2,
                   textAlign: "center",
-                  fontWeight: "bold",
+                  fontWeight: 700,
                   backgroundColor: theme.palette.primary.main,
-                  color: theme.palette.common.white,
-                  borderRadius: "4px 4px 0 0",
+                  color: theme.palette.primary.contrastText,
+                  borderRadius: "12px 12px 0 0",
+                  fontSize: "1rem",
+                  textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+                  borderBottom: `3px solid ${theme.palette.primary.dark}`,
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
                 }}
               >
                 {day}
@@ -220,62 +255,93 @@ const MonthlyTimesheet = () => {
               <Box
                 onClick={() => day && handleDayClick(day)}
                 sx={{
-                  p: 1,
-                  height: "100px",
-                  border: "1px solid",
-                  borderColor: "divider",
-                  borderRadius: "0 0 4px 4px",
+                  p: 1.5,
+                  height: "120px",
+                  border: "2px solid",
+                  borderColor: day ? theme.palette.divider : "transparent",
+                  borderRadius: "0 0 12px 12px",
                   cursor: day ? "pointer" : "default",
                   backgroundColor: day
                     ? day.getDay() === 0 || day.getDay() === 6
                       ? theme.palette.primary.light
-                      : "inherit"
-                    : "inherit",
+                      : theme.palette.background.paper
+                    : "transparent",
+                  transition: "all 0.2s ease-in-out",
+                  position: "relative",
+                  overflow: "hidden",
                   "&:hover": {
                     backgroundColor: day
                       ? theme.palette.action.hover
-                      : "inherit",
+                      : "transparent",
+                    transform: day ? "translateY(-2px)" : "none",
+                    boxShadow: day ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
                   },
+                  "&::before":
+                    day && isToday(day)
+                      ? {
+                          content: '""',
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: "4px",
+                          backgroundColor: theme.palette.error.main,
+                          borderRadius: "12px 12px 0 0",
+                        }
+                      : {},
                 }}
               >
                 {day && (
                   <>
                     <Typography
-                      variant="body2"
+                      variant="h6"
                       sx={{
-                        fontWeight: isToday(day) ? "bold" : "normal",
+                        fontWeight: isToday(day) ? 800 : 600,
                         color: isToday(day)
-                          ? theme.palette.primary.main
+                          ? theme.palette.error.main
                           : day.getDay() === 0 || day.getDay() === 6
-                          ? theme.palette.common.white
-                          : "inherit",
+                          ? theme.palette.primary.contrastText
+                          : theme.palette.text.primary,
+                        fontSize: "1.1rem",
+                        textAlign: "center",
+                        mb: 1,
+                        textShadow: isToday(day)
+                          ? "0 1px 2px rgba(0,0,0,0.2)"
+                          : "none",
                       }}
                     >
                       {format(day, "d")}
                     </Typography>
                     {getTimesheetStatus(day) && (
-                      <Chip
-                        size="small"
-                        label={getTimesheetStatus(day)}
-                        color={
-                          getTimesheetStatus(day) === "finalised"
-                            ? "success"
-                            : getTimesheetStatus(day) === "absent"
-                            ? "error"
-                            : "default"
-                        }
-                        sx={{
-                          mt: 1,
-                          backgroundColor:
-                            day.getDay() === 0 || day.getDay() === 6
-                              ? theme.palette.common.white
-                              : undefined,
-                          color:
-                            day.getDay() === 0 || day.getDay() === 6
-                              ? theme.palette.primary.main
-                              : undefined,
-                        }}
-                      />
+                      <Box sx={{ display: "flex", justifyContent: "center" }}>
+                        <Chip
+                          size="small"
+                          label={getTimesheetStatus(day)}
+                          color={
+                            getTimesheetStatus(day) === "finalised"
+                              ? "success"
+                              : getTimesheetStatus(day) === "absent"
+                              ? "error"
+                              : "warning"
+                          }
+                          sx={{
+                            fontSize: "0.7rem",
+                            fontWeight: 600,
+                            backgroundColor:
+                              day.getDay() === 0 || day.getDay() === 6
+                                ? theme.palette.common.white
+                                : undefined,
+                            color:
+                              day.getDay() === 0 || day.getDay() === 6
+                                ? theme.palette.primary.main
+                                : undefined,
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                            "& .MuiChip-label": {
+                              px: 1,
+                            },
+                          }}
+                        />
+                      </Box>
                     )}
                   </>
                 )}

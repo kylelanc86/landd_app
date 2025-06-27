@@ -31,9 +31,8 @@ import MicroscopePage from "./scenes/calibrations/air-mon-calibrations/pages/Mic
 import AcetoneVaporiserPage from "./scenes/calibrations/air-mon-calibrations/pages/AcetoneVaporiserPage";
 import GraticulePage from "./scenes/calibrations/air-mon-calibrations/pages/GraticulePage";
 import PrimaryFlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/PrimaryFlowmeterPage";
-import EquipmentList from "./scenes/calibrations/air-mon-calibrations/pages/EquipmentList";
-import AnalysisPage from "./scenes/fibre/pages/AnalysisPage";
-import CalibrationsFibreID from "./scenes/calibrations/fibre-id-calibrations/index";
+import EquipmentList from "./scenes/calibrations/EquipmentList.jsx";
+import FibreIdAnalysis from "./scenes/fibreID/AnalysisPage.jsx";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
@@ -45,14 +44,33 @@ const EditSample = lazy(() => import("./scenes/air-monitoring/edit-sample"));
 const Analysis = lazy(() => import("./scenes/air-monitoring/analysis"));
 const Users = lazy(() => import("./scenes/users"));
 const Profile = lazy(() => import("./scenes/profile"));
-const AsbestosAssessment = lazy(() => import("./scenes/asbestos-assessment"));
-const ResidentialAssessment = lazy(() =>
-  import("./scenes/asbestos-assessment/ResidentialAssessment")
+const AsbestosAssessment = lazy(() =>
+  import("./scenes/surveys/asbestos/AsbestosAssessment")
 );
+const AsbestosClearance = lazy(() =>
+  import("./scenes/clearances/AsbestosClearanceList")
+);
+
+const ClearanceReports = lazy(() =>
+  import("./scenes/clearances/ClearanceReportItems")
+);
+
 const AssessmentSamples = lazy(() =>
-  import("./scenes/asbestos-assessment/assessment-samples")
+  import("./scenes/surveys/asbestos/assessment-samples")
 );
 const Clients = lazy(() => import("./scenes/clients"));
+
+// New lazy loaded components for missing pages
+const LeadAssessment = lazy(() =>
+  import("./scenes/surveys/lead/LeadAssessment")
+);
+const MouldAssessment = lazy(() =>
+  import("./scenes/surveys/mould/MouldAssessment")
+);
+const LeadClearance = lazy(() => import("./scenes/clearances/LeadClearance"));
+const MouldValidation = lazy(() =>
+  import("./scenes/clearances/MouldValidation")
+);
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -62,7 +80,9 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <AuthProvider>
-          <BrowserRouter>
+          <BrowserRouter
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
@@ -243,18 +263,7 @@ function App() {
                             </PermissionRoute>
                           }
                         />
-                        <Route
-                          path="/asbestos-assessment/residential"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["asbestos.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <ResidentialAssessment />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
+
                         <Route
                           path="/asbestos-assessment/samples"
                           element={
@@ -263,6 +272,114 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <AssessmentSamples />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosAssessment />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys/asbestos"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosAssessment />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys/lead"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <LeadAssessment />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys/mould"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <MouldAssessment />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances/asbestos"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosClearance />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances/lead"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <LeadClearance />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances/mould"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <MouldValidation />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances/:id/details"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosClearance />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances/:clearanceId/reports"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ClearanceReports />
                               </Suspense>
                             </PermissionRoute>
                           }
@@ -318,7 +435,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/air-mon-calibrations/pump/:pumpId"
+                          path="/calibrations/pump/:pumpId"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -388,7 +505,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/equipment-list"
+                          path="/laboratory-equipment"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -398,23 +515,13 @@ function App() {
                           }
                         />
                         <Route
-                          path="/fibreID/analysis"
+                          path="/fibreID"
                           element={
                             <PermissionRoute
                               requiredPermissions={["fibre.view"]}
                             >
-                              <AnalysisPage />
+                              <FibreIdAnalysis />
                             </PermissionRoute>
-                          }
-                        />
-                        <Route
-                          path="/fibreID/calibrations"
-                          element={
-                            <ProtectedRoute
-                              requiredPermissions={["calibrations.view"]}
-                            >
-                              <CalibrationsFibreID />
-                            </ProtectedRoute>
                           }
                         />
                       </Routes>

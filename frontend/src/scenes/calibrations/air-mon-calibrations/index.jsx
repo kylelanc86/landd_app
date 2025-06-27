@@ -23,6 +23,9 @@ import MicroscopeCalibration from "./widgets/MicroscopeCalibration";
 import AcetoneVaporiser from "./widgets/AcetoneVaporiser";
 import GraticuleCalibration from "./widgets/GraticuleCalibration";
 import PrimaryFlowmeter from "./widgets/PrimaryFlowmeter";
+import PureAsbestos from "./widgets/PureAsbestos";
+import RiLiquid from "./widgets/RiLiquid";
+import Sieves from "./widgets/Sieves";
 
 const Calibrations = () => {
   const navigate = useNavigate();
@@ -35,7 +38,10 @@ const Calibrations = () => {
         alignItems="center"
         mb="20px"
       >
-        <Header title="Equipment Calibrations" subtitle="Air Monitoring" />
+        <Header
+          title="Equipment Calibrations"
+          subtitle="Air Monitoring & Fibre ID Equipment Calibrations"
+        />
         <Button
           variant="contained"
           startIcon={<ListAltIcon />}
@@ -95,6 +101,24 @@ const Calibrations = () => {
           <PrimaryFlowmeter
             nextCalibrationDue="2024-04-15"
             viewCalibrationsPath="/calibrations/primary-flowmeter"
+          />
+        </Grid>
+        <Grid item xs={12} md={6} lg={4}>
+          <PureAsbestos
+            nextCalibrationDue="2024-04-20"
+            viewCalibrationsPath="/calibrations/pure-asbestos"
+          />
+        </Grid>
+        <Grid item xs={12} md={6} lg={4}>
+          <RiLiquid
+            nextCalibrationDue="2024-04-25"
+            viewCalibrationsPath="/calibrations/ri-liquid"
+          />
+        </Grid>
+        <Grid item xs={12} md={6} lg={4}>
+          <Sieves
+            nextCalibrationDue="2024-04-30"
+            viewCalibrationsPath="/calibrations/sieves"
           />
         </Grid>
       </Grid>

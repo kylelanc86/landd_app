@@ -40,7 +40,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { useNavigate, useParams } from "react-router-dom";
 import { airPumpCalibrationService } from "../../../../services/airPumpCalibrationService";
-import { airPumpService } from "../../../../services/airPumpService";
+import airPumpService from "../../../../services/airPumpService";
 
 const AirPumpCalibrationPage = () => {
   const theme = useTheme();
@@ -91,7 +91,7 @@ const AirPumpCalibrationPage = () => {
       setError(null);
 
       // Load pump details
-      const pumpData = await airPumpService.getAirPump(pumpId);
+      const pumpData = await airPumpService.getById(pumpId);
       setPump(pumpData);
 
       // Load calibrations
@@ -269,58 +269,6 @@ const AirPumpCalibrationPage = () => {
             </Typography>
           </CardContent>
         </Card>
-      )}
-
-      {/* Statistics */}
-      {stats && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6">{stats.totalCalibrations}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Total Calibrations
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" color="success.main">
-                  {stats.passedCalibrations}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Passed
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" color="error.main">
-                  {stats.failedCalibrations}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Failed
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6">
-                  {stats.averagePercentError?.toFixed(2) || "0"}%
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Avg Error
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
       )}
 
       {/* Actions */}

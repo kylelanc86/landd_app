@@ -1,0 +1,97 @@
+import api from './axios';
+
+const BASE_URL = '/equipment';
+
+export const equipmentService = {
+  // Get all equipment with optional filtering
+  getAll: async (params = {}) => {
+    try {
+      const response = await api.get(BASE_URL, { params });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get equipment by ID
+  getById: async (id) => {
+    try {
+      const response = await api.get(`${BASE_URL}/${id}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Create new equipment
+  create: async (data) => {
+    try {
+      const response = await api.post(BASE_URL, data);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Update equipment
+  update: async (id, data) => {
+    try {
+      const response = await api.put(`${BASE_URL}/${id}`, data);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Delete equipment
+  delete: async (id) => {
+    try {
+      const response = await api.delete(`${BASE_URL}/${id}`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get equipment statistics
+  getStats: async () => {
+    try {
+      const response = await api.get(`${BASE_URL}/stats/overview`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get equipment due for calibration
+  getDueForCalibration: async (days = 30) => {
+    try {
+      const response = await api.get(`${BASE_URL}/calibrations/due`, {
+        params: { days }
+      });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get equipment types for dropdown
+  getTypes: async () => {
+    try {
+      const response = await api.get(`${BASE_URL}/types/list`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get labs for dropdown
+  getLabs: async () => {
+    try {
+      const response = await api.get(`${BASE_URL}/labs/list`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  }
+}; 

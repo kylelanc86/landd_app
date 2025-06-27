@@ -37,6 +37,7 @@ import {
   StatusChip,
 } from "../../components/JobStatus";
 import debounce from "lodash/debounce";
+import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -104,6 +105,7 @@ const ProjectInformation = () => {
   // Initialize Google Places Autocomplete
   const [autocompleteService, setAutocompleteService] = useState(null);
   const [placesService, setPlacesService] = useState(null);
+  const [googleMaps, setGoogleMaps] = useState(null);
 
   const [timeLogsOpen, setTimeLogsOpen] = useState(false);
   const [timeLogs, setTimeLogs] = useState([]);
@@ -133,6 +135,10 @@ const ProjectInformation = () => {
       throw new Error("Failed to generate project ID");
     }
   };
+
+  useEffect(() => {
+    console.log("ProjectInformation component mounted");
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -202,6 +208,7 @@ const ProjectInformation = () => {
   }, [id, navigate]);
 
   useEffect(() => {
+    console.log("Google Maps useEffect triggered");
     const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
     console.log("Environment variables:", {
       REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
@@ -217,56 +224,48 @@ const ProjectInformation = () => {
       return;
     }
 
-    if (!window.google) {
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-
-      script.onload = () => {
-        console.log("Google Maps script loaded successfully");
+    console.log("Loading Google Maps API...");
+    loadGoogleMapsApi(apiKey)
+      .then((google) => {
+        console.log("Google Maps loaded successfully:", google);
+        console.log("Google Maps version:", google.maps.version);
+        console.log("Places API available:", !!google.maps.places);
+        setGoogleMaps(google);
         // Initialize the autocomplete service
         const autocompleteService =
-          new window.google.maps.places.AutocompleteService();
-        const placesService = new window.google.maps.places.PlacesService(
+          new google.maps.places.AutocompleteService();
+        const placesService = new google.maps.places.PlacesService(
           document.createElement("div")
         );
+        console.log("Autocomplete service created:", autocompleteService);
+        console.log("Places service created:", placesService);
         setAutocompleteService(autocompleteService);
         setPlacesService(placesService);
-      };
-
-      script.onerror = (error) => {
+      })
+      .catch((error) => {
         console.error("Error loading Google Maps script:", error);
-      };
-
-      document.head.appendChild(script);
-
-      return () => {
-        if (document.head.contains(script)) {
-          document.head.removeChild(script);
-        }
-      };
-    } else {
-      console.log("Google Maps already loaded");
-      // Initialize the autocomplete service
-      const autocompleteService =
-        new window.google.maps.places.AutocompleteService();
-      const placesService = new window.google.maps.places.PlacesService(
-        document.createElement("div")
-      );
-      setAutocompleteService(autocompleteService);
-      setPlacesService(placesService);
-    }
+      });
   }, []);
 
   const handleAddressInputChange = async (value) => {
+    console.log("handleAddressInputChange called with:", value);
+    console.log("autocompleteService:", autocompleteService);
+    console.log("googleMaps:", googleMaps);
+
     setAddressInput(value);
 
-    if (!value || value.length < 3 || !autocompleteService) {
+    if (!value || value.length < 3 || !autocompleteService || !googleMaps) {
+      console.log("Early return - conditions not met:", {
+        value,
+        valueLength: value?.length,
+        hasAutocompleteService: !!autocompleteService,
+        hasGoogleMaps: !!googleMaps,
+      });
       setAddressOptions([]);
       return;
     }
 
+    console.log("Making API call for:", value);
     setIsAddressLoading(true);
     try {
       autocompleteService.getPlacePredictions(
@@ -276,11 +275,16 @@ const ProjectInformation = () => {
           types: ["address"],
         },
         (predictions, status) => {
-          console.log("Address predictions:", predictions, "Status:", status);
+          console.log("Address predictions callback received:", {
+            predictions,
+            status,
+            statusText: googleMaps.maps.places.PlacesServiceStatus[status],
+          });
           if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             predictions
           ) {
+            console.log("Setting address options:", predictions);
             setAddressOptions(predictions);
           } else {
             console.log("No predictions found or error:", status);
@@ -297,7 +301,7 @@ const ProjectInformation = () => {
   };
 
   const handleAddressSelect = async (placeId) => {
-    if (!placeId || !placesService) return;
+    if (!placeId || !placesService || !googleMaps) return;
 
     try {
       placesService.getDetails(
@@ -308,7 +312,7 @@ const ProjectInformation = () => {
         (place, status) => {
           console.log("Selected place:", place, "Status:", status);
           if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
+            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             place
           ) {
             setForm((prev) => ({
@@ -736,9 +740,12 @@ const ProjectInformation = () => {
                     />
                   )}
                   renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip label={option} {...getTagProps({ index })} />
-                    ))
+                    value.map((option, index) => {
+                      const tagProps = getTagProps({ index });
+                      return (
+                        <Chip key={tagProps.key} label={option} {...tagProps} />
+                      );
+                    })
                   }
                 />
               </Grid>
@@ -835,12 +842,16 @@ const ProjectInformation = () => {
                     />
                   )}
                   renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip
-                        label={`${option.firstName} ${option.lastName}`}
-                        {...getTagProps({ index })}
-                      />
-                    ))
+                    value.map((option, index) => {
+                      const tagProps = getTagProps({ index });
+                      return (
+                        <Chip
+                          key={tagProps.key}
+                          label={`${option.firstName} ${option.lastName}`}
+                          {...tagProps}
+                        />
+                      );
+                    })
                   }
                 />
               </Grid>

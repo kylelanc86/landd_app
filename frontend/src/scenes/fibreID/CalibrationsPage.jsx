@@ -3,13 +3,13 @@ import { Box, Typography } from "@mui/material";
 import Header from "../../components/Header";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
-const ResidentialAssessment = () => {
+const CalibrationsPage = () => {
   return (
     <Box m="20px" position="relative" height="100%">
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Header
-          title="RESIDENTIAL ASBESTOS ASSESSMENT"
-          subtitle="Manage residential asbestos assessments"
+          title="FIBRE CALIBRATIONS"
+          subtitle="Manage fibre calibration records"
         />
       </Box>
 
@@ -77,12 +77,10 @@ const ResidentialAssessment = () => {
 
       {/* Page Content */}
       <Box mt="20px">
-        <Typography variant="h4">
-          Residential Asbestos Assessment Content
-        </Typography>
+        <Typography variant="h4">Fibre Calibrations Content</Typography>
       </Box>
     </Box>
   );
 };
 
-export default ResidentialAssessment;
+export default CalibrationsPage;
