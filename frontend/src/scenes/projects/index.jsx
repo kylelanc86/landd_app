@@ -1055,7 +1055,7 @@ const Projects = () => {
     const fetchData = async () => {
       try {
         const clientsResponse = await clientService.getAll();
-        setClients(clientsResponse.data);
+        setClients(clientsResponse.data.clients || clientsResponse.data);
       } catch (err) {
         console.error("Error fetching clients:", err);
       }

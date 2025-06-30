@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   useTheme,
-  Paper,
   Button,
   IconButton,
   Dialog,
@@ -12,11 +11,6 @@ import {
   DialogActions,
   TextField,
   Stack,
-  Grid,
-  Card,
-  CardContent,
-  Divider,
-  Chip,
   Alert,
   CircularProgress,
   FormControl,
@@ -30,20 +24,18 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import PrintIcon from "@mui/icons-material/Print";
-import DownloadIcon from "@mui/icons-material/Download";
 import CloseIcon from "@mui/icons-material/Close";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import jsPDF from "jspdf";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import userService from "../../services/userService";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
 import performanceMonitor from "../../utils/performanceMonitor";
 
 const ClearanceReports = () => {
   const theme = useTheme();
-  const colors = tokens;
   const navigate = useNavigate();
   const { clearanceId } = useParams();
 
@@ -58,7 +50,6 @@ const ClearanceReports = () => {
   const [addItemDialog, setAddItemDialog] = useState(false);
   const [editItemDialog, setEditItemDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [clearanceItems, setClearanceItems] = useState([]);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [form, setForm] = useState({
     clearanceDate: "",
@@ -349,12 +340,189 @@ const ClearanceReports = () => {
     }
   };
 
-  const handlePhotoChange = (event) => {
+  const generatePDFReport = async () => {
+    try {
+      if (!clearance || reports.length === 0) {
+        setError("No clearance data or items available for PDF generation");
+        return;
+      }
+
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const contentWidth = pageWidth - margin * 2;
+
+      // Front Cover
+      doc.setFontSize(24);
+      doc.setFont("helvetica", "bold");
+      doc.text("ASBESTOS CLEARANCE REPORT", pageWidth / 2, 60, {
+        align: "center",
+      });
+
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "normal");
+      doc.text("Project Information", pageWidth / 2, 90, { align: "center" });
+
+      doc.setFontSize(12);
+      doc.text(
+        `Project ID: ${clearance.projectId?.projectID || "N/A"}`,
+        margin,
+        120
+      );
+      doc.text(`Site Name: ${clearance.projectId?.name || "N/A"}`, margin, 135);
+      doc.text(
+        `Clearance Date: ${
+          clearance.clearanceDate
+            ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
+            : "N/A"
+        }`,
+        margin,
+        150
+      );
+      doc.text(`LAA: ${clearance.LAA || "N/A"}`, margin, 165);
+      doc.text(
+        `Asbestos Removalist: ${clearance.asbestosRemovalist || "N/A"}`,
+        margin,
+        180
+      );
+      doc.text(`Status: ${clearance.status || "N/A"}`, margin, 195);
+
+      doc.setFontSize(10);
+      doc.text(
+        `Report Generated: ${new Date().toLocaleDateString("en-GB")}`,
+        margin,
+        pageHeight - 30
+      );
+      doc.text(`Total Items: ${reports.length}`, margin, pageHeight - 20);
+
+      // Add new page for items
+      doc.addPage();
+
+      // Items Section
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("Clearance Items", margin, 30);
+
+      let yPosition = 50;
+      let itemNumber = 1;
+
+      for (const item of reports) {
+        // Check if we need a new page
+        if (yPosition > pageHeight - 100) {
+          doc.addPage();
+          yPosition = 30;
+        }
+
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text(
+          `Item ${itemNumber}: ${item.locationDescription}`,
+          margin,
+          yPosition
+        );
+        yPosition += 15;
+
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(
+          `Material Description: ${item.materialDescription}`,
+          margin,
+          yPosition
+        );
+        yPosition += 10;
+
+        if (item.notes) {
+          doc.text(`Notes: ${item.notes}`, margin, yPosition);
+          yPosition += 10;
+        }
+
+        // Add photo if available
+        if (item.photograph) {
+          try {
+            // Convert base64 to image and add to PDF
+            const img = new Image();
+            img.src = item.photograph;
+
+            // Wait for image to load
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              // Add timeout to prevent hanging
+              setTimeout(reject, 10000);
+            });
+
+            // Calculate image dimensions to fit on page
+            const maxWidth = contentWidth;
+            const maxHeight = 100; // Slightly larger for better quality
+            let imgWidth = img.width;
+            let imgHeight = img.height;
+
+            if (imgWidth > maxWidth) {
+              const ratio = maxWidth / imgWidth;
+              imgWidth = maxWidth;
+              imgHeight = imgHeight * ratio;
+            }
+
+            if (imgHeight > maxHeight) {
+              const ratio = maxHeight / imgHeight;
+              imgHeight = maxHeight;
+              imgWidth = imgWidth * ratio;
+            }
+
+            // Check if we need a new page for the image
+            if (yPosition + imgHeight > pageHeight - 30) {
+              doc.addPage();
+              yPosition = 30;
+            }
+
+            // Add image with better error handling
+            doc.addImage(
+              item.photograph,
+              "JPEG",
+              margin,
+              yPosition,
+              imgWidth,
+              imgHeight
+            );
+            yPosition += imgHeight + 10;
+          } catch (error) {
+            console.error("Error adding image to PDF:", error);
+            doc.text("Photo: [Error loading image]", margin, yPosition);
+            yPosition += 10;
+          }
+        } else {
+          doc.text("Photo: No photo available", margin, yPosition);
+          yPosition += 10;
+        }
+
+        // Add separator
+        if (itemNumber < reports.length) {
+          doc.setDrawColor(200, 200, 200);
+          doc.line(margin, yPosition, pageWidth - margin, yPosition);
+          yPosition += 20;
+        }
+
+        itemNumber++;
+      }
+
+      // Save the PDF
+      const fileName = `asbestos-clearance-report-${
+        clearance.projectId?.projectID || "unknown"
+      }-${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(fileName);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      setError("Failed to generate PDF report");
+    }
+  };
+
+  const handlePhotoChange = async (event) => {
     const file = event.target.files[0];
     if (file) {
-      // Check file size (limit to 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError("Photo file size must be less than 5MB");
+      // Check file size (limit to 10MB before compression)
+      if (file.size > 10 * 1024 * 1024) {
+        setError("Photo file size must be less than 10MB");
         return;
       }
 
@@ -364,15 +532,24 @@ const ClearanceReports = () => {
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPhotoPreview(e.target.result);
+      try {
         setError(null); // Clear any previous errors
-      };
-      reader.onerror = () => {
-        setError("Failed to read the photo file");
-      };
-      reader.readAsDataURL(file);
+
+        // Show loading state
+        setPhotoPreview("loading");
+
+        // Compress the image
+        const compressedImage = await compressImage(file, 1200, 1200, 0.8);
+
+        // Set the compressed image as preview
+        setPhotoPreview(compressedImage);
+
+        console.log("Image compressed successfully");
+      } catch (error) {
+        console.error("Error compressing image:", error);
+        setError("Failed to process the photo file");
+        setPhotoPreview(null);
+      }
     }
   };
 
@@ -384,6 +561,49 @@ const ClearanceReports = () => {
       ) ||
       (navigator.maxTouchPoints && navigator.maxTouchPoints > 2)
     );
+  };
+
+  // Compress image function
+  const compressImage = (
+    file,
+    maxWidth = 1200,
+    maxHeight = 1200,
+    quality = 0.8
+  ) => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const img = new Image();
+
+      img.onload = () => {
+        // Calculate new dimensions while maintaining aspect ratio
+        let { width, height } = img;
+
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        if (height > maxHeight) {
+          width = (width * maxHeight) / height;
+          height = maxHeight;
+        }
+
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress image
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to base64 with compression
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(compressedDataUrl);
+      };
+
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   if (loading) {
@@ -449,6 +669,25 @@ const ClearanceReports = () => {
             }}
           >
             Add Clearance Item
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<PictureAsPdfIcon />}
+            onClick={generatePDFReport}
+            sx={{
+              borderColor: theme.palette.secondary.main,
+              color: theme.palette.secondary.main,
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                borderColor: theme.palette.secondary.dark,
+                backgroundColor: theme.palette.secondary.light,
+                color: theme.palette.secondary.dark,
+              },
+            }}
+          >
+            Generate PDF Report
           </Button>
         </Box>
       </Box>
@@ -805,24 +1044,45 @@ const ClearanceReports = () => {
                 </Box>
                 {photoPreview && (
                   <Box sx={{ mt: 2 }}>
-                    <img
-                      src={photoPreview}
-                      alt="Preview"
-                      style={{
-                        maxWidth: "100%",
-                        maxHeight: "200px",
-                        borderRadius: "4px",
-                      }}
-                    />
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      size="small"
-                      onClick={() => setPhotoPreview(null)}
-                      sx={{ mt: 1 }}
-                    >
-                      Remove Photo
-                    </Button>
+                    {photoPreview === "loading" ? (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          p: 2,
+                          border: "1px dashed #ccc",
+                          borderRadius: "4px",
+                          backgroundColor: "#f5f5f5",
+                        }}
+                      >
+                        <CircularProgress size={20} />
+                        <Typography variant="body2" color="text.secondary">
+                          Compressing image...
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <>
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: "200px",
+                            borderRadius: "4px",
+                          }}
+                        />
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={() => setPhotoPreview(null)}
+                          sx={{ mt: 1 }}
+                        >
+                          Remove Photo
+                        </Button>
+                      </>
+                    )}
                   </Box>
                 )}
               </Box>
@@ -972,24 +1232,45 @@ const ClearanceReports = () => {
                 </Box>
                 {photoPreview && (
                   <Box sx={{ mt: 2 }}>
-                    <img
-                      src={photoPreview}
-                      alt="Preview"
-                      style={{
-                        maxWidth: "100%",
-                        maxHeight: "200px",
-                        borderRadius: "4px",
-                      }}
-                    />
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      size="small"
-                      onClick={() => setPhotoPreview(null)}
-                      sx={{ mt: 1 }}
-                    >
-                      Remove Photo
-                    </Button>
+                    {photoPreview === "loading" ? (
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          p: 2,
+                          border: "1px dashed #ccc",
+                          borderRadius: "4px",
+                          backgroundColor: "#f5f5f5",
+                        }}
+                      >
+                        <CircularProgress size={20} />
+                        <Typography variant="body2" color="text.secondary">
+                          Compressing image...
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <>
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: "200px",
+                            borderRadius: "4px",
+                          }}
+                        />
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={() => setPhotoPreview(null)}
+                          sx={{ mt: 1 }}
+                        >
+                          Remove Photo
+                        </Button>
+                      </>
+                    )}
                   </Box>
                 )}
               </Box>

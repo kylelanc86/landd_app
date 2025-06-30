@@ -32,25 +32,19 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:3000',
-
       'https://landd-app-frontend1.onrender.com',
       'https://app.landd.com.au'
     ];
     
-    // Log the incoming origin
-    console.log('Incoming request origin:', origin);
-    
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
-      console.log('No origin - allowing request');
       return callback(null, true);
     }
     
     if (allowedOrigins.indexOf(origin) !== -1) {
-      console.log('Origin allowed:', origin);
       callback(null, true);
     } else {
-      console.log('Origin blocked:', origin);
+      console.log('CORS blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -64,19 +58,17 @@ const corsOptions = {
 // Apply CORS middleware
 app.use(cors(corsOptions));
 
-// Add request logging middleware
+// Simplified request logging middleware (only log errors and important events)
 app.use((req, res, next) => {
-  console.log('=== Request Details ===');
-  console.log('Time:', new Date().toISOString());
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('=====================');
+  // Only log non-GET requests and errors
+  if (req.method !== 'GET') {
+    console.log(`${req.method} ${req.url} - ${new Date().toISOString()}`);
+  }
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Root route
 app.get('/', (req, res) => {
@@ -94,14 +86,8 @@ app.get('/api/health', (req, res) => {
   const healthData = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    cors: {
-      origin: req.headers.origin,
-      allowed: true
-    },
-    headers: req.headers
+    environment: process.env.NODE_ENV
   };
-  console.log('Health check response:', healthData);
   res.status(200).json(healthData);
 });
 

@@ -38,18 +38,8 @@ const asbestosClearanceSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
   }
 );
-
-// Virtual field to count clearance report items
-asbestosClearanceSchema.virtual('items', {
-  ref: 'AsbestosClearanceReport',
-  localField: '_id',
-  foreignField: 'clearanceId',
-  count: true
-});
 
 // Index for better query performance
 asbestosClearanceSchema.index({ projectId: 1, status: 1 });

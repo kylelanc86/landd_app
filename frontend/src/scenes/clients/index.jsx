@@ -172,11 +172,13 @@ const Clients = () => {
         limit: pagination.limit,
         search: search,
       });
-      setClients(response.data);
+      setClients(response.data.clients || response.data);
       setPagination((prev) => ({
         ...prev,
-        total: response.pagination.total,
-        pages: response.pagination.pages,
+        total:
+          response.data.pagination?.total || response.pagination?.total || 0,
+        pages:
+          response.data.pagination?.pages || response.pagination?.pages || 0,
       }));
     } catch (err) {
       console.error("Error fetching clients:", err);

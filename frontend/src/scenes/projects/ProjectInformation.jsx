@@ -152,7 +152,7 @@ const ProjectInformation = () => {
           userService.getAll(),
         ]);
 
-        setClients(clientsRes.data);
+        setClients(clientsRes.data.clients || clientsRes.data);
         setUsers(usersRes.data);
 
         // If we're in edit mode, fetch the project data

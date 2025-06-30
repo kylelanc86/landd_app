@@ -363,8 +363,7 @@ const AsbestosClearanceList = () => {
               flex: 1,
               minWidth: 100,
               renderCell: (params) => {
-                const itemsCount = params.row.items || 0;
-                return itemsCount;
+                return "0"; // Placeholder until we implement proper counting
               },
             },
             {

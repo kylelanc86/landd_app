@@ -30,7 +30,6 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
       .populate("projectId", "projectID name")
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName")
-      .populate("items")
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -56,8 +55,7 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
     const clearance = await AsbestosClearance.findById(req.params.id)
       .populate("projectId", "projectID name")
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName")
-      .populate("items");
+      .populate("updatedBy", "firstName lastName");
 
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
@@ -89,8 +87,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
     
     const populatedClearance = await AsbestosClearance.findById(savedClearance._id)
       .populate("projectId", "projectID name")
-      .populate("createdBy", "firstName lastName")
-      .populate("items");
+      .populate("createdBy", "firstName lastName");
 
     res.status(201).json(populatedClearance);
   } catch (error) {
@@ -122,8 +119,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate("projectId", "projectID name")
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName")
-      .populate("items");
+      .populate("updatedBy", "firstName lastName");
 
     res.json(populatedClearance);
   } catch (error) {

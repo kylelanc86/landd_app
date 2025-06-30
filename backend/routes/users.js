@@ -18,14 +18,6 @@ router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
       .select('-password')
       .sort({ createdAt: -1 });
     
-    console.log('Users from database:', users.map(u => ({ 
-      id: u._id, 
-      email: u.email, 
-      role: u.role,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      phone: u.phone 
-    })));
     res.json(users);
   } catch (err) {
     console.error('Error fetching users:', err);
@@ -83,7 +75,6 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   try {
     const { firstName, lastName, email, role, phone, isActive } = req.body;
-    console.log('Update request body:', req.body);
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -99,9 +90,7 @@ router.put('/:id', auth, async (req, res) => {
     user.phone = phone || '';
     if (typeof isActive === 'boolean') user.isActive = isActive;
 
-    console.log('User before save:', user.toObject());
     await user.save();
-    console.log('User after save:', user.toObject());
 
     // Return updated user without password
     const userResponse = user.toObject();

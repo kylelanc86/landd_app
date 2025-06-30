@@ -118,7 +118,7 @@ const Invoices = () => {
 
         setInvoices(invoicesRes.data);
         setProjects(projectsRes.data);
-        setClients(clientsRes.data);
+        setClients(clientsRes.data.clients || clientsRes.data);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
