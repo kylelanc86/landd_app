@@ -93,6 +93,7 @@ const Invoices = () => {
   const [xeroConnected, setXeroConnected] = useState(false);
   const [xeroError, setXeroError] = useState(null);
   const [showXeroAlert, setShowXeroAlert] = useState(false);
+  const [clientInputValue, setClientInputValue] = useState("");
 
   // Add permission check for Xero sync
   const canSyncXero = hasPermission(currentUser, "xero.sync");
@@ -880,11 +881,29 @@ const Invoices = () => {
             getOptionLabel={(option) => option.name}
             value={filterClient}
             onChange={(event, newValue) => setFilterClient(newValue)}
+            inputValue={clientInputValue}
+            onInputChange={(event, newInputValue) =>
+              setClientInputValue(newInputValue)
+            }
+            filterOptions={(options, { inputValue }) => {
+              if (inputValue.length < 3) return [];
+              const filterValue = inputValue.toLowerCase();
+              return options.filter((option) =>
+                option.name.toLowerCase().includes(filterValue)
+              );
+            }}
+            includeInputInList
+            filterSelectedOptions
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Filter by Client"
                 placeholder="Select client"
+                helperText={
+                  clientInputValue.length < 3
+                    ? "Type at least 3 characters to search clients"
+                    : ""
+                }
               />
             )}
             isOptionEqualToValue={(option, value) => option._id === value._id}

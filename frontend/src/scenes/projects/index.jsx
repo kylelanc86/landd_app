@@ -557,6 +557,8 @@ const Projects = () => {
   const [placesService, setPlacesService] = useState(null);
   const [googleMaps, setGoogleMaps] = useState(null);
 
+  const [clientInputValue, setClientInputValue] = useState("");
+
   // Start page load monitoring only on initial load
   useEffect(() => {
     if (isInitialLoadRef.current) {
@@ -1055,7 +1057,13 @@ const Projects = () => {
     const fetchData = async () => {
       try {
         const clientsResponse = await clientService.getAll();
-        setClients(clientsResponse.data.clients || clientsResponse.data);
+        console.log("Clients response:", clientsResponse);
+        console.log("Clients data:", clientsResponse.data);
+        const clientsData =
+          clientsResponse.data.clients || clientsResponse.data;
+        console.log("Final clients array:", clientsData);
+        console.log("Number of clients fetched:", clientsData.length);
+        setClients(clientsData);
       } catch (err) {
         console.error("Error fetching clients:", err);
       }
@@ -2229,12 +2237,30 @@ const Projects = () => {
                         null
                       }
                       onChange={handleClientChange}
+                      inputValue={clientInputValue}
+                      onInputChange={(event, newInputValue) =>
+                        setClientInputValue(newInputValue)
+                      }
+                      filterOptions={(options, { inputValue }) => {
+                        if (inputValue.length < 3) return [];
+                        const filterValue = inputValue.toLowerCase();
+                        return options.filter((option) =>
+                          option.name.toLowerCase().includes(filterValue)
+                        );
+                      }}
+                      includeInputInList
+                      filterSelectedOptions
                       renderInput={(params) => (
                         <TextField
                           {...params}
                           label="Client"
                           required
                           fullWidth
+                          helperText={
+                            clientInputValue.length < 3
+                              ? "Type at least 3 characters to search clients"
+                              : ""
+                          }
                         />
                       )}
                       isOptionEqualToValue={(option, value) =>

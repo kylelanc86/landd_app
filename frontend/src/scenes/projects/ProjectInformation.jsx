@@ -111,6 +111,8 @@ const ProjectInformation = () => {
   const [timeLogs, setTimeLogs] = useState([]);
   const [loadingTimeLogs, setLoadingTimeLogs] = useState(false);
 
+  const [clientInputValue, setClientInputValue] = useState("");
+
   const generateNextProjectId = async () => {
     try {
       const response = await projectService.getAll();
@@ -609,12 +611,34 @@ const ProjectInformation = () => {
                     getOptionLabel={(option) => option.name}
                     value={form.client}
                     onChange={handleClientChange}
+                    inputValue={clientInputValue}
+                    onInputChange={(event, newInputValue) =>
+                      setClientInputValue(newInputValue)
+                    }
+                    filterOptions={(options, { inputValue }) => {
+                      if (inputValue.length < 3) return [];
+                      const filterValue = inputValue.toLowerCase();
+                      return options.filter((option) =>
+                        option.name.toLowerCase().includes(filterValue)
+                      );
+                    }}
+                    includeInputInList
+                    filterSelectedOptions
                     isOptionEqualToValue={(option, value) =>
                       option._id === value._id
                     }
                     sx={{ flex: 1 }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Client" required />
+                      <TextField
+                        {...params}
+                        label="Client"
+                        required
+                        helperText={
+                          clientInputValue.length < 3
+                            ? "Type at least 3 characters to search clients"
+                            : ""
+                        }
+                      />
                     )}
                   />
                   <Button

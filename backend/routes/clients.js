@@ -2,10 +2,22 @@ const express = require('express');
 const router = express.Router();
 const Client = require('../models/Client');
 
+// Get total count of clients (for debugging)
+router.get('/count', async (req, res) => {
+  try {
+    const total = await Client.countDocuments({});
+    res.json({ total });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get all clients with search and pagination
 router.get('/', async (req, res) => {
   try {
     const { search, page = 1, limit = 25 } = req.query;
+    console.log('Backend received query params:', req.query);
+    console.log('Backend parsed params:', { search, page, limit });
     const query = {};
 
     // Add search condition if search term is provided
@@ -15,6 +27,7 @@ router.get('/', async (req, res) => {
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
+    console.log('Backend pagination:', { skip, limit: parseInt(limit) });
 
     // Get total count for pagination
     const total = await Client.countDocuments(query);
@@ -27,7 +40,9 @@ router.get('/', async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
-    // Send response with pagination metadata
+    console.log('Backend returning clients:', clients.length, 'out of', total);
+
+    // Always return the same format with clients array and pagination metadata
     res.json({
       clients,
       pagination: {
