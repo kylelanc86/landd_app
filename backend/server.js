@@ -20,6 +20,7 @@ const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
+const reportTemplateRoutes = require('./routes/reportTemplates');
 
 // Load environment variables
 dotenv.config();
@@ -111,6 +112,7 @@ connectDB()
     app.use('/api/equipment', equipmentRoutes);
     app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
     app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
+    app.use('/api/report-templates', reportTemplateRoutes);
 
     // Error handling middleware
     app.use((err, req, res, next) => {

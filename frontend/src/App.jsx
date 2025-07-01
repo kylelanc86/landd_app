@@ -59,6 +59,8 @@ const AssessmentSamples = lazy(() =>
   import("./scenes/surveys/asbestos/assessment-samples")
 );
 const Clients = lazy(() => import("./scenes/clients"));
+const AdminDashboard = lazy(() => import("./scenes/admin"));
+const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
 
 // New lazy loaded components for missing pages
 const LeadAssessment = lazy(() =>
@@ -521,6 +523,30 @@ function App() {
                               requiredPermissions={["fibre.view"]}
                             >
                               <FibreIdAnalysis />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["admin.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AdminDashboard />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/report-templates"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["admin.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ReportTemplates />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />

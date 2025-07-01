@@ -353,7 +353,9 @@ const ClearanceReports = () => {
       setError("No clearance data available for PDF generation");
       return;
     }
-    await generateClearanceReport(clearance, setError);
+    await generateClearanceReport(clearance, setError, {
+      includePhotographs: true,
+    });
   };
 
   const handleSiteWorkComplete = async () => {
@@ -550,15 +552,14 @@ const ClearanceReports = () => {
               startIcon={<PictureAsPdfIcon />}
               onClick={generatePDFReport}
               sx={{
-                borderColor: theme.palette.secondary.main,
-                color: theme.palette.secondary.main,
+                borderColor: theme.palette.primary.main,
+                color: theme.palette.primary.main,
                 fontSize: "14px",
                 fontWeight: "bold",
                 padding: "10px 20px",
                 "&:hover": {
-                  borderColor: theme.palette.secondary.dark,
-                  backgroundColor: theme.palette.secondary.light,
-                  color: theme.palette.secondary.dark,
+                  borderColor: theme.palette.primary.dark,
+                  backgroundColor: theme.palette.primary.light,
                 },
               }}
             >

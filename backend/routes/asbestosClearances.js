@@ -27,7 +27,14 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
 
     const clearances = await AsbestosClearance.find(filter)
-      .populate("projectId", "projectID name")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName")
       .sort(sortOptions)
@@ -53,7 +60,14 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
 router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
     const clearance = await AsbestosClearance.findById(req.params.id)
-      .populate("projectId", "projectID name")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName");
 
@@ -87,7 +101,14 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
     const savedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(savedClearance._id)
-      .populate("projectId", "projectID name")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
       .populate("createdBy", "firstName lastName");
 
     res.status(201).json(populatedClearance);
@@ -119,7 +140,14 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
-      .populate("projectId", "projectID name")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName");
 
@@ -146,7 +174,14 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
-      .populate("projectId", "projectID name")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName");
 

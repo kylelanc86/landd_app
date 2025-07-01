@@ -290,7 +290,9 @@ const AsbestosClearanceList = () => {
   };
 
   const handleGenerateReport = async (clearance) => {
-    await generateClearanceReport(clearance, setError);
+    await generateClearanceReport(clearance, setError, {
+      includePhotographs: true,
+    });
   };
 
   const handleNavigateToItems = (clearance) => {

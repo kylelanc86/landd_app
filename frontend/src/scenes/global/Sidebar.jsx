@@ -349,10 +349,10 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             isCollapsed={isCollapsed}
           />
 
-          <PermissionGate requiredPermissions={["users.view"]} fallback={null}>
+          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
             <Item
-              title="User Management"
-              to="/users"
+              title="Admin"
+              to="/admin"
               icon={<AccessibilityIcon />}
               isCollapsed={isCollapsed}
             />
