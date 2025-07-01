@@ -28,6 +28,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import userService from "../../services/userService";
@@ -355,6 +356,29 @@ const ClearanceReports = () => {
     await generateClearanceReport(clearance, setError);
   };
 
+  const handleSiteWorkComplete = async () => {
+    try {
+      setError(null);
+      await asbestosClearanceService.updateStatus(
+        clearanceId,
+        "Site Work Complete"
+      );
+
+      // Refresh the clearance data
+      const clearanceResponse = await asbestosClearanceService.getById(
+        clearanceId
+      );
+      setClearance(clearanceResponse);
+
+      // Show success message
+      setError("Site work marked as complete successfully!");
+      setTimeout(() => setError(null), 3000);
+    } catch (err) {
+      console.error("Error updating clearance status:", err);
+      setError(err.message || "Failed to update clearance status");
+    }
+  };
+
   const handlePhotoChange = async (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -508,30 +532,54 @@ const ClearanceReports = () => {
           >
             Add Clearance Item
           </Button>
-          <Button
-            variant="outlined"
-            startIcon={<PictureAsPdfIcon />}
-            onClick={generatePDFReport}
-            sx={{
-              borderColor: theme.palette.secondary.main,
-              color: theme.palette.secondary.main,
-              fontSize: "14px",
-              fontWeight: "bold",
-              padding: "10px 20px",
-              "&:hover": {
-                borderColor: theme.palette.secondary.dark,
-                backgroundColor: theme.palette.secondary.light,
-                color: theme.palette.secondary.dark,
-              },
-            }}
-          >
-            Generate PDF Report
-          </Button>
+          {clearance?.status !== "Site Work Complete" && (
+            <Button
+              variant="contained"
+              startIcon={<CheckCircleIcon />}
+              onClick={handleSiteWorkComplete}
+              sx={{
+                backgroundColor: theme.palette.success.main,
+                color: theme.palette.common.white,
+                fontSize: "14px",
+                fontWeight: "bold",
+                padding: "10px 20px",
+                "&:hover": {
+                  backgroundColor: theme.palette.success.dark,
+                },
+              }}
+            >
+              Site Work Complete
+            </Button>
+          )}
+          {clearance?.status === "Site Work Complete" && (
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={generatePDFReport}
+              sx={{
+                borderColor: theme.palette.secondary.main,
+                color: theme.palette.secondary.main,
+                fontSize: "14px",
+                fontWeight: "bold",
+                padding: "10px 20px",
+                "&:hover": {
+                  borderColor: theme.palette.secondary.dark,
+                  backgroundColor: theme.palette.secondary.light,
+                  color: theme.palette.secondary.dark,
+                },
+              }}
+            >
+              Generate PDF Report
+            </Button>
+          )}
         </Box>
       </Box>
 
       {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
+        <Typography
+          color={error.includes("successfully") ? "success" : "error"}
+          sx={{ mb: 2 }}
+        >
           {error}
         </Typography>
       )}

@@ -324,6 +324,8 @@ const AsbestosClearanceList = () => {
     switch (status) {
       case "complete":
         return theme.palette.success.main;
+      case "Site Work Complete":
+        return theme.palette.warning.main;
       case "in progress":
         return theme.palette.info.main;
       default:
@@ -435,8 +437,8 @@ const AsbestosClearanceList = () => {
               field: "clearanceDate",
               headerName: "Clearance Date",
               flex: 1,
-              minWidth: 120,
-              maxWidth: 120,
+              minWidth: 140,
+              maxWidth: 140,
               renderCell: (params) => {
                 return params.row.clearanceDate
                   ? new Date(params.row.clearanceDate).toLocaleDateString(
@@ -528,22 +530,24 @@ const AsbestosClearanceList = () => {
                     >
                       Items
                     </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => handleGenerateReport(row)}
-                      title="Generate Report"
-                      sx={{
-                        color: theme.palette.secondary.main,
-                        borderColor: theme.palette.secondary.main,
-                        fontSize: "0.75rem",
-                        py: 0.5,
-                        px: 1,
-                        minWidth: "auto",
-                      }}
-                    >
-                      Report
-                    </Button>
+                    {row.status === "Site Work Complete" && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleGenerateReport(row)}
+                        title="Generate Report"
+                        sx={{
+                          color: theme.palette.secondary.main,
+                          borderColor: theme.palette.secondary.main,
+                          fontSize: "0.75rem",
+                          py: 0.5,
+                          px: 1,
+                          minWidth: "auto",
+                        }}
+                      >
+                        Report
+                      </Button>
+                    )}
                     {row.status !== "complete" && (
                       <IconButton
                         size="small"

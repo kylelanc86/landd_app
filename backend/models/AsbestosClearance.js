@@ -13,7 +13,7 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["in progress", "complete"],
+      enum: ["in progress", "complete", "Site Work Complete"],
       default: "in progress",
     },
     clearanceType: {

@@ -130,6 +130,33 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   }
 });
 
+// Update clearance status
+router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    clearance.status = status;
+    clearance.updatedBy = req.user.id;
+
+    const updatedClearance = await clearance.save();
+    
+    const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
+      .populate("projectId", "projectID name")
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName");
+
+    res.json(populatedClearance);
+  } catch (error) {
+    console.error("Error updating asbestos clearance status:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Delete asbestos clearance
 router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res) => {
   try {
