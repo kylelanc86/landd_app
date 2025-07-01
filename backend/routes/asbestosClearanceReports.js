@@ -79,12 +79,13 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new clearance report
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { clearanceId, locationDescription, materialDescription, photograph, notes } = req.body;
+    const { clearanceId, locationDescription, materialDescription, asbestosType, photograph, notes } = req.body;
 
     const report = new AsbestosClearanceReport({
       clearanceId,
       locationDescription,
       materialDescription,
+      asbestosType,
       photograph,
       notes,
       createdBy: req.user.id,
@@ -106,7 +107,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update clearance report
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { locationDescription, materialDescription, photograph, notes } = req.body;
+    const { locationDescription, materialDescription, asbestosType, photograph, notes } = req.body;
 
     const report = await AsbestosClearanceReport.findById(req.params.id);
     if (!report) {
@@ -115,6 +116,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 
     report.locationDescription = locationDescription || report.locationDescription;
     report.materialDescription = materialDescription || report.materialDescription;
+    report.asbestosType = asbestosType || report.asbestosType;
     report.photograph = photograph || report.photograph;
     report.notes = notes || report.notes;
     report.updatedBy = req.user.id;

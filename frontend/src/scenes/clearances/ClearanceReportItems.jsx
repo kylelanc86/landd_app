@@ -17,6 +17,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Chip,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useParams, useNavigate } from "react-router-dom";
@@ -27,12 +28,12 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import jsPDF from "jspdf";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import userService from "../../services/userService";
 import Header from "../../components/Header";
 import performanceMonitor from "../../utils/performanceMonitor";
+import { generateClearanceReport } from "../../utils/generateClearanceReport";
 
 const ClearanceReports = () => {
   const theme = useTheme();
@@ -60,6 +61,7 @@ const ClearanceReports = () => {
   const [itemForm, setItemForm] = useState({
     locationDescription: "",
     materialDescription: "",
+    asbestosType: "",
     notes: "",
   });
 
@@ -257,6 +259,7 @@ const ClearanceReports = () => {
         clearanceId: clearanceId,
         locationDescription: itemForm.locationDescription,
         materialDescription: itemForm.materialDescription,
+        asbestosType: itemForm.asbestosType,
         photograph: photoPreview,
         notes: itemForm.notes,
       };
@@ -273,6 +276,7 @@ const ClearanceReports = () => {
       setItemForm({
         locationDescription: "",
         materialDescription: "",
+        asbestosType: "",
         notes: "",
       });
       setPhotoPreview(null);
@@ -287,6 +291,7 @@ const ClearanceReports = () => {
     setItemForm({
       locationDescription: item.locationDescription,
       materialDescription: item.materialDescription,
+      asbestosType: item.asbestosType || "",
       notes: item.notes,
     });
     setPhotoPreview(item.photograph);
@@ -299,6 +304,7 @@ const ClearanceReports = () => {
       const updateData = {
         locationDescription: itemForm.locationDescription,
         materialDescription: itemForm.materialDescription,
+        asbestosType: itemForm.asbestosType,
         photograph: photoPreview,
         notes: itemForm.notes,
       };
@@ -316,6 +322,7 @@ const ClearanceReports = () => {
       setItemForm({
         locationDescription: "",
         materialDescription: "",
+        asbestosType: "",
         notes: "",
       });
       setPhotoPreview(null);
@@ -341,180 +348,11 @@ const ClearanceReports = () => {
   };
 
   const generatePDFReport = async () => {
-    try {
-      if (!clearance || reports.length === 0) {
-        setError("No clearance data or items available for PDF generation");
-        return;
-      }
-
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 20;
-      const contentWidth = pageWidth - margin * 2;
-
-      // Front Cover
-      doc.setFontSize(24);
-      doc.setFont("helvetica", "bold");
-      doc.text("ASBESTOS CLEARANCE REPORT", pageWidth / 2, 60, {
-        align: "center",
-      });
-
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "normal");
-      doc.text("Project Information", pageWidth / 2, 90, { align: "center" });
-
-      doc.setFontSize(12);
-      doc.text(
-        `Project ID: ${clearance.projectId?.projectID || "N/A"}`,
-        margin,
-        120
-      );
-      doc.text(`Site Name: ${clearance.projectId?.name || "N/A"}`, margin, 135);
-      doc.text(
-        `Clearance Date: ${
-          clearance.clearanceDate
-            ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
-            : "N/A"
-        }`,
-        margin,
-        150
-      );
-      doc.text(`LAA: ${clearance.LAA || "N/A"}`, margin, 165);
-      doc.text(
-        `Asbestos Removalist: ${clearance.asbestosRemovalist || "N/A"}`,
-        margin,
-        180
-      );
-      doc.text(`Status: ${clearance.status || "N/A"}`, margin, 195);
-
-      doc.setFontSize(10);
-      doc.text(
-        `Report Generated: ${new Date().toLocaleDateString("en-GB")}`,
-        margin,
-        pageHeight - 30
-      );
-      doc.text(`Total Items: ${reports.length}`, margin, pageHeight - 20);
-
-      // Add new page for items
-      doc.addPage();
-
-      // Items Section
-      doc.setFontSize(18);
-      doc.setFont("helvetica", "bold");
-      doc.text("Clearance Items", margin, 30);
-
-      let yPosition = 50;
-      let itemNumber = 1;
-
-      for (const item of reports) {
-        // Check if we need a new page
-        if (yPosition > pageHeight - 100) {
-          doc.addPage();
-          yPosition = 30;
-        }
-
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text(
-          `Item ${itemNumber}: ${item.locationDescription}`,
-          margin,
-          yPosition
-        );
-        yPosition += 15;
-
-        doc.setFontSize(12);
-        doc.setFont("helvetica", "normal");
-        doc.text(
-          `Material Description: ${item.materialDescription}`,
-          margin,
-          yPosition
-        );
-        yPosition += 10;
-
-        if (item.notes) {
-          doc.text(`Notes: ${item.notes}`, margin, yPosition);
-          yPosition += 10;
-        }
-
-        // Add photo if available
-        if (item.photograph) {
-          try {
-            // Convert base64 to image and add to PDF
-            const img = new Image();
-            img.src = item.photograph;
-
-            // Wait for image to load
-            await new Promise((resolve, reject) => {
-              img.onload = resolve;
-              img.onerror = reject;
-              // Add timeout to prevent hanging
-              setTimeout(reject, 10000);
-            });
-
-            // Calculate image dimensions to fit on page
-            const maxWidth = contentWidth;
-            const maxHeight = 100; // Slightly larger for better quality
-            let imgWidth = img.width;
-            let imgHeight = img.height;
-
-            if (imgWidth > maxWidth) {
-              const ratio = maxWidth / imgWidth;
-              imgWidth = maxWidth;
-              imgHeight = imgHeight * ratio;
-            }
-
-            if (imgHeight > maxHeight) {
-              const ratio = maxHeight / imgHeight;
-              imgHeight = maxHeight;
-              imgWidth = imgWidth * ratio;
-            }
-
-            // Check if we need a new page for the image
-            if (yPosition + imgHeight > pageHeight - 30) {
-              doc.addPage();
-              yPosition = 30;
-            }
-
-            // Add image with better error handling
-            doc.addImage(
-              item.photograph,
-              "JPEG",
-              margin,
-              yPosition,
-              imgWidth,
-              imgHeight
-            );
-            yPosition += imgHeight + 10;
-          } catch (error) {
-            console.error("Error adding image to PDF:", error);
-            doc.text("Photo: [Error loading image]", margin, yPosition);
-            yPosition += 10;
-          }
-        } else {
-          doc.text("Photo: No photo available", margin, yPosition);
-          yPosition += 10;
-        }
-
-        // Add separator
-        if (itemNumber < reports.length) {
-          doc.setDrawColor(200, 200, 200);
-          doc.line(margin, yPosition, pageWidth - margin, yPosition);
-          yPosition += 20;
-        }
-
-        itemNumber++;
-      }
-
-      // Save the PDF
-      const fileName = `asbestos-clearance-report-${
-        clearance.projectId?.projectID || "unknown"
-      }-${new Date().toISOString().split("T")[0]}.pdf`;
-      doc.save(fileName);
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      setError("Failed to generate PDF report");
+    if (!clearance) {
+      setError("No clearance data available for PDF generation");
+      return;
     }
+    await generateClearanceReport(clearance, setError);
   };
 
   const handlePhotoChange = async (event) => {
@@ -746,6 +584,27 @@ const ClearanceReports = () => {
               minWidth: 150,
               renderCell: (params) => {
                 return params.row.materialDescription || "N/A";
+              },
+            },
+            {
+              field: "asbestosType",
+              headerName: "Asbestos Type",
+              flex: 1,
+              minWidth: 120,
+              renderCell: (params) => {
+                return (
+                  <Chip
+                    label={params.row.asbestosType || "N/A"}
+                    sx={{
+                      backgroundColor:
+                        params.row.asbestosType === "friable"
+                          ? theme.palette.warning.main
+                          : theme.palette.success.main,
+                      color: theme.palette.common.white,
+                      fontWeight: "bold",
+                    }}
+                  />
+                );
               },
             },
             {
@@ -988,6 +847,22 @@ const ClearanceReports = () => {
                 multiline
                 rows={2}
               />
+              <FormControl fullWidth required>
+                <InputLabel>Asbestos Type</InputLabel>
+                <Select
+                  value={itemForm.asbestosType}
+                  label="Asbestos Type"
+                  onChange={(e) =>
+                    setItemForm({
+                      ...itemForm,
+                      asbestosType: e.target.value,
+                    })
+                  }
+                >
+                  <MenuItem value="friable">Friable</MenuItem>
+                  <MenuItem value="non-friable">Non-friable</MenuItem>
+                </Select>
+              </FormControl>
               <Box>
                 <Typography variant="subtitle1" gutterBottom>
                   Photograph
@@ -1104,7 +979,9 @@ const ClearanceReports = () => {
               type="submit"
               variant="contained"
               disabled={
-                !itemForm.locationDescription || !itemForm.materialDescription
+                !itemForm.locationDescription ||
+                !itemForm.materialDescription ||
+                !itemForm.asbestosType
               }
             >
               Add Item
@@ -1176,6 +1053,22 @@ const ClearanceReports = () => {
                 multiline
                 rows={2}
               />
+              <FormControl fullWidth required>
+                <InputLabel>Asbestos Type</InputLabel>
+                <Select
+                  value={itemForm.asbestosType}
+                  label="Asbestos Type"
+                  onChange={(e) =>
+                    setItemForm({
+                      ...itemForm,
+                      asbestosType: e.target.value,
+                    })
+                  }
+                >
+                  <MenuItem value="friable">Friable</MenuItem>
+                  <MenuItem value="non-friable">Non-friable</MenuItem>
+                </Select>
+              </FormControl>
               <Box>
                 <Typography variant="subtitle1" gutterBottom>
                   Photograph
@@ -1292,7 +1185,9 @@ const ClearanceReports = () => {
               type="submit"
               variant="contained"
               disabled={
-                !itemForm.locationDescription || !itemForm.materialDescription
+                !itemForm.locationDescription ||
+                !itemForm.materialDescription ||
+                !itemForm.asbestosType
               }
             >
               Save Changes

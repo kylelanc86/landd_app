@@ -71,12 +71,13 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, status, LAA, asbestosRemovalist, notes } = req.body;
+    const { projectId, clearanceDate, status, clearanceType, LAA, asbestosRemovalist, notes } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
       clearanceDate,
       status: status || "in progress",
+      clearanceType,
       LAA,
       asbestosRemovalist,
       notes,
@@ -99,7 +100,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, status, LAA, asbestosRemovalist, notes } = req.body;
+    const { projectId, clearanceDate, status, clearanceType, LAA, asbestosRemovalist, notes } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -109,6 +110,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.projectId = projectId || clearance.projectId;
     clearance.clearanceDate = clearanceDate || clearance.clearanceDate;
     clearance.status = status || clearance.status;
+    clearance.clearanceType = clearanceType || clearance.clearanceType;
     clearance.LAA = LAA || clearance.LAA;
     clearance.asbestosRemovalist = asbestosRemovalist || clearance.asbestosRemovalist;
     clearance.notes = notes || clearance.notes;

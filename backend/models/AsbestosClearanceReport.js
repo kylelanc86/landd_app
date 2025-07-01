@@ -15,6 +15,11 @@ const asbestosClearanceReportSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    asbestosType: {
+      type: String,
+      enum: ["friable", "non-friable"],
+      required: true,
+    },
     photograph: {
       type: String, // Base64 encoded image or file path
     },

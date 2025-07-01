@@ -819,7 +819,7 @@ const Timesheets = () => {
               padding: "4px 8px",
               fontSize: "0.875rem",
               fontWeight: 500,
-            },
+              },
             "& .fc-event-time": {
               fontWeight: 600,
               fontSize: "0.75rem",
