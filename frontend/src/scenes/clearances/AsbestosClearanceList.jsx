@@ -491,7 +491,7 @@ const AsbestosClearanceList = () => {
               field: "status",
               headerName: "Status",
               flex: 1,
-              minWidth: 120,
+              minWidth: 185,
               renderCell: (params) => {
                 return (
                   <Chip
