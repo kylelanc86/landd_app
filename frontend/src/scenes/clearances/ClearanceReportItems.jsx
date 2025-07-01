@@ -364,15 +364,8 @@ const ClearanceReports = () => {
         "Site Work Complete"
       );
 
-      // Refresh the clearance data
-      const clearanceResponse = await asbestosClearanceService.getById(
-        clearanceId
-      );
-      setClearance(clearanceResponse);
-
-      // Show success message
-      setError("Site work marked as complete successfully!");
-      setTimeout(() => setError(null), 3000);
+      // Navigate back to the asbestos clearance list
+      navigate("/clearances/asbestos");
     } catch (err) {
       console.error("Error updating clearance status:", err);
       setError(err.message || "Failed to update clearance status");
