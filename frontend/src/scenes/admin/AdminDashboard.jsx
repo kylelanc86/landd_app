@@ -126,7 +126,7 @@ const AdminDashboard = () => {
         </Box>
 
         {/* Additional Admin Info */}
-        <Box
+        {/* <Box
           sx={{
             mt: 6,
             p: 3,
@@ -146,7 +146,7 @@ const AdminDashboard = () => {
           <Typography variant="body2" color={colors.grey[300]}>
             <strong>Permissions:</strong> Admin access granted
           </Typography>
-        </Box>
+        </Box> */}
       </Box>
     </PermissionGate>
   );

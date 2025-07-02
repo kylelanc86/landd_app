@@ -41,7 +41,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new user
 router.post('/', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, password, role, phone } = req.body;
+    const { firstName, lastName, email, password, role, phone, licences, signature } = req.body;
 
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -57,6 +57,8 @@ router.post('/', auth, async (req, res) => {
       password,
       role: role || 'employee',
       phone,
+      licences: licences || [],
+      signature: signature || '',
       isActive: true
     });
 
@@ -74,7 +76,7 @@ router.post('/', auth, async (req, res) => {
 // Update user
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, isActive } = req.body;
+    const { firstName, lastName, email, role, phone, isActive, licences, signature } = req.body;
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -89,6 +91,8 @@ router.put('/:id', auth, async (req, res) => {
     // Always update phone field, even if it's an empty string
     user.phone = phone || '';
     if (typeof isActive === 'boolean') user.isActive = isActive;
+    if (licences !== undefined) user.licences = licences;
+    if (signature !== undefined) user.signature = signature;
 
     await user.save();
 

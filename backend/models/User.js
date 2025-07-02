@@ -43,6 +43,30 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  licences: {
+    type: [{
+      state: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      licenceNumber: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      licenceType: {
+        type: String,
+        required: true,
+        trim: true
+      }
+    }],
+    default: []
+  },
+  signature: {
+    type: String,
+    trim: true
+  },
   notifications: {
     email: {
       type: Boolean,

@@ -13,6 +13,8 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Collapse,
+  Tooltip,
 } from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
@@ -29,6 +31,8 @@ import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScienceIcon from "@mui/icons-material/Science";
 import HomeIcon from "@mui/icons-material/Home";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -101,7 +105,7 @@ const Item = ({ title, to, icon, isCollapsed }) => {
     }
   }, [isCollapsed]);
 
-  return (
+  const menuItemContent = (
     <MenuItem
       icon={
         isCollapsed ? (
@@ -179,10 +183,43 @@ const Item = ({ title, to, icon, isCollapsed }) => {
       </Link>
     </MenuItem>
   );
+
+  // Wrap with tooltip only when collapsed
+  if (isCollapsed) {
+    return (
+      <Tooltip
+        title={title}
+        placement="right"
+        arrow
+        enterDelay={500}
+        leaveDelay={0}
+        sx={{
+          "& .MuiTooltip-tooltip": {
+            backgroundColor: theme.palette.mode === "dark" ? "#333" : "#fff",
+            color: theme.palette.mode === "dark" ? "#fff" : "#333",
+            fontSize: "0.75rem",
+            padding: "8px 12px",
+            border: `1px solid ${
+              theme.palette.mode === "dark" ? "#555" : "#ddd"
+            }`,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+          },
+          "& .MuiTooltip-arrow": {
+            color: theme.palette.mode === "dark" ? "#333" : "#fff",
+          },
+        }}
+      >
+        <Box>{menuItemContent}</Box>
+      </Tooltip>
+    );
+  }
+
+  return menuItemContent;
 };
 
 const SectionDivider = ({ isCollapsed }) => {
   const theme = useTheme();
+
   return (
     <Box
       sx={{
@@ -200,6 +237,88 @@ const SectionDivider = ({ isCollapsed }) => {
             theme.palette.mode === "dark" ? tokens.grey[700] : tokens.grey[300],
         }}
       />
+    </Box>
+  );
+};
+
+const CollapsibleSection = ({
+  title,
+  children,
+  isCollapsed,
+  isExpanded,
+  onToggle,
+  defaultExpanded = true,
+}) => {
+  const theme = useTheme();
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  const handleToggle = () => {
+    const newExpanded = !expanded;
+    setExpanded(newExpanded);
+    if (onToggle) {
+      onToggle(newExpanded);
+    }
+  };
+
+  if (isCollapsed) {
+    return <SectionDivider isCollapsed={isCollapsed} />;
+  }
+
+  return (
+    <Box>
+      <Box
+        onClick={handleToggle}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          cursor: "pointer",
+          p: "8px 10px",
+          m: "12px 10px 0px 10px",
+          borderRadius: "4px",
+          "&:hover": {
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? "rgba(255, 255, 255, 0.08)"
+                : "rgba(0, 0, 0, 0.04)",
+          },
+          transition: "background-color 0.2s",
+        }}
+      >
+        <Typography
+          variant="h3"
+          color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
+          sx={{
+            fontSize: "1rem",
+            fontWeight: "bold",
+            opacity: 0.8,
+            textAlign: "left",
+            userSelect: "none",
+          }}
+        >
+          {title}
+        </Typography>
+        {expanded ? (
+          <ExpandLessIcon
+            sx={{
+              fontSize: "1.2rem",
+              color: theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a",
+              opacity: 0.8,
+            }}
+          />
+        ) : (
+          <ExpandMoreIcon
+            sx={{
+              fontSize: "1.2rem",
+              color: theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a",
+              opacity: 0.8,
+            }}
+          />
+        )}
+      </Box>
+      <Collapse in={expanded} timeout="auto" unmountOnExit>
+        <Box>{children}</Box>
+      </Collapse>
     </Box>
   );
 };
@@ -403,128 +522,93 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
             />
           </PermissionGate>
 
-          {/* HIDDEN SECTIONS - Commented out to hide unwanted menu items */}
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "12px 10px 0px 10px",
-                fontSize: "1rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-              }}
-            >
-              SURVEYS
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
+          {/* Collapsible Sections */}
+          <CollapsibleSection
+            title="SURVEYS"
+            isCollapsed={isCollapsed}
+            defaultExpanded={true}
+          >
+            <PermissionGate requiredPermissions={["asbestos.view"]}>
+              <Item
+                title="Asbestos Assessment"
+                to="/surveys/asbestos"
+                icon={<HomeIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Lead Assessment"
+                to="/surveys/lead"
+                icon={<HomeIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Mould Assessment"
+                to="/surveys/mould"
+                icon={<HomeIcon />}
+                isCollapsed={isCollapsed}
+              />
+            </PermissionGate>
+          </CollapsibleSection>
 
-          <PermissionGate requiredPermissions={["asbestos.view"]}>
-            <Item
-              title="Asbestos Assessment"
-              to="/surveys/asbestos"
-              icon={<HomeIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Lead Assessment"
-              to="/surveys/lead"
-              icon={<HomeIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Mould Assessment"
-              to="/surveys/mould"
-              icon={<HomeIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "12px 10px 0px 10px",
-                fontSize: "1rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-              }}
-            >
-              CLEARANCES
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
+          <CollapsibleSection
+            title="CLEARANCES"
+            isCollapsed={isCollapsed}
+            defaultExpanded={true}
+          >
+            <PermissionGate requiredPermissions={["asbestos.view"]}>
+              <Item
+                title="Asbestos Clearance"
+                to="/clearances/asbestos"
+                icon={<AssessmentIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Lead Clearance"
+                to="/clearances/lead"
+                icon={<AssessmentIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Mould Validation"
+                to="/clearances/mould"
+                icon={<AssessmentIcon />}
+                isCollapsed={isCollapsed}
+              />
+            </PermissionGate>
+          </CollapsibleSection>
 
-          <PermissionGate requiredPermissions={["asbestos.view"]}>
-            <Item
-              title="Asbestos Clearance"
-              to="/clearances/asbestos"
-              icon={<AssessmentIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Lead Clearance"
-              to="/clearances/lead"
-              icon={<AssessmentIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Mould Validation"
-              to="/clearances/mould"
-              icon={<AssessmentIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
-
-          {!isCollapsed ? (
-            <Typography
-              variant="h3"
-              color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-              sx={{
-                m: "12px 10px 0px 10px",
-                fontSize: "1rem",
-                fontWeight: "bold",
-                opacity: 0.8,
-                textAlign: "left",
-              }}
-            >
-              LABORATORY
-            </Typography>
-          ) : (
-            <SectionDivider isCollapsed={isCollapsed} />
-          )}
-
-          <PermissionGate requiredPermissions={["fibre.view"]}>
-            <Item
-              title="Air Monitoring"
-              to="/air-monitoring"
-              icon={<AirOutlinedIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Fibre ID Analysis"
-              to="/fibreID"
-              icon={<ScienceIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Calibrations"
-              to="/calibrations"
-              icon={<ScienceIcon />}
-              isCollapsed={isCollapsed}
-            />
-            <Item
-              title="Laboratory Equipment"
-              to="/laboratory-equipment"
-              icon={<ScienceIcon />}
-              isCollapsed={isCollapsed}
-            />
-          </PermissionGate>
+          <CollapsibleSection
+            title="LABORATORY"
+            isCollapsed={isCollapsed}
+            defaultExpanded={true}
+          >
+            <PermissionGate requiredPermissions={["fibre.view"]}>
+              <Item
+                title="Air Monitoring"
+                to="/air-monitoring"
+                icon={<AirOutlinedIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Fibre ID Analysis"
+                to="/fibreID"
+                icon={<ScienceIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Calibrations"
+                to="/calibrations"
+                icon={<ScienceIcon />}
+                isCollapsed={isCollapsed}
+              />
+              <Item
+                title="Laboratory Equipment"
+                to="/laboratory-equipment"
+                icon={<ScienceIcon />}
+                isCollapsed={isCollapsed}
+              />
+            </PermissionGate>
+          </CollapsibleSection>
         </Box>
       </Menu>
     </ProSidebar>

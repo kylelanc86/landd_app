@@ -382,7 +382,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
 
     // Green line beneath header
     doc.setDrawColor(0, 153, 0);
-    doc.setLineWidth(1);
+    doc.setLineWidth(0.7);
     doc.line(
       headerPadding,
       headerBottomY,
@@ -476,12 +476,12 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     
     // Green border above footer
     doc.setDrawColor(0, 153, 0);
-    doc.setLineWidth(1.0);
+    doc.setLineWidth(0.7);
     doc.line(footerPadding, footerY - 5, pageWidth - footerPadding, footerY - 5);
 
     
     // Footer text
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setFont("GOTHIC", "normal");
     const footerText = `${clearance.clearanceType || "Non-friable"} Clearance Certificate: ${clearance.projectId?.name || "{Site Name}"}`;
     doc.text(footerText, footerPadding, footerY + 3); // Added 3 point gap between border and text
@@ -521,7 +521,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     // Green line beneath header - same as page 2
     const headerBottomY3 = headerPadding3 + logoHeight + 8;
     doc.setDrawColor(0, 153, 0);
-    doc.setLineWidth(1);
+    doc.setLineWidth(0.7);
     doc.line(
       headerPadding3,
       headerBottomY3,
@@ -539,7 +539,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     y3 += 6;
     
     // Grouped text with height-aware spacing
-    const inspectionText = `Following discussions with ${clearance.projectId?.client?.name || "{Client Name}"}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection following the removal of ${clearance.clearanceType?.toLowerCase() || "non-friable"} asbestos from ${clearance.projectId?.name || "{Site Address}"} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by ${clearance.asbestosRemovalist || "Choose an item"}. ${clearance.LAA || "Patrick Cerone"} (ACT Licensed Asbestos Assessor - AA00031) from L&D visited the Site at time on ${clearance.clearanceDate ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB") : "25 July 2024"}.\n\nTable 1 below outlines the ACM that formed part of the inspection. Photographs of the Asbestos Removal Area and a Site Plan are presented in Appendix A and Appendix B respectively.`;
+    const inspectionText = `Following discussions with ${clearance.projectId?.client?.name || "{Client Name}"}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection following the removal of ${clearance.clearanceType?.toLowerCase() || "non-friable"} asbestos from ${clearance.projectId?.name || "{Site Address}"} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by ${clearance.asbestosRemovalist || "Choose an item"}. ${clearance.LAA || "Patrick Cerone"} (ACT Licensed Asbestos Assessor - AA00031) from L&D visited the Site at time on ${clearance.clearanceDate ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB") : "25 July 2024"}. \n\nTable 1 below outlines the ACM that formed part of the inspection. Photographs of the Asbestos Removal Area and a Site Plan are presented in Appendix A and Appendix B respectively.`;
     
     // Set font properties BEFORE rendering text
     doc.setFontSize(11);
@@ -663,10 +663,10 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     
     // Signature line
     doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(1);
+    doc.setLineWidth(0.7);
     // doc.line(footerPadding3, footerY3 - 5, pageWidth - footerPadding3, footerY3 - 5);
     y3 += 5;
-    doc.setFontSize(10);
+    doc.setFontSize(11);
     doc.text(`${clearance.LAA || "Report Author"}`, headerPadding3, y3);
     y3 += 5;
     doc.text("ACT Licensed Asbestos Assessor - AA00004", headerPadding3, y3);
@@ -677,11 +677,11 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     
     // Green border above footer
     doc.setDrawColor(0, 153, 0);
-    doc.setLineWidth(1.0);
+    doc.setLineWidth(0.7);
     doc.line(footerPadding3, footerY3 - 5, pageWidth - footerPadding3, footerY3 - 5);
 
     // Footer text
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setFont("GOTHIC", "normal");
     const footerText3 = `${clearance.clearanceType || "Non-friable"} Clearance Certificate: ${clearance.projectId?.name || "{Site Name}"}`;
     doc.text(footerText3, footerPadding3, footerY3 + 3);
@@ -724,7 +724,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     // Green line beneath header - same as page 3
     const headerBottomY4 = headerPadding4 + logoHeight + 8;
     doc.setDrawColor(0, 153, 0);
-    doc.setLineWidth(1);
+    doc.setLineWidth(0.7);
     doc.line(
       headerPadding4,
       headerBottomY4,
@@ -761,7 +761,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     // More bullet points
     const bulletPoint3 = "• This certificate should be issued prior to the area being re-occupied. This chain of events should occur regardless of whether the site is a commercial or residential property.";
     doc.text(bulletPoint3, headerPadding4 + 10, y4, { maxWidth: pageWidth - headerPadding4 * 2 - 10 });
-    y4 += 12;
+    y4 += 15;
     
     const bulletPoint4 = "• The asbestos removal area and areas immediately surrounding it are visibly clean from asbestos contamination";
     doc.text(bulletPoint4, headerPadding4 + 10, y4, { maxWidth: pageWidth - headerPadding4 * 2 - 10 });
@@ -769,7 +769,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     
     const bulletPoint5 = "• The removal area does not pose a risk to health safety and safety from exposure to asbestos";
     doc.text(bulletPoint5, headerPadding4 + 10, y4, { maxWidth: pageWidth - headerPadding4 * 2 - 10 });
-    y4 += 18;
+    y4 += 12;
     
     // LEGISLATIVE REQUIREMENTS SECTION
     if (y4 > pageHeight - 100) {
@@ -780,7 +780,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     doc.setFontSize(12);
     doc.setFont("Gothic Bold", "bold");
     doc.text("Legislative Requirements", headerPadding4, y4);
-    y4 += 6;
+    y4 += 10;
     
     doc.setFontSize(11);
     doc.setFont("GOTHIC", "normal");
@@ -799,7 +799,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     
     const legislativePoint3 = "• ACT Work Health and Safety (How to Safely Remove Asbestos Code of Practice) 2022";
     doc.text(legislativePoint3, headerPadding4 + 10, y4, { maxWidth: pageWidth - headerPadding4 * 2 - 10 });
-    y4 += 20;
+    y4 += 15;
     
     // LIMITATIONS SECTION
     if (y4 > pageHeight - 60) {
@@ -823,7 +823,7 @@ export const generateClearanceReport = async (clearance, setError, options = {})
     
     // Green border above footer
     doc.setDrawColor(0, 153, 0);
-    doc.setLineWidth(1.0);
+    doc.setLineWidth(0.7);
     doc.line(footerPadding4, footerY4 - 5, pageWidth - footerPadding4, footerY4 - 5);
 
     // Footer text
