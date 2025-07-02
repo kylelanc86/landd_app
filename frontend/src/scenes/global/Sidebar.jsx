@@ -1,38 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import "react-pro-sidebar/dist/css/styles.css";
-import { ProSidebar, Menu, MenuItem, SubMenu } from "react-pro-sidebar";
-import {
-  Box,
-  IconButton,
-  Typography,
-  useTheme,
-  Avatar,
-  Divider,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Collapse,
-  Tooltip,
-} from "@mui/material";
-import { Link, useLocation } from "react-router-dom";
+import { ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
+import { Box, Typography, useTheme, Divider } from "@mui/material";
+import { useLocation, useNavigate } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
 import ContactsOutlinedIcon from "@mui/icons-material/ContactsOutlined";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
-import PersonOutlinedIcon from "@mui/icons-material/PersonOutlined";
 import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined";
-import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
-import AirOutlinedIcon from "@mui/icons-material/AirOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AccessibilityIcon from "@mui/icons-material/Accessibility";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScienceIcon from "@mui/icons-material/Science";
 import HomeIcon from "@mui/icons-material/Home";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -80,51 +61,34 @@ const getRandomColor = (user) => {
   return colors[index];
 };
 
-const Item = ({ title, to, icon, isCollapsed }) => {
+const Item = ({ title, to, icon }) => {
   const theme = useTheme();
   const location = useLocation();
-  const [showText, setShowText] = useState(!isCollapsed);
+  const navigate = useNavigate();
 
   const isActive =
     to === "/asbestos-assessment"
       ? location.pathname === to
       : location.pathname === to || location.pathname.startsWith(`${to}/`);
 
-  // Handle text visibility with delay
-  useEffect(() => {
-    if (isCollapsed) {
-      // Hide text immediately when collapsing
-      setShowText(false);
+  // Handle navigation with refresh
+  const handleNavigation = () => {
+    // If we're already on the same page, force a refresh
+    if (location.pathname === to || location.pathname.startsWith(`${to}/`)) {
+      window.location.reload();
     } else {
-      // Show text after a small delay when expanding
-      const timer = setTimeout(() => {
-        setShowText(true);
-      }, 200); // 200ms delay - adjust this value as needed
-
-      return () => clearTimeout(timer);
+      // Navigate to the new page
+      navigate(to);
     }
-  }, [isCollapsed]);
+  };
 
   const menuItemContent = (
-    <MenuItem
-      icon={
-        isCollapsed ? (
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "center",
-              width: "100%",
-              paddingLeft: "10px",
-              paddingRight: "10px",
-            }}
-          >
-            {icon}
-          </Box>
-        ) : (
-          icon
-        )
-      }
-      style={{
+    <Box
+      onClick={handleNavigation}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-start",
         color: isActive
           ? theme.palette.mode === "dark"
             ? tokens.grey[100]
@@ -138,86 +102,56 @@ const Item = ({ title, to, icon, isCollapsed }) => {
             : tokens.primary[100]
           : "transparent",
         borderRadius: "4px",
-        margin: isCollapsed ? "1px 0" : "1px 8px",
-        padding: isCollapsed ? "2px" : "2px 10px",
-        display: "flex",
-        justifyContent: isCollapsed ? "center" : "flex-start",
-        alignItems: "center",
-        textAlign: isCollapsed ? "center" : "left",
+        margin: "1px 8px",
+        padding: "8px 10px",
+        cursor: "pointer",
+        transition: "background-color 0.2s",
+        "&:hover": {
+          backgroundColor: isActive
+            ? theme.palette.mode === "dark"
+              ? tokens.primary[800]
+              : tokens.primary[200]
+            : theme.palette.mode === "dark"
+            ? "rgba(255, 255, 255, 0.08)"
+            : "rgba(0, 0, 0, 0.04)",
+        },
       }}
     >
-      <Link
-        to={to}
-        style={{
-          textDecoration: "none",
-          color: "inherit",
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: isCollapsed ? "center" : "flex-start",
-          padding: isCollapsed ? "2px 0" : "0 0",
-          textAlign: isCollapsed ? "center" : "left",
-        }}
-      >
-        {!isCollapsed && showText && (
-          <Typography
-            sx={{
-              fontWeight: isActive ? "bold" : "normal",
-              color: isActive
-                ? theme.palette.mode === "dark"
-                  ? tokens.grey[100]
-                  : tokens.primary[700]
-                : theme.palette.mode === "dark"
-                ? tokens.grey[100]
-                : tokens.grey[700],
-              whiteSpace: "normal",
-              wordBreak: "break-word",
-              fontSize: "0.8rem",
-              lineHeight: 1.2,
-              textAlign: "left",
-            }}
-          >
-            {title}
-          </Typography>
-        )}
-      </Link>
-    </MenuItem>
-  );
-
-  // Wrap with tooltip only when collapsed
-  if (isCollapsed) {
-    return (
-      <Tooltip
-        title={title}
-        placement="right"
-        arrow
-        enterDelay={500}
-        leaveDelay={0}
+      {/* Icon */}
+      <Box
         sx={{
-          "& .MuiTooltip-tooltip": {
-            backgroundColor: theme.palette.mode === "dark" ? "#333" : "#fff",
-            color: theme.palette.mode === "dark" ? "#fff" : "#333",
-            fontSize: "0.75rem",
-            padding: "8px 12px",
-            border: `1px solid ${
-              theme.palette.mode === "dark" ? "#555" : "#ddd"
-            }`,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-          },
-          "& .MuiTooltip-arrow": {
-            color: theme.palette.mode === "dark" ? "#333" : "#fff",
-          },
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minWidth: "24px",
+          marginRight: "8px",
         }}
       >
-        <Box>{menuItemContent}</Box>
-      </Tooltip>
-    );
-  }
+        {icon}
+      </Box>
+
+      {/* Text */}
+      <Typography
+        sx={{
+          fontWeight: isActive ? "bold" : "normal",
+          color: "inherit",
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+          fontSize: "0.8rem",
+          lineHeight: 1.2,
+          textAlign: "left",
+          flex: 1,
+        }}
+      >
+        {title}
+      </Typography>
+    </Box>
+  );
 
   return menuItemContent;
 };
 
-const SectionDivider = ({ isCollapsed }) => {
+const SectionDivider = () => {
   const theme = useTheme();
 
   return (
@@ -226,13 +160,13 @@ const SectionDivider = ({ isCollapsed }) => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        my: isCollapsed ? 0.5 : 1,
-        px: isCollapsed ? 1 : 2,
+        my: 1,
+        px: 2,
       }}
     >
       <Divider
         sx={{
-          width: isCollapsed ? "30px" : "100%",
+          width: "100%",
           borderColor:
             theme.palette.mode === "dark" ? tokens.grey[700] : tokens.grey[300],
         }}
@@ -241,89 +175,93 @@ const SectionDivider = ({ isCollapsed }) => {
   );
 };
 
-const CollapsibleSection = ({
-  title,
-  children,
-  isCollapsed,
-  isExpanded,
-  onToggle,
-  defaultExpanded = true,
-}) => {
+const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const handleToggle = () => {
-    const newExpanded = !expanded;
-    setExpanded(newExpanded);
-    if (onToggle) {
-      onToggle(newExpanded);
+  const isActive =
+    location.pathname === to || location.pathname.startsWith(`${to}/`);
+
+  // Handle navigation with refresh
+  const handleNavigation = () => {
+    // If we're already on the same page, force a refresh
+    if (location.pathname === to || location.pathname.startsWith(`${to}/`)) {
+      window.location.reload();
+    } else {
+      // Navigate to the new page
+      navigate(to);
     }
   };
 
-  if (isCollapsed) {
-    return <SectionDivider isCollapsed={isCollapsed} />;
-  }
-
   return (
-    <Box>
+    <Box
+      onClick={handleNavigation}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        cursor: "pointer",
+        p: "8px 10px",
+        m: "12px 10px 0px 10px",
+        borderRadius: "4px",
+        color: isActive
+          ? theme.palette.mode === "dark"
+            ? tokens.grey[100]
+            : tokens.primary[700]
+          : theme.palette.mode === "dark"
+          ? tokens.grey[100]
+          : tokens.grey[700],
+        backgroundColor: isActive
+          ? theme.palette.mode === "dark"
+            ? tokens.primary[900]
+            : tokens.primary[100]
+          : "transparent",
+        transition: "background-color 0.2s",
+        "&:hover": {
+          backgroundColor: isActive
+            ? theme.palette.mode === "dark"
+              ? tokens.primary[800]
+              : tokens.primary[200]
+            : theme.palette.mode === "dark"
+            ? "rgba(255, 255, 255, 0.08)"
+            : "rgba(0, 0, 0, 0.04)",
+        },
+      }}
+    >
+      {/* Icon */}
       <Box
-        onClick={handleToggle}
         sx={{
           display: "flex",
+          justifyContent: "center",
           alignItems: "center",
-          justifyContent: "space-between",
-          cursor: "pointer",
-          p: "8px 10px",
-          m: "12px 10px 0px 10px",
-          borderRadius: "4px",
-          "&:hover": {
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? "rgba(255, 255, 255, 0.08)"
-                : "rgba(0, 0, 0, 0.04)",
-          },
-          transition: "background-color 0.2s",
+          minWidth: "24px",
+          marginRight: "8px",
         }}
       >
-        <Typography
-          variant="h3"
-          color={theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a"}
-          sx={{
-            fontSize: "1rem",
-            fontWeight: "bold",
-            opacity: 0.8,
-            textAlign: "left",
-            userSelect: "none",
-          }}
-        >
-          {title}
-        </Typography>
-        {expanded ? (
-          <ExpandLessIcon
-            sx={{
-              fontSize: "1.2rem",
-              color: theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a",
-              opacity: 0.8,
-            }}
-          />
-        ) : (
-          <ExpandMoreIcon
-            sx={{
-              fontSize: "1.2rem",
-              color: theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a",
-              opacity: 0.8,
-            }}
-          />
-        )}
+        {icon}
       </Box>
-      <Collapse in={expanded} timeout="auto" unmountOnExit>
-        <Box>{children}</Box>
-      </Collapse>
+
+      {/* Text */}
+      <Typography
+        sx={{
+          fontWeight: isActive ? "bold" : "normal",
+          color: "inherit",
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+          fontSize: "0.8rem",
+          lineHeight: 1.2,
+          textAlign: "left",
+          flex: 1,
+        }}
+      >
+        {title}
+      </Typography>
     </Box>
   );
 };
 
-const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
+const Sidebar = () => {
   const theme = useTheme();
   const { currentUser } = useAuth();
   const location = useLocation();
@@ -338,6 +276,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         left: 0 !important;
         height: 100vh !important;
         z-index: 1300 !important;
+        width: 202px !important;
       }
       .pro-sidebar-inner {
         background: ${
@@ -346,13 +285,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         border-right: 1px solid ${
           theme.palette.mode === "dark" ? "#2d2d2d" : "#e0e0e0"
         } !important;
+        width: 202px !important;
       }
       
-      /* Simple icon centering for collapsed state */
-      .pro-sidebar.collapsed .pro-icon-wrapper {
-        text-align: center !important;
-      }
-
       /* Reduce spacing between menu items */
       .pro-menu-item {
         margin: 2px 0 !important;
@@ -389,36 +324,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
   };
 
   return (
-    <ProSidebar collapsed={isCollapsed}>
+    <ProSidebar collapsed={false}>
       <Menu iconShape="square">
         <MenuItem
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          icon={
-            isCollapsed ? (
-              <img
-                src="/logo_small.png"
-                alt="L&D"
-                style={{
-                  height: "48px",
-                  width: "auto",
-                  display: "block",
-                  margin: "0 auto",
-                }}
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.style.display = "none";
-                  const parent = e.target.parentNode;
-                  const text = document.createElement("span");
-                  text.textContent = "L&D";
-                  text.style.fontSize = "24px";
-                  text.style.fontWeight = "bold";
-                  text.style.color =
-                    theme.palette.mode === "dark" ? "#fff" : "#000";
-                  parent.appendChild(text);
-                }}
-              />
-            ) : undefined
-          }
           style={{
             margin: "10px 0 20px 0",
             color:
@@ -427,54 +335,50 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
                 : tokens.grey[700],
           }}
         >
-          {!isCollapsed && (
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-              ml="10px"
-            >
-              <img
-                src="/logo.png"
-                alt="Lancaster and Dickenson Consulting"
-                style={{
-                  maxHeight: "62.5px",
-                  width: "auto",
-                  display: "block",
-                  margin: "0 auto",
-                }}
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.style.display = "none";
-                  const parent = e.target.parentNode;
-                  const text = document.createElement("span");
-                  text.textContent = "L&D";
-                  text.style.fontSize = "24px";
-                  text.style.fontWeight = "bold";
-                  text.style.color =
-                    theme.palette.mode === "dark" ? "#fff" : "#000";
-                  parent.appendChild(text);
-                }}
-              />
-            </Box>
-          )}
+          <Box
+            display="flex"
+            justifyContent="flex-start"
+            alignItems="center"
+            ml="5px"
+            mr="5px"
+            sx={{
+              width: "100%",
+              overflow: "visible",
+            }}
+          >
+            <img
+              src="/logo.png"
+              alt="Lancaster and Dickenson Consulting"
+              style={{
+                maxHeight: "75px",
+                maxWidth: "190px",
+                width: "auto",
+                height: "auto",
+                display: "block",
+                margin: "0",
+                objectFit: "contain",
+              }}
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.style.display = "none";
+                const parent = e.target.parentNode;
+                const text = document.createElement("span");
+                text.textContent = "L&D";
+                text.style.fontSize = "28px";
+                text.style.fontWeight = "bold";
+                text.style.color =
+                  theme.palette.mode === "dark" ? "#fff" : "#000";
+                parent.appendChild(text);
+              }}
+            />
+          </Box>
         </MenuItem>
 
-        <Box paddingLeft={isCollapsed ? undefined : "5%"}>
-          <Item
-            title="Dashboard"
-            to="/"
-            icon={<HomeOutlinedIcon />}
-            isCollapsed={isCollapsed}
-          />
+        <Box paddingLeft="5%">
+          <Item title="Dashboard" to="/" icon={<HomeOutlinedIcon />} />
 
           <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
-            <Item
-              title="Admin"
-              to="/admin"
-              icon={<AccessibilityIcon />}
-              isCollapsed={isCollapsed}
-            />
+            <Item title="Admin" to="/admin" icon={<AccessibilityIcon />} />
           </PermissionGate>
 
           <PermissionGate requiredPermissions={["timesheets.view"]}>
@@ -482,17 +386,11 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Timesheets"
               to="/timesheets"
               icon={<AccessTimeIcon />}
-              isCollapsed={isCollapsed}
             />
           </PermissionGate>
 
           <PermissionGate requiredPermissions={["projects.view"]}>
-            <Item
-              title="Projects"
-              to="/projects"
-              icon={<MapOutlinedIcon />}
-              isCollapsed={isCollapsed}
-            />
+            <Item title="Projects" to="/projects" icon={<MapOutlinedIcon />} />
           </PermissionGate>
 
           <PermissionGate requiredPermissions={["clients.view"]}>
@@ -500,7 +398,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Clients"
               to="/clients"
               icon={<ContactsOutlinedIcon />}
-              isCollapsed={isCollapsed}
             />
           </PermissionGate>
 
@@ -509,7 +406,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Invoices"
               to="/invoices"
               icon={<ReceiptOutlinedIcon />}
-              isCollapsed={isCollapsed}
             />
           </PermissionGate>
 
@@ -518,97 +414,29 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
               title="Scheduler"
               to="/calendar"
               icon={<CalendarTodayOutlinedIcon />}
-              isCollapsed={isCollapsed}
             />
           </PermissionGate>
+
+          <SectionDivider />
 
           {/* Collapsible Sections */}
           <CollapsibleSection
             title="SURVEYS"
-            isCollapsed={isCollapsed}
-            defaultExpanded={true}
-          >
-            <PermissionGate requiredPermissions={["asbestos.view"]}>
-              <Item
-                title="Asbestos Assessment"
-                to="/surveys/asbestos"
-                icon={<HomeIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Lead Assessment"
-                to="/surveys/lead"
-                icon={<HomeIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Mould Assessment"
-                to="/surveys/mould"
-                icon={<HomeIcon />}
-                isCollapsed={isCollapsed}
-              />
-            </PermissionGate>
-          </CollapsibleSection>
+            to="/surveys"
+            icon={<HomeIcon />}
+          />
 
           <CollapsibleSection
             title="CLEARANCES"
-            isCollapsed={isCollapsed}
-            defaultExpanded={true}
-          >
-            <PermissionGate requiredPermissions={["asbestos.view"]}>
-              <Item
-                title="Asbestos Clearance"
-                to="/clearances/asbestos"
-                icon={<AssessmentIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Lead Clearance"
-                to="/clearances/lead"
-                icon={<AssessmentIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Mould Validation"
-                to="/clearances/mould"
-                icon={<AssessmentIcon />}
-                isCollapsed={isCollapsed}
-              />
-            </PermissionGate>
-          </CollapsibleSection>
+            to="/clearances"
+            icon={<AssessmentIcon />}
+          />
 
           <CollapsibleSection
             title="LABORATORY"
-            isCollapsed={isCollapsed}
-            defaultExpanded={true}
-          >
-            <PermissionGate requiredPermissions={["fibre.view"]}>
-              <Item
-                title="Air Monitoring"
-                to="/air-monitoring"
-                icon={<AirOutlinedIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Fibre ID Analysis"
-                to="/fibreID"
-                icon={<ScienceIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Calibrations"
-                to="/calibrations"
-                icon={<ScienceIcon />}
-                isCollapsed={isCollapsed}
-              />
-              <Item
-                title="Laboratory Equipment"
-                to="/laboratory-equipment"
-                icon={<ScienceIcon />}
-                isCollapsed={isCollapsed}
-              />
-            </PermissionGate>
-          </CollapsibleSection>
+            to="/laboratory"
+            icon={<ScienceIcon />}
+          />
         </Box>
       </Menu>
     </ProSidebar>

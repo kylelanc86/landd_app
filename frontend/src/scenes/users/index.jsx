@@ -609,19 +609,25 @@ const Users = () => {
                   <CardContent>
                     <Grid container spacing={2}>
                       <Grid item xs={4}>
-                        <TextField
-                          label="Licence Type"
-                          value={licence.licenceType}
-                          onChange={(e) =>
-                            handleLaaLicenceChange(
-                              index,
-                              "licenceType",
-                              e.target.value
-                            )
-                          }
-                          fullWidth
-                          size="small"
-                        />
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Licence Type</InputLabel>
+                          <Select
+                            label="Licence Type"
+                            value={licence.licenceType}
+                            onChange={(e) =>
+                              handleLaaLicenceChange(
+                                index,
+                                "licenceType",
+                                e.target.value
+                              )
+                            }
+                          >
+                            <MenuItem value="Asbestos Assessor">
+                              Asbestos Assessor
+                            </MenuItem>
+                            <MenuItem value="White Card">White Card</MenuItem>
+                          </Select>
+                        </FormControl>
                       </Grid>
                       <Grid item xs={4}>
                         <TextField
@@ -811,19 +817,25 @@ const Users = () => {
                   <CardContent>
                     <Grid container spacing={2}>
                       <Grid item xs={4}>
-                        <TextField
-                          label="Licence Type"
-                          value={licence.licenceType}
-                          onChange={(e) =>
-                            handleEditLaaLicenceChange(
-                              index,
-                              "licenceType",
-                              e.target.value
-                            )
-                          }
-                          fullWidth
-                          size="small"
-                        />
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Licence Type</InputLabel>
+                          <Select
+                            label="Licence Type"
+                            value={licence.licenceType}
+                            onChange={(e) =>
+                              handleEditLaaLicenceChange(
+                                index,
+                                "licenceType",
+                                e.target.value
+                              )
+                            }
+                          >
+                            <MenuItem value="Asbestos Assessor">
+                              Asbestos Assessor
+                            </MenuItem>
+                            <MenuItem value="White Card">White Card</MenuItem>
+                          </Select>
+                        </FormControl>
                       </Grid>
                       <Grid item xs={4}>
                         <TextField

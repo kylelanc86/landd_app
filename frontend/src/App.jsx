@@ -74,6 +74,11 @@ const MouldValidation = lazy(() =>
   import("./scenes/clearances/MouldValidation")
 );
 
+// New dashboard components
+const SurveysDashboard = lazy(() => import("./scenes/surveys"));
+const ClearancesDashboard = lazy(() => import("./scenes/clearances"));
+const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
+
 function App() {
   const [theme, colorMode] = useMode();
 
@@ -285,7 +290,7 @@ function App() {
                               requiredPermissions={["asbestos.view"]}
                             >
                               <Suspense fallback={<LoadingSpinner />}>
-                                <AsbestosAssessment />
+                                <SurveysDashboard />
                               </Suspense>
                             </PermissionRoute>
                           }
@@ -382,6 +387,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <ClearanceReports />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ClearancesDashboard />
                               </Suspense>
                             </PermissionRoute>
                           }
@@ -546,6 +563,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <ReportTemplates />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/laboratory"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <LaboratoryDashboard />
                               </Suspense>
                             </PermissionRoute>
                           }

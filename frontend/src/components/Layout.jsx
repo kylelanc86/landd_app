@@ -1,24 +1,18 @@
-import React, { useState } from "react";
+import React from "react";
 import { Box } from "@mui/material";
 import Topbar from "../scenes/global/Topbar";
 import Sidebar from "../scenes/global/Sidebar";
 
 const Layout = ({ children, toggleColorMode, mode }) => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      <Sidebar
-        isCollapsed={isSidebarCollapsed}
-        setIsCollapsed={setIsSidebarCollapsed}
-      />
+      <Sidebar />
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          ml: isSidebarCollapsed ? "80px" : "240px",
-          transition: "margin-left 0.3s ease",
-          width: `calc(100% - ${isSidebarCollapsed ? "80px" : "240px"})`,
+          ml: "202px",
+          width: "calc(100% - 202px)",
           minHeight: "100vh",
           backgroundColor: "background.default",
           display: "flex",
