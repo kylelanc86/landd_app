@@ -20,6 +20,7 @@ import { useAuth } from "../../context/AuthContext";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { authService } from "../../services/api";
+import { grey } from "@mui/material/colors";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -94,7 +95,7 @@ const Login = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundImage: "url('/login_back.jpg')",
+        backgroundColor: grey[600],
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
@@ -115,8 +116,8 @@ const Login = () => {
         elevation={8}
         sx={{
           p: 4,
-          width: "100%",
-          maxWidth: 400,
+          width: "70%",
+          maxWidth: 800,
           display: "flex",
           flexDirection: "column",
           gap: 2,
@@ -126,6 +127,22 @@ const Login = () => {
           backdropFilter: "blur(10px)", // Glass effect
         }}
       >
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            mb: 2,
+          }}
+        >
+          <img
+            src="/logo.png"
+            alt="Company Logo"
+            style={{
+              maxWidth: "400px",
+              height: "auto",
+            }}
+          />
+        </Box>
         <Typography variant="h4" component="h1" align="center" gutterBottom>
           Login
         </Typography>
@@ -202,9 +219,9 @@ const Login = () => {
           align="center"
           sx={{ mt: 2 }}
         >
-          Contact admin {" "}
+          Contact admin{" "}
           <Link href="mailto:kylelanc86@gmail.com" color="primary">
-             here
+            here
           </Link>
         </Typography>
       </Paper>

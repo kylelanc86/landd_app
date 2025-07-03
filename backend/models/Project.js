@@ -102,6 +102,10 @@ const projectSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
+  },
+  reports_present: {
+    type: Boolean,
+    default: false
   }
 });
 

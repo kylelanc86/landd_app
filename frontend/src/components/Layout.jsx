@@ -11,8 +11,8 @@ const Layout = ({ children, toggleColorMode, mode }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          ml: "202px",
-          width: "calc(100% - 202px)",
+          ml: "232px",
+          width: "calc(100% - 232px)",
           minHeight: "100vh",
           backgroundColor: "background.default",
           display: "flex",
@@ -38,7 +38,7 @@ const Layout = ({ children, toggleColorMode, mode }) => {
         <Box
           sx={{
             flex: 1,
-            mt: "30px", // Match the Topbar height
+            mt: "23px", // Reduced from 30px to 23px to match 73px total height
             p: 3,
             overflow: "auto",
             position: "relative",

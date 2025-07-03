@@ -79,6 +79,12 @@ const SurveysDashboard = lazy(() => import("./scenes/surveys"));
 const ClearancesDashboard = lazy(() => import("./scenes/clearances"));
 const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
 
+// New landing page components
+const Databases = lazy(() => import("./scenes/databases"));
+const Reports = lazy(() => import("./scenes/reports"));
+const Records = lazy(() => import("./scenes/records"));
+const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
+
 function App() {
   const [theme, colorMode] = useMode();
 
@@ -575,6 +581,74 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <LaboratoryDashboard />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/databases"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Databases />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/reports"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Reports />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Records />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/laboratory/equipment"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <EquipmentList />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/laboratory/calibrations"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["calibrations.view"]}
+                            >
+                              <Calibrations />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/asbestos-removal"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosRemoval />
                               </Suspense>
                             </PermissionRoute>
                           }

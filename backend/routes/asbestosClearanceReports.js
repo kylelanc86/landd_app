@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const AsbestosClearanceReport = require("../models/AsbestosClearanceReport");
+const Project = require("../models/Project");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 
@@ -92,6 +93,22 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
     });
 
     const savedReport = await report.save();
+    
+    // Update the project's reports_present field to true
+    if (savedReport.clearanceId) {
+      try {
+        const clearance = await savedReport.populate("clearanceId");
+        if (clearance.clearanceId && clearance.clearanceId.projectId) {
+          await Project.findByIdAndUpdate(
+            clearance.clearanceId.projectId,
+            { reports_present: true }
+          );
+          console.log(`Updated project ${clearance.clearanceId.projectId} reports_present to true`);
+        }
+      } catch (error) {
+        console.error("Error updating project reports_present field:", error);
+      }
+    }
     
     const populatedReport = await AsbestosClearanceReport.findById(savedReport._id)
       .populate("clearanceId", "projectId clearanceDate status")

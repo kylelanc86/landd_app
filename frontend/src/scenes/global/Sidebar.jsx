@@ -10,10 +10,14 @@ import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import AssessmentIcon from "@mui/icons-material/Assessment";
-import AccessibilityIcon from "@mui/icons-material/Accessibility";
+import SettingsIcon from "@mui/icons-material/Settings";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScienceIcon from "@mui/icons-material/Science";
 import HomeIcon from "@mui/icons-material/Home";
+import StorageIcon from "@mui/icons-material/Storage";
+import MonitorIcon from "@mui/icons-material/Monitor";
+import DescriptionIcon from "@mui/icons-material/Description";
+import ConstructionIcon from "@mui/icons-material/Construction";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -73,8 +77,8 @@ const Item = ({ title, to, icon }) => {
 
   // Handle navigation with refresh
   const handleNavigation = () => {
-    // If we're already on the same page, force a refresh
-    if (location.pathname === to || location.pathname.startsWith(`${to}/`)) {
+    // If we're already on the exact same page, force a refresh
+    if (location.pathname === to) {
       window.location.reload();
     } else {
       // Navigate to the new page
@@ -103,7 +107,7 @@ const Item = ({ title, to, icon }) => {
           : "transparent",
         borderRadius: "4px",
         margin: "1px 8px",
-        padding: "8px 10px",
+        padding: "12px 10px",
         cursor: "pointer",
         transition: "background-color 0.2s",
         "&:hover": {
@@ -185,8 +189,8 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 
   // Handle navigation with refresh
   const handleNavigation = () => {
-    // If we're already on the same page, force a refresh
-    if (location.pathname === to || location.pathname.startsWith(`${to}/`)) {
+    // If we're already on the exact same page, force a refresh
+    if (location.pathname === to) {
       window.location.reload();
     } else {
       // Navigate to the new page
@@ -202,7 +206,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
         alignItems: "center",
         justifyContent: "flex-start",
         cursor: "pointer",
-        p: "8px 10px",
+        p: "12px 10px",
         m: "12px 10px 0px 10px",
         borderRadius: "4px",
         color: isActive
@@ -249,7 +253,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
           color: "inherit",
           whiteSpace: "normal",
           wordBreak: "break-word",
-          fontSize: "0.8rem",
+          fontSize: "1rem",
           lineHeight: 1.2,
           textAlign: "left",
           flex: 1,
@@ -276,7 +280,7 @@ const Sidebar = () => {
         left: 0 !important;
         height: 100vh !important;
         z-index: 1300 !important;
-        width: 202px !important;
+        width: 242px !important;
       }
       .pro-sidebar-inner {
         background: ${
@@ -285,7 +289,7 @@ const Sidebar = () => {
         border-right: 1px solid ${
           theme.palette.mode === "dark" ? "#2d2d2d" : "#e0e0e0"
         } !important;
-        width: 202px !important;
+        width: 242px !important;
       }
       
       /* Reduce spacing between menu items */
@@ -344,6 +348,7 @@ const Sidebar = () => {
             sx={{
               width: "100%",
               overflow: "visible",
+              cursor: "default",
             }}
           >
             <img
@@ -377,10 +382,6 @@ const Sidebar = () => {
         <Box paddingLeft="5%">
           <Item title="Dashboard" to="/" icon={<HomeOutlinedIcon />} />
 
-          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
-            <Item title="Admin" to="/admin" icon={<AccessibilityIcon />} />
-          </PermissionGate>
-
           <PermissionGate requiredPermissions={["timesheets.view"]}>
             <Item
               title="Timesheets"
@@ -389,37 +390,38 @@ const Sidebar = () => {
             />
           </PermissionGate>
 
-          <PermissionGate requiredPermissions={["projects.view"]}>
-            <Item title="Projects" to="/projects" icon={<MapOutlinedIcon />} />
-          </PermissionGate>
-
-          <PermissionGate requiredPermissions={["clients.view"]}>
-            <Item
-              title="Clients"
-              to="/clients"
-              icon={<ContactsOutlinedIcon />}
-            />
-          </PermissionGate>
-
-          <PermissionGate requiredPermissions={["invoices.view"]}>
-            <Item
-              title="Invoices"
-              to="/invoices"
-              icon={<ReceiptOutlinedIcon />}
-            />
-          </PermissionGate>
-
+          {/* 
           <PermissionGate requiredPermissions={["calendar.view"]}>
             <Item
               title="Scheduler"
               to="/calendar"
               icon={<CalendarTodayOutlinedIcon />}
             />
-          </PermissionGate>
+          </PermissionGate> */}
 
           <SectionDivider />
 
           {/* Collapsible Sections */}
+          <CollapsibleSection
+            title="DATABASES"
+            to="/databases"
+            icon={<StorageIcon />}
+          />
+
+          <CollapsibleSection
+            title="REPORTS"
+            to="/reports"
+            icon={<DescriptionIcon />}
+          />
+
+          <CollapsibleSection
+            title="RECORDS"
+            to="/records"
+            icon={<DescriptionIcon />}
+          />
+
+          <SectionDivider />
+
           <CollapsibleSection
             title="SURVEYS"
             to="/surveys"
@@ -427,16 +429,23 @@ const Sidebar = () => {
           />
 
           <CollapsibleSection
-            title="CLEARANCES"
-            to="/clearances"
-            icon={<AssessmentIcon />}
+            title="ASBESTOS REMOVAL"
+            to="/asbestos-removal"
+            icon={<ConstructionIcon />}
           />
 
           <CollapsibleSection
-            title="LABORATORY"
-            to="/laboratory"
+            title="FIBRE ID"
+            to="/fibreID"
             icon={<ScienceIcon />}
           />
+        </Box>
+
+        <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, p: 2 }}>
+          <SectionDivider />
+          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
+            <Item title="Admin" to="/admin" icon={<SettingsIcon />} />
+          </PermissionGate>
         </Box>
       </Menu>
     </ProSidebar>

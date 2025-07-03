@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Shift = require('../models/Shift');
+const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const mongoose = require('mongoose');
@@ -139,6 +140,28 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       }
 
       const updatedShift = await shift.save();
+      // Update project's reports_present field if shift is completed
+      if (updatedShift.status === 'analysis_complete' || updatedShift.status === 'shift_complete' || updatedShift.reportApprovedBy) {
+        try {
+          const populatedShift = await Shift.findById(updatedShift._id)
+            .populate({
+              path: 'job',
+              populate: {
+                path: 'project',
+                select: '_id'
+              }
+            });
+          if (populatedShift.job && populatedShift.job.project) {
+            await Project.findByIdAndUpdate(
+              populatedShift.job.project._id,
+              { reports_present: true }
+            );
+            console.log(`Updated project ${populatedShift.job.project._id} reports_present to true due to completed shift`);
+          }
+        } catch (error) {
+          console.error("Error updating project reports_present field:", error);
+        }
+      }
       res.json(updatedShift);
     } catch (saveError) {
       return res.status(400).json({ 

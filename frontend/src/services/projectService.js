@@ -1,8 +1,8 @@
 import axiosInstance from "./axios";
 
 const projectService = {
-  getAll: async () => {
-    const response = await axiosInstance.get("/projects");
+  getAll: async (params = {}) => {
+    const response = await axiosInstance.get("/projects", { params });
     return response.data;
   },
   getById: (id) => axiosInstance.get(`/projects/${id}`),

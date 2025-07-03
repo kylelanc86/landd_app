@@ -1855,7 +1855,7 @@ const Projects = () => {
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
-    <Box m="20px 0px 20px 20px">
+    <Box m="5px 0px 20px 20px">
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>
@@ -1872,25 +1872,9 @@ const Projects = () => {
         </Box>
       )}
 
-      <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Header title="PROJECTS" subtitle="Managing your projects" />
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={() => setDialogOpen(true)}
-          sx={{
-            backgroundColor: theme.palette.secondary.main,
-            "&:hover": { backgroundColor: theme.palette.secondary.dark },
-          }}
-        >
-          <AddIcon sx={{ mr: 1 }} />
-          Add Project
-        </Button>
-      </Box>
-
       {/* Search and Filter Section */}
       <Box
-        mt="20px"
+        mt="5px"
         mb="20px"
         sx={{
           backgroundColor: "background.paper",
@@ -1899,99 +1883,121 @@ const Projects = () => {
           p: 2,
         }}
       >
-        <Stack direction="row" spacing={2} alignItems="center">
-          {/* Search Input */}
-          <TextField
-            label="Search Projects"
-            variant="outlined"
-            size="small"
-            placeholder="Enter search term"
-            value={filters.searchTerm}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ minWidth: 300 }}
-            ref={searchInputRef}
-            onFocus={() => {
-              setSearchFocused(true);
-            }}
-            onBlur={() => {
-              setSearchFocused(false);
-            }}
-          />
+        <Stack
+          direction="row"
+          spacing={2}
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Stack direction="row" spacing={2} alignItems="center">
+            {/* Search Input */}
+            <TextField
+              label="Search Projects"
+              variant="outlined"
+              size="small"
+              placeholder="Enter search term"
+              value={filters.searchTerm}
+              onChange={handleSearchChange}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ minWidth: 300 }}
+              ref={searchInputRef}
+              onFocus={() => {
+                setSearchFocused(true);
+              }}
+              onBlur={() => {
+                setSearchFocused(false);
+              }}
+            />
 
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={filters.statusFilter}
-              label="Status"
-              onChange={(e) => handleFilterChange("status", e.target.value)}
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={filters.statusFilter}
+                label="Status"
+                onChange={(e) => handleFilterChange("status", e.target.value)}
+              >
+                <MenuItem value="all">All Statuses</MenuItem>
+                <MenuItem value="all_active">All Active</MenuItem>
+                <MenuItem value="all_inactive">All Inactive</MenuItem>
+                <Divider />
+                <MenuItem disabled>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Active Statuses
+                  </Typography>
+                </MenuItem>
+                {ACTIVE_STATUSES.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status}
+                  </MenuItem>
+                ))}
+                <Divider />
+                <MenuItem disabled>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Inactive Statuses
+                  </Typography>
+                </MenuItem>
+                {INACTIVE_STATUSES.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* Clear Filters Button */}
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={clearFilters}
+              sx={{
+                height: 40, // Match the height of other components
+                minWidth: 120,
+              }}
             >
-              <MenuItem value="all">All Statuses</MenuItem>
-              <MenuItem value="all_active">All Active</MenuItem>
-              <MenuItem value="all_inactive">All Inactive</MenuItem>
-              <Divider />
-              <MenuItem disabled>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Active Statuses
-                </Typography>
-              </MenuItem>
-              {ACTIVE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
-              <Divider />
-              <MenuItem disabled>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Inactive Statuses
-                </Typography>
-              </MenuItem>
-              {INACTIVE_STATUSES.map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              Clear Filters
+            </Button>
 
-          {/* Clear Filters Button */}
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={clearFilters}
-            sx={{
-              height: 40, // Match the height of other components
-              minWidth: 120,
-            }}
-          >
-            Clear Filters
-          </Button>
-
-          {/* Column Visibility Button */}
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<ViewColumnIcon />}
-            onClick={handleColumnVisibilityClick}
-            sx={{
-              height: 40, // Match the height of other components
-              minWidth: 140,
-              color: colors.blueAccent[500],
-              borderColor: colors.blueAccent[500],
-              "&:hover": {
-                backgroundColor: colors.blueAccent[500],
-                color: "white",
+            {/* Column Visibility Button */}
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ViewColumnIcon />}
+              onClick={handleColumnVisibilityClick}
+              sx={{
+                height: 40, // Match the height of other components
+                minWidth: 140,
+                color: colors.blueAccent[500],
                 borderColor: colors.blueAccent[500],
-              },
+                "&:hover": {
+                  backgroundColor: colors.blueAccent[500],
+                  color: "white",
+                  borderColor: colors.blueAccent[500],
+                },
+              }}
+            >
+              Columns
+            </Button>
+          </Stack>
+
+          {/* Add Project Button */}
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => setDialogOpen(true)}
+            sx={{
+              backgroundColor: theme.palette.secondary.main,
+              "&:hover": { backgroundColor: theme.palette.secondary.dark },
+              height: 40, // Match the height of other components
             }}
           >
-            Columns
+            <AddIcon sx={{ mr: 1 }} />
+            Add Project
           </Button>
         </Stack>
       </Box>
