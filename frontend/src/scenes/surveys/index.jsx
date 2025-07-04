@@ -19,7 +19,7 @@ import PermissionGate from "../../components/PermissionGate";
 
 const SurveysDashboard = () => {
   const theme = useTheme();
-  const colors = tokens;
+
   const navigate = useNavigate();
 
   const surveyModules = [
@@ -27,7 +27,9 @@ const SurveysDashboard = () => {
       id: "asbestos-assessment",
       title: "Asbestos Assessment",
       description: "Conduct asbestos surveys and assessments",
-      icon: <HomeIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />,
+      icon: (
+        <HomeIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
+      ),
       path: "/surveys/asbestos",
       requiredPermission: "asbestos.view",
     },
@@ -36,7 +38,9 @@ const SurveysDashboard = () => {
       title: "Lead Assessment",
       description: "Conduct lead paint surveys and assessments",
       icon: (
-        <AssessmentIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />
+        <AssessmentIcon
+          sx={{ fontSize: 40, color: theme.palette.secondary.main }}
+        />
       ),
       path: "/surveys/lead",
       requiredPermission: "asbestos.view",
@@ -45,7 +49,11 @@ const SurveysDashboard = () => {
       id: "mould-assessment",
       title: "Mould Assessment",
       description: "Conduct mould surveys and assessments",
-      icon: <ScienceIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />,
+      icon: (
+        <ScienceIcon
+          sx={{ fontSize: 40, color: theme.palette.secondary.main }}
+        />
+      ),
       path: "/surveys/mould",
       requiredPermission: "asbestos.view",
     },
@@ -61,14 +69,14 @@ const SurveysDashboard = () => {
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography
             variant="h2"
-            color={colors.grey[100]}
+            color="#000000"
             fontWeight="bold"
             sx={{ mb: "5px" }}
           >
             Surveys Dashboard
           </Typography>
         </Box>
-        <Typography variant="h5" color={colors.secondary[500]}>
+        <Typography variant="h5" color={theme.palette.secondary.main}>
           Manage and conduct various types of surveys
         </Typography>
 
@@ -103,7 +111,7 @@ const SurveysDashboard = () => {
                       <Box sx={{ mb: 2 }}>{module.icon}</Box>
                       <Typography
                         variant="h5"
-                        color={colors.grey[100]}
+                        color="#000000"
                         fontWeight="bold"
                         sx={{ mb: 1 }}
                       >
@@ -111,7 +119,7 @@ const SurveysDashboard = () => {
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={colors.grey[300]}
+                        color={theme.palette.text.secondary}
                         sx={{ mb: 2 }}
                       >
                         {module.description}
@@ -120,7 +128,7 @@ const SurveysDashboard = () => {
                         sx={{
                           width: "100%",
                           height: 2,
-                          backgroundColor: colors.secondary[500],
+                          backgroundColor: theme.palette.secondary.main,
                           borderRadius: 1,
                         }}
                       />

@@ -806,7 +806,6 @@ const Invoices = () => {
   return (
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Header title="INVOICES" subtitle="Managing your invoices" />
         <Box display="flex" gap={2}>
           <Button
             variant="contained"
@@ -931,20 +930,38 @@ const Invoices = () => {
         height="75vh"
         sx={{
           "& .MuiDataGrid-root": { border: "none" },
-          "& .MuiDataGrid-cell": { borderBottom: "none" },
-          "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.dark,
+          "& .MuiDataGrid-cell": {
             borderBottom: "none",
+            color: "#000000",
+          },
+          "& .MuiDataGrid-columnHeaders": {
+            backgroundColor: theme.palette.primary.main,
+            borderBottom: "none",
+            color: "#FFFFFF",
+          },
+          "& .MuiDataGrid-columnHeader": {
+            color: "#FFFFFF",
+            fontWeight: 600,
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: theme.palette.background.default,
+            backgroundColor: "#FFFFFF",
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.dark,
+            backgroundColor: theme.palette.primary.main,
+            color: "#FFFFFF",
           },
           "& .MuiCheckbox-root": {
             color: `${theme.palette.secondary.main} !important`,
+          },
+          "& .MuiDataGrid-row:nth-of-type(even)": {
+            backgroundColor: "#f8f9fa",
+          },
+          "& .MuiDataGrid-row:nth-of-type(odd)": {
+            backgroundColor: "#ffffff",
+          },
+          "& .MuiDataGrid-row:hover": {
+            backgroundColor: "#e3f2fd",
           },
         }}
       >

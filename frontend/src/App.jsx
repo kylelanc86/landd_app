@@ -85,6 +85,31 @@ const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
 
+// Records pages
+const TrainingRecords = lazy(() => import("./scenes/records/training"));
+const StaffMeetings = lazy(() => import("./scenes/records/staff-meetings"));
+const DocumentRegister = lazy(() =>
+  import("./scenes/records/document-register")
+);
+const ApprovedSuppliers = lazy(() =>
+  import("./scenes/records/approved-suppliers")
+);
+const AssetRegister = lazy(() => import("./scenes/records/asset-register"));
+const Incidents = lazy(() => import("./scenes/records/incidents"));
+const OHSEnvironmental = lazy(() =>
+  import("./scenes/records/ohs-environmental")
+);
+const ImpartialityRisks = lazy(() =>
+  import("./scenes/records/impartiality-risks")
+);
+const Feedback = lazy(() => import("./scenes/records/feedback"));
+const QualityControl = lazy(() => import("./scenes/records/quality-control"));
+const IndoorAirQuality = lazy(() =>
+  import("./scenes/records/indoor-air-quality")
+);
+const Blanks = lazy(() => import("./scenes/records/blanks"));
+const Audits = lazy(() => import("./scenes/records/audits"));
+
 function App() {
   const [theme, colorMode] = useMode();
 
@@ -106,10 +131,7 @@ function App() {
                 path="/*"
                 element={
                   <ProtectedRoute>
-                    <Layout
-                      toggleColorMode={colorMode.toggleColorMode}
-                      mode={theme.palette.mode}
-                    >
+                    <Layout>
                       <Routes>
                         <Route path="/" element={<Dashboard />} />
                         <Route
@@ -638,6 +660,162 @@ function App() {
                               requiredPermissions={["calibrations.view"]}
                             >
                               <Calibrations />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/training"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <TrainingRecords />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/staff-meetings"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <StaffMeetings />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/document-register"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <DocumentRegister />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/approved-suppliers"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ApprovedSuppliers />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/asset-register"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AssetRegister />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/incidents"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Incidents />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/ohs-environmental"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <OHSEnvironmental />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/impartiality-risks"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ImpartialityRisks />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/feedback"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Feedback />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/quality-control"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <QualityControl />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/indoor-air-quality"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <IndoorAirQuality />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/blanks"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Blanks />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/records/audits"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Audits />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />

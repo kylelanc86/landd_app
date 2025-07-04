@@ -23,6 +23,8 @@ import {
   jobService,
   userService,
 } from "../../services/api";
+import airPumpService from "../../services/airPumpService";
+import { equipmentService } from "../../services/equipmentService";
 import { useAuth } from "../../context/AuthContext";
 import { formatDateForInput } from "../../utils/dateUtils";
 
@@ -37,11 +39,14 @@ const NewSample = () => {
   const location = useLocation();
   const { currentUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [airPumps, setAirPumps] = useState([]);
+  const [flowmeters, setFlowmeters] = useState([]);
   const [form, setForm] = useState({
     sampleNumber: "",
     type: "Background",
     location: "",
     pumpNo: "",
+    flowmeter: "",
     cowlNo: "",
     filterSize: "25mm",
     startTime: "",
@@ -56,6 +61,7 @@ const NewSample = () => {
   const [projectID, setProjectID] = useState(null);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState(null);
@@ -71,6 +77,58 @@ const NewSample = () => {
       }
     };
     fetchUsers();
+  }, []);
+
+  // Fetch active air pumps when component mounts
+  useEffect(() => {
+    const fetchActiveAirPumps = async () => {
+      try {
+        const response = await airPumpService.filterByStatus("Active");
+        const pumps = response.data || response;
+        setAirPumps(pumps);
+      } catch (error) {
+        console.error("Error fetching active air pumps:", error);
+      }
+    };
+    fetchActiveAirPumps();
+  }, []);
+
+  // Fetch active flowmeters when component mounts
+  useEffect(() => {
+    const fetchActiveFlowmeters = async () => {
+      try {
+        console.log("Fetching flowmeters...");
+        const response = await equipmentService.getAll();
+        console.log("Equipment response:", response);
+
+        if (!response) {
+          console.error("No response from equipment service");
+          return;
+        }
+
+        const allEquipment = response.equipment || response.data || response;
+        console.log("All equipment:", allEquipment);
+
+        if (!Array.isArray(allEquipment)) {
+          console.error("Equipment data is not an array:", allEquipment);
+          return;
+        }
+
+        const flowmeters = allEquipment.filter(
+          (equipment) =>
+            (equipment.equipmentType === "Bubble flowmeter" ||
+              equipment.equipmentType === "Site flowmeter") &&
+            equipment.status === "active"
+        );
+        console.log("Filtered flowmeters:", flowmeters);
+        console.log("Flowmeter count:", flowmeters.length);
+        setFlowmeters(flowmeters);
+      } catch (error) {
+        console.error("Error fetching active flowmeters:", error);
+        console.error("Error details:", error.response?.data || error.message);
+      }
+    };
+    fetchActiveFlowmeters();
   }, []);
 
   useEffect(() => {
@@ -155,6 +213,54 @@ const NewSample = () => {
             sampler: samplerId,
           }));
         }
+
+        // Handle default flowmeter logic
+        if (!response.data.defaultFlowmeter && samplesInShift.length > 0) {
+          const firstSample = samplesInShift[0];
+          console.log("First sample in shift for flowmeter:", firstSample);
+
+          if (firstSample.flowmeter) {
+            console.log(
+              "Setting default flowmeter from first sample:",
+              firstSample.flowmeter
+            );
+            try {
+              const shiftUpdateResponse = await shiftService.update(shiftId, {
+                defaultFlowmeter: firstSample.flowmeter,
+              });
+              console.log(
+                "Shift updated with default flowmeter from first sample:",
+                shiftUpdateResponse
+              );
+
+              // Set the flowmeter in the form
+              setForm((prev) => ({
+                ...prev,
+                flowmeter: firstSample.flowmeter,
+              }));
+            } catch (error) {
+              console.error(
+                "Error setting default flowmeter from first sample:",
+                error
+              );
+            }
+          }
+        }
+        // If there is a default flowmeter, use it for subsequent samples
+        else if (response.data.defaultFlowmeter) {
+          console.log(
+            "Setting default flowmeter from shift:",
+            response.data.defaultFlowmeter
+          );
+          setForm((prev) => {
+            const updatedForm = {
+              ...prev,
+              flowmeter: response.data.defaultFlowmeter,
+            };
+            console.log("Updated form with flowmeter:", updatedForm);
+            return updatedForm;
+          });
+        }
       } catch (err) {
         console.error("Error fetching shift:", err);
         setError("Failed to load shift details");
@@ -199,8 +305,43 @@ const NewSample = () => {
     fetchShiftDetails();
   }, [shiftId]);
 
+  // Effect to handle flowmeter persistence when flowmeters are loaded
+  useEffect(() => {
+    if (flowmeters.length > 0 && shift && shift.defaultFlowmeter) {
+      console.log(
+        "Flowmeters loaded, checking for default flowmeter:",
+        shift.defaultFlowmeter
+      );
+      console.log(
+        "Available flowmeter references:",
+        flowmeters.map((f) => f.equipmentReference)
+      );
+
+      // Check if the default flowmeter exists in the available flowmeters
+      const defaultFlowmeterExists = flowmeters.some(
+        (f) => f.equipmentReference === shift.defaultFlowmeter
+      );
+
+      if (defaultFlowmeterExists && !form.flowmeter) {
+        console.log(
+          "Setting default flowmeter from shift after flowmeters loaded"
+        );
+        setForm((prev) => ({
+          ...prev,
+          flowmeter: shift.defaultFlowmeter,
+        }));
+      }
+    }
+  }, [flowmeters, shift, form.flowmeter]);
+
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
+
+    // Clear field error when user starts typing
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
+
     if (name === "isFieldBlank") {
       setForm((prev) => ({
         ...prev,
@@ -246,10 +387,51 @@ const NewSample = () => {
     setForm((prev) => ({ ...prev, [field]: timeString }));
   };
 
+  const validateForm = () => {
+    const errors = {};
+
+    if (!form.sampler) {
+      errors.sampler = "Sampler is required";
+    }
+
+    if (!form.sampleNumber) {
+      errors.sampleNumber = "Sample number is required";
+    }
+
+    if (!form.flowmeter) {
+      errors.flowmeter = "Flowmeter is required";
+    }
+
+    if (!form.isFieldBlank) {
+      if (!form.location) {
+        errors.location = "Location is required";
+      }
+      if (!form.type) {
+        errors.type = "Type is required";
+      }
+      if (!form.startTime) {
+        errors.startTime = "Start time is required";
+      }
+      if (!form.initialFlowrate) {
+        errors.initialFlowrate = "Initial flowrate is required";
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
     setError("");
+    setFieldErrors({});
+
+    // Validate form before submission
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       if (!projectID) {
@@ -262,10 +444,6 @@ const NewSample = () => {
 
       if (!shiftId) {
         throw new Error("Shift ID is required");
-      }
-
-      if (!form.sampleNumber) {
-        throw new Error("Sample number is required");
       }
 
       // Get the number of samples in this shift
@@ -284,14 +462,31 @@ const NewSample = () => {
         }
       }
 
+      // If this is the first sample in the shift and we have a flowmeter, set it as the default
+      if (shiftSampleNumber === 1 && form.flowmeter) {
+        try {
+          await shiftService.update(shiftId, {
+            defaultFlowmeter: form.flowmeter,
+          });
+        } catch (error) {
+          // Don't throw the error, just log it and continue
+        }
+      }
+
       // Create the sample
+      console.log("Form data before submission:", form);
+      console.log("Flowmeter value:", form.flowmeter);
+
       const sampleData = {
         ...form,
         shift: shiftId,
         job: job._id,
         fullSampleID: `${projectID}-${form.sampleNumber}`,
         collectedBy: form.sampler,
+        flowmeter: form.flowmeter, // Explicitly include flowmeter
       };
+
+      console.log("Sample data being sent:", sampleData);
 
       await sampleService.create(sampleData);
 
@@ -349,13 +544,14 @@ const NewSample = () => {
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
-          <FormControl fullWidth required>
+          <FormControl fullWidth required error={!!fieldErrors.sampler}>
             <InputLabel>Sampler</InputLabel>
             <Select
               name="sampler"
               value={form.sampler}
               onChange={handleChange}
               label="Sampler"
+              required
             >
               {users.map((user) => (
                 <MenuItem key={user._id} value={user._id}>
@@ -363,6 +559,11 @@ const NewSample = () => {
                 </MenuItem>
               ))}
             </Select>
+            {fieldErrors.sampler && (
+              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                {fieldErrors.sampler}
+              </Typography>
+            )}
           </FormControl>
           <TextField
             name="sampleNumber"
@@ -371,8 +572,11 @@ const NewSample = () => {
             onChange={handleChange}
             required
             fullWidth
+            error={!!fieldErrors.sampleNumber}
             helperText={
-              projectID
+              fieldErrors.sampleNumber
+                ? fieldErrors.sampleNumber
+                : projectID
                 ? `Full Sample ID will be: ${projectID}-${
                     form.sampleNumber || "XXX"
                   }`
@@ -391,7 +595,7 @@ const NewSample = () => {
           />
           {!form.isFieldBlank && (
             <>
-              <FormControl fullWidth required>
+              <FormControl fullWidth required error={!!fieldErrors.type}>
                 <InputLabel>Type</InputLabel>
                 <Select
                   name="type"
@@ -403,6 +607,11 @@ const NewSample = () => {
                   <MenuItem value="Clearance">Clearance</MenuItem>
                   <MenuItem value="Exposure">Exposure</MenuItem>
                 </Select>
+                {fieldErrors.type && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.type}
+                  </Typography>
+                )}
               </FormControl>
               <TextField
                 name="location"
@@ -411,6 +620,8 @@ const NewSample = () => {
                 onChange={handleChange}
                 required
                 fullWidth
+                error={!!fieldErrors.location}
+                helperText={fieldErrors.location}
               />
             </>
           )}
@@ -426,25 +637,32 @@ const NewSample = () => {
           )}
           {!form.isFieldBlank && (
             <>
+              <FormControl fullWidth>
+                <InputLabel>Pump No.</InputLabel>
+                <Select
+                  name="pumpNo"
+                  value={form.pumpNo}
+                  onChange={handleChange}
+                  label="Pump No."
+                >
+                  <MenuItem value="">
+                    <em>Select a pump</em>
+                  </MenuItem>
+                  {airPumps.map((pump) => (
+                    <MenuItem key={pump._id} value={pump.pumpReference}>
+                      {pump.pumpReference} - {pump.pumpDetails}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
-                name="pumpNo"
-                label="Pump No."
-                value={form.pumpNo}
+                name="cowlNo"
+                label="Cowl No."
+                value={form.cowlNo}
                 onChange={handleChange}
+                required
                 fullWidth
               />
-            </>
-          )}
-          <TextField
-            name="cowlNo"
-            label="Cowl No."
-            value={form.cowlNo}
-            onChange={handleChange}
-            required
-            fullWidth
-          />
-          {!form.isFieldBlank && (
-            <>
               <FormControl fullWidth>
                 <InputLabel>Filter Size</InputLabel>
                 <Select
@@ -457,6 +675,45 @@ const NewSample = () => {
                   <MenuItem value="13mm">13mm</MenuItem>
                 </Select>
               </FormControl>
+            </>
+          )}
+          <FormControl fullWidth required error={!!fieldErrors.flowmeter}>
+            <InputLabel>Flowmeter</InputLabel>
+            <Select
+              name="flowmeter"
+              value={form.flowmeter}
+              onChange={handleChange}
+              label="Flowmeter"
+              required
+            >
+              <MenuItem value="">
+                <em>Select a flowmeter</em>
+              </MenuItem>
+              {flowmeters.map((flowmeter) => (
+                <MenuItem
+                  key={flowmeter._id}
+                  value={flowmeter.equipmentReference}
+                >
+                  {flowmeter.equipmentReference} - {flowmeter.brandModel} (
+                  {flowmeter.equipmentType})
+                </MenuItem>
+              ))}
+            </Select>
+            {fieldErrors.flowmeter && (
+              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                {fieldErrors.flowmeter}
+              </Typography>
+            )}
+            <Typography
+              variant="caption"
+              sx={{ mt: 0.5, color: "text.secondary" }}
+            >
+              Current value: {form.flowmeter || "None"} | Available options:{" "}
+              {flowmeters.map((f) => f.equipmentReference).join(", ")}
+            </Typography>
+          </FormControl>
+          {!form.isFieldBlank && (
+            <>
               <Box sx={{ display: "flex", gap: 1 }}>
                 <TextField
                   name="startTime"
@@ -466,6 +723,8 @@ const NewSample = () => {
                   onChange={handleChange}
                   required
                   fullWidth
+                  error={!!fieldErrors.startTime}
+                  helperText={fieldErrors.startTime}
                   InputLabelProps={{ shrink: true }}
                   inputProps={{ step: 60 }}
                 />
@@ -476,6 +735,18 @@ const NewSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
+              <TextField
+                name="initialFlowrate"
+                label="Initial Flowrate (L/min)"
+                type="number"
+                value={form.initialFlowrate}
+                onChange={handleChange}
+                required
+                fullWidth
+                error={!!fieldErrors.initialFlowrate}
+                helperText={fieldErrors.initialFlowrate}
+                inputProps={{ step: "0.1" }}
+              />
               <Box sx={{ display: "flex", gap: 1 }}>
                 <TextField
                   name="endTime"
@@ -494,16 +765,6 @@ const NewSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
-              <TextField
-                name="initialFlowrate"
-                label="Initial Flowrate (L/min)"
-                type="number"
-                value={form.initialFlowrate}
-                onChange={handleChange}
-                required
-                fullWidth
-                inputProps={{ step: "0.1" }}
-              />
               <TextField
                 name="finalFlowrate"
                 label="Final Flowrate (L/min)"

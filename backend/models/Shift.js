@@ -32,6 +32,10 @@ const shiftSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   },
+  defaultFlowmeter: {
+    type: String,
+    required: false
+  },
   status: {
     type: String,
     enum: ['ongoing', 'sampling_complete', 'samples_submitted_to_lab', 'analysis_complete', 'shift_complete'],

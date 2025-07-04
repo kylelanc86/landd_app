@@ -3,15 +3,12 @@ import { tokens } from "../theme";
 
 const Header = ({ title, subtitle, secondarySubtitle }) => {
   const theme = useTheme();
-  const colors = tokens;
 
   return (
     <Box mb="30px">
       <Typography
         variant="h2"
-        color={
-          theme.palette.mode === "dark" ? colors.grey[100] : colors.grey[900]
-        }
+        color={"#000000"}
         fontWeight="bold"
         sx={{ mb: "5px" }}
       >
@@ -21,8 +18,8 @@ const Header = ({ title, subtitle, secondarySubtitle }) => {
         variant="h5"
         color={
           theme.palette.mode === "dark"
-            ? colors.secondary[500]
-            : colors.secondary[700]
+            ? theme.palette.secondary.main
+            : theme.palette.secondary.dark
         }
         sx={{ mb: secondarySubtitle ? "2px" : 0 }}
       >

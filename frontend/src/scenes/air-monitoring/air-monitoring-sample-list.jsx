@@ -247,17 +247,6 @@ const SampleList = () => {
     }
   };
 
-  const handleDescriptionBlur = () => {
-    saveDescriptionOfWorks();
-  };
-
-  const handleDescriptionKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      saveDescriptionOfWorks();
-    }
-  };
-
   if (loading) {
     return <Typography>Loading...</Typography>;
   }
@@ -290,8 +279,6 @@ const SampleList = () => {
           maxRows={6}
           value={descriptionOfWorks}
           onChange={handleDescriptionChange}
-          onBlur={handleDescriptionBlur}
-          onKeyDown={handleDescriptionKeyDown}
           placeholder="Enter a description of works for this shift..."
           required
           error={!descriptionOfWorks}
@@ -299,16 +286,31 @@ const SampleList = () => {
             !descriptionOfWorks ? "Description of works is required" : ""
           }
         />
-        {descSaveStatus === "Saved" && (
-          <Typography variant="caption" color="success.main">
-            Description saved
-          </Typography>
-        )}
-        {descSaveStatus === "Error" && (
-          <Typography variant="caption" color="error.main">
-            Error saving description
-          </Typography>
-        )}
+        <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
+          <Button
+            variant="contained"
+            onClick={saveDescriptionOfWorks}
+            disabled={!descriptionOfWorks.trim()}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Save Description
+          </Button>
+          {descSaveStatus === "Saved" && (
+            <Typography variant="caption" color="success.main">
+              Description saved successfully
+            </Typography>
+          )}
+          {descSaveStatus === "Error" && (
+            <Typography variant="caption" color="error.main">
+              Error saving description
+            </Typography>
+          )}
+        </Box>
       </Box>
 
       <Typography

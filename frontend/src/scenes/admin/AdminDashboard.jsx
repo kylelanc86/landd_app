@@ -37,7 +37,7 @@ const AdminDashboard = () => {
       title: "Report Templates",
       description: "Manage standardized content for different report types",
       icon: (
-        <AssessmentIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />
+        <AssessmentIcon sx={{ fontSize: 40, color: colors.secondary[200] }} />
       ),
       path: "/admin/report-templates",
       requiredPermission: "admin.view",
@@ -54,7 +54,7 @@ const AdminDashboard = () => {
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography
             variant="h2"
-            color={colors.grey[100]}
+            color={"black"}
             fontWeight="bold"
             sx={{ mb: "5px" }}
           >
@@ -96,7 +96,7 @@ const AdminDashboard = () => {
                       <Box sx={{ mb: 2 }}>{module.icon}</Box>
                       <Typography
                         variant="h5"
-                        color={colors.grey[100]}
+                        color={"black"}
                         fontWeight="bold"
                         sx={{ mb: 1 }}
                       >

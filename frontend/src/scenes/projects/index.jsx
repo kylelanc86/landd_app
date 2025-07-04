@@ -70,7 +70,6 @@ import {
 } from "../../services/api";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
-import { colors } from "../../theme";
 import AddIcon from "@mui/icons-material/Add";
 import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
@@ -401,7 +400,7 @@ const getRandomColor = (user) => {
   }, 0);
 
   // Use the hash to select a color
-  const index = Math.abs(hash) % colors.length;
+  const index = Math.abs(hash) % 20;
   return colors[index];
 };
 
@@ -454,7 +453,6 @@ const calculateDaysDifference = (dueDate) => {
 // Main Projects component
 const Projects = () => {
   const theme = useTheme();
-  const colors = tokens;
   const navigate = useNavigate();
   const location = useLocation();
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
@@ -503,9 +501,10 @@ const Projects = () => {
     client: true,
     d_Date: true,
     status: true,
-    department: true,
+    department: false, // Hide department column by default
+    workOrder: false, // Hide work order column by default
     users: true,
-    createdAt: true,
+    createdAt: false, // Hide by default
     updatedAt: false,
   });
   const [showInactive, setShowInactive] = useState(false);
@@ -989,7 +988,7 @@ const Projects = () => {
       status: true,
       department: true,
       users: true,
-      createdAt: true,
+      createdAt: false, // Hide by default
       updatedAt: false,
     };
     setColumnVisibilityModel(defaultColumnVisibility);
@@ -1563,7 +1562,7 @@ const Projects = () => {
             onClick={() => navigate(`/projects/${row._id}`)}
             sx={{
               cursor: "pointer",
-              "&:hover": { color: colors.blueAccent[500] },
+              "&:hover": { color: theme.palette.primary.main },
               whiteSpace: "normal",
               wordWrap: "break-word",
               lineHeight: 1.2,
@@ -1972,12 +1971,12 @@ const Projects = () => {
               sx={{
                 height: 40, // Match the height of other components
                 minWidth: 140,
-                color: colors.blueAccent[500],
-                borderColor: colors.blueAccent[500],
+                color: theme.palette.primary.main,
+                borderColor: theme.palette.primary.main,
                 "&:hover": {
-                  backgroundColor: colors.blueAccent[500],
+                  backgroundColor: theme.palette.primary.main,
                   color: "white",
-                  borderColor: colors.blueAccent[500],
+                  borderColor: theme.palette.primary.main,
                 },
               }}
             >
@@ -1991,8 +1990,8 @@ const Projects = () => {
             color="secondary"
             onClick={() => setDialogOpen(true)}
             sx={{
-              backgroundColor: theme.palette.secondary.main,
-              "&:hover": { backgroundColor: theme.palette.secondary.dark },
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": { backgroundColor: theme.palette.primary.dark },
               height: 40, // Match the height of other components
             }}
           >
@@ -2138,17 +2137,24 @@ const Projects = () => {
           },
           "& .MuiDataGrid-cell": {
             borderBottom: `1px solid ${theme.palette.divider}`,
+            color: "#000000",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.dark,
+            backgroundColor: theme.palette.primary.main,
             borderBottom: "none",
+            color: "#FFFFFF",
+          },
+          "& .MuiDataGrid-columnHeader": {
+            color: "#FFFFFF",
+            fontWeight: 600,
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: theme.palette.background.default,
+            backgroundColor: "#FFFFFF",
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.dark,
+            backgroundColor: theme.palette.primary.main,
+            color: "#FFFFFF",
           },
           "& .MuiCheckbox-root": {
             color: `${theme.palette.secondary.main} !important`,
@@ -2187,6 +2193,17 @@ const Projects = () => {
           initialState={{
             pagination: {
               paginationModel: { pageSize: 50, page: 0 },
+            },
+          }}
+          sx={{
+            "& .MuiDataGrid-row:nth-of-type(even)": {
+              backgroundColor: "#f8f9fa",
+            },
+            "& .MuiDataGrid-row:nth-of-type(odd)": {
+              backgroundColor: "#ffffff",
+            },
+            "& .MuiDataGrid-row:hover": {
+              backgroundColor: "#e3f2fd",
             },
           }}
         />

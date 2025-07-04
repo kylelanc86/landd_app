@@ -429,7 +429,7 @@ const Dashboard = () => {
                                 variant="h6"
                                 component="div"
                                 sx={{
-                                  color: "white",
+                                  color: "black",
                                   fontSize: "1.05rem",
                                 }}
                               >
@@ -439,8 +439,9 @@ const Dashboard = () => {
                                 variant="h6"
                                 component="div"
                                 sx={{
-                                  color: "white",
+                                  color: "#2e7d32",
                                   fontSize: "1.05rem",
+                                  fontStyle: "bold",
                                 }}
                               >
                                 {item.value}
@@ -453,7 +454,7 @@ const Dashboard = () => {
                                   color:
                                     item.subtitle === "Incomplete"
                                       ? "#ff6b6b"
-                                      : "white",
+                                      : "#000000",
                                   textAlign: "center",
                                   mt: 1,
                                 }}

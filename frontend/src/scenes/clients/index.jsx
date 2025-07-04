@@ -60,7 +60,6 @@ const Clients = () => {
   console.log("Clients component rendering");
 
   const theme = useTheme();
-  const colors = tokens;
   const navigate = useNavigate();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +87,7 @@ const Clients = () => {
     invoiceEmail: true,
     contact1Name: true,
     contact1Number: true,
-    address: true,
+    address: false, // Hide address column by default
     written_off: true,
     actions: true,
   });
@@ -489,7 +488,6 @@ const Clients = () => {
   return (
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Header title="CLIENTS" subtitle="Managing your clients" />
         <Button
           variant="contained"
           color="secondary"
@@ -540,12 +538,12 @@ const Clients = () => {
             sx={{
               height: 56, // Match the height of the search field
               minWidth: 140,
-              color: colors.blueAccent[500],
-              borderColor: colors.blueAccent[500],
+              color: theme.palette.primary.main,
+              borderColor: theme.palette.primary.main,
               "&:hover": {
-                backgroundColor: colors.blueAccent[500],
+                backgroundColor: theme.palette.primary.main,
                 color: "white",
-                borderColor: colors.blueAccent[500],
+                borderColor: theme.palette.primary.main,
               },
             }}
           >
@@ -614,22 +612,38 @@ const Clients = () => {
           "& .MuiDataGrid-cell": {
             borderBottom: `1px solid ${theme.palette.divider}`,
             fontSize: "0.875rem",
+            color: "#000000",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.dark,
+            backgroundColor: theme.palette.primary.main,
             borderBottom: "none",
             fontSize: "0.875rem",
+            color: "#FFFFFF",
+          },
+          "& .MuiDataGrid-columnHeader": {
+            color: "#FFFFFF",
+            fontWeight: 600,
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: theme.palette.background.default,
+            backgroundColor: "#FFFFFF",
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.dark,
+            backgroundColor: theme.palette.primary.main,
             fontSize: "0.875rem",
+            color: "#FFFFFF",
           },
           "& .MuiCheckbox-root": {
             color: `${theme.palette.secondary.main} !important`,
+          },
+          "& .MuiDataGrid-row:nth-of-type(even)": {
+            backgroundColor: "#f8f9fa",
+          },
+          "& .MuiDataGrid-row:nth-of-type(odd)": {
+            backgroundColor: "#ffffff",
+          },
+          "& .MuiDataGrid-row:hover": {
+            backgroundColor: "#e3f2fd",
           },
         }}
       >

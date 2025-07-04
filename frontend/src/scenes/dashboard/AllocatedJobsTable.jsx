@@ -168,6 +168,15 @@ const AllocatedJobsTable = () => {
         "& .MuiCheckbox-root": {
           color: `${theme.palette.secondary.main} !important`,
         },
+        "& .MuiDataGrid-row:nth-of-type(even)": {
+          backgroundColor: "#f8f9fa",
+        },
+        "& .MuiDataGrid-row:nth-of-type(odd)": {
+          backgroundColor: "#ffffff",
+        },
+        "& .MuiDataGrid-row:hover": {
+          backgroundColor: "#e3f2fd",
+        },
       }}
     >
       <Typography variant="h5" sx={{ mb: 2 }}>

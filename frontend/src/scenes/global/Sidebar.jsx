@@ -93,31 +93,15 @@ const Item = ({ title, to, icon }) => {
         display: "flex",
         alignItems: "center",
         justifyContent: "flex-start",
-        color: isActive
-          ? theme.palette.mode === "dark"
-            ? tokens.grey[100]
-            : tokens.primary[700]
-          : theme.palette.mode === "dark"
-          ? tokens.grey[100]
-          : tokens.grey[700],
-        backgroundColor: isActive
-          ? theme.palette.mode === "dark"
-            ? tokens.primary[900]
-            : tokens.primary[100]
-          : "transparent",
+        color: isActive ? "#000000" : tokens.grey[600],
+        backgroundColor: isActive ? tokens.primary[50] : "transparent",
         borderRadius: "4px",
         margin: "1px 8px",
         padding: "12px 10px",
         cursor: "pointer",
         transition: "background-color 0.2s",
         "&:hover": {
-          backgroundColor: isActive
-            ? theme.palette.mode === "dark"
-              ? tokens.primary[800]
-              : tokens.primary[200]
-            : theme.palette.mode === "dark"
-            ? "rgba(255, 255, 255, 0.08)"
-            : "rgba(0, 0, 0, 0.04)",
+          backgroundColor: isActive ? tokens.primary[100] : tokens.grey[50],
         },
       }}
     >
@@ -141,7 +125,7 @@ const Item = ({ title, to, icon }) => {
           color: "inherit",
           whiteSpace: "normal",
           wordBreak: "break-word",
-          fontSize: "0.8rem",
+          fontSize: "1rem",
           lineHeight: 1.2,
           textAlign: "left",
           flex: 1,
@@ -171,8 +155,7 @@ const SectionDivider = () => {
       <Divider
         sx={{
           width: "100%",
-          borderColor:
-            theme.palette.mode === "dark" ? tokens.grey[700] : tokens.grey[300],
+          borderColor: tokens.grey[300],
         }}
       />
     </Box>
@@ -283,12 +266,8 @@ const Sidebar = () => {
         width: 242px !important;
       }
       .pro-sidebar-inner {
-        background: ${
-          theme.palette.mode === "dark" ? "#1a1a1a" : "#ffffff"
-        } !important;
-        border-right: 1px solid ${
-          theme.palette.mode === "dark" ? "#2d2d2d" : "#e0e0e0"
-        } !important;
+        background: #ffffff !important;
+        border-right: 1px solid #e0e0e0 !important;
         width: 242px !important;
       }
       
@@ -333,10 +312,7 @@ const Sidebar = () => {
         <MenuItem
           style={{
             margin: "10px 0 20px 0",
-            color:
-              theme.palette.mode === "dark"
-                ? tokens.grey[100]
-                : tokens.grey[700],
+            color: tokens.grey[700],
           }}
         >
           <Box
@@ -371,8 +347,7 @@ const Sidebar = () => {
                 text.textContent = "L&D";
                 text.style.fontSize = "28px";
                 text.style.fontWeight = "bold";
-                text.style.color =
-                  theme.palette.mode === "dark" ? "#fff" : "#000";
+                text.style.color = "#000000";
                 parent.appendChild(text);
               }}
             />

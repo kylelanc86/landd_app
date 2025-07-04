@@ -34,6 +34,10 @@ const sampleSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  flowmeter: {
+    type: String,
+    required: true
+  },
   cowlNo: {
     type: String,
     required: false

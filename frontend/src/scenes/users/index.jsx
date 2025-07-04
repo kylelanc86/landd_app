@@ -82,7 +82,6 @@ const Users = () => {
   const [sortDir, setSortDir] = useState("asc");
   const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
-  const colors = tokens;
 
   // Delete user state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -487,7 +486,7 @@ const Users = () => {
           alignItems="center"
           mb="10px"
         >
-          <Typography variant="h5" color={colors.grey[100]}>
+          <Typography variant="h5" color="#000000">
             Users
           </Typography>
           <FormControlLabel
@@ -499,7 +498,7 @@ const Users = () => {
               />
             }
             label="Show Inactive Users"
-            sx={{ color: colors.grey[100] }}
+            sx={{ color: "#000000" }}
           />
         </Box>
         <Box
@@ -522,6 +521,15 @@ const Users = () => {
             },
             "& .MuiCheckbox-root": {
               color: `${theme.palette.secondary.main} !important`,
+            },
+            "& .MuiDataGrid-row:nth-of-type(even)": {
+              backgroundColor: "#f8f9fa",
+            },
+            "& .MuiDataGrid-row:nth-of-type(odd)": {
+              backgroundColor: "#ffffff",
+            },
+            "& .MuiDataGrid-row:hover": {
+              backgroundColor: "#e3f2fd",
             },
           }}
         >

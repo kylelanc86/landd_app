@@ -15,7 +15,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f5f5;
+  background-color: #FAFAFA;
+  color: #000000;
 }
 
 code {
@@ -38,23 +39,23 @@ code {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #F5F5F5;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #888;
+  background: #E0E0E0;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #BDBDBD;
 }
 
 /* Global link styles */
 a {
   text-decoration: none;
-  color: inherit;
+  color: #000000;
 }
 
 /* Global button styles */
@@ -66,15 +67,63 @@ button {
 /* Global input styles */
 input, select, textarea {
   font-family: 'Poppins', sans-serif;
+  background-color: #FFFFFF;
+  color: #000000;
+  border: 1px solid #E0E0E0;
 }
 
 /* Global table styles */
 table {
   border-collapse: collapse;
   width: 100%;
+  background-color: #FFFFFF;
+  color: #000000;
+}
+
+/* DataGrid specific styles */
+.MuiDataGrid-root .MuiDataGrid-cell {
+  color: #000000 !important;
+}
+
+.MuiDataGrid-root .MuiDataGrid-columnHeaders {
+  background-color: #4CAF50 !important;
+  color: #FFFFFF !important;
+}
+
+.MuiDataGrid-root .MuiDataGrid-columnHeader {
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+}
+
+.MuiDataGrid-root .MuiDataGrid-footerContainer {
+  background-color: #4CAF50 !important;
+  color: #FFFFFF !important;
 }
 
 /* Global form styles */
 form {
   width: 100%;
+}
+
+/* Global card styles */
+.MuiCard-root {
+  background-color: #FFFFFF !important;
+  border: 1px solid #EEEEEE !important;
+}
+
+/* Global paper styles */
+.MuiPaper-root {
+  background-color: #FFFFFF !important;
+}
+
+/* Global app bar styles */
+.MuiAppBar-root {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
+}
+
+/* Global drawer styles */
+.MuiDrawer-paper {
+  background-color: #FFFFFF !important;
+  color: #000000 !important;
 }

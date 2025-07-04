@@ -4,12 +4,12 @@ import { createTheme } from "@mui/material/styles";
 export const ColorModeContext = createContext();
 
 export const useMode = () => {
-  const [mode, setMode] = useState("dark");
+  const [mode, setMode] = useState("light");
 
   const colorMode = useMemo(
     () => ({
       toggleColorMode: () => {
-        setMode((prev) => (prev === "light" ? "dark" : "light"));
+        setMode((prev) => (prev === "light" ? "light" : "light"));
       },
     }),
     []
@@ -20,141 +20,98 @@ export const useMode = () => {
   return [theme, colorMode];
 };
 
-// color design tokens
+// color design tokens for clean light theme
 export const tokens = {
   primary: {
-    50: "#E6F4F8",
-    100: "#CCE9F1",
-    200: "#99D3E3",
-    300: "#66BDD5",
-    400: "#33A7C7",
-    500: "#74B3CE", // Main color
-    600: "#4A8BA8",
-    700: "#3A6F86",
-    800: "#2B5364",
-    900: "#1B3742",
+    50: "#E8F5E8",
+    100: "#C8E6C9",
+    200: "#A5D6A7",
+    300: "#81C784",
+    400: "#66BB6A",
+    500: "#4CAF50", // Main green
+    600: "#43A047",
+    700: "#388E3C",
+    800: "#2E7D32",
+    900: "#1B5E20",
   },
   secondary: {
-    50: "#E6F7F3",
-    100: "#CCEFE7",
-    200: "#99DFCF",
-    300: "#66CFB7",
-    400: "#33BF9F",
-    500: "#09BC8A", // Main color
-    600: "#068B6A",
-    700: "#056A52",
-    800: "#034A3A",
-    900: "#022A22",
+    50: "#E0F2F1",
+    100: "#B2DFDB",
+    200: "#80CBC4",
+    300: "#4DB6AC",
+    400: "#26A69A",
+    500: "#009688", // Teal green
+    600: "#00897B",
+    700: "#00796B",
+    800: "#00695C",
+    900: "#004D40",
   },
   neutral: {
-    50: "#F0F2F5",
-    100: "#E1E5EA",
-    200: "#C3CBD5",
-    300: "#A5B1C0",
-    400: "#8797AB",
-    500: "#508991", // Muted blue
-    600: "#3D6B71",
-    700: "#2B4D51",
-    800: "#1A2E31",
-    900: "#172A3A", // Dark blue
+    50: "#FAFAFA",
+    100: "#F5F5F5",
+    200: "#EEEEEE",
+    300: "#E0E0E0",
+    400: "#BDBDBD",
+    500: "#9E9E9E",
+    600: "#757575",
+    700: "#616161",
+    800: "#424242",
+    900: "#212121",
   },
   grey: {
     0: "#FFFFFF",
-    10: "#F6F6F6",
-    50: "#F0F0F0",
-    100: "#E0E0E0",
-    200: "#C2C2C2",
-    300: "#A3A3A3",
-    400: "#858585",
-    500: "#666666",
-    600: "#4D4D4D",
-    700: "#333333",
-    800: "#1A1A1A",
-    900: "#0A0A0A",
+    10: "#FAFAFA",
+    50: "#F5F5F5",
+    100: "#EEEEEE",
+    200: "#E0E0E0",
+    300: "#BDBDBD",
+    400: "#9E9E9E",
+    500: "#757575",
+    600: "#616161",
+    700: "#424242",
+    800: "#212121",
+    900: "#000000",
     1000: "#000000",
-  },
-  blueAccent: {
-    50: "#E3F2FD",
-    100: "#BBDEFB",
-    200: "#90CAF9",
-    300: "#64B5F6",
-    400: "#42A5F5",
-    500: "#2196F3",
-    600: "#1E88E5",
-    700: "#1976D2",
-    800: "#1565C0",
-    900: "#0D47A1",
   },
   background: {
     light: "#FFFFFF",
-    main: "#F5F5F5",
-    dark: "#172A3A",
-    paper: "#004346",
+    main: "#FAFAFA",
+    dark: "#F5F5F5",
+    paper: "#FFFFFF",
   },
 };
 
-// mui theme settings
+// mui theme settings for clean light design
 export const themeSettings = (mode) => {
   return {
     palette: {
-      mode: mode,
-      ...(mode === "dark"
-        ? {
-            // palette values for dark mode
-            primary: {
-              main: tokens.primary[500],
-              light: tokens.primary[400],
-              dark: tokens.primary[600],
-              contrastText: "#fff",
-            },
-            secondary: {
-              main: tokens.secondary[500],
-              light: tokens.secondary[400],
-              dark: tokens.secondary[600],
-              contrastText: "#fff",
-            },
-            neutral: {
-              dark: tokens.neutral[700],
-              main: tokens.neutral[500],
-              light: tokens.neutral[100],
-            },
-            background: {
-              default: tokens.background.dark,
-              paper: tokens.background.paper,
-            },
-            text: {
-              primary: "#FFFFFF",
-              secondary: tokens.primary[500],
-            },
-          }
-        : {
-            // palette values for light mode
-            primary: {
-              main: tokens.primary[500],
-              light: tokens.primary[400],
-              dark: tokens.primary[600],
-              contrastText: "#fff",
-            },
-            secondary: {
-              main: tokens.secondary[500],
-              light: tokens.secondary[400],
-              dark: tokens.secondary[600],
-              contrastText: "#fff",
-            },
-            neutral: {
-              dark: tokens.neutral[700],
-              main: tokens.neutral[500],
-              light: tokens.neutral[100],
-            },
-            background: {
-              default: tokens.background.light,
-              paper: tokens.background.main,
-            },
-            text: {
-              primary: tokens.neutral[900],
-              secondary: tokens.neutral[500],
-            },
-          }),
+      mode: "light",
+      primary: {
+        main: tokens.primary[500],
+        light: tokens.primary[400],
+        dark: tokens.primary[600],
+        contrastText: "#FFFFFF",
+      },
+      secondary: {
+        main: tokens.secondary[500],
+        light: tokens.secondary[400],
+        dark: tokens.secondary[600],
+        contrastText: "#FFFFFF",
+      },
+      neutral: {
+        dark: tokens.neutral[700],
+        main: tokens.neutral[500],
+        light: tokens.neutral[100],
+      },
+      background: {
+        default: tokens.background.light,
+        paper: tokens.background.paper,
+      },
+      text: {
+        primary: "#000000",
+        secondary: tokens.neutral[600],
+      },
+      grey: tokens.grey,
     },
     typography: {
       fontFamily: '"Poppins", sans-serif',
@@ -162,57 +119,68 @@ export const themeSettings = (mode) => {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "2.5rem",
         fontWeight: 600,
+        color: "#000000",
       },
       h2: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "2rem",
         fontWeight: 600,
+        color: "#000000",
       },
       h3: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "1.75rem",
         fontWeight: 600,
+        color: "#000000",
       },
       h4: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "1.5rem",
         fontWeight: 600,
+        color: "#000000",
       },
       h5: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "1.25rem",
         fontWeight: 500,
+        color: "#000000",
       },
       h6: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "1rem",
         fontWeight: 500,
+        color: "#000000",
       },
       subtitle1: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "1rem",
         fontWeight: 500,
+        color: tokens.neutral[600],
       },
       subtitle2: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 500,
+        color: tokens.neutral[600],
       },
       body1: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "1rem",
         fontWeight: 400,
+        color: "#000000",
       },
       body2: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 400,
+        color: tokens.neutral[600],
       },
       button: {
         fontFamily: '"Poppins", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 500,
         textTransform: "none",
+        color: "#000000",
       },
     },
     components: {
@@ -224,6 +192,24 @@ export const themeSettings = (mode) => {
             fontFamily: '"Poppins", sans-serif',
             fontWeight: 500,
             padding: "8px 16px",
+            boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
+            "&:hover": {
+              boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.15)",
+            },
+          },
+          contained: {
+            backgroundColor: tokens.primary[500],
+            color: "#FFFFFF",
+            "&:hover": {
+              backgroundColor: tokens.primary[600],
+            },
+          },
+          outlined: {
+            borderColor: tokens.primary[500],
+            color: tokens.primary[500],
+            "&:hover": {
+              backgroundColor: tokens.primary[50],
+            },
           },
         },
       },
@@ -232,6 +218,8 @@ export const themeSettings = (mode) => {
           root: {
             fontFamily: '"Poppins", sans-serif',
             borderRadius: 8,
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
           },
         },
       },
@@ -246,7 +234,9 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           root: {
             borderRadius: 8,
-            boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
+            border: "1px solid #EEEEEE",
           },
         },
       },
@@ -255,28 +245,30 @@ export const themeSettings = (mode) => {
           root: {
             fontFamily: '"Poppins", sans-serif',
             padding: "12px 16px",
-            borderBottom: "1px solid rgba(224, 224, 224, 0.2)",
+            borderBottom: "1px solid #EEEEEE",
+            color: "#000000",
           },
           head: {
-            backgroundColor: (theme) =>
-              theme.palette.mode === "dark"
-                ? tokens.background.paper
-                : tokens.primary[50],
-            color: (theme) =>
-              theme.palette.mode === "dark"
-                ? tokens.grey[100]
-                : tokens.primary[700],
+            backgroundColor: tokens.primary[500],
+            color: "#FFFFFF",
             fontWeight: 600,
+            borderBottom: "2px solid #E0E0E0",
           },
           body: {
-            backgroundColor: (theme) =>
-              theme.palette.mode === "dark"
-                ? tokens.background.dark
-                : tokens.grey[0],
-            color: (theme) =>
-              theme.palette.mode === "dark"
-                ? tokens.grey[100]
-                : tokens.grey[700],
+            backgroundColor: "#FFFFFF",
+            color: "#000000",
+            "&:hover": {
+              backgroundColor: tokens.grey[50],
+            },
+          },
+        },
+      },
+      MuiTableRow: {
+        styleOverrides: {
+          root: {
+            "&:hover": {
+              backgroundColor: tokens.grey[50],
+            },
           },
         },
       },
@@ -284,6 +276,23 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           root: {
             fontFamily: '"Poppins", sans-serif',
+            color: tokens.neutral[600],
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            backgroundColor: "#FFFFFF",
+            "& fieldset": {
+              borderColor: "#E0E0E0",
+            },
+            "&:hover fieldset": {
+              borderColor: tokens.primary[500],
+            },
+            "&.Mui-focused fieldset": {
+              borderColor: tokens.primary[500],
+            },
           },
         },
       },
@@ -291,6 +300,10 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           root: {
             fontFamily: '"Poppins", sans-serif',
+            color: "#000000",
+            "&:hover": {
+              backgroundColor: tokens.primary[50],
+            },
           },
         },
       },
@@ -307,6 +320,8 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           paper: {
             borderRadius: 12,
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0px 8px 32px rgba(0, 0, 0, 0.15)",
           },
         },
       },
@@ -315,6 +330,8 @@ export const themeSettings = (mode) => {
           root: {
             fontFamily: '"Poppins", sans-serif',
             fontWeight: 600,
+            color: "#000000",
+            borderBottom: "1px solid #EEEEEE",
           },
         },
       },
@@ -322,6 +339,7 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           root: {
             fontFamily: '"Poppins", sans-serif',
+            color: "#000000",
           },
         },
       },
@@ -329,6 +347,74 @@ export const themeSettings = (mode) => {
         styleOverrides: {
           root: {
             padding: '16px 24px',
+            borderTop: "1px solid #EEEEEE",
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Poppins", sans-serif',
+            backgroundColor: tokens.grey[100],
+            color: "#000000",
+            border: "1px solid #E0E0E0",
+          },
+          colorPrimary: {
+            backgroundColor: tokens.primary[500],
+            color: "#FFFFFF",
+          },
+          colorSecondary: {
+            backgroundColor: tokens.secondary[500],
+            color: "#FFFFFF",
+          },
+        },
+      },
+      MuiAppBar: {
+        styleOverrides: {
+          root: {
+            backgroundColor: "#FFFFFF",
+            color: "#000000",
+            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: "#FFFFFF",
+            color: "#000000",
+            borderRight: "1px solid #EEEEEE",
+          },
+        },
+      },
+      MuiDataGrid: {
+        styleOverrides: {
+          root: {
+            border: "none",
+            "& .MuiDataGrid-cell": {
+              borderBottom: "1px solid #EEEEEE",
+              color: "#000000",
+            },
+            "& .MuiDataGrid-columnHeaders": {
+              backgroundColor: tokens.primary[500],
+              color: "#FFFFFF",
+              borderBottom: "none",
+            },
+            "& .MuiDataGrid-columnHeader": {
+              color: "#FFFFFF",
+              fontWeight: 600,
+            },
+            "& .MuiDataGrid-virtualScroller": {
+              backgroundColor: "#FFFFFF",
+            },
+            "& .MuiDataGrid-footerContainer": {
+              borderTop: "none",
+              backgroundColor: tokens.primary[500],
+              color: "#FFFFFF",
+            },
+            "& .MuiCheckbox-root": {
+              color: `${tokens.secondary.main} !important`,
+            },
           },
         },
       },

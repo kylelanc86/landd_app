@@ -84,7 +84,7 @@ const Databases = () => {
     {
       title: "Project Database",
       icon: <AssignmentIcon />,
-      color: "secondary",
+      color: "primary",
       onClick: () => setSelectedDatabase("projects"),
     },
     {
@@ -96,7 +96,7 @@ const Databases = () => {
     {
       title: "Invoice Database",
       icon: <ReceiptOutlinedIcon />,
-      color: "success",
+      color: "primary",
       onClick: () => setSelectedDatabase("invoices"),
     },
   ];
@@ -116,18 +116,6 @@ const Databases = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography
-        variant="h1"
-        component="h1"
-        gutterBottom
-        sx={{ mb: 4 }}
-        justifyContent="center"
-        fontFamily="Poppins"
-        align="center"
-      >
-        DATABASES
-      </Typography>
-
       {/* Widgets Section */}
       <Box
         sx={{

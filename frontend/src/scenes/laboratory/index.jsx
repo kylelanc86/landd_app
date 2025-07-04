@@ -20,7 +20,7 @@ import PermissionGate from "../../components/PermissionGate";
 
 const LaboratoryDashboard = () => {
   const theme = useTheme();
-  const colors = tokens;
+
   const navigate = useNavigate();
 
   const laboratoryModules = [
@@ -28,7 +28,9 @@ const LaboratoryDashboard = () => {
       id: "air-monitoring",
       title: "Air Monitoring",
       description: "Manage air monitoring samples and data",
-      icon: <AirIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />,
+      icon: (
+        <AirIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
+      ),
       path: "/air-monitoring",
       requiredPermission: "fibre.view",
     },
@@ -37,7 +39,9 @@ const LaboratoryDashboard = () => {
       title: "Fibre ID Analysis",
       description: "Conduct fibre identification and analysis",
       icon: (
-        <VisibilityIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />
+        <VisibilityIcon
+          sx={{ fontSize: 40, color: theme.palette.secondary.main }}
+        />
       ),
       path: "/fibreID",
       requiredPermission: "fibre.view",
@@ -46,7 +50,11 @@ const LaboratoryDashboard = () => {
       id: "calibrations",
       title: "Calibrations",
       description: "Manage equipment calibrations and maintenance",
-      icon: <ScienceIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />,
+      icon: (
+        <ScienceIcon
+          sx={{ fontSize: 40, color: theme.palette.secondary.main }}
+        />
+      ),
       path: "/calibrations",
       requiredPermission: "fibre.view",
     },
@@ -54,7 +62,9 @@ const LaboratoryDashboard = () => {
       id: "laboratory-equipment",
       title: "Laboratory Equipment",
       description: "Manage laboratory equipment and inventory",
-      icon: <BuildIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />,
+      icon: (
+        <BuildIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
+      ),
       path: "/laboratory-equipment",
       requiredPermission: "fibre.view",
     },
@@ -70,14 +80,14 @@ const LaboratoryDashboard = () => {
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography
             variant="h2"
-            color={colors.grey[100]}
+            color="#000000"
             fontWeight="bold"
             sx={{ mb: "5px" }}
           >
             Laboratory Dashboard
           </Typography>
         </Box>
-        <Typography variant="h5" color={colors.secondary[500]}>
+        <Typography variant="h5" color={theme.palette.secondary.main}>
           Manage laboratory operations and equipment
         </Typography>
 
@@ -112,7 +122,7 @@ const LaboratoryDashboard = () => {
                       <Box sx={{ mb: 2 }}>{module.icon}</Box>
                       <Typography
                         variant="h5"
-                        color={colors.grey[100]}
+                        color="#000000"
                         fontWeight="bold"
                         sx={{ mb: 1 }}
                       >
@@ -120,7 +130,7 @@ const LaboratoryDashboard = () => {
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={colors.grey[300]}
+                        color={theme.palette.text.secondary}
                         sx={{ mb: 2 }}
                       >
                         {module.description}
@@ -129,7 +139,7 @@ const LaboratoryDashboard = () => {
                         sx={{
                           width: "100%",
                           height: 2,
-                          backgroundColor: colors.secondary[500],
+                          backgroundColor: theme.palette.secondary.main,
                           borderRadius: 1,
                         }}
                       />

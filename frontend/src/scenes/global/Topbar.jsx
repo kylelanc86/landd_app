@@ -12,13 +12,11 @@ import {
   Divider,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
-import LightModeIcon from "@mui/icons-material/LightMode";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { useTheme } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 
-const Topbar = ({ toggleColorMode }) => {
+const Topbar = () => {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
@@ -44,16 +42,14 @@ const Topbar = ({ toggleColorMode }) => {
       position="fixed"
       className="topbar"
       sx={{
-        backgroundColor:
-          theme.palette.mode === "dark"
-            ? theme.palette.background.dark
-            : theme.palette.background.light,
-        boxShadow: 1,
+        backgroundColor: "#FFFFFF",
+        boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
         width: "100%",
         zIndex: (theme) => theme.zIndex.drawer + 1,
         height: "50px",
         display: "flex",
         alignItems: "center",
+        borderBottom: "1px solid #EEEEEE",
       }}
     >
       <Toolbar
@@ -71,7 +67,7 @@ const Topbar = ({ toggleColorMode }) => {
           <Typography
             variant="subtitle1"
             sx={{
-              color: theme.palette.mode === "dark" ? "#ffffff" : "#1a1a1a",
+              color: "#000000",
               fontWeight: "medium",
             }}
           >
@@ -82,7 +78,7 @@ const Topbar = ({ toggleColorMode }) => {
           <Typography
             variant="body2"
             sx={{
-              color: theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32",
+              color: theme.palette.primary.main,
               textTransform: "capitalize",
             }}
           >
@@ -91,27 +87,13 @@ const Topbar = ({ toggleColorMode }) => {
         </Box>
         <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Tooltip title="Toggle theme">
-            <IconButton
-              onClick={toggleColorMode}
-              sx={{
-                color: theme.palette.mode === "dark" ? "#4CAF50" : "#2E7D32",
-              }}
-            >
-              {theme.palette.mode === "dark" ? (
-                <LightModeIcon />
-              ) : (
-                <DarkModeIcon />
-              )}
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Profile">
             <IconButton onClick={handleProfileClick} color="inherit">
               <Avatar
                 sx={{
                   width: 32,
                   height: 32,
-                  bgcolor: theme.palette.secondary.main,
+                  bgcolor: theme.palette.primary.main,
                 }}
               >
                 <AccountCircleIcon />

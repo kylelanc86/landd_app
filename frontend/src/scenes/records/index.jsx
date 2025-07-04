@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -6,7 +6,10 @@ import {
   CardContent,
   Typography,
   CardActionArea,
-  Divider,
+  Tabs,
+  Tab,
+  useTheme,
+  Paper,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import SchoolIcon from "@mui/icons-material/School";
@@ -62,6 +65,14 @@ const RecordWidget = ({ title, icon, onClick, color = "primary" }) => (
 
 const Records = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const [activeTab, setActiveTab] = useState(0);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const containerRef = useRef(null);
+
+  // Minimum swipe distance (in px)
+  const minSwipeDistance = 50;
 
   const generalRecordWidgets = [
     {
@@ -159,42 +170,160 @@ const Records = () => {
     },
   ];
 
+  // Touch event handlers for swipe functionality
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe && activeTab < 1) {
+      setActiveTab(1); // Swipe to Laboratory Records
+    } else if (isRightSwipe && activeTab > 0) {
+      setActiveTab(0); // Swipe to General Records
+    }
+  };
+
+  // Handle tab change
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  // Tab panel component
+  const TabPanel = ({ children, value, index, ...other }) => (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`records-tabpanel-${index}`}
+      aria-labelledby={`records-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
         Records
       </Typography>
 
-      {/* General Records Section */}
-      <Typography
-        variant="h5"
-        component="h2"
-        gutterBottom
-        sx={{ mb: 3, mt: 4 }}
+      {/* Tab Navigation */}
+      <Paper
+        elevation={0}
+        sx={{
+          mb: 3,
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: 2,
+        }}
       >
-        General Records
-      </Typography>
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {generalRecordWidgets.map((widget, index) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
-            <RecordWidget {...widget} />
-          </Grid>
-        ))}
-      </Grid>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="fullWidth"
+          sx={{
+            "& .MuiTab-root": {
+              textTransform: "none",
+              fontSize: "1rem",
+              fontWeight: 600,
+              py: 2,
+              color: theme.palette.text.secondary,
+              "&.Mui-selected": {
+                color: theme.palette.primary.main,
+              },
+            },
+            "& .MuiTabs-indicator": {
+              backgroundColor: theme.palette.primary.main,
+              height: 3,
+            },
+          }}
+        >
+          <Tab
+            label="General Records"
+            id="records-tab-0"
+            aria-controls="records-tabpanel-0"
+          />
+          <Tab
+            label="Laboratory Records"
+            id="records-tab-1"
+            aria-controls="records-tabpanel-1"
+          />
+        </Tabs>
+      </Paper>
 
-      <Divider sx={{ my: 4 }} />
+      {/* Swipeable Content Container */}
+      <Box
+        ref={containerRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        sx={{
+          position: "relative",
+          overflow: "hidden",
+          minHeight: "60vh",
+        }}
+      >
+        {/* General Records Tab */}
+        <TabPanel value={activeTab} index={0}>
+          <Box
+            sx={{
+              transform:
+                activeTab === 0 ? "translateX(0)" : "translateX(-100%)",
+              transition: "transform 0.3s ease-in-out",
+              position: "relative",
+            }}
+          >
+            <Grid container spacing={3}>
+              {generalRecordWidgets.map((widget, index) => (
+                <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+                  <RecordWidget {...widget} />
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        </TabPanel>
 
-      {/* Laboratory Records Section */}
-      <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 3 }}>
-        Laboratory Records
-      </Typography>
-      <Grid container spacing={3}>
-        {laboratoryRecordWidgets.map((widget, index) => (
-          <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
-            <RecordWidget {...widget} />
-          </Grid>
-        ))}
-      </Grid>
+        {/* Laboratory Records Tab */}
+        <TabPanel value={activeTab} index={1}>
+          <Box
+            sx={{
+              transform: activeTab === 1 ? "translateX(0)" : "translateX(100%)",
+              transition: "transform 0.3s ease-in-out",
+              position: "relative",
+            }}
+          >
+            <Grid container spacing={3}>
+              {laboratoryRecordWidgets.map((widget, index) => (
+                <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
+                  <RecordWidget {...widget} />
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        </TabPanel>
+      </Box>
+
+      {/* Swipe Instructions */}
+      <Box
+        sx={{
+          mt: 3,
+          textAlign: "center",
+          color: theme.palette.text.secondary,
+          fontSize: "0.875rem",
+        }}
+      >
+        💡 Swipe left or right to switch between tabs
+      </Box>
     </Box>
   );
 };
