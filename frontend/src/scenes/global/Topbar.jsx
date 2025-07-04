@@ -42,7 +42,7 @@ const Topbar = () => {
       position="fixed"
       className="topbar"
       sx={{
-        backgroundColor: "#FFFFFF",
+        backgroundColor: `${theme.palette.primary.main} !important`, // Force green background
         boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
         width: "100%",
         zIndex: (theme) => theme.zIndex.drawer + 1,
@@ -67,7 +67,7 @@ const Topbar = () => {
           <Typography
             variant="subtitle1"
             sx={{
-              color: "#000000",
+              color: "#FFFFFF", // White text for user name
               fontWeight: "medium",
             }}
           >
@@ -78,25 +78,33 @@ const Topbar = () => {
           <Typography
             variant="body2"
             sx={{
-              color: theme.palette.primary.main,
+              color: "black",
               textTransform: "capitalize",
             }}
           >
             {currentUser ? currentUser.role : "Guest"}
           </Typography>
         </Box>
-        <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+        <Divider
+          orientation="vertical"
+          flexItem
+          sx={{ mx: 2, borderColor: "rgba(255,255,255,0.3)" }}
+        />
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Tooltip title="Profile">
-            <IconButton onClick={handleProfileClick} color="inherit">
+            <IconButton onClick={handleProfileClick} sx={{ color: "#FFF" }}>
               <Avatar
                 sx={{
                   width: 32,
                   height: 32,
-                  bgcolor: theme.palette.primary.main,
+                  bgcolor: "#FFF0", // Transparent so icon color shows
+                  color: "#FFF", // White icon
+                  border: `2px solid ${theme.palette.primary.light}`,
                 }}
               >
-                <AccountCircleIcon />
+                <AccountCircleIcon
+                  sx={{ color: "#FFF", width: 28, height: 28 }}
+                />
               </Avatar>
             </IconButton>
           </Tooltip>

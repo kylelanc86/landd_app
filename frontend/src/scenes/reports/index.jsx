@@ -31,7 +31,12 @@ import { useTheme } from "@mui/material/styles";
 import { tokens } from "../../theme";
 import projectService from "../../services/projectService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
-import { shiftService, jobService, sampleService } from "../../services/api";
+import {
+  shiftService,
+  jobService,
+  sampleService,
+  clientService,
+} from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 
 const Reports = () => {
@@ -244,6 +249,10 @@ const Reports = () => {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;
         }
+        if (project && project.client && typeof project.client === "string") {
+          const clientResponse = await clientService.getById(project.client);
+          project.client = clientResponse.data;
+        }
 
         generateShiftReport({
           shift: shift,
@@ -290,6 +299,10 @@ const Reports = () => {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;
         }
+        if (project && project.client && typeof project.client === "string") {
+          const clientResponse = await clientService.getById(project.client);
+          project.client = clientResponse.data;
+        }
 
         generateShiftReport({
           shift: shift,
@@ -335,6 +348,10 @@ const Reports = () => {
         if (project && typeof project === "string") {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;
+        }
+        if (project && project.client && typeof project.client === "string") {
+          const clientResponse = await clientService.getById(project.client);
+          project.client = clientResponse.data;
         }
 
         // Generate report and open in new tab, then trigger print

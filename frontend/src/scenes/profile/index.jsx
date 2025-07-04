@@ -112,7 +112,7 @@ const Profile = () => {
           borderRadius: 2,
         }}
       >
-        <Typography variant="h4" gutterBottom>
+        <Typography variant="h4" gutterBottom color="black">
           Profile Settings
         </Typography>
 
@@ -132,7 +132,7 @@ const Profile = () => {
           <Grid container spacing={3}>
             {/* Profile Information Section */}
             <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" gutterBottom color="black">
                 Profile Information
               </Typography>
             </Grid>
@@ -161,7 +161,7 @@ const Profile = () => {
             <Divider sx={{ my: 3 }} />
             {/* Password Section */}
             <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" gutterBottom color="black">
                 Change Password
               </Typography>
             </Grid>

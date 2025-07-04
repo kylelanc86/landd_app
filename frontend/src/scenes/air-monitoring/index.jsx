@@ -42,7 +42,12 @@ import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import DescriptionIcon from "@mui/icons-material/Description";
-import { jobService, projectService, clientService } from "../../services/api";
+import {
+  jobService,
+  projectService,
+  clientService,
+  shiftService,
+} from "../../services/api";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
@@ -123,16 +128,58 @@ const AirMonitoring = () => {
 
         console.log("Raw jobs data:", jobsResponse.data);
 
-        // Process jobs to include project details
-        const processedJobs = jobsResponse.data.map((job) => ({
-          id: job._id,
-          _id: job._id,
-          projectID: job.project?.projectID || "Unknown",
-          projectName: job.project?.name || "Unknown Project",
-          status: job.status,
-          asbestosRemovalist: job.asbestosRemovalist,
-          department: job.project?.department || "Unknown",
-        }));
+        // Process jobs to include project details and shift information
+        const processedJobs = await Promise.all(
+          jobsResponse.data.map(async (job) => {
+            // Fetch shifts for this job
+            let shifts = [];
+            let shiftStatus = "No Shifts";
+            try {
+              const shiftsResponse = await shiftService.getByJob(job._id);
+              shifts = shiftsResponse.data || [];
+
+              if (shifts.length > 0) {
+                // Determine overall shift status
+                const hasCompletedShifts = shifts.some(
+                  (shift) =>
+                    shift.status === "shift_complete" || shift.reportApprovedBy
+                );
+                const hasAnalysisComplete = shifts.some(
+                  (shift) => shift.status === "analysis_complete"
+                );
+                const hasSamplingComplete = shifts.some(
+                  (shift) =>
+                    shift.status === "sampling_complete" ||
+                    shift.status === "samples_submitted_to_lab"
+                );
+
+                if (hasCompletedShifts) {
+                  shiftStatus = "Reports Complete";
+                } else if (hasAnalysisComplete) {
+                  shiftStatus = "Analysis Complete";
+                } else if (hasSamplingComplete) {
+                  shiftStatus = "Sampling Complete";
+                } else {
+                  shiftStatus = "Sampling in Progress";
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching shifts for job ${job._id}:`, error);
+            }
+
+            return {
+              id: job._id,
+              _id: job._id,
+              projectID: job.project?.projectID || "Unknown",
+              projectName: job.project?.name || "Unknown Project",
+              status: job.status,
+              asbestosRemovalist: job.asbestosRemovalist,
+              department: job.project?.department || "Unknown",
+              shiftStatus,
+              shiftCount: shifts.length,
+            };
+          })
+        );
 
         console.log("Final processed jobs:", processedJobs);
         setJobs(processedJobs);
@@ -246,6 +293,8 @@ const AirMonitoring = () => {
         projectName: selectedProject.name,
         status: "in_progress",
         asbestosRemovalist: response.data.asbestosRemovalist,
+        shiftStatus: "No Shifts",
+        shiftCount: 0,
       };
 
       // Add the new job to the list
@@ -446,35 +495,45 @@ const AirMonitoring = () => {
         return params?.row?.asbestosRemovalist || "Not assigned";
       },
     },
+
     {
-      field: "status",
-      headerName: "Status",
+      field: "shiftStatus",
+      headerName: "Shift Progress",
       flex: 1,
-      minWidth: 130,
-      maxWidth: 130,
-      renderCell: (params) => (
-        <Box
-          onClick={(e) => handleStatusClick(e, params.row)}
-          sx={{
-            cursor: "pointer",
-            padding: "4px 8px",
-            borderRadius: "4px",
-            backgroundColor:
-              params.row.status === "completed"
-                ? theme.palette.success.main
-                : params.row.status === "in_progress"
-                ? theme.palette.info.main
-                : theme.palette.grey[500],
-            color: theme.palette.common.white,
-            "&:hover": {
-              opacity: 0.8,
-            },
-          }}
-        >
-          {params.row.status.charAt(0).toUpperCase() +
-            params.row.status.slice(1).replace("_", " ")}
-        </Box>
-      ),
+      minWidth: 150,
+      maxWidth: 150,
+      renderCell: (params) => {
+        const getShiftStatusColor = (status) => {
+          switch (status) {
+            case "Reports Complete":
+              return theme.palette.success.main;
+            case "Analysis Complete":
+              return theme.palette.warning.main;
+            case "Sampling Complete":
+              return theme.palette.info.main;
+            case "Sampling in Progress":
+              return theme.palette.primary.main;
+            case "No Shifts":
+              return theme.palette.grey[500];
+            default:
+              return theme.palette.grey[500];
+          }
+        };
+
+        return (
+          <Box
+            sx={{
+              padding: "4px 8px",
+              borderRadius: "4px",
+              backgroundColor: getShiftStatusColor(params.row.shiftStatus),
+              color: theme.palette.common.white,
+              fontSize: "0.8rem",
+            }}
+          >
+            {params.row.shiftStatus}
+          </Box>
+        );
+      },
     },
     {
       field: "actions",
@@ -489,13 +548,13 @@ const AirMonitoring = () => {
           <Box display="flex" alignItems="center" gap={1}>
             <IconButton
               onClick={() => handleEditJob(params.row)}
-              sx={{ color: colors.grey[100] }}
+              sx={{ color: theme.palette.success.main }}
             >
               <EditIcon />
             </IconButton>
             <IconButton
               onClick={(e) => handleDeleteClick(e, params.row)}
-              sx={{ color: colors.grey[100] }}
+              sx={{ color: theme.palette.success.main }}
             >
               <DeleteIcon />
             </IconButton>

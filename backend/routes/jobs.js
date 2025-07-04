@@ -9,7 +9,12 @@ const checkPermission = require('../middleware/checkPermission');
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const jobs = await AirMonitoringJob.find()
-      .populate('project', 'name projectID status department')
+      .populate({
+        path: 'project',
+        populate: {
+          path: 'client'
+        }
+      })
       .populate('assignedTo', 'firstName lastName');
     res.json(jobs);
   } catch (error) {
@@ -21,7 +26,12 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
 router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findById(req.params.id)
-      .populate('project', 'name projectID status department')
+      .populate({
+        path: 'project',
+        populate: {
+          path: 'client'
+        }
+      })
       .populate('assignedTo', 'firstName lastName');
     if (!job) {
       return res.status(404).json({ message: 'Air monitoring job not found' });
@@ -99,7 +109,12 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     
     // Populate the project and assignedTo fields before sending response
     const populatedJob = await AirMonitoringJob.findById(newJob._id)
-      .populate('project')
+      .populate({
+        path: 'project',
+        populate: {
+          path: 'client'
+        }
+      })
       .populate('assignedTo', 'firstName lastName');
 
     res.status(201).json(populatedJob);
@@ -142,7 +157,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
     
     // Populate the project and assignedTo fields before sending response
     const populatedJob = await AirMonitoringJob.findById(updatedJob._id)
-      .populate('project')
+      .populate({
+        path: 'project',
+        populate: {
+          path: 'client'
+        }
+      })
       .populate('assignedTo', 'firstName lastName');
 
     res.json(populatedJob);

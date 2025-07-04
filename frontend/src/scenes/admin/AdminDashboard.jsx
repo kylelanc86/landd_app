@@ -68,7 +68,7 @@ const AdminDashboard = () => {
         <Box sx={{ mt: 4 }}>
           <Grid container spacing={3}>
             {adminModules.map((module) => (
-              <Grid item xs={12} md={6} lg={4} key={module.id}>
+              <Grid item xs={12} md={6} lg={6} key={module.id}>
                 <Card
                   sx={{
                     height: "100%",

@@ -486,7 +486,7 @@ const Users = () => {
           alignItems="center"
           mb="10px"
         >
-          <Typography variant="h5" color="#000000">
+          <Typography variant="h5" color="black">
             Users
           </Typography>
           <FormControlLabel
@@ -498,7 +498,7 @@ const Users = () => {
               />
             }
             label="Show Inactive Users"
-            sx={{ color: "#000000" }}
+            sx={{ color: "black" }}
           />
         </Box>
         <Box

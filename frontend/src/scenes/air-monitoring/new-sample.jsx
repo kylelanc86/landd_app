@@ -474,9 +474,6 @@ const NewSample = () => {
       }
 
       // Create the sample
-      console.log("Form data before submission:", form);
-      console.log("Flowmeter value:", form.flowmeter);
-
       const sampleData = {
         ...form,
         shift: shiftId,
@@ -485,8 +482,6 @@ const NewSample = () => {
         collectedBy: form.sampler,
         flowmeter: form.flowmeter, // Explicitly include flowmeter
       };
-
-      console.log("Sample data being sent:", sampleData);
 
       await sampleService.create(sampleData);
 

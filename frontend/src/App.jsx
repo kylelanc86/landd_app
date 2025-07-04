@@ -62,6 +62,8 @@ const Clients = lazy(() => import("./scenes/clients"));
 const AdminDashboard = lazy(() => import("./scenes/admin"));
 const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
 
+const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
+
 // New lazy loaded components for missing pages
 const LeadAssessment = lazy(() =>
   import("./scenes/surveys/lead/LeadAssessment")
@@ -591,6 +593,19 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <ReportTemplates />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+
+                        <Route
+                          path="/admin/template-test"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["admin.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <TemplateTestPage />
                               </Suspense>
                             </PermissionRoute>
                           }

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asbestos Clearance Certificate</title>
+    <style>
+      /* Reset and base styles */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background: white;
+      }
+
+      /* Page layout */
+      .page {
+        width: 210mm;
+        height: 297mm;
+        margin: 0 auto;
+        padding: 20mm;
+        position: relative;
+        background: white;
+      }
+
+      /* Header section */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 30px;
+        border-bottom: 2px solid #009900;
+        padding-bottom: 15px;
+      }
+
+      .logo {
+        width: 150px;
+        height: auto;
+      }
+
+      .company-details {
+        text-align: right;
+        font-size: 10px;
+      }
+
+      /* Content zones */
+      .content-zone {
+        margin-bottom: 20px;
+        padding: 10px;
+        border: 1px dashed #ccc;
+        min-height: 50px;
+      }
+
+      .content-zone.template-content {
+        background-color: #f9f9f9;
+      }
+
+      .content-zone.job-content {
+        background-color: #f0f8ff;
+      }
+
+      /* Typography */
+      h1 {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: #009900;
+      }
+
+      h2 {
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+
+      h3 {
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+
+      p {
+        font-size: 11px;
+        margin-bottom: 8px;
+        text-align: justify;
+      }
+
+      /* Tables */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0;
+        font-size: 10px;
+      }
+
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 6px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+
+      /* Footer */
+      .footer {
+        position: absolute;
+        bottom: 20mm;
+        left: 20mm;
+        right: 20mm;
+        border-top: 1px solid #009900;
+        padding-top: 10px;
+        font-size: 10px;
+        text-align: center;
+      }
+
+      /* Utility classes */
+      .text-center {
+        text-align: center;
+      }
+      .text-right {
+        text-align: right;
+      }
+      .text-bold {
+        font-weight: bold;
+      }
+      .text-green {
+        color: #009900;
+      }
+      .mb-10 {
+        margin-bottom: 10px;
+      }
+      .mb-15 {
+        margin-bottom: 15px;
+      }
+      .mb-20 {
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Page 1: Front Cover -->
+    <div class="page">
+      <div class="header">
+        <img src="/frontend/public/logo.png" alt="Company Logo" class="logo" />
+        <div class="company-details">
+          <div>Lancaster & Dickenson Consulting Pty Ltd</div>
+          <div>4/6 Dacre Street, Mitchell ACT 2911</div>
+          <div>enquiries@landd.com.au</div>
+          <div>(02) 6241 2779</div>
+        </div>
+      </div>
+
+      <!-- Template Content Zone 1: Report Title -->
+      <div class="content-zone template-content" data-zone="report-title">
+        <h1>[REPORT_TITLE]</h1>
+      </div>
+
+      <!-- Job Content Zone 1: Project Details -->
+      <div class="content-zone job-content" data-zone="project-details">
+        <h2>Project Information</h2>
+        <p><strong>Site Name:</strong> [SITE_NAME]</p>
+        <p><strong>Address:</strong> [SITE_ADDRESS]</p>
+        <p><strong>Project ID:</strong> [PROJECT_ID]</p>
+        <p><strong>Clearance Date:</strong> [CLEARANCE_DATE]</p>
+      </div>
+
+      <!-- Template Content Zone 2: Company Information -->
+      <div class="content-zone template-content" data-zone="company-info">
+        <h2>About Lancaster & Dickenson Consulting</h2>
+        <p>
+          Lancaster & Dickenson Consulting Pty Ltd is a leading environmental
+          consulting firm specializing in asbestos management and clearance
+          inspections.
+        </p>
+      </div>
+
+      <div class="footer">
+        <p class="text-center text-green">
+          [REPORT_TYPE] Clearance Certificate: [SITE_NAME]
+        </p>
+      </div>
+    </div>
+
+    <!-- Page 2: Inspection Details -->
+    <div class="page">
+      <div class="header">
+        <img src="[LOGO_URL]" alt="Company Logo" class="logo" />
+        <div class="company-details">
+          <div>Lancaster & Dickenson Consulting Pty Ltd</div>
+          <div>4/6 Dacre Street, Mitchell ACT 2911</div>
+          <div>enquiries@landd.com.au</div>
+          <div>(02) 6241 2779</div>
+        </div>
+      </div>
+
+      <!-- Template Content Zone 3: Inspection Introduction -->
+      <div class="content-zone template-content" data-zone="inspection-intro">
+        <h2>Inspection Details</h2>
+        <p>
+          Following discussions with [CLIENT_NAME], Lancaster and Dickenson
+          Consulting (L & D) were contracted to undertake a visual clearance
+          inspection following the removal of [ASBESTOS_TYPE] asbestos from
+          [SITE_NAME] (herein referred to as 'the Site').
+        </p>
+      </div>
+
+      <!-- Job Content Zone 2: Inspection Specifics -->
+      <div class="content-zone job-content" data-zone="inspection-specifics">
+        <p>
+          Asbestos removal works were undertaken by [ASBESTOS_REMOVALIST].
+          [LAA_NAME] (ACT Licensed Asbestos Assessor - [LAA_LICENSE]) from L&D
+          visited the Site at [INSPECTION_TIME] on [INSPECTION_DATE].
+        </p>
+      </div>
+
+      <!-- Template Content Zone 4: Table Introduction -->
+      <div class="content-zone template-content" data-zone="table-intro">
+        <p>
+          Table 1 below outlines the ACM that formed part of the inspection.
+          Photographs of the Asbestos Removal Area and a Site Plan are presented
+          in Appendix A and Appendix B respectively.
+        </p>
+      </div>
+
+      <!-- Job Content Zone 3: Asbestos Removal Table -->
+      <div class="content-zone job-content" data-zone="removal-table">
+        <h3>Table 1: Asbestos Removal Areas</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Location</th>
+              <th>Material Description</th>
+              <th>Asbestos Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            [REMOVAL_ITEMS_TABLE]
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Template Content Zone 5: Inspection Exclusions -->
+      <div
+        class="content-zone template-content"
+        data-zone="inspection-exclusions"
+      >
+        <h3>Inspection Exclusions</h3>
+        <p>
+          This clearance certificate is specific to the scope of removal works
+          detailed above. ACM may be present beyond the inspected area.
+        </p>
+      </div>
+
+      <div class="footer">
+        <p class="text-center text-green">
+          [REPORT_TYPE] Clearance Certificate: [SITE_NAME]
+        </p>
+      </div>
+    </div>
+
+    <!-- Page 3: Certification -->
+    <div class="page">
+      <div class="header">
+        <img src="[LOGO_URL]" alt="Company Logo" class="logo" />
+        <div class="company-details">
+          <div>Lancaster & Dickenson Consulting Pty Ltd</div>
+          <div>4/6 Dacre Street, Mitchell ACT 2911</div>
+          <div>enquiries@landd.com.au</div>
+          <div>(02) 6241 2779</div>
+        </div>
+      </div>
+
+      <!-- Template Content Zone 6: Clearance Certification -->
+      <div
+        class="content-zone template-content"
+        data-zone="clearance-certification"
+      >
+        <h2>Clearance Certification</h2>
+        <p>
+          An inspection of the asbestos removal area and the surrounding areas
+          (including access and egress pathways) was undertaken on
+          [INSPECTION_DATE]. The LAA found no visible asbestos residue from
+          asbestos removal work in the asbestos removal area, or in the vicinity
+          of the area, where the asbestos removal works were carried out.
+        </p>
+        <p>
+          The LAA considers that the asbestos removal area does not pose a risk
+          to health and safety from exposure to asbestos and may be re-occupied.
+        </p>
+      </div>
+
+      <!-- Template Content Zone 7: Contact Information -->
+      <div class="content-zone template-content" data-zone="contact-info">
+        <p>
+          Please do not hesitate to contact the undersigned should you have any
+          queries regarding this report.
+        </p>
+        <p>For and on behalf of Lancaster and Dickenson Consulting.</p>
+      </div>
+
+      <!-- Job Content Zone 4: Signature -->
+      <div class="content-zone job-content" data-zone="signature">
+        <p class="text-bold">[LAA_NAME]</p>
+        <p>ACT Licensed Asbestos Assessor - [LAA_LICENSE]</p>
+      </div>
+
+      <div class="footer">
+        <p class="text-center text-green">
+          [REPORT_TYPE] Clearance Certificate: [SITE_NAME]
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

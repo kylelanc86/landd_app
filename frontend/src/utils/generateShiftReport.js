@@ -76,6 +76,8 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
   // Add debug logging
   console.log('Shift data in report generation:', shift);
   console.log('Samples received date:', shift?.samplesReceivedDate);
+  console.log('Project data in report generation:', project);
+  console.log('Client data in report generation:', project?.client);
   
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');

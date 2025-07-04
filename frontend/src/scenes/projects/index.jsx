@@ -739,6 +739,10 @@ const Projects = () => {
     };
   });
 
+  // Add ref to track current filters state to avoid stale closures
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
   // Function to save filters to localStorage and update URL
   const saveFilters = useCallback((newFilters) => {
     localStorage.setItem("projects-filters", JSON.stringify(newFilters));
@@ -774,11 +778,13 @@ const Projects = () => {
   // Update individual filter functions to use the combined state
   const updateFilter = useCallback(
     (filterType, value) => {
+      console.log("🔍 updateFilter called with:", filterType, value);
       setFilters((prev) => {
         const newFilters = {
           ...prev,
           [filterType]: value,
         };
+        console.log("🔍 New filters state:", newFilters);
         // Save filters whenever they change
         saveFilters(newFilters);
         return newFilters;
@@ -791,9 +797,19 @@ const Projects = () => {
   const fetchProjectsWithPagination = useCallback(
     async (
       paginationModel,
-      searchValue = filters.searchTerm,
-      isSearch = false
+      searchValue = filtersRef.current.searchTerm,
+      isSearch = false,
+      currentFilters = null
     ) => {
+      console.log("🔍 fetchProjectsWithPagination called with:");
+      console.log("  - searchValue:", searchValue);
+      console.log("  - isSearch:", isSearch);
+      console.log("  - currentFilters:", currentFilters);
+      console.log("  - current filters state:", filtersRef.current);
+
+      // Use current filters state if currentFilters is null (for search operations)
+      const filtersToUse = currentFilters || filtersRef.current;
+      console.log("🔍 filtersToUse:", filtersToUse);
       try {
         if (isSearch) {
           setSearchLoading(true);
@@ -804,30 +820,34 @@ const Projects = () => {
         const params = {
           page: paginationModel.page + 1,
           limit: paginationModel.pageSize,
-          sortBy: filters.sortModel[0]?.field || "createdAt",
-          sortOrder: filters.sortModel[0]?.sort || "desc",
+          sortBy: filtersToUse.sortModel[0]?.field || "createdAt",
+          sortOrder: filtersToUse.sortModel[0]?.sort || "desc",
         };
 
         // Add search term if provided
         if (searchValue) {
           params.search = searchValue;
+          console.log("🔍 Added search param:", searchValue);
         }
 
         // Add department filter
-        if (filters.departmentFilter !== "all") {
-          params.department = filters.departmentFilter;
+        if (filtersToUse.departmentFilter !== "all") {
+          params.department = filtersToUse.departmentFilter;
         }
 
         // Add status filter
-        if (filters.statusFilter !== "all") {
-          params.status = filters.statusFilter;
+        if (filtersToUse.statusFilter !== "all") {
+          params.status = filtersToUse.statusFilter;
         }
 
+        console.log("🔍 API call params:", params);
         const response = await projectService.getAll(params);
+        console.log("🔍 API response:", response);
 
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
+        console.log("🔍 Processed projectsData length:", projectsData.length);
 
         setProjects(projectsData);
         setPagination({
@@ -845,7 +865,7 @@ const Projects = () => {
         setSearchLoading(false);
       }
     },
-    [filters]
+    [] // Remove filters dependency since we now use ref to get current state
   );
 
   // Move fetchProjects here so it is defined after fetchProjectsWithPagination
@@ -854,22 +874,27 @@ const Projects = () => {
       // Use fetchProjectsWithPagination with current pagination model
       return fetchProjectsWithPagination(
         paginationModel,
-        filters.searchTerm,
-        isSearch
+        filtersRef.current.searchTerm,
+        isSearch,
+        filtersRef.current
       );
     },
-    [filters.searchTerm, fetchProjectsWithPagination, paginationModel]
+    [fetchProjectsWithPagination, paginationModel]
   );
 
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value) => {
+      console.log("🔍 debouncedSearch triggered with value:", value);
+      console.log("🔍 Current paginationModel:", paginationModel);
+
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
       // Use the new function with reset pagination
       fetchProjectsWithPagination(
         { page: 0, pageSize: paginationModel.pageSize },
         value,
-        true
+        true,
+        null // Pass null to use current filters state inside fetchProjectsWithPagination
       );
     }, 150), // Reduced from 300ms to 150ms for better responsiveness
     [fetchProjectsWithPagination, paginationModel.pageSize]
@@ -958,7 +983,7 @@ const Projects = () => {
       // Use the new function with updated filters
       fetchWithUpdatedFilters();
     },
-    [updateFilter, filters, paginationModel]
+    [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
   );
 
   // Function to clear all filters
@@ -997,7 +1022,8 @@ const Projects = () => {
     fetchProjectsWithPagination(
       { page: 0, pageSize: paginationModel.pageSize },
       "",
-      false
+      false,
+      defaultFilters
     );
   }, [fetchProjectsWithPagination, paginationModel.pageSize]);
 
@@ -1005,9 +1031,16 @@ const Projects = () => {
   const handleSearchChange = useCallback(
     (event) => {
       const value = event.target.value;
+      console.log("🔍 handleSearchChange called with value:", value);
+
       // Immediately update the search term in state for better UX
       updateFilter("searchTerm", value);
-      // Then trigger the debounced search
+      console.log(
+        "🔍 After updateFilter, calling debouncedSearch with:",
+        value
+      );
+
+      // Then trigger the debounced search with the current value
       debouncedSearch(value);
     },
     [debouncedSearch, updateFilter]
@@ -1018,6 +1051,53 @@ const Projects = () => {
     // Removed automatic fetch to prevent double API calls
     // All fetches are now triggered manually in search and filter handlers
   }, [paginationModel]);
+
+  // Clear search term when component unmounts or when navigating away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Clear search term from localStorage when leaving the page
+      const currentFilters = localStorage.getItem("projects-filters");
+      if (currentFilters) {
+        try {
+          const parsedFilters = JSON.parse(currentFilters);
+          if (parsedFilters.searchTerm) {
+            parsedFilters.searchTerm = "";
+            localStorage.setItem(
+              "projects-filters",
+              JSON.stringify(parsedFilters)
+            );
+          }
+        } catch (error) {
+          console.error("Error clearing search term:", error);
+        }
+      }
+    };
+
+    // Listen for page unload/refresh
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Cleanup function to clear search term when component unmounts
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+
+      // Clear search term from state and localStorage
+      const currentFilters = localStorage.getItem("projects-filters");
+      if (currentFilters) {
+        try {
+          const parsedFilters = JSON.parse(currentFilters);
+          if (parsedFilters.searchTerm) {
+            parsedFilters.searchTerm = "";
+            localStorage.setItem(
+              "projects-filters",
+              JSON.stringify(parsedFilters)
+            );
+          }
+        } catch (error) {
+          console.error("Error clearing search term on unmount:", error);
+        }
+      }
+    };
+  }, []);
 
   // Restore focus to search input when search loading completes
   useEffect(() => {
@@ -1872,6 +1952,28 @@ const Projects = () => {
       )}
 
       {/* Search and Filter Section */}
+      {/* Add Project Button - Full Width */}
+
+      <Box sx={{ mb: 2 }}>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => setDialogOpen(true)}
+          fullWidth
+          sx={{
+            backgroundColor: theme.palette.primary.main,
+            "&:hover": { backgroundColor: theme.palette.primary.dark },
+            height: 60,
+            fontSize: "1.2rem",
+            fontWeight: "bold",
+            border: "2px solid rgb(83, 84, 85)",
+            py: 2,
+          }}
+        >
+          <AddIcon sx={{ mr: 1 }} />
+          ADD PROJECT
+        </Button>
+      </Box>
       <Box
         mt="5px"
         mb="20px"
@@ -1922,8 +2024,8 @@ const Projects = () => {
                 onChange={(e) => handleFilterChange("status", e.target.value)}
               >
                 <MenuItem value="all">All Statuses</MenuItem>
-                <MenuItem value="all_active">All Active</MenuItem>
-                <MenuItem value="all_inactive">All Inactive</MenuItem>
+                <MenuItem value="all_active">Active</MenuItem>
+                <MenuItem value="all_inactive">Inactive</MenuItem>
                 <Divider />
                 <MenuItem disabled>
                   <Typography variant="subtitle2" color="text.secondary">
@@ -1949,19 +2051,6 @@ const Projects = () => {
               </Select>
             </FormControl>
 
-            {/* Clear Filters Button */}
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={clearFilters}
-              sx={{
-                height: 40, // Match the height of other components
-                minWidth: 120,
-              }}
-            >
-              Clear Filters
-            </Button>
-
             {/* Column Visibility Button */}
             <Button
               variant="outlined"
@@ -1983,21 +2072,6 @@ const Projects = () => {
               Columns
             </Button>
           </Stack>
-
-          {/* Add Project Button */}
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => setDialogOpen(true)}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              "&:hover": { backgroundColor: theme.palette.primary.dark },
-              height: 40, // Match the height of other components
-            }}
-          >
-            <AddIcon sx={{ mr: 1 }} />
-            Add Project
-          </Button>
         </Stack>
       </Box>
 

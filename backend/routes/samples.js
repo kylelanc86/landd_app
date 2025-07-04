@@ -94,6 +94,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       type: req.body.type,
       location: req.body.location,
       pumpNo: req.body.pumpNo,
+      flowmeter: req.body.flowmeter,
       cowlNo: req.body.cowlNo,
       filterSize: req.body.filterSize,
       startTime: req.body.startTime,
