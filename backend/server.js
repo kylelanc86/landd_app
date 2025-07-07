@@ -21,6 +21,7 @@ const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
 const reportTemplateRoutes = require('./routes/reportTemplates');
+const pdfRoutes = require('./routes/pdf');
 
 // Load environment variables
 dotenv.config();
@@ -51,7 +52,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma', 'Expires'],
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
@@ -113,6 +114,7 @@ connectDB()
     app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
     app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
     app.use('/api/report-templates', reportTemplateRoutes);
+    app.use('/api/pdf', pdfRoutes);
 
     // Error handling middleware
     app.use((err, req, res, next) => {

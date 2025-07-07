@@ -48,11 +48,13 @@ const AsbestosAssessment = lazy(() =>
   import("./scenes/surveys/asbestos/AsbestosAssessment")
 );
 const AsbestosClearance = lazy(() =>
-  import("./scenes/clearances/AsbestosClearanceList")
+  import("./scenes/clearances/AsbestosClearance")
 );
 
+const ClearanceItems = lazy(() => import("./scenes/clearances/ClearanceItems"));
+
 const ClearanceReports = lazy(() =>
-  import("./scenes/clearances/ClearanceReportItems")
+  import("./scenes/clearances/AsbestosClearance")
 );
 
 const AssessmentSamples = lazy(() =>
@@ -417,6 +419,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <ClearanceReports />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clearances/:clearanceId/items"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ClearanceItems />
                               </Suspense>
                             </PermissionRoute>
                           }

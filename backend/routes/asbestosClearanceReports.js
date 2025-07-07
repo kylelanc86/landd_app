@@ -131,11 +131,12 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       return res.status(404).json({ message: "Clearance report not found" });
     }
 
-    report.locationDescription = locationDescription || report.locationDescription;
-    report.materialDescription = materialDescription || report.materialDescription;
-    report.asbestosType = asbestosType || report.asbestosType;
-    report.photograph = photograph || report.photograph;
-    report.notes = notes || report.notes;
+    // Update fields, allowing empty strings for photograph to remove images
+    if (locationDescription !== undefined) report.locationDescription = locationDescription;
+    if (materialDescription !== undefined) report.materialDescription = materialDescription;
+    if (asbestosType !== undefined) report.asbestosType = asbestosType;
+    if (photograph !== undefined) report.photograph = photograph; // Allow empty string to remove image
+    if (notes !== undefined) report.notes = notes;
     report.updatedBy = req.user.id;
 
     const updatedReport = await report.save();

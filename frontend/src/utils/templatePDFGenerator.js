@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 export const generateTemplatePDF = async (template, sampleData, replacePlaceholders) => {
   // Create a new PDF document
@@ -309,4 +310,78 @@ export const generateTemplatePDF = async (template, sampleData, replacePlacehold
   doc.save(fileName);
 
   return fileName;
+};
+
+/**
+ * Generate PDF from HTML templates using server-side Puppeteer
+ * @param {string} templateType - Type of template (e.g., 'asbestos-clearance')
+ * @param {Object} data - Clearance data
+ * @returns {Promise<string>} - Generated PDF filename
+ */
+export const generateHTMLPDF = async (templateType, data) => {
+  return generateHTMLTemplatePDF(templateType, data);
+    };
+
+export const generateHTMLTemplatePDF = async (templateType, data) => {
+  try {
+    console.log('Starting server-side PDF generation with data:', data);
+    
+    // Get the API base URL from the environment
+    const apiBaseUrl = process.env.NODE_ENV === 'development' 
+      ? "http://localhost:5000/api" 
+      : "https://landd-app-backend1.onrender.com/api";
+    
+    const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-clearance?t=${Date.now()}`;
+    console.log('Calling backend URL:', requestUrl);
+
+    // Call the server-side PDF generation endpoint with cache busting
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      body: JSON.stringify({ clearanceData: data })
+    });
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate PDF');
+    }
+
+    // Get the PDF blob
+    const pdfBlob = await response.blob();
+    console.log('PDF blob size:', pdfBlob.size, 'bytes');
+
+    // Create a download link
+    const url = window.URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    // Generate filename
+    const fileName = `asbestos-clearance-${data.projectId?.name || 'report'}-${new Date().toISOString().split('T')[0]}.pdf`;
+    link.download = fileName;
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    
+    console.log('PDF generation completed successfully:', fileName);
+    return fileName;
+    
+  } catch (error) {
+    console.error("Error generating HTML template PDF:", error);
+    console.error("Error stack:", error.stack);
+    throw error;
+  }
 }; 

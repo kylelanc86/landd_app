@@ -13,7 +13,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 
 // Import components for inline display
 import AirMonitoring from "../air-monitoring";
-import AsbestosClearance from "../clearances/AsbestosClearanceList";
+import AsbestosClearance from "../clearances/AsbestosClearance";
 
 const AsbestosRemovalWidget = ({ title, icon, onClick, color = "primary" }) => (
   <Card

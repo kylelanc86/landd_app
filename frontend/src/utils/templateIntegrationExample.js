@@ -2,7 +2,7 @@ import { populateTemplateContent, getSectionContent } from './templateDataBindin
 
 /**
  * Example of how to integrate template content with existing PDF generation
- * This shows how to replace hardcoded text in your generateClearanceReport.js
+ * This shows how to replace hardcoded text in your clearance report generation
  */
 export const integrateTemplateWithPDF = async (clearance, setError, options = {}) => {
   try {
@@ -12,7 +12,7 @@ export const integrateTemplateWithPDF = async (clearance, setError, options = {}
     // Step 2: Use template content instead of hardcoded text
     // This is how you would replace the hardcoded content in your PDF generation
     
-    // Example replacements for your existing generateClearanceReport.js:
+    // Example replacements for your existing clearance report generation:
     
     // Instead of:
     // doc.text("ASBESTOS REMOVAL CLEARANCE CERTIFICATE", leftMargin, y);
