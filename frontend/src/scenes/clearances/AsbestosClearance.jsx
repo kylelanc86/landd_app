@@ -2,46 +2,62 @@ import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
-  Button,
-  Card,
-  CardContent,
-  Grid,
+  useTheme,
+  Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
+  Button,
   IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
+  FormControlLabel,
+  Checkbox,
+  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   Chip,
   Alert,
-  Snackbar,
   CircularProgress,
+  Card,
+  CardContent,
+  Snackbar,
 } from "@mui/material";
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  PictureAsPdf as PdfIcon,
-  Visibility as ViewIcon,
-} from "@mui/icons-material";
-
 import { useNavigate } from "react-router-dom";
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import DescriptionIcon from "@mui/icons-material/Description";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import Header from "../../components/Header";
 import { tokens } from "../../theme";
-import PermissionGate from "../../components/PermissionGate";
+import { projectService, userService } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
-import projectService from "../../services/projectService";
+import PermissionGate from "../../components/PermissionGate";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
+
+// ASBESTOS_REMOVALISTS array from air monitoring modal
+const ASBESTOS_REMOVALISTS = [
+  "AGH",
+  "Aztech Services",
+  "Capstone",
+  "Crown Asbestos Removals",
+  "Empire Contracting",
+  "Glade Group",
+  "IAR",
+  "Jesco",
+  "Ozbestos",
+  "Spec Services",
+];
 
 const AsbestosClearance = () => {
   const colors = tokens;
@@ -49,6 +65,7 @@ const AsbestosClearance = () => {
 
   const [clearances, setClearances] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -66,10 +83,13 @@ const AsbestosClearance = () => {
     clearanceType: "Non-friable",
     LAA: "",
     asbestosRemovalist: "",
+    airMonitoring: false,
+    airMonitoringReport: null,
+    jobSpecificExclusions: "",
     notes: "",
   });
 
-  // Fetch clearances and projects on component mount
+  // Fetch clearances, projects, and users on component mount
   useEffect(() => {
     fetchData();
   }, []);
@@ -77,22 +97,55 @@ const AsbestosClearance = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [clearancesData, projectsData] = await Promise.all([
+      const [clearancesData, projectsData, usersData] = await Promise.all([
         asbestosClearanceService.getAll(),
         projectService.getAll({
           limit: 1000,
           status:
             "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent",
         }),
+        userService.getAll(),
       ]);
 
       console.log("Clearances API response:", clearancesData);
       console.log("Projects API response:", projectsData);
+      console.log("Projects API response type:", typeof projectsData);
+      console.log(
+        "Projects API response keys:",
+        projectsData ? Object.keys(projectsData) : "null/undefined"
+      );
+      console.log("Users API response:", usersData);
 
       setClearances(
         clearancesData.clearances || clearancesData.data || clearancesData || []
       );
-      setProjects(projectsData.data || projectsData);
+
+      // Ensure projects is always an array - handle different response structures
+      let projectsArray = [];
+      if (projectsData) {
+        // Handle the standard API response structure: { data: [...], pagination: {...} }
+        if (projectsData.data && Array.isArray(projectsData.data)) {
+          projectsArray = projectsData.data;
+        } else if (Array.isArray(projectsData)) {
+          projectsArray = projectsData;
+        } else if (
+          projectsData.data &&
+          projectsData.data.data &&
+          Array.isArray(projectsData.data.data)
+        ) {
+          projectsArray = projectsData.data.data;
+        }
+      }
+      console.log("Projects array:", projectsArray);
+      console.log("Projects array length:", projectsArray.length);
+      console.log("First project (if any):", projectsArray[0]);
+      setProjects(projectsArray);
+
+      // Filter active users and transform for dropdown
+      const activeUsers = (usersData.data || usersData).filter(
+        (user) => user.isActive
+      );
+      setUsers(activeUsers);
     } catch (err) {
       console.error("Error fetching data:", err);
       setError("Failed to load data");
@@ -144,6 +197,9 @@ const AsbestosClearance = () => {
       clearanceType: clearance.clearanceType,
       LAA: clearance.LAA,
       asbestosRemovalist: clearance.asbestosRemovalist,
+      airMonitoring: clearance.airMonitoring || false,
+      airMonitoringReport: clearance.airMonitoringReport || null,
+      jobSpecificExclusions: clearance.jobSpecificExclusions || "",
       notes: clearance.notes || "",
     });
     setDialogOpen(true);
@@ -219,6 +275,9 @@ const AsbestosClearance = () => {
       clearanceType: "Non-friable",
       LAA: "",
       asbestosRemovalist: "",
+      airMonitoring: false,
+      airMonitoringReport: null,
+      jobSpecificExclusions: "",
       notes: "",
     });
   };
@@ -237,6 +296,12 @@ const AsbestosClearance = () => {
   };
 
   const getProjectName = (projectId) => {
+    // Ensure projects is an array
+    if (!Array.isArray(projects)) {
+      console.warn("Projects is not an array:", projects);
+      return "Unknown Project";
+    }
+
     // Handle case where projectId is an object with _id
     const projectIdValue = projectId?._id || projectId;
     const project = projects.find((p) => p._id === projectIdValue);
@@ -244,6 +309,12 @@ const AsbestosClearance = () => {
   };
 
   const getProjectDisplayName = (projectId) => {
+    // Ensure projects is an array
+    if (!Array.isArray(projects)) {
+      console.warn("Projects is not an array:", projects);
+      return "Unknown Project";
+    }
+
     // Handle case where projectId is an object with _id
     const projectIdValue = projectId?._id || projectId;
     const project = projects.find((p) => p._id === projectIdValue);
@@ -276,12 +347,12 @@ const AsbestosClearance = () => {
       <Box m="20px">
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography
-            variant="h2"
-            color={colors.grey[100]}
+            variant="h4"
+            color={colors.grey[500]}
             fontWeight="bold"
             sx={{ mb: "5px" }}
           >
-            Asbestos Clearance
+            Asbestos Clearances
           </Typography>
           <Button
             variant="contained"
@@ -299,88 +370,108 @@ const AsbestosClearance = () => {
 
         <Card sx={{ mt: 3 }}>
           <CardContent>
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Project ID</TableCell>
-                    <TableCell>Project Name</TableCell>
-                    <TableCell>Clearance Date</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Removalist</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(clearances || []).map((clearance) => (
-                    <TableRow key={clearance._id}>
-                      <TableCell>
-                        {getProjectName(clearance.projectId)}
-                      </TableCell>
-                      <TableCell>
-                        {getProjectDisplayName(clearance.projectId)}
-                      </TableCell>
-                      <TableCell>
-                        {clearance.clearanceDate
-                          ? new Date(
-                              clearance.clearanceDate
-                            ).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                            })
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>{clearance.clearanceType}</TableCell>
-                      <TableCell>{clearance.asbestosRemovalist}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={clearance.status}
-                          color={getStatusColor(clearance.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <IconButton
-                          onClick={() => handleViewItems(clearance)}
-                          color="info"
-                          size="small"
-                          title="View Items"
-                        >
-                          <ViewIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleEdit(clearance)}
-                          color="primary"
-                          size="small"
-                          title="Edit"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleGeneratePDF(clearance)}
-                          color="secondary"
-                          size="small"
-                          disabled={generatingPDF}
-                          title="Generate PDF"
-                        >
-                          <PdfIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleDelete(clearance)}
-                          color="error"
-                          size="small"
-                          title="Delete"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
+            {loading ? (
+              <Box
+                display="flex"
+                justifyContent="center"
+                alignItems="center"
+                height="200px"
+              >
+                <CircularProgress />
+              </Box>
+            ) : (
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Project ID</TableCell>
+                      <TableCell>Clearance Date</TableCell>
+                      <TableCell>Project Name</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Air Monitoring</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Actions</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {Array.isArray(clearances) &&
+                      (clearances || []).map((clearance) => (
+                        <TableRow key={clearance._id}>
+                          <TableCell>
+                            {getProjectName(clearance.projectId)}
+                          </TableCell>
+                          <TableCell>
+                            {clearance.clearanceDate
+                              ? new Date(
+                                  clearance.clearanceDate
+                                ).toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                })
+                              : "N/A"}
+                          </TableCell>
+                          <TableCell>
+                            {getProjectDisplayName(clearance.projectId)}
+                          </TableCell>
+                          <TableCell>{clearance.clearanceType}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={clearance.airMonitoring ? "Yes" : "No"}
+                              color={
+                                clearance.airMonitoring ? "success" : "default"
+                              }
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={clearance.status}
+                              color={getStatusColor(clearance.status)}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <IconButton
+                              onClick={() => handleViewItems(clearance)}
+                              color="info"
+                              size="small"
+                              title="View Items"
+                            >
+                              <VisibilityIcon />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => handleEdit(clearance)}
+                              color="primary"
+                              size="small"
+                              title="Edit"
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => handleGeneratePDF(clearance)}
+                              color="secondary"
+                              size="small"
+                              disabled={generatingPDF}
+                              title="Generate PDF"
+                            >
+                              <PictureAsPdfIcon />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => handleDelete(clearance)}
+                              color="error"
+                              size="small"
+                              title="Delete"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -407,11 +498,15 @@ const AsbestosClearance = () => {
                       }
                       label="Project"
                     >
-                      {(projects || []).map((project) => (
-                        <MenuItem key={project._id} value={project._id}>
-                          {project.projectID}: {project.name}
-                        </MenuItem>
-                      ))}
+                      {(projects || []).length > 0 ? (
+                        (projects || []).map((project) => (
+                          <MenuItem key={project._id} value={project._id}>
+                            {project.projectID}: {project.name}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>No projects available</MenuItem>
+                      )}
                     </Select>
                   </FormControl>
                 </Grid>
@@ -444,23 +539,115 @@ const AsbestosClearance = () => {
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="LAA"
-                    value={form.LAA}
-                    onChange={(e) => setForm({ ...form, LAA: e.target.value })}
-                    required
-                  />
+                  <FormControl fullWidth required>
+                    <InputLabel>LAA</InputLabel>
+                    <Select
+                      value={form.LAA}
+                      onChange={(e) =>
+                        setForm({ ...form, LAA: e.target.value })
+                      }
+                      label="LAA"
+                    >
+                      {(users || []).map((user) => (
+                        <MenuItem
+                          key={user._id}
+                          value={`${user.firstName} ${user.lastName}`}
+                        >
+                          {user.firstName} {user.lastName}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
                 <Grid item xs={12} md={6}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Asbestos Removalist</InputLabel>
+                    <Select
+                      value={form.asbestosRemovalist}
+                      onChange={(e) =>
+                        setForm({ ...form, asbestosRemovalist: e.target.value })
+                      }
+                      label="Asbestos Removalist"
+                    >
+                      {ASBESTOS_REMOVALISTS.map((removalist) => (
+                        <MenuItem key={removalist} value={removalist}>
+                          {removalist}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.airMonitoring}
+                        onChange={(e) =>
+                          setForm({ ...form, airMonitoring: e.target.checked })
+                        }
+                        color="primary"
+                      />
+                    }
+                    label="Include Air Monitoring Report"
+                  />
+                </Grid>
+                {form.airMonitoring && (
+                  <Grid item xs={12}>
+                    <input
+                      accept=".pdf"
+                      style={{ display: "none" }}
+                      id="air-monitoring-report-upload"
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            // Extract just the base64 data from the data URL
+                            const dataUrl = event.target.result;
+                            const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
+                            setForm({
+                              ...form,
+                              airMonitoringReport: base64Data,
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label htmlFor="air-monitoring-report-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        startIcon={<PictureAsPdfIcon />}
+                      >
+                        Upload Air Monitoring Report (PDF)
+                      </Button>
+                    </label>
+                    {form.airMonitoringReport && (
+                      <Typography
+                        variant="body2"
+                        color="success.main"
+                        sx={{ mt: 1 }}
+                      >
+                        ✓ Report uploaded successfully
+                      </Typography>
+                    )}
+                  </Grid>
+                )}
+                <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    label="Asbestos Removalist"
-                    value={form.asbestosRemovalist}
+                    label="Job Specific Exclusions"
+                    value={form.jobSpecificExclusions}
                     onChange={(e) =>
-                      setForm({ ...form, asbestosRemovalist: e.target.value })
+                      setForm({
+                        ...form,
+                        jobSpecificExclusions: e.target.value,
+                      })
                     }
-                    required
+                    multiline
+                    rows={3}
                   />
                 </Grid>
                 <Grid item xs={12}>

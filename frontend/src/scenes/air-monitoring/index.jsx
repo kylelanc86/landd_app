@@ -489,7 +489,8 @@ const AirMonitoring = () => {
       field: "asbestosRemovalist",
       headerName: "Asbestos Removalist",
       flex: 1,
-      maxWidth: 220,
+      minWidth: 150,
+      maxWidth: 300,
       valueGetter: (params) => {
         if (typeof params === "string") return params;
         return params?.row?.asbestosRemovalist || "Not assigned";
@@ -593,9 +594,14 @@ const AirMonitoring = () => {
 
   return (
     <Box m="20px">
-      <Header title="Air Monitoring" subtitle="Manage air monitoring jobs" />
-
-      {/* Add New Job Button and Show Completed Toggle */}
+      <Typography
+            variant="h4"
+            color={colors.grey[500]}
+            fontWeight="bold"
+            sx={{ mb: "5px" }}
+      >
+            Active Air Monitoring Jobs
+      </Typography>
       <Box
         display="flex"
         justifyContent="space-between"

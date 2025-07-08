@@ -72,7 +72,7 @@ const formatReportedConcentration = (sample) => {
   return numValue.toFixed(2);
 };
 
-export async function generateShiftReport({ shift, job, samples, project, openInNewTab }) {
+export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false }) {
   // Add debug logging
   console.log('Shift data in report generation:', shift);
   console.log('Samples received date:', shift?.samplesReceivedDate);
@@ -316,9 +316,17 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
   const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
-  if (openInNewTab) {
-    pdfDoc.open({}, undefined, filename);
+  if (returnPdfData) {
+    return new Promise((resolve) => {
+      pdfDoc.getDataUrl((dataUrl) => {
+        resolve(dataUrl);
+      });
+    });
   } else {
-    pdfDoc.download(filename);
+    if (openInNewTab) {
+      pdfDoc.open({}, undefined, filename);
+    } else {
+      pdfDoc.download(filename);
+    }
   }
 } 

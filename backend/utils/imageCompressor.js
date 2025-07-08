@@ -1,6 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const Jimp = require('jimp');
+
+// Import Jimp with proper error handling
+let Jimp;
+try {
+  Jimp = require('jimp').Jimp;
+} catch (error) {
+  console.error('Failed to import Jimp:', error);
+  Jimp = null;
+}
 
 /**
  * Compress base64 image by reducing quality and resolution to target size
@@ -12,6 +20,12 @@ const Jimp = require('jimp');
  */
 async function compressBase64Image(base64String, targetSizeKB = 100, maxWidth = 800, maxHeight = 600) {
   try {
+    // Check if Jimp is available
+    if (!Jimp) {
+      console.log('Jimp not available, returning original image');
+      return base64String;
+    }
+
     // Extract the data part from base64 string
     const dataMatch = base64String.match(/^data:([^;]+);base64,(.+)$/);
     if (!dataMatch) {
@@ -38,69 +52,61 @@ async function compressBase64Image(base64String, targetSizeKB = 100, maxWidth = 
     // Load image with Jimp
     const image = await Jimp.read(imageBuffer);
     
-    // Get original dimensions
-    const originalWidth = image.getWidth();
-    const originalHeight = image.getHeight();
+    // Debug: Check if image is a valid Jimp instance
+    console.log('Type of image:', typeof image);
+    console.log('Image bitmap:', image.bitmap);
+    if (!image || !image.bitmap) {
+      console.error('Jimp.read did not return a valid Jimp image instance:', image);
+      return base64String;
+    }
+    
+    // Get original dimensions from bitmap
+    const originalWidth = image.bitmap.width;
+    const originalHeight = image.bitmap.height;
     
     console.log('Original dimensions:', originalWidth, 'x', originalHeight);
     
     // Resize if needed
     if (originalWidth > maxWidth || originalHeight > maxHeight) {
       image.scaleToFit(maxWidth, maxHeight);
-      console.log('Resized to:', image.getWidth(), 'x', image.getHeight());
+      console.log('Resized to:', image.bitmap.width, 'x', image.bitmap.height);
     }
-    
-    // Progressive compression to reach target size
+
+    // Always convert to JPEG for compression
     let quality = 90; // Start with high quality
     let compressedBuffer;
     let compressedBase64;
     let currentSizeKB;
-    
+    let tempImage = image;
+
     do {
-      // Compress based on mime type
-      if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
-        compressedBuffer = await image.quality(quality).getBufferAsync(Jimp.MIME_JPEG);
-      } else if (mimeType.includes('png')) {
-        // For PNG, we'll convert to JPEG for better compression
-        compressedBuffer = await image.quality(quality).getBufferAsync(Jimp.MIME_JPEG);
-      } else {
-        // For other formats, try to convert to JPEG
-        compressedBuffer = await image.quality(quality).getBufferAsync(Jimp.MIME_JPEG);
-      }
-      
-      // Convert back to base64
+      // Convert to JPEG buffer
+      compressedBuffer = await tempImage.getBufferAsync(Jimp.MIME_JPEG);
+      // Reload as Jimp image to apply quality
+      tempImage = await Jimp.read(compressedBuffer);
+      tempImage.quality(quality);
+      compressedBuffer = await tempImage.getBufferAsync(Jimp.MIME_JPEG);
       compressedBase64 = compressedBuffer.toString('base64');
       currentSizeKB = Math.round(compressedBase64.length * 0.75 / 1024);
-      
       console.log(`Quality ${quality}% -> ${currentSizeKB}KB`);
-      
-      // Reduce quality for next iteration
       quality -= 10;
-      
-      // Stop if we reach minimum quality or target size
       if (quality < 10) {
         console.log('Reached minimum quality (10%)');
         break;
       }
-      
     } while (currentSizeKB > targetSizeKB);
-    
+
     const compressedMimeType = 'image/jpeg';
-    
     console.log('Final compressed base64 length:', compressedBase64.length);
     console.log('Final compressed image size (KB):', currentSizeKB);
-    
     const reduction = Math.round(((base64Data.length - compressedBase64.length) / base64Data.length) * 100);
     console.log('Compression achieved:', reduction + '%');
-    
     if (currentSizeKB > targetSizeKB) {
       console.log(`WARNING: Could not compress to ${targetSizeKB}KB, final size: ${currentSizeKB}KB`);
     } else {
       console.log(`SUCCESS: Compressed to ${currentSizeKB}KB (target: ${targetSizeKB}KB)`);
     }
-    
     return `data:${compressedMimeType};base64,${compressedBase64}`;
-    
   } catch (error) {
     console.error('Error compressing base64 image:', error);
     return base64String;

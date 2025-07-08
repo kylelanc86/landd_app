@@ -170,17 +170,8 @@ const Users = () => {
 
       const reader = new FileReader();
       reader.onload = async (event) => {
-        try {
-          // Compress the image
-          const compressedSignature = await compressSignatureImage(
-            event.target.result
-          );
-          setForm({ ...form, signature: compressedSignature });
-        } catch (error) {
-          console.error("Error compressing signature:", error);
-          // Fallback to original if compression fails
-          setForm({ ...form, signature: event.target.result });
-        }
+        // Store the original image without compression
+        setForm({ ...form, signature: event.target.result });
       };
       reader.readAsDataURL(file);
     }
@@ -198,17 +189,8 @@ const Users = () => {
 
       const reader = new FileReader();
       reader.onload = async (event) => {
-        try {
-          // Compress the image
-          const compressedSignature = await compressSignatureImage(
-            event.target.result
-          );
-          setEditForm({ ...editForm, signature: compressedSignature });
-        } catch (error) {
-          console.error("Error compressing signature:", error);
-          // Fallback to original if compression fails
-          setEditForm({ ...editForm, signature: event.target.result });
-        }
+        // Store the original image without compression
+        setEditForm({ ...editForm, signature: event.target.result });
       };
       reader.readAsDataURL(file);
     }

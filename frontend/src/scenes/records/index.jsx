@@ -239,11 +239,12 @@ const Records = () => {
               py: 2,
               color: theme.palette.text.secondary,
               "&.Mui-selected": {
-                color: theme.palette.primary.main,
+                backgroundColor: "#4caf50",
+                color: "white !important",
               },
             },
             "& .MuiTabs-indicator": {
-              backgroundColor: theme.palette.primary.main,
+              backgroundColor: "#4caf50",
               height: 3,
             },
           }}

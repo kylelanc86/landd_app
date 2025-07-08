@@ -29,9 +29,41 @@ const asbestosClearanceSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    airMonitoring: {
+      type: Boolean,
+      default: false,
+    },
+    airMonitoringReport: {
+      type: String, // Will store the file path or base64 data
+    },
+    jobSpecificExclusions: {
+      type: String, // Job-specific exclusions text
+    },
     notes: {
       type: String,
     },
+    // Array of clearance items embedded directly in the clearance job
+    items: [{
+      locationDescription: {
+        type: String,
+        required: true,
+      },
+      materialDescription: {
+        type: String,
+        required: true,
+      },
+      asbestosType: {
+        type: String,
+        enum: ["non-friable", "friable"],
+        required: true,
+      },
+      photograph: {
+        type: String, // Base64 image data
+      },
+      notes: {
+        type: String,
+      },
+    }],
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

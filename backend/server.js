@@ -20,6 +20,7 @@ const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
+const asbestosRemovalJobRoutes = require('./routes/asbestosRemovalJobs');
 const reportTemplateRoutes = require('./routes/reportTemplates');
 const pdfRoutes = require('./routes/pdf');
 
@@ -113,6 +114,7 @@ connectDB()
     app.use('/api/equipment', equipmentRoutes);
     app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
     app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
+    app.use('/api/asbestos-removal-jobs', asbestosRemovalJobRoutes);
     app.use('/api/report-templates', reportTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
 

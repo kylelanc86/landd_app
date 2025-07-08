@@ -2,9 +2,11 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
+const { PDFDocument } = require('pdf-lib');
 const router = express.Router();
 const { ultraCompressPDF } = require('../utils/pdfCompressor');
 const { compressImagesInHTML } = require('../utils/imageCompressor');
+const { getTemplateByType, replacePlaceholders } = require('../services/templateService');
 
 // Create a log file for debugging
 const logFile = path.join(__dirname, 'pdf-debug.log');
@@ -22,7 +24,10 @@ const logoBase64 = fs.readFileSync(logoPath).toString('base64');
 
 // Load the background image using the same method as logos
 const backgroundPath = path.join(__dirname, '../../frontend/public/images/clearance_front.jpg');
+console.log('Background image path:', backgroundPath);
+console.log('Background image exists:', fs.existsSync(backgroundPath));
 const backgroundBase64 = fs.readFileSync(backgroundPath).toString('base64');
+console.log('Background image loaded, base64 length:', backgroundBase64.length);
 
 // HTML templates for asbestos clearance reports - Using the actual 7-page template structure
 const HTML_TEMPLATES = {
@@ -532,71 +537,18 @@ const HTML_TEMPLATES = {
         </div>
         <div class="header-line"></div>
         <div class="content" style="justify-content: flex-start; align-items: flex-start;">
-          <div class="section-header first-section" style="margin-top: 8px;">
-            Background Information Regarding [ASBESTOS_TYPE] Clearance Inspections
+          <div class="section-header first-section" style="margin-top: 8px;">[BACKGROUND_INFORMATION_TITLE]</div>
+          <div class="paragraph">
+            [BACKGROUND_INFORMATION_CONTENT]
           </div>
-        <div class="paragraph">
-          Following completion of [ASBESTOS_TYPE] asbestos removal works undertaken
-          by a suitably licenced Asbestos Removal Contractor, a clearance
-          inspection must be completed by an independent LAA / a competent
-          person. The clearance inspection includes an assessment of the
-          following:
-        </div>
-        <ul class="bullets">
-          <li>
-            Visual inspection of the work area for asbestos dust or debris
-          </li>
-          <li>
-            Visual inspection of the adjacent area including the access and
-            egress pathways for visible asbestos dust and debris
-          </li>
-        </ul>
-        <div class="paragraph">
-          It is required that a [REPORT_TYPE] Clearance Certificate be issued on
-          completion of a successful inspection. The issuer needs to ensure:
-        </div>
-        <ul class="bullets">
-          <li>
-            This certificate should be issued prior to the area being
-            re-occupied. This chain of events should occur regardless of whether
-            the site is a commercial or residential property.
-          </li>
-          <li>
-            The asbestos removal area and areas immediately surrounding it are
-            visibly clean from asbestos contamination
-          </li>
-          <li>
-            The removal area does not pose a risk to health safety and safety
-            from exposure to asbestos
-          </li>
-        </ul>
-        <div class="section-header">Legislative Requirements</div>
-        <div class="paragraph">
-          [REPORT_TYPE] Clearance Certificates should be written in general
-          accordance with and with reference to:
-        </div>
-        <ul class="bullets">
-          <li>ACT Work Health and Safety (WHS) Act 2011</li>
-          <li>ACT Work Health and Safety Regulation 2011</li>
-          <li>
-            ACT Work Health and Safety (How to Safely Remove Asbestos Code of
-            Practice) 2022
-          </li>
-        </ul>
-        <div class="section-header">
-          [REPORT_TYPE] Clearance Certificate Limitations
-        </div>
-        <div class="paragraph">
-          The visual clearance inspection was only carried out in the locations
-          outlined within this document. L&D did not inspect any areas of the
-          property that fall outside of the locations listed in this certificate
-          and therefore make no comment regarding the presence or condition of
-          other ACM that may or may not be present. When undertaking the
-          inspection, the LAA tries to inspect as much of the asbestos removal
-          area as possible. However, no inspection is absolute. Should suspect
-          ACM be identified following the inspection, works should cease until
-          an assessment of the materials is completed.
-        </div>
+          <div class="section-header">[LEGISLATIVE_REQUIREMENTS_TITLE]</div>
+          <div class="paragraph">
+            [LEGISLATIVE_REQUIREMENTS_CONTENT]
+          </div>
+          <div class="section-header">[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE]</div>
+          <div class="paragraph">
+            [NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT]
+          </div>
       </div>
       <div class="footer">
         <div class="footer-line"></div>
@@ -776,23 +728,9 @@ const HTML_TEMPLATES = {
       </div>
       <div class="header-line"></div>
       <div class="content" style="justify-content: flex-start; align-items: flex-start;">
-        <div class="section-header first-section" style="margin-top: 8px;">Inspection Details</div>
+        <div class="section-header first-section" style="margin-top: 8px;">[INSPECTION_DETAILS_TITLE]</div>
         <div class="paragraph">
-          Following discussions with [CLIENT_NAME], Lancaster and Dickenson
-          Consulting (L &amp; D) were contracted to undertake a visual clearance
-          inspection following the removal of [ASBESTOS_TYPE] asbestos from
-          <b>[SITE_ADDRESS]</b> (herein referred to as 'the Site').
-        </div>
-        <div class="paragraph">
-          Asbestos removal works were undertaken by
-          <b>[ASBESTOS_REMOVALIST]</b>. <b>[LAA_NAME]</b>
-          <b>[LAA_LICENSE]</b> from L&amp;D visited the Site at
-          time on [CLEARANCE_DATE].
-        </div>
-        <div class="paragraph">
-          Table 1 below outlines the ACM that formed part of the inspection.
-          Photographs of the Asbestos Removal Area and a Site Plan are presented
-          in Appendix A and Appendix B respectively.
+          [INSPECTION_DETAILS_CONTENT]
         </div>
         <div class="table-title">Table 1: Asbestos Removal Areas</div>
         <table class="asbestos-table">
@@ -805,41 +743,23 @@ const HTML_TEMPLATES = {
           [REMOVAL_ITEMS_TABLE]
         </table>
 
-        <div class="section-header">Inspection Exclusions</div>
+        <div class="section-header">[INSPECTION_EXCLUSIONS_TITLE]</div>
         <div class="paragraph">
-          This clearance certificate is specific to the scope of removal works
-          detailed above. ACM may be present beyond the inspected area. Asbestos
-          fibre cement packers remain under the windowsill. The packers were
-          sprayed with black spray. The packers should be removed prior to
-          commencing works that may disturb or damage the material.
+          [INSPECTION_EXCLUSIONS_CONTENT]
         </div>
 
-        <div class="section-header">Clearance Certification</div>
+        <div class="section-header">[CLEARANCE_CERTIFICATION_TITLE]</div>
         <div class="paragraph">
-          An inspection of the asbestos removal area and the surrounding areas
-          (including access and egress pathways) was undertaken on [CLEARANCE_DATE].
-          The LAA found no visible asbestos residue from asbestos removal work
-          in the asbestos removal area, or in the vicinity of the area, where
-          the asbestos removal works were carried out.
+          [CLEARANCE_CERTIFICATION_CONTENT]
         </div>
         <div class="paragraph">
-          The LAA considers that the asbestos removal area does not pose a risk
-          to health and safety from exposure to asbestos and may be re-occupied.
+          [SIGN_OFF_CONTENT]
         </div>
-        <div class="paragraph">
-          Please do not hesitate to contact the undersigned should you have any
-          queries regarding this report.
-        </div>
-        <div class="signature-block">
-          For and on behalf of Lancaster and Dickenson Consulting.<br />
-          <div class="signature-line"></div>
-          <div class="signature-name">[LAA_NAME]</div>
-          <div class="signature-licence">[LAA_LICENSE]</div>
-        </div>
+
       </div>
       <div class="footer">
         <div class="footer-line"></div>
-        [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+        [FOOTER_TEXT]
       </div>
     </div>
   </body>
@@ -1212,6 +1132,24 @@ const HTML_TEMPLATES = {
         flex: 1;
         display: flex;
         flex-direction: column;
+        justify-content: flex-start;
+      }
+      .section-header {
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 10px 0 10px 0;
+        letter-spacing: 0.01em;
+        color: #222;
+        text-align: center;
+      }
+      .section-header.first-section {
+        margin-top: 18px;
+      }
+      .air-monitoring-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
         justify-content: center;
         align-items: center;
       }
@@ -1228,6 +1166,11 @@ const HTML_TEMPLATES = {
       }
       .photographs-text {
         font-weight: 400;
+      }
+      .report-content {
+        width: 100%;
+        height: 100%;
+        border: none;
       }
       .footer {
         position: absolute;
@@ -1265,11 +1208,8 @@ const HTML_TEMPLATES = {
         </div>
       </div>
       <div class="header-line"></div>
-      <div class="content" style="justify-content: center; align-items: center;">
-        <div class="centered-text">
-          <div class="appendix-title">APPENDIX B</div>
-          <div class="photographs-text">AIR MONITORING REPORT</div>
-        </div>
+      <div class="content">
+        [AIR_MONITORING_CONTENT]
       </div>
       <div class="footer">
         <div class="footer-line"></div>
@@ -1287,7 +1227,7 @@ const HTML_TEMPLATES = {
  * @returns {string} - Populated HTML string
  */
 // Function to generate main content pages with overflow detection
-const generateMainContentPages = (data) => {
+const generateMainContentPages = async (data) => {
   // Generate the main content (page 4) with overflow detection
   const mainContentTemplate = HTML_TEMPLATES.page4;
   
@@ -1297,7 +1237,7 @@ const generateMainContentPages = (data) => {
   
   if (mainContentEnd === -1 || signatureSectionStart === -1) {
     // Fallback: return original template if we can't find the split point
-    return [populateTemplate(mainContentTemplate, data)];
+    return [await populateTemplate(mainContentTemplate, data)];
   }
   
   // Estimate content height to determine if we need to split
@@ -1460,7 +1400,7 @@ const generateMainContentPages = (data) => {
             </div>
             <div class="footer">
               <div class="footer-line"></div>
-              [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+              [FOOTER_TEXT]
             </div>
           </div>
         </body>
@@ -1468,17 +1408,73 @@ const generateMainContentPages = (data) => {
     `;
     
     // Populate both templates with data
-    const populatedMainContent = populateTemplate(mainContentPage, data);
-    const populatedSignaturePage = populateTemplate(signaturePageTemplate, data);
+    const populatedMainContent = await populateTemplate(mainContentPage, data);
+    const populatedSignaturePage = await populateTemplate(signaturePageTemplate, data);
     
     return [populatedMainContent, populatedSignaturePage];
   } else {
     // No split needed, return original template
-    return [populateTemplate(mainContentTemplate, data)];
+    return [await populateTemplate(mainContentTemplate, data)];
   }
 };
 
-const populateTemplate = (htmlTemplate, data) => {
+const populateTemplate = async (htmlTemplate, data) => {
+  
+  // Fetch template content for non-friable clearance
+  let templateContent = null;
+  try {
+    templateContent = await getTemplateByType('asbestosClearanceNonFriable');
+    console.log('Template content fetched successfully');
+  } catch (error) {
+    console.error('Error fetching template content:', error);
+    // Continue with hardcoded content as fallback
+  }
+
+  // Look up user's Asbestos Assessor licence number
+  let laaLicenceNumber = 'AA00031'; // Default fallback
+  let userSignature = null;
+  if (data.LAA) {
+    try {
+      console.log('[DEBUG] LAA value from clearance:', data.LAA);
+      const User = require('../models/User');
+      const user = await User.findOne({
+        $or: [
+          { firstName: { $regex: new RegExp(data.LAA.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(data.LAA.split(' ')[1] || '', 'i') } },
+          { firstName: { $regex: new RegExp(data.LAA, 'i') } },
+          { lastName: { $regex: new RegExp(data.LAA, 'i') } }
+        ]
+      });
+      if (user) {
+        console.log('[DEBUG] User found for LAA:', user.firstName, user.lastName, user.email);
+        
+        // Get user's signature
+        if (user.signature) {
+          userSignature = user.signature;
+          console.log('[DEBUG] Found signature for user:', user.firstName, user.lastName);
+        }
+        
+        if (user.licences && user.licences.length > 0) {
+          const asbestosAssessorLicence = user.licences.find(licence => 
+            licence.licenceType === 'Asbestos Assessor' || 
+            licence.licenceType === 'LAA'
+          );
+          if (asbestosAssessorLicence) {
+            laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
+            console.log('[DEBUG] Found LAA licence:', laaLicenceNumber);
+          } else {
+            console.log('[DEBUG] No Asbestos Assessor licence found for user');
+          }
+        } else {
+          console.log('[DEBUG] No licences found for user');
+        }
+      } else {
+        console.log('[DEBUG] No user found for LAA:', data.LAA);
+      }
+    } catch (error) {
+      console.error('[DEBUG] Error looking up user licence:', error);
+    }
+  }
+  console.log('[DEBUG] LAA_LICENSE used in template:', laaLicenceNumber);
   
   // Replace logo placeholders with actual img tags
   let templateWithLogoPath = htmlTemplate.replace(/\[LOGO_PATH\]/g, '');
@@ -1488,7 +1484,7 @@ const populateTemplate = (htmlTemplate, data) => {
       /<img\s+class="logo"[^>]*>/g,
       '<img class="logo" src="data:image/png;base64,' + logoBase64 + '" alt="Company Logo" />'
     );
-    writeLog('Logo img replacement successful');
+
   } catch (error) {
     writeLog('Logo img replacement failed: ' + error.message);
   }
@@ -1515,18 +1511,29 @@ const populateTemplate = (htmlTemplate, data) => {
   
   // Add background image as simple img tag for cover page
   if (htmlTemplate.includes('cover-bg')) {
+    console.log('=== BACKGROUND REPLACEMENT DEBUG ===');
+    console.log('Template contains cover-bg:', htmlTemplate.includes('cover-bg'));
+    console.log('Background base64 available:', !!backgroundBase64);
+    console.log('Background base64 length:', backgroundBase64?.length);
+    
     try {
       // Remove the original background div completely
+      const beforeRemoval = templateWithLogoPath.includes('cover-bg');
       templateWithLogoPath = templateWithLogoPath.replace(
         /<div\s+class="cover-bg"[^>]*><\/div>/g,
         ''
       );
+      const afterRemoval = templateWithLogoPath.includes('cover-bg');
+      console.log('Background div removal - before:', beforeRemoval, 'after:', afterRemoval);
       
       // Add simple background image at the start of cover-container
+      const beforeAddition = templateWithLogoPath.includes('cover-container');
       templateWithLogoPath = templateWithLogoPath.replace(
         /<div class="cover-container">/g,
         '<div class="cover-container"><img src="data:image/jpeg;base64,' + backgroundBase64 + '" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0;" /><svg style="position: absolute; top: 0; left: 0; width: 432px; height: 100%; z-index: 1; fill: white;" viewBox="0 0 432 1130" xmlns="http://www.w3.org/2000/svg"><polygon points="80,-10 426,240 426,884 80,1134 0,1134 0,0" /></svg>'
       );
+      const afterAddition = templateWithLogoPath.includes('data:image/jpeg;base64');
+      console.log('Background image addition - before:', beforeAddition, 'after:', afterAddition);
       
       console.log('Simple background image added successfully');
     } catch (error) {
@@ -1558,7 +1565,7 @@ const populateTemplate = (htmlTemplate, data) => {
       { item: '2', location: 'Bathroom wall sheet', material: 'Fibre cement', type: 'Non-friable' }
     ];
     
-    // console.log('Clearance items for table:', JSON.stringify(clearanceItems, null, 2));
+
     
     return clearanceItems.map((item, index) => 
       `<tr>
@@ -1590,9 +1597,6 @@ const populateTemplate = (htmlTemplate, data) => {
       item.photograph && item.photograph.trim() !== ''
     );
     
-    // console.log('Generating photographs content for first page from clearance items:', clearanceItems.length);
-    // console.log('Items with photos:', itemsWithPhotos.length);
-    
     // Only generate content for the first 2 photos (first photo page)
     const firstPageItems = itemsWithPhotos.slice(0, 2);
     
@@ -1619,39 +1623,20 @@ const populateTemplate = (htmlTemplate, data) => {
     }).join('');
   };
 
+  const generateAirMonitoringContent = () => {
+    // Always show placeholder since the actual report is appended as a separate page
+    return `
+      <div class="air-monitoring-content">
+        <div class="centered-text">
+          <div class="appendix-title">APPENDIX B</div>
+          <div class="photographs-text">AIR MONITORING REPORT</div>
+        </div>
+      </div>
+    `;
+  };
 
-
-  // Debug: Log the data structure
-  console.log('=== DATA MAPPING DEBUG ===');
-  // console.log('Full data object:', JSON.stringify(data, null, 2));
-  console.log('data.projectId:', data.projectId);
-  console.log('data.projectId?.name:', data.projectId?.name);
-  console.log('data.projectId?.address:', data.projectId?.address);
-  console.log('data.projectId?.projectID:', data.projectId?.projectID);
-  console.log('data.clearanceType:', data.clearanceType);
-  console.log('data.clearanceDate:', data.clearanceDate);
-  console.log('data.projectId?.client?.name:', data.projectId?.client?.name);
-
-  console.log('data.asbestosRemovalist:', data.asbestosRemovalist);
-  console.log('data.LAA:', data.LAA);
-  console.log('=== END DATA MAPPING DEBUG ===');
-  
-  // Test the actual replacements
-  console.log('=== REPLACEMENT VALUES DEBUG ===');
-  console.log('SITE_NAME will be:', data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site');
-  console.log('SITE_ADDRESS will be:', data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site');
-  console.log('PROJECT_ID will be:', data.projectId?.projectID || data.project?.projectID || data.projectId || 'Unknown Project');
-  console.log('CLIENT_NAME will be:', data.projectId?.client?.name || data.project?.client?.name || data.clientName || 'Unknown Client');
-  console.log('=== END REPLACEMENT VALUES DEBUG ===');
-  
-  // Additional debugging for the specific issue
-  console.log('=== SPECIFIC DEBUG ===');
-  console.log('data.projectId.name exists:', !!data.projectId?.name);
-  console.log('data.projectId.name value:', data.projectId?.name);
-
-  console.log('data.projectId.client exists:', !!data.projectId?.client);
-  console.log('data.projectId.client:', data.projectId?.client);
-  console.log('=== END SPECIFIC DEBUG ===');
+  // Debug: Log only the LAA value for troubleshooting
+  console.log('[LAA DEBUG] LAA value from clearance:', data.LAA);
 
   // Replace placeholders with actual data
   const replacements = {
@@ -1666,14 +1651,38 @@ const populateTemplate = (htmlTemplate, data) => {
     '[ASBESTOS_TYPE]': data.clearanceType?.toLowerCase() || 'non-friable',
     '[ASBESTOS_REMOVALIST]': data.asbestosRemovalist || 'Unknown Removalist',
     '[LAA_NAME]': data.LAA || data.laaName || 'Unknown LAA',
-    '[LAA_LICENSE]': 'AA00031',
+    '[LAA_LICENSE]': laaLicenceNumber,
     '[INSPECTION_TIME]': 'Inspection Time',
     '[INSPECTION_DATE]': data.clearanceDate 
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
     '[REPORT_TYPE]': data.clearanceType || 'Non-friable',
     '[REMOVAL_ITEMS_TABLE]': generateRemovalItemsTable(),
-    '[PHOTOGRAPHS_CONTENT]': generatePhotographsContent()
+    '[PHOTOGRAPHS_CONTENT]': generatePhotographsContent(),
+    '[AIR_MONITORING_CONTENT]': generateAirMonitoringContent(),
+    // Conditional Appendix B text
+    '[APPENDIX_B_TEXT]': data.airMonitoring 
+      ? 'Photographs of the Asbestos Removal Area and a Site Plan are presented in Appendix A and Appendix B respectively.'
+      : 'Photographs of the Asbestos Removal Area are presented in Appendix A.',
+    
+    // Signature placeholder
+    '[SIGNATURE_IMAGE]': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : '[SIGNATURE_PLACEHOLDER]',
+    
+    // Template content placeholders
+    '[BACKGROUND_INFORMATION_TITLE]': templateContent?.standardSections?.backgroundInformationTitle || 'Background Information Regarding Non-Friable Clearance Inspections',
+    '[BACKGROUND_INFORMATION_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, data) : 'Background information content not available',
+    '[LEGISLATIVE_REQUIREMENTS_TITLE]': templateContent?.standardSections?.legislativeRequirementsTitle || 'Legislative Requirements',
+    '[LEGISLATIVE_REQUIREMENTS_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.legislativeRequirementsContent, data) : 'Legislative requirements content not available',
+    '[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE]': templateContent?.standardSections?.nonFriableClearanceCertificateLimitationsTitle || 'Non-Friable Clearance Certificate Limitations',
+    '[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, data) : 'Non-friable clearance certificate limitations content not available',
+    '[INSPECTION_DETAILS_TITLE]': templateContent?.standardSections?.inspectionDetailsTitle || 'Inspection Details',
+    '[INSPECTION_DETAILS_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, data) : 'Inspection details content not available',
+    '[INSPECTION_EXCLUSIONS_TITLE]': templateContent?.standardSections?.inspectionExclusionsTitle || 'Inspection Exclusions',
+    '[INSPECTION_EXCLUSIONS_CONTENT]': 'PLACEHOLDER_FOR_EXCLUSIONS',
+    '[CLEARANCE_CERTIFICATION_TITLE]': templateContent?.standardSections?.clearanceCertificationTitle || 'Clearance Certification',
+    '[CLEARANCE_CERTIFICATION_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, data) : 'Clearance certification content not available',
+    '[SIGN_OFF_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, data) : 'Sign-off content not available',
+    '[FOOTER_TEXT]': templateContent ? await replacePlaceholders(templateContent.standardSections.footerText, data) : `${data.clearanceType || 'Non-friable'} Clearance Certificate: ${data.projectId?.name || data.project?.name || 'Unknown Site'}`
   };
 
   let populatedHTML = templateWithLogoPath;
@@ -1681,7 +1690,72 @@ const populateTemplate = (htmlTemplate, data) => {
     populatedHTML = populatedHTML.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
   });
 
+  // Handle exclusions content with job-specific exclusions
+  let exclusionsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionExclusionsContent, data) : 'Inspection exclusions content not available';
+  
+  // Append job-specific exclusions if they exist
+  if (data.jobSpecificExclusions && data.jobSpecificExclusions.trim() !== '') {
+    console.log('[DEBUG] Adding job-specific exclusions:', data.jobSpecificExclusions);
+    exclusionsContent += '\n\n' + data.jobSpecificExclusions;
+  } else {
+    console.log('[DEBUG] No job-specific exclusions found');
+  }
+  
+  // Replace the placeholder with the final exclusions content
+  populatedHTML = populatedHTML.replace(/PLACEHOLDER_FOR_EXCLUSIONS/g, exclusionsContent);
+
   return populatedHTML;
+};
+
+/**
+ * Merge two PDFs together
+ * @param {Buffer} pdf1Buffer - First PDF buffer (clearance report)
+ * @param {string} pdf2Base64 - Second PDF as base64 string (air monitoring report)
+ * @returns {Promise<Buffer>} - Merged PDF as buffer
+ */
+const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
+  try {
+    console.log('=== PDF MERGING DEBUG ===');
+    console.log('pdf1Buffer length:', pdf1Buffer.length);
+    console.log('pdf2Base64 length:', pdf2Base64 ? pdf2Base64.length : 'null/undefined');
+    console.log('pdf2Base64 starts with:', pdf2Base64 ? pdf2Base64.substring(0, 50) : 'N/A');
+    
+    // Create a new PDF document
+    const mergedPdf = await PDFDocument.create();
+    console.log('Created merged PDF document');
+    
+    // Load the first PDF (clearance report)
+    const pdf1Doc = await PDFDocument.load(pdf1Buffer);
+    console.log('Loaded clearance PDF, pages:', pdf1Doc.getPageCount());
+    const pdf1Pages = await mergedPdf.copyPages(pdf1Doc, pdf1Doc.getPageIndices());
+    pdf1Pages.forEach((page) => mergedPdf.addPage(page));
+    console.log('Added clearance pages to merged PDF');
+    
+    // Load the second PDF (air monitoring report) from base64
+    // Handle both pure base64 and data URL formats
+    let cleanBase64 = pdf2Base64;
+    if (pdf2Base64.startsWith('data:')) {
+      cleanBase64 = pdf2Base64.split(',')[1];
+      console.log('Removed data URL prefix from air monitoring report');
+    }
+    const pdf2Buffer = Buffer.from(cleanBase64, 'base64');
+    console.log('Converted base64 to buffer, length:', pdf2Buffer.length);
+    const pdf2Doc = await PDFDocument.load(pdf2Buffer);
+    console.log('Loaded air monitoring PDF, pages:', pdf2Doc.getPageCount());
+    const pdf2Pages = await mergedPdf.copyPages(pdf2Doc, pdf2Doc.getPageIndices());
+    pdf2Pages.forEach((page) => mergedPdf.addPage(page));
+    console.log('Added air monitoring pages to merged PDF');
+    
+    // Save the merged PDF
+    const mergedPdfBytes = await mergedPdf.save();
+    console.log('Saved merged PDF, total pages:', mergedPdf.getPageCount());
+    console.log('=== PDF MERGING COMPLETED ===');
+    return Buffer.from(mergedPdfBytes);
+  } catch (error) {
+    console.error('Error in mergePDFs:', error);
+    console.error('Error stack:', error.stack);
+    throw error;
+  }
 };
 
 /**
@@ -1708,7 +1782,11 @@ const generatePDFFromHTML = async (templateType, data) => {
     writeLog('Populating all 7 template pages...');
     writeLog('Number of templates available: ' + Object.keys(HTML_TEMPLATES).length);
     
-    // Calculate how many photo pages we need
+    // Create complete HTML document with dynamic pages
+    writeLog('Available templates: ' + Object.keys(HTML_TEMPLATES).join(', '));
+    
+    // Generate all pages content first
+    const templates = Object.values(HTML_TEMPLATES);
     const clearanceItems = data.clearanceItems || data.removalItems || data.asbestosItems || [];
     
     // Filter out items that don't have photographs
@@ -1717,14 +1795,78 @@ const generatePDFFromHTML = async (templateType, data) => {
     );
     
     const photosPerPage = 2;
-    const photoPagesNeeded = Math.ceil(itemsWithPhotos.length / photosPerPage);
-    writeLog(`Need ${photoPagesNeeded} photo pages for ${itemsWithPhotos.length} items with photos (out of ${clearanceItems.length} total items)`);
+    const totalPhotoPages = Math.ceil(itemsWithPhotos.length / photosPerPage);
+    writeLog(`Need ${totalPhotoPages} photo pages for ${itemsWithPhotos.length} items with photos (out of ${clearanceItems.length} total items)`);
     
+    let pagesContent = '';
+    
+    // Process pages 1-2 (cover, version control)
+    for (let i = 0; i < 2; i++) {
+      writeLog(`Template ${i + 1} contains cover-bg: ${templates[i].includes('cover-bg')}`);
+      const populatedTemplate = await populateTemplate(templates[i], data);
+      pagesContent += `<div class="page-break">${populatedTemplate}</div>`;
+    }
+    
+    // Generate main content pages (page 4 with potential overflow handling) - now page 3
+    const mainContentPages = await generateMainContentPages(data);
+    mainContentPages.forEach(page => {
+      pagesContent += `<div class="page-break">${page}</div>`;
+    });
+    
+    // Add background information page (page 3) - now page 4
+    const populatedBackgroundTemplate = await populateTemplate(templates[2], data);
+    pagesContent += `<div class="page-break">${populatedBackgroundTemplate}</div>`;
+    
+    // Add Appendix A (page 5)
+    const populatedTemplate = await populateTemplate(templates[4], data);
+    pagesContent += `<div class="page-break">${populatedTemplate}</div>`;
+    
+    // Add first photo page (page 6)
+    const populatedPhotoTemplate = await populateTemplate(templates[5], data);
+    pagesContent += `<div class="page-break">${populatedPhotoTemplate}</div>`;
+    
+    // Add extra photo pages before Appendix B
+    if (totalPhotoPages > 1) {
+      for (let pageIndex = 1; pageIndex < totalPhotoPages; pageIndex++) {
+        const startIndex = pageIndex * photosPerPage;
+        const endIndex = Math.min(startIndex + photosPerPage, itemsWithPhotos.length);
+        const pageItems = itemsWithPhotos.slice(startIndex, endIndex);
+        
+        const photoContent = pageItems.map((item, index) => {
+          const photoNumber = startIndex + index + 1;
+          
+          return `
+            <!-- Photo ${photoNumber} -->
+            <div class="photo-container">
+              <div class="photo">
+                <img src="${item.photograph}" alt="Photograph ${photoNumber}" style="width: 100%; height: 100%; object-fit: contain;" />
+              </div>
+              <div class="photo-details">
+                <div class="photo-number">Photograph ${photoNumber}</div>
+                <div class="photo-location">
+                  Location: ${item.locationDescription || 'Unknown Location'}
+                </div>
+                <div class="photo-materials">
+                  Materials Description: ${item.materialDescription || 'Unknown Material'}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        // Use populateTemplate to ensure logo and other data are included
+        const extraPhotoPageTemplate = HTML_TEMPLATES.page6.replace('[PHOTOGRAPHS_CONTENT]', photoContent);
+        const populatedExtraPhotoPage = await populateTemplate(extraPhotoPageTemplate, data);
+        pagesContent += `<div class="page-break">${populatedExtraPhotoPage}</div>`;
+      }
+    }
+    
+    // Add Appendix B (page 7) - only if air monitoring is enabled
+    if (data.airMonitoring) {
+      const populatedAppendixB = await populateTemplate(templates[6], data);
+      pagesContent += `<div class="page-break">${populatedAppendixB}</div>`;
+    }
 
-    
-    // Create complete HTML document with dynamic pages
-    writeLog('Available templates: ' + Object.keys(HTML_TEMPLATES).join(', '));
-    
     const completeHTML = `
       <!DOCTYPE html>
       <html lang="en">
@@ -1816,86 +1958,7 @@ const generatePDFFromHTML = async (templateType, data) => {
         </style>
       </head>
       <body>
-
-        ${(() => {
-          // Process templates and insert extra photo pages before Appendix B
-          const templates = Object.values(HTML_TEMPLATES);
-          const clearanceItems = data.clearanceItems || data.removalItems || data.asbestosItems || [];
-          
-          // Filter out items that don't have photographs
-          const itemsWithPhotos = clearanceItems.filter(item => 
-            item.photograph && item.photograph.trim() !== ''
-          );
-          
-          const photosPerPage = 2;
-          const totalPhotoPages = Math.ceil(itemsWithPhotos.length / photosPerPage);
-          
-          let result = '';
-          
-          // Process pages 1-3 (cover, version control, background)
-          for (let i = 0; i < 3; i++) {
-            writeLog(`Template ${i + 1} contains cover-bg: ${templates[i].includes('cover-bg')}`);
-            const populatedTemplate = populateTemplate(templates[i], data);
-            result += `<div class="page-break">${populatedTemplate}</div>`;
-          }
-          
-          // Generate main content pages (page 4 with potential overflow handling)
-          const mainContentPages = generateMainContentPages(data);
-          mainContentPages.forEach(page => {
-            result += `<div class="page-break">${page}</div>`;
-          });
-          
-          // Add Appendix A (page 5)
-          const populatedTemplate = populateTemplate(templates[4], data);
-          result += `<div class="page-break">${populatedTemplate}</div>`;
-          
-          // Add first photo page (page 6)
-          const populatedPhotoTemplate = populateTemplate(templates[5], data);
-          result += `<div class="page-break">${populatedPhotoTemplate}</div>`;
-          
-          // Add extra photo pages before Appendix B
-          if (totalPhotoPages > 1) {
-            // console.log(`Adding ${totalPhotoPages - 1} extra photo pages before Appendix B for ${itemsWithPhotos.length} items with photos`);
-            for (let pageIndex = 1; pageIndex < totalPhotoPages; pageIndex++) {
-              const startIndex = pageIndex * photosPerPage;
-              const endIndex = Math.min(startIndex + photosPerPage, itemsWithPhotos.length);
-              const pageItems = itemsWithPhotos.slice(startIndex, endIndex);
-              
-              const photoContent = pageItems.map((item, index) => {
-                const photoNumber = startIndex + index + 1;
-                
-                return `
-                  <!-- Photo ${photoNumber} -->
-                  <div class="photo-container">
-                    <div class="photo">
-                      <img src="${item.photograph}" alt="Photograph ${photoNumber}" style="width: 100%; height: 100%; object-fit: contain;" />
-                    </div>
-                    <div class="photo-details">
-                      <div class="photo-number">Photograph ${photoNumber}</div>
-                      <div class="photo-location">
-                        Location: ${item.locationDescription || 'Unknown Location'}
-                      </div>
-                      <div class="photo-materials">
-                        Materials Description: ${item.materialDescription || 'Unknown Material'}
-                      </div>
-                    </div>
-                  </div>
-                `;
-              }).join('');
-              
-              // Use populateTemplate to ensure logo and other data are included
-              const extraPhotoPageTemplate = HTML_TEMPLATES.page6.replace('[PHOTOGRAPHS_CONTENT]', photoContent);
-              const populatedExtraPhotoPage = populateTemplate(extraPhotoPageTemplate, data);
-              result += `<div class="page-break">${populatedExtraPhotoPage}</div>`;
-            }
-          }
-          
-          // Add Appendix B (page 7)
-          const populatedAppendixB = populateTemplate(templates[6], data);
-          result += `<div class="page-break">${populatedAppendixB}</div>`;
-          
-          return result;
-        })()}
+        ${pagesContent}
       </body>
       </html>
     `;
@@ -1909,7 +1972,7 @@ const generatePDFFromHTML = async (templateType, data) => {
     
 
     
-    console.log('Generating PDF with all 7 pages...');
+    console.log('Generating PDF with clearance pages and air monitoring report...');
     
     // Set content and generate PDF
     await page.setContent(compressedHTML, { waitUntil: 'networkidle0' });
@@ -1932,8 +1995,31 @@ const generatePDFFromHTML = async (templateType, data) => {
       landscape: false
     });
 
-    console.log('PDF generation completed successfully with 7 pages');
+    console.log('PDF generation completed successfully');
     console.log('PDF buffer size:', pdf.length);
+    
+    // If there's an air monitoring report, merge it with the generated PDF
+    if (data.airMonitoringReport) {
+      console.log('=== AIR MONITORING REPORT DEBUG ===');
+      console.log('airMonitoringReport exists:', !!data.airMonitoringReport);
+      console.log('airMonitoringReport type:', typeof data.airMonitoringReport);
+      console.log('airMonitoringReport length:', data.airMonitoringReport ? data.airMonitoringReport.length : 'N/A');
+      console.log('airMonitoringReport starts with:', data.airMonitoringReport ? data.airMonitoringReport.substring(0, 100) : 'N/A');
+      
+      try {
+        console.log('Merging air monitoring report with clearance PDF...');
+        const mergedPdf = await mergePDFs(pdf, data.airMonitoringReport);
+        console.log('PDFs merged successfully, new size:', mergedPdf.length);
+        return mergedPdf;
+      } catch (error) {
+        console.error('Error merging PDFs:', error);
+        console.log('Returning original PDF without air monitoring report');
+        return pdf;
+      }
+    } else {
+      console.log('No air monitoring report found in data');
+    }
+    
     return pdf;
     
   } catch (error) {
@@ -1959,8 +2045,7 @@ router.get('/test', (req, res) => {
 // Route to generate asbestos clearance PDF
 router.post('/generate-asbestos-clearance', async (req, res) => {
   try {
-    writeLog('=== PDF GENERATION REQUEST RECEIVED - UPDATED CODE VERSION ===');
-    writeLog('=== THIS IS THE NEW VERSION WITH LOGO OPTIMIZATION ===');
+    writeLog('=== PDF GENERATION REQUEST RECEIVED ===');
     writeLog('Request received for clearance ID: ' + req.body.clearanceData?._id);
     const { clearanceData } = req.body;
     
@@ -1971,10 +2056,7 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
 
     writeLog('Clearance data received for: ' + (clearanceData.projectId?.name || 'Unknown project'));
     
-    // Fetch clearance items for this clearance
-    console.log('Fetching clearance items for clearance ID:', clearanceData._id);
-    const AsbestosClearanceReport = require('../models/AsbestosClearanceReport');
-    const clearanceItems = await AsbestosClearanceReport.find({ clearanceId: clearanceData._id });
+    const clearanceItems = clearanceData.items || [];
     writeLog('Clearance items found: ' + clearanceItems.length);
     
     // Add clearance items to the data

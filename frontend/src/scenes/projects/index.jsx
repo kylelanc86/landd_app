@@ -1368,7 +1368,7 @@ const Projects = () => {
 
   // Update the renderUsersSelect function
   const renderUsersSelect = (value, onChange, name) => {
-    console.log("Rendering users select with:", { value, users });
+    // console.log("Rendering users select with:", { value, users });
 
     // Ensure value is always an array of user IDs
     const selectedUserIds = Array.isArray(value) ? value : [];
@@ -1502,7 +1502,7 @@ const Projects = () => {
   };
 
   const handleDepartmentClick = (department) => {
-    console.log("Department filter clicked:", department);
+    // console.log("Department filter clicked:", department);
     setSelectedDepartment(department);
 
     // Convert department name to filter value
@@ -1814,7 +1814,13 @@ const Projects = () => {
         flex: 1,
         minWidth: 60,
         maxWidth: 120,
-        renderCell: (params) => <UsersCell users={params.row.users} />,
+        renderCell: (params) => {
+          // Safety check to ensure UsersCell component is available
+          if (typeof UsersCell !== "function") {
+            return <span>-</span>;
+          }
+          return <UsersCell users={params.row.users} />;
+        },
       },
       {
         field: "actions",
@@ -1932,6 +1938,11 @@ const Projects = () => {
 
   if (loading) return <Typography>Loading projects...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
+
+  // Ensure columns are properly defined before rendering
+  if (!columns || columns.length === 0) {
+    return <Typography>Loading columns...</Typography>;
+  }
 
   return (
     <Box m="5px 0px 20px 20px">

@@ -132,6 +132,15 @@
         font-size: 0.8rem;
         color: #444;
       }
+      .signature-image {
+        margin-top: 8px;
+        max-width: 150px;
+        max-height: 75px;
+      }
+      .signature-image img {
+        width: 100%;
+        height: auto;
+      }
       .footer {
         position: absolute;
         left: 0;
@@ -257,8 +266,10 @@
         <div class="signature-block">
           For and on behalf of Lancaster and Dickenson Consulting.<br />
           <div class="signature-line"></div>
-          <div class="signature-name">{Assessor Name}</div>
-          <div class="signature-licence">{Assessor Licence Details}</div>
+          <div class="signature-name">{LAA_NAME}</div>
+          <div class="signature-licence">{LAA_LICENSE}</div>
+          <!-- Signature image placeholder -->
+          <div class="signature-image">{SIGNATURE_IMAGE}</div>
         </div>
       </div>
       <div class="footer">

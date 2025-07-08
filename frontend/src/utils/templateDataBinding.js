@@ -25,19 +25,28 @@ export const populateTemplateContent = async (clearance, template = null) => {
         : "Clearance Date",
       ASBESTOS_REMOVALIST: clearance.asbestosRemovalist || "Asbestos Removalist",
       LAA_NAME: clearance.LAA || "LAA Name",
-      LAA_LICENSE: "AA00031", // This could be made configurable
+      LAA_LICENSE: clearance.LAA_LICENSE || "AA00031", // Use clearance LAA_LICENSE if available, otherwise default
       INSPECTION_TIME: "Inspection Time", // This could be added to clearance model
       INSPECTION_DATE: clearance.clearanceDate 
         ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
         : "Inspection Date",
       REPORT_TYPE: clearance.clearanceType || "Non-friable",
       LOGO_URL: "/images/logo.png",
+      // Signature placeholder
+      SIGNATURE_IMAGE: "[SIGNATURE_PLACEHOLDER]"
     };
 
     // Populate template sections
     const populatedSections = {};
     Object.entries(template.standardSections).forEach(([key, value]) => {
-      populatedSections[key] = replacePlaceholders(value, jobData);
+      let populatedValue = replacePlaceholders(value, jobData);
+      
+      // Special handling for inspection exclusions to append job-specific exclusions
+      if (key === 'inspectionExclusionsContent' && clearance.jobSpecificExclusions) {
+        populatedValue += '\n\n' + clearance.jobSpecificExclusions;
+      }
+      
+      populatedSections[key] = populatedValue;
     });
 
     return {

@@ -61,7 +61,7 @@ const AssessmentSamples = lazy(() =>
   import("./scenes/surveys/asbestos/assessment-samples")
 );
 const Clients = lazy(() => import("./scenes/clients"));
-const AdminDashboard = lazy(() => import("./scenes/admin"));
+const AdminDashboard = lazy(() => import("./scenes/admin/AdminDashboard"));
 const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
 
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
@@ -113,6 +113,10 @@ const IndoorAirQuality = lazy(() =>
 );
 const Blanks = lazy(() => import("./scenes/records/blanks"));
 const Audits = lazy(() => import("./scenes/records/audits"));
+
+const ProjectReports = lazy(() =>
+  import("./scenes/reports/ProjectReports.jsx")
+);
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -656,6 +660,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <Reports />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/reports/project/:projectId"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["projects.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ProjectReports />
                               </Suspense>
                             </PermissionRoute>
                           }

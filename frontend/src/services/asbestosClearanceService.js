@@ -69,6 +69,42 @@ const asbestosClearanceService = {
       params: { asbestosRemovalist } 
     });
     return response.data;
+  },
+
+  // Upload air monitoring report
+  uploadAirMonitoringReport: async (id, reportData) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/air-monitoring-report`, reportData);
+    return response.data;
+  },
+
+  // Get clearance items
+  getItems: async (clearanceId) => {
+    const response = await axios.get(`${API_BASE_URL}/${clearanceId}/items`);
+    return response.data;
+  },
+
+  // Add clearance item
+  addItem: async (clearanceId, itemData) => {
+    const response = await axios.post(`${API_BASE_URL}/${clearanceId}/items`, itemData);
+    return response.data;
+  },
+
+  // Update clearance item
+  updateItem: async (clearanceId, itemId, itemData) => {
+    const response = await axios.put(`${API_BASE_URL}/${clearanceId}/items/${itemId}`, itemData);
+    return response.data;
+  },
+
+  // Delete clearance item
+  deleteItem: async (clearanceId, itemId) => {
+    const response = await axios.delete(`${API_BASE_URL}/${clearanceId}/items/${itemId}`);
+    return response.data;
+  },
+
+  // Get air monitoring reports for a project
+  getAirMonitoringReports: async (projectId) => {
+    const response = await axios.get(`${API_BASE_URL}/air-monitoring-reports/${projectId}`);
+    return response.data;
   }
 };
 

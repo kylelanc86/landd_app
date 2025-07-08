@@ -6,8 +6,6 @@ import {
   CardContent,
   Grid,
   Button,
-  Tabs,
-  Tab,
   Paper,
   TextField,
   FormControl,
@@ -44,7 +42,9 @@ const ReportTemplates = () => {
   const colors = tokens;
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState(0);
+  const [selectedTemplate, setSelectedTemplate] = useState(
+    "asbestosClearanceNonFriable"
+  );
   const [templates, setTemplates] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -56,22 +56,66 @@ const ReportTemplates = () => {
     message: "",
     severity: "success",
   });
-  const [detailedEditMode, setDetailedEditMode] = useState(false);
+
   const [previewData, setPreviewData] = useState({});
   const [showPreview, setShowPreview] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
 
   const reportTypes = [
     {
-      id: "asbestosClearance",
-      name: "Asbestos Clearance Report",
+      id: "asbestosClearanceNonFriable",
+      name: "Non-Friable Asbestos Clearance Report",
       color: "#FF6B6B",
     },
-    { id: "leadAssessment", name: "Lead Assessment Report", color: "#4ECDC4" },
+    {
+      id: "asbestosClearanceFriable",
+      name: "Friable Asbestos Clearance Report",
+      color: "#FF6B6B",
+    },
+    {
+      id: "asbestosAssessment",
+      name: "Asbestos Assessment Report",
+      color: "#FF6B6B",
+    },
+    {
+      id: "leadAssessment",
+      name: "Lead Assessment Report",
+      color: "#4ECDC4",
+    },
     {
       id: "mouldAssessment",
       name: "Mould Assessment Report",
       color: "#45B7D1",
+    },
+    {
+      id: "airMonitoringReport",
+      name: "Air Monitoring Report",
+      color: "#6C5CE7",
+    },
+    {
+      id: "fibreIdentificationReport",
+      name: "Fibre Identification Report",
+      color: "#00B894",
+    },
+    {
+      id: "inspectionReport",
+      name: "Inspection Report",
+      color: "#E17055",
+    },
+    {
+      id: "complianceReport",
+      name: "Compliance Report",
+      color: "#74B9FF",
+    },
+    {
+      id: "riskAssessmentReport",
+      name: "Risk Assessment Report",
+      color: "#A29BFE",
+    },
+    {
+      id: "managementPlanReport",
+      name: "Management Plan Report",
+      color: "#FD79A8",
     },
   ];
 
@@ -89,59 +133,37 @@ const ReportTemplates = () => {
     PROJECT_NAME: "Sample Asbestos Removal Project",
     PROJECT_NUMBER: "PRJ-2024-001",
     SITE_ADDRESS: "123 Sample Street, Canberra ACT 2600",
-    REMOVAL_CONTRACTOR: "Professional Asbestos Removal Pty Ltd",
-    REMOVAL_LICENSE: "AR000123",
-    INSPECTOR_NAME: "John Smith",
-    INSPECTOR_LICENSE: "AI000456",
-    INSPECTION_DATETIME: "25 July 2024 at 09:00 AM",
     CLEARANCE_DATE: "25 July 2024",
     CLEARANCE_TIME: "09:00 AM",
   };
 
   // Template sections organized by page for detailed editing
   const templateSections = {
-    "Front Cover": ["frontCoverTitle", "frontCoverSubtitle"],
-    "Version Control": [
-      "versionControlTitle",
-      "preparedForLabel",
-      "preparedByLabel",
-      "documentDetailsLabel",
-      "revisionHistoryLabel",
+    "Background Information": [
+      "backgroundInformationTitle",
+      "backgroundInformationContent",
+    ],
+    "Legislative Requirements": [
+      "legislativeRequirementsTitle",
+      "legislativeRequirementsContent",
+    ],
+    "Non-Friable Clearance Certificate Limitations": [
+      "nonFriableClearanceCertificateLimitationsTitle",
+      "nonFriableClearanceCertificateLimitationsContent",
     ],
     "Inspection Details": [
       "inspectionDetailsTitle",
-      "inspectionIntroduction",
-      "inspectionSpecifics",
-      "tableIntroduction",
-      "removalTableTitle",
-      "inspectionExclusions",
+      "inspectionDetailsContent",
+    ],
+    "Inspection Exclusions": [
+      "inspectionExclusionsTitle",
+      "inspectionExclusionsContent",
     ],
     "Clearance Certification": [
       "clearanceCertificationTitle",
-      "clearanceCertificationText",
-      "riskAssessmentText",
-      "contactText",
-      "behalfText",
-      "signatureTitle",
+      "clearanceCertificationContent",
     ],
-    "Background Information": [
-      "backgroundTitle",
-      "backgroundIntroduction",
-      "bulletPoint1",
-      "bulletPoint2",
-      "requirementsText",
-      "bulletPoint3",
-      "bulletPoint4",
-      "bulletPoint5",
-    ],
-    "Legislative Requirements": [
-      "legislativeTitle",
-      "legislativeIntroduction",
-      "legislativePoint1",
-      "legislativePoint2",
-      "legislativePoint3",
-    ],
-    Limitations: ["limitationsTitle", "limitationsText"],
+    "Sign-off": ["signOffContent"],
     Footer: ["footerText"],
   };
 
@@ -150,8 +172,8 @@ const ReportTemplates = () => {
     const loadTemplates = async () => {
       try {
         setLoading(true);
-        // Initialize default templates if they don't exist
-        await reportTemplateService.initializeDefaultTemplates();
+        // Remove automatic initialization to prevent overwriting custom changes
+        // await reportTemplateService.initializeDefaultTemplates();
 
         // Load all templates
         const allTemplates = await reportTemplateService.getAllTemplates();
@@ -181,8 +203,8 @@ const ReportTemplates = () => {
     loadTemplates();
   }, []);
 
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
+  const handleTemplateChange = (event) => {
+    setSelectedTemplate(event.target.value);
   };
 
   const handleEdit = (section, data) => {
@@ -193,7 +215,7 @@ const ReportTemplates = () => {
 
   const handleSave = async () => {
     try {
-      const currentTemplate = reportTypes[activeTab].id;
+      const currentTemplate = selectedTemplate;
 
       // Update template via API
       await reportTemplateService.updateTemplate(currentTemplate, {
@@ -259,8 +281,10 @@ const ReportTemplates = () => {
 
   const handleDetailedSave = async () => {
     try {
+      const currentTemplate = selectedTemplate;
+
       // Update template via API
-      await reportTemplateService.updateTemplate("asbestosClearance", {
+      await reportTemplateService.updateTemplate(currentTemplate, {
         standardSections: {
           [editingSection]: editData,
         },
@@ -269,10 +293,10 @@ const ReportTemplates = () => {
       // Update local state
       setTemplates((prev) => ({
         ...prev,
-        asbestosClearance: {
-          ...prev.asbestosClearance,
+        [currentTemplate]: {
+          ...prev[currentTemplate],
           standardSections: {
-            ...prev.asbestosClearance?.standardSections,
+            ...prev[currentTemplate]?.standardSections,
             [editingSection]: editData,
           },
         },
@@ -302,7 +326,8 @@ const ReportTemplates = () => {
   };
 
   const generatePDFPreview = async () => {
-    const template = templates.asbestosClearance;
+    const currentTemplate = selectedTemplate;
+    const template = templates[currentTemplate];
     if (!template) return;
 
     setGeneratingPDF(true);
@@ -336,10 +361,36 @@ const ReportTemplates = () => {
     }
   };
 
+  const handleGeneratePDF = async () => {
+    try {
+      setGeneratingPDF(true);
+      const template = templates[selectedTemplate];
+      if (!template) {
+        throw new Error("Template not found");
+      }
+
+      await generateTemplatePDF(template, previewData);
+      setSaveStatus({
+        show: true,
+        message: "PDF generated successfully!",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      setSaveStatus({
+        show: true,
+        message: "Error generating PDF",
+        severity: "error",
+      });
+    } finally {
+      setGeneratingPDF(false);
+    }
+  };
+
   const renderSectionEditor = () => {
     if (!editingSection || !editData) return null;
 
-    const currentTemplate = templates[reportTypes[activeTab].id];
+    const currentTemplate = templates[selectedTemplate];
     const sectionData = currentTemplate[editingSection];
 
     if (editingSection === "companyDetails") {
@@ -414,7 +465,8 @@ const ReportTemplates = () => {
   };
 
   const renderDetailedTemplateSection = (sectionName, fields) => {
-    const template = templates.asbestosClearance;
+    const currentTemplate = selectedTemplate;
+    const template = templates[currentTemplate];
     if (!template) return null;
 
     return (
@@ -435,7 +487,7 @@ const ReportTemplates = () => {
             </Box>
             <Grid container spacing={2}>
               {fields.map((field) => (
-                <Grid item xs={12} md={6} key={field}>
+                <Grid item xs={12} key={field}>
                   <Box
                     sx={{
                       p: 2,
@@ -468,10 +520,12 @@ const ReportTemplates = () => {
                         <EditIcon />
                       </IconButton>
                     </Box>
-                    <Typography variant="body2" color="black">
-                      {replacePlaceholders(
-                        template.standardSections[field] || ""
-                      )}
+                    <Typography
+                      variant="body2"
+                      color="black"
+                      sx={{ whiteSpace: "pre-line" }}
+                    >
+                      {template.standardSections[field] || ""}
                     </Typography>
                   </Box>
                 </Grid>
@@ -486,6 +540,30 @@ const ReportTemplates = () => {
   const renderDetailedEditor = () => {
     if (!editingSection || !editData) return null;
 
+    // Available placeholders for reference
+    const availablePlaceholders = [
+      "CLIENT_NAME",
+      "ASBESTOS_TYPE",
+      "SITE_NAME",
+      "ASBESTOS_REMOVALIST",
+      "LAA_NAME",
+      "LAA_LICENSE",
+      "INSPECTION_TIME",
+      "INSPECTION_DATE",
+      "REPORT_TYPE",
+      "PROJECT_NAME",
+      "PROJECT_NUMBER",
+      "SITE_ADDRESS",
+      "REMOVAL_CONTRACTOR",
+      "REMOVAL_LICENSE",
+      "INSPECTOR_NAME",
+      "INSPECTOR_LICENSE",
+      "INSPECTION_DATETIME",
+      "CLEARANCE_DATE",
+      "CLEARANCE_TIME",
+      "SIGNATURE_IMAGE",
+    ];
+
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <TextField
@@ -497,10 +575,47 @@ const ReportTemplates = () => {
           onChange={(e) => setEditData(e.target.value)}
           fullWidth
           multiline
-          rows={4}
+          rows={8}
           variant="outlined"
-          helperText="Use {PLACEHOLDER_NAME} for dynamic content"
+          helperText="Use {PLACEHOLDER_NAME} for dynamic content. Available placeholders will be replaced with actual data when generating reports."
         />
+
+        {/* Available Placeholders */}
+        <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1 }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+            Available Placeholders:
+          </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+            {availablePlaceholders.map((placeholder) => (
+              <Chip
+                key={placeholder}
+                label={`{${placeholder}}`}
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: "0.7rem", cursor: "pointer" }}
+                onClick={() => {
+                  const textField = document.querySelector(
+                    'textarea[aria-label*="' +
+                      editingSection.charAt(0).toUpperCase() +
+                      editingSection.slice(1).replace(/([A-Z])/g, " $1") +
+                      '"]'
+                  );
+                  if (textField) {
+                    const start = textField.selectionStart;
+                    const end = textField.selectionEnd;
+                    const newValue =
+                      editData.substring(0, start) +
+                      `{${placeholder}}` +
+                      editData.substring(end);
+                    setEditData(newValue);
+                    // Focus back to text field
+                    setTimeout(() => textField.focus(), 0);
+                  }
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
         <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
           <Button onClick={handleCancel} startIcon={<CancelIcon />}>
             Cancel
@@ -518,7 +633,8 @@ const ReportTemplates = () => {
   };
 
   const renderPreview = () => {
-    const template = templates.asbestosClearance;
+    const currentTemplate = selectedTemplate;
+    const template = templates[currentTemplate];
     if (!template || !showPreview) return null;
 
     return (
@@ -571,11 +687,50 @@ const ReportTemplates = () => {
               }}
             >
               <Typography variant="h4" sx={{ mb: 2, color: "#009900" }}>
-                {replacePlaceholders(template.standardSections.frontCoverTitle)}
-              </Typography>
-              <Typography variant="h6" sx={{ mb: 3 }}>
                 {replacePlaceholders(
-                  template.standardSections.frontCoverSubtitle
+                  template.standardSections.backgroundInformationTitle
+                )}
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ mb: 3, whiteSpace: "pre-line" }}
+              >
+                {replacePlaceholders(
+                  template.standardSections.backgroundInformationContent
+                )}
+              </Typography>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                {replacePlaceholders(
+                  template.standardSections.legislativeRequirementsTitle
+                )}
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ mb: 2, whiteSpace: "pre-line" }}
+              >
+                {replacePlaceholders(
+                  template.standardSections.legislativeRequirementsContent
+                )}
+              </Typography>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                {replacePlaceholders(
+                  template.standardSections
+                    .nonFriableClearanceCertificateLimitationsTitle
+                )}
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ mb: 2, whiteSpace: "pre-line" }}
+              >
+                {replacePlaceholders(
+                  template.standardSections
+                    .nonFriableClearanceCertificateLimitationsContent
                 )}
               </Typography>
 
@@ -586,14 +741,28 @@ const ReportTemplates = () => {
                   template.standardSections.inspectionDetailsTitle
                 )}
               </Typography>
-              <Typography variant="body1" sx={{ mb: 2 }}>
+              <Typography
+                variant="body1"
+                sx={{ mb: 2, whiteSpace: "pre-line" }}
+              >
                 {replacePlaceholders(
-                  template.standardSections.inspectionIntroduction
+                  template.standardSections.inspectionDetailsContent
                 )}
               </Typography>
-              <Typography variant="body1" sx={{ mb: 2 }}>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="h5" sx={{ mb: 2 }}>
                 {replacePlaceholders(
-                  template.standardSections.inspectionSpecifics
+                  template.standardSections.inspectionExclusionsTitle
+                )}
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ mb: 2, whiteSpace: "pre-line" }}
+              >
+                {replacePlaceholders(
+                  template.standardSections.inspectionExclusionsContent
                 )}
               </Typography>
 
@@ -604,15 +773,22 @@ const ReportTemplates = () => {
                   template.standardSections.clearanceCertificationTitle
                 )}
               </Typography>
-              <Typography variant="body1" sx={{ mb: 2 }}>
+              <Typography
+                variant="body1"
+                sx={{ mb: 2, whiteSpace: "pre-line" }}
+              >
                 {replacePlaceholders(
-                  template.standardSections.clearanceCertificationText
+                  template.standardSections.clearanceCertificationContent
                 )}
               </Typography>
-              <Typography variant="body1" sx={{ mb: 2 }}>
-                {replacePlaceholders(
-                  template.standardSections.riskAssessmentText
-                )}
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography
+                variant="body1"
+                sx={{ mb: 2, whiteSpace: "pre-line" }}
+              >
+                {replacePlaceholders(template.standardSections.signOffContent)}
               </Typography>
             </Paper>
           </CardContent>
@@ -695,6 +871,54 @@ const ReportTemplates = () => {
                 </Box>
               </Grid>
             </Grid>
+          </CardContent>
+        </Card>
+      </Grid>
+    );
+  };
+
+  const renderAvailablePlaceholders = () => {
+    // Available placeholders for reference
+    const availablePlaceholders = [
+      "CLIENT_NAME",
+      "ASBESTOS_TYPE",
+      "SITE_NAME",
+      "ASBESTOS_REMOVALIST",
+      "LAA_NAME",
+      "LAA_LICENSE",
+      "INSPECTION_TIME",
+      "INSPECTION_DATE",
+      "REPORT_TYPE",
+      "PROJECT_NAME",
+      "PROJECT_NUMBER",
+      "SITE_ADDRESS",
+      "CLEARANCE_DATE",
+      "CLEARANCE_TIME",
+      "SIGNATURE_IMAGE",
+    ];
+
+    return (
+      <Grid item xs={12}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" color="black" sx={{ mb: 2 }}>
+              Available Placeholders
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Use these placeholders in your template content. They will be
+              automatically replaced with actual data when generating reports.
+            </Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {availablePlaceholders.map((placeholder) => (
+                <Chip
+                  key={placeholder}
+                  label={`{${placeholder}}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: "0.8rem" }}
+                />
+              ))}
+            </Box>
           </CardContent>
         </Card>
       </Grid>
@@ -846,24 +1070,15 @@ const ReportTemplates = () => {
           >
             Report Templates
           </Typography>
-          {activeTab === 0 && (
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <Button
-                onClick={() => setDetailedEditMode(!detailedEditMode)}
-                variant="outlined"
-                color={detailedEditMode ? "primary" : "inherit"}
-              >
-                {detailedEditMode ? "Simple Mode" : "Detailed Mode"}
-              </Button>
-              <Button
-                onClick={handlePreviewToggle}
-                startIcon={<PreviewIcon />}
-                variant="outlined"
-              >
-                {showPreview ? "Hide Preview" : "Show Preview"}
-              </Button>
-            </Box>
-          )}
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Button
+              onClick={handlePreviewToggle}
+              startIcon={<PreviewIcon />}
+              variant="outlined"
+            >
+              {showPreview ? "Hide Preview" : "Show Preview"}
+            </Button>
+          </Box>
         </Box>
         <Typography variant="h5" color="black">
           Manage standardized content for different report types
@@ -897,39 +1112,39 @@ const ReportTemplates = () => {
           )}
         </Box>
 
-        {/* Report Template Selection Tabs */}
-        <Box sx={{ borderBottom: 1, borderColor: "divider", mt: 3 }}>
-          <Tabs
-            value={activeTab}
-            onChange={handleTabChange}
-            sx={{
-              "& .MuiTab-root": {
-                color: "black",
-                "&.Mui-selected": {
-                  color: "green",
+        {/* Available Placeholders - Beneath company details */}
+        <Box sx={{ mt: 3 }}>
+          {!loading && (
+            <Grid container spacing={3}>
+              {renderAvailablePlaceholders()}
+            </Grid>
+          )}
+        </Box>
+
+        {/* Report Template Selection Dropdown */}
+        <Box sx={{ mt: 3, mb: 2 }}>
+          <FormControl fullWidth>
+            <InputLabel id="template-select-label">
+              Select Report Template
+            </InputLabel>
+            <Select
+              labelId="template-select-label"
+              value={selectedTemplate}
+              label="Select Report Template"
+              onChange={handleTemplateChange}
+              sx={{
+                "& .MuiSelect-select": {
+                  color: "black",
                 },
-              },
-            }}
-          >
-            {reportTypes.map((type, index) => (
-              <Tab
-                key={type.id}
-                label={type.name}
-                sx={{
-                  "&::before": {
-                    content: '""',
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 3,
-                    backgroundColor: type.color,
-                    borderRadius: "3px 3px 0 0",
-                  },
-                }}
-              />
-            ))}
-          </Tabs>
+              }}
+            >
+              {reportTypes.map((type) => (
+                <MenuItem key={type.id} value={type.id}>
+                  {type.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
 
         {/* Template Content */}
@@ -947,7 +1162,7 @@ const ReportTemplates = () => {
                 Loading templates...
               </Typography>
             </Box>
-          ) : activeTab === 0 && detailedEditMode ? (
+          ) : (
             <Grid container spacing={3}>
               {/* Preview Section */}
               {showPreview && renderPreview()}
@@ -957,8 +1172,6 @@ const ReportTemplates = () => {
                 renderDetailedTemplateSection(sectionName, fields)
               )}
             </Grid>
-          ) : (
-            renderTemplateContent(reportTypes[activeTab].id)
           )}
         </Box>
 
@@ -992,7 +1205,7 @@ const ReportTemplates = () => {
         </Dialog>
 
         {/* Detailed Edit Dialog */}
-        {editingSection && detailedEditMode && (
+        {editingSection && (
           <Box
             sx={{
               position: "fixed",

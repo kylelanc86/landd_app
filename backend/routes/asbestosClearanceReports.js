@@ -8,12 +8,23 @@ const checkPermission = require("../middleware/checkPermission");
 // Get all clearance reports with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
-    const { page = 1, limit = 10, clearanceId, sortBy = "createdAt", sortOrder = "desc" } = req.query;
+    const { page = 1, limit = 10, clearanceId, projectId, sortBy = "createdAt", sortOrder = "desc" } = req.query;
 
     const filter = {};
     
     if (clearanceId) {
       filter.clearanceId = clearanceId;
+    }
+
+    // If projectId is provided, we need to filter through the clearance relationship
+    if (projectId) {
+      // First get all clearances for this project
+      const AsbestosClearance = require("../models/AsbestosClearance");
+      const clearances = await AsbestosClearance.find({ projectId: projectId }).select('_id');
+      const clearanceIds = clearances.map(c => c._id);
+      
+      // Then filter reports by those clearance IDs
+      filter.clearanceId = { $in: clearanceIds };
     }
 
     const sortOptions = {};

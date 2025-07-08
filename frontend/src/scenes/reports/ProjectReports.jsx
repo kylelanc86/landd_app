@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Box,
   Typography,
-  TextField,
-  Button,
   Table,
   TableBody,
   TableCell,
@@ -12,25 +10,25 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Autocomplete,
   CircularProgress,
   Alert,
   Chip,
   IconButton,
   Tooltip,
-  InputAdornment,
+  Button,
 } from "@mui/material";
 import {
-  Search as SearchIcon,
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
   Print as PrintIcon,
-  Clear as ClearIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { tokens } from "../../theme";
 import projectService from "../../services/projectService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
+import asbestosClearanceService from "../../services/asbestosClearanceService";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import {
   shiftService,
   jobService,
@@ -39,114 +37,45 @@ import {
 } from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 
-const Reports = () => {
+const ProjectReports = () => {
   const theme = useTheme();
   const colors = tokens;
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [projectReports, setProjectReports] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [loadingReports, setLoadingReports] = useState(false);
-  const [error, setError] = useState("");
-  const [projectsWithReports, setProjectsWithReports] = useState(new Set());
+  const { projectId } = useParams();
   const navigate = useNavigate();
 
-  // Search projects function - using the same approach as projects page
-  const handleSearch = async (searchValue = searchTerm) => {
-    const termToSearch = searchValue || searchTerm;
-    if (!termToSearch.trim()) {
-      setError("Please enter a search term");
-      return;
-    }
+  const [project, setProject] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
+  useEffect(() => {
+    loadProjectReports();
+  }, [projectId]);
+
+  const loadProjectReports = async () => {
     try {
-      setSearching(true);
-      setError("");
-      setSearchResults([]);
-      setSelectedProject(null);
-      setProjectReports([]);
-
-      // Use the same parameters as the projects page
-      const params = {
-        page: 1,
-        limit: 1000, // Large limit to get more results
-        sortBy: "projectID",
-        sortOrder: "desc",
-        search: termToSearch.trim(),
-      };
-
-      // Ensure limit is a number
-      params.limit = parseInt(params.limit);
-
-      console.log("Search params:", params);
-      console.log("Current searchTerm:", searchTerm);
-      console.log("Search term being used:", termToSearch.trim());
-      const response = await projectService.getAll(params);
-
-      console.log("Search response:", response);
-
-      // Use the same response handling as projects page
-      const projectsData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-
-      console.log("Projects data:", projectsData.length);
-
-      setSearchResults(projectsData);
-
-      // Use the reports_present field from the API response
-      const projectsWithReportsSet = new Set();
-
-      projectsData.forEach((project) => {
-        if (project.reports_present) {
-          projectsWithReportsSet.add(project._id);
-        }
-      });
-
-      setProjectsWithReports(projectsWithReportsSet);
-
-      if (projectsData.length === 0) {
-        setError("No projects found matching your search term");
-      }
-    } catch (err) {
-      console.error("Error searching projects:", err);
-      setError("Failed to search projects");
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleClearSearch = () => {
-    setSearchTerm("");
-    setSearchResults([]);
-    setSelectedProject(null);
-    setProjectReports([]);
-    setError("");
-    setProjectsWithReports(new Set());
-  };
-
-  const handleLoadReportsForProject = async (project) => {
-    if (!projectsWithReports.has(project._id)) {
-      return; // Don't allow loading reports if project has no reports
-    }
-
-    try {
-      setLoadingReports(true);
+      setLoading(true);
       setError("");
 
-      // Collect all reports for the selected project
+      // Get project details
+      const projectResponse = await projectService.getById(projectId);
+      setProject(projectResponse.data);
+
       const allReports = [];
 
       // 1. Get asbestos clearance reports
       try {
+        console.log("Fetching clearance reports for project:", projectId);
         const clearanceReports = await asbestosClearanceReportService.getAll({
-          projectId: project._id,
+          projectId: projectId,
         });
+        console.log("Clearance reports response:", clearanceReports);
         if (clearanceReports.reports) {
+          console.log(
+            "Number of clearance reports found:",
+            clearanceReports.reports.length
+          );
+
           // Group reports by clearanceId to avoid duplicates
           const clearanceGroups = {};
           clearanceReports.reports.forEach((report) => {
@@ -167,6 +96,7 @@ const Reports = () => {
 
           // Add only one report per clearance
           Object.values(clearanceGroups).forEach((report) => {
+            console.log("Adding clearance report:", report.id, report.status);
             allReports.push(report);
           });
         }
@@ -174,30 +104,51 @@ const Reports = () => {
         console.log("No clearance reports found for this project:", err);
       }
 
-      // 2. Get air monitoring reports (shifts) - ONLY if no clearance reports exist
+      // 2. Get asbestos removal jobs - REMOVED: No longer displaying removal jobs
+
+      // 3. Get air monitoring reports (shifts) - ONLY if no clearance reports exist
       if (allReports.length === 0) {
         try {
+          console.log(
+            "No clearance reports found, fetching air monitoring reports for project:",
+            projectId
+          );
           // First get all jobs for this project
           const jobsResponse = await jobService.getAll();
+          console.log("All jobs response:", jobsResponse);
           const projectJobs =
             jobsResponse.data?.filter(
               (job) =>
-                job.project === project._id || job.project?._id === project._id
+                job.project === projectId || job.project?._id === projectId
             ) || [];
+          console.log("Project jobs found:", projectJobs.length);
 
           // Get shifts for each job
           for (const job of projectJobs) {
             try {
+              console.log("Fetching shifts for job:", job._id, job.name);
               const shiftsResponse = await shiftService.getByJob(job._id);
               const shifts = shiftsResponse.data || [];
+              console.log("Shifts found for job:", job.name, shifts.length);
 
               shifts.forEach((shift) => {
+                console.log(
+                  "Checking shift:",
+                  shift._id,
+                  shift.name,
+                  "status:",
+                  shift.status
+                );
                 // Only include shifts that have reports (analysis complete or shift complete)
                 if (
                   shift.status === "analysis_complete" ||
                   shift.status === "shift_complete" ||
                   shift.reportApprovedBy
                 ) {
+                  console.log(
+                    "Adding air monitoring report for shift:",
+                    shift._id
+                  );
                   allReports.push({
                     id: shift._id,
                     date: new Date(
@@ -212,15 +163,16 @@ const Reports = () => {
                     report: shift,
                     jobName: job.name,
                     shiftName: shift.name,
+                    category: "air-monitoring",
                   });
                 }
               });
             } catch (err) {
-              console.log(`No shifts found for job ${job._id}`);
+              console.log(`No shifts found for job ${job._id}:`, err);
             }
           }
         } catch (err) {
-          console.log("No air monitoring reports found for this project");
+          console.log("No air monitoring reports found for this project:", err);
         }
       }
 
@@ -230,13 +182,21 @@ const Reports = () => {
       // Only keep the most recent report
       const finalReports = allReports.length > 0 ? [allReports[0]] : [];
 
-      setProjectReports(finalReports);
-      setSelectedProject(project);
+      console.log("Final reports array (most recent only):", finalReports);
+      console.log(
+        "Reports by type:",
+        finalReports.reduce((acc, report) => {
+          acc[report.type] = (acc[report.type] || 0) + 1;
+          return acc;
+        }, {})
+      );
+
+      setReports(finalReports);
     } catch (err) {
-      console.error("Error loading reports:", err);
+      console.error("Error loading project reports:", err);
       setError("Failed to load reports for this project");
     } finally {
-      setLoadingReports(false);
+      setLoading(false);
     }
   };
 
@@ -439,9 +399,6 @@ const Reports = () => {
         setTimeout(() => {
           window.print();
         }, 1000);
-      } else if (report.type === "Asbestos Clearance Report") {
-        // TODO: Implement asbestos clearance report printing
-        console.log("Printing asbestos clearance report:", report);
       }
     } catch (err) {
       console.error("Error printing report:", err);
@@ -452,168 +409,115 @@ const Reports = () => {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "complete":
+      case "completed":
         return "success";
       case "in progress":
+      case "in_progress":
         return "warning";
       case "pending":
+        return "info";
+      case "cancelled":
+        return "error";
+      default:
+        return "default";
+    }
+  };
+
+  const getCategoryColor = (category) => {
+    switch (category) {
+      case "air-monitoring":
+        return "primary";
+      case "clearance":
+        return "secondary";
+      case "removal":
         return "info";
       default:
         return "default";
     }
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ p: 3, textAlign: "center" }}>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>Loading project reports...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Reports
-      </Typography>
-
-      {/* Project Search Section */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Search Projects
-        </Typography>
-
-        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", mb: 2 }}>
-          <TextField
-            fullWidth
-            label="Search for a project"
-            placeholder="Enter project ID, name, or client"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === "Enter") {
-                handleSearch(searchTerm);
-              }
-            }}
-            InputProps={{
-              startAdornment: (
-                <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
-              ),
-              endAdornment: searchTerm && (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={handleClearSearch}
-                    edge="end"
-                  >
-                    <ClearIcon />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-
-          <Button
-            variant="contained"
-            onClick={() => handleSearch(searchTerm)}
-            disabled={!searchTerm.trim() || searching}
-            sx={{ minWidth: 140 }}
-          >
-            {searching ? (
-              <CircularProgress size={20} color="inherit" />
-            ) : (
-              "Search"
-            )}
-          </Button>
-        </Box>
-
-        {/* Search Results */}
-        {searchResults.length > 0 && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              Search Results ({searchResults.length} projects found)
+      {/* Header */}
+      <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
+        <IconButton onClick={() => navigate("/reports")} sx={{ mr: 2 }}>
+          <ArrowBackIcon />
+        </IconButton>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Project Reports
+          </Typography>
+          {project && (
+            <Typography variant="h6" color="text.secondary">
+              {project.projectID} - {project.name}
             </Typography>
-            <TableContainer component={Paper} sx={{ maxHeight: 700 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Project ID</TableCell>
-                    <TableCell>Site Name</TableCell>
-                    <TableCell>Reports</TableCell>
-                    <TableCell align="center">Action</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {searchResults.map((project) => {
-                    const hasReports = projectsWithReports.has(project._id);
-                    return (
-                      <TableRow key={project._id}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
-                            {project.projectID}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{project.name}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              hasReports ? "Reports Available" : "No Reports"
-                            }
-                            color={hasReports ? "success" : "error"}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="center">
-                          <Button
-                            variant="contained"
-                            size="small"
-                            color="secondary"
-                            disabled={!hasReports}
-                            onClick={() =>
-                              (window.location.href = `/reports/project/${project._id}`)
-                            }
-                          >
-                            Load Reports
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
-      </Paper>
-
-      {/* Error Display */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+          )}
+        </Box>
+      </Box>
 
       {/* Reports Table */}
-      {projectReports.length > 0 && (
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Reports for {selectedProject?.projectID}
-          </Typography>
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          All Reports ({reports.length})
+        </Typography>
 
+        {reports.length > 0 ? (
           <TableContainer>
             <Table>
               <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Report Type</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
+                <TableRow sx={{ backgroundColor: colors.primary[700] }}>
+                  <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    Date
+                  </TableCell>
+                  <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    Report Type
+                  </TableCell>
+                  <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    Status
+                  </TableCell>
+
+                  <TableCell
+                    sx={{ color: "white", fontWeight: "bold" }}
+                    align="center"
+                  >
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {projectReports.map((report) => (
-                  <TableRow key={report.id}>
-                    <TableCell>{report.date.toLocaleDateString()}</TableCell>
+                {reports.map((report) => (
+                  <TableRow key={report.id} hover>
                     <TableCell>
-                      <Typography variant="body2" fontWeight="medium">
-                        {report.type}
-                      </Typography>
-                      {report.jobName && (
-                        <Typography variant="caption" color="text.secondary">
-                          {report.jobName} • {report.shiftName}
+                      {report.date.toLocaleDateString("en-GB")}
+                    </TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {report.type}
                         </Typography>
-                      )}
+                        {report.jobName && (
+                          <Typography variant="caption" color="text.secondary">
+                            {report.jobName} • {report.shiftName}
+                          </Typography>
+                        )}
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -622,6 +526,7 @@ const Reports = () => {
                         size="small"
                       />
                     </TableCell>
+
                     <TableCell align="center">
                       <Box
                         sx={{
@@ -664,25 +569,19 @@ const Reports = () => {
               </TableBody>
             </Table>
           </TableContainer>
-        </Paper>
-      )}
-
-      {/* No Reports Message */}
-      {selectedProject &&
-        !loadingReports &&
-        projectReports.length === 0 &&
-        !error && (
-          <Paper sx={{ p: 3, textAlign: "center" }}>
+        ) : (
+          <Box sx={{ textAlign: "center", py: 4 }}>
             <Typography variant="h6" color="text.secondary" gutterBottom>
               No Reports Found
             </Typography>
             <Typography variant="body2" color="text.secondary">
               No reports have been generated for this project yet.
             </Typography>
-          </Paper>
+          </Box>
         )}
+      </Paper>
     </Box>
   );
 };
 
-export default Reports;
+export default ProjectReports;

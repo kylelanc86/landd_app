@@ -36,14 +36,15 @@ import {
   PhotoCamera as PhotoCameraIcon,
   Upload as UploadIcon,
   Delete as DeletePhotoIcon,
+  Description as DescriptionIcon,
 } from "@mui/icons-material";
 
 import { useNavigate, useParams } from "react-router-dom";
 import { tokens } from "../../theme";
 import PermissionGate from "../../components/PermissionGate";
-import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import { compressImage, needsCompression } from "../../utils/imageCompression";
+import { formatDate } from "../../utils/dateUtils";
 
 const ClearanceItems = () => {
   const colors = tokens;
@@ -73,6 +74,16 @@ const ClearanceItems = () => {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [compressionStatus, setCompressionStatus] = useState(null);
+  const [airMonitoringDialogOpen, setAirMonitoringDialogOpen] = useState(false);
+  const [airMonitoringFile, setAirMonitoringFile] = useState(null);
+  const [uploadingReport, setUploadingReport] = useState(false);
+  const [airMonitoringReportsDialogOpen, setAirMonitoringReportsDialogOpen] =
+    useState(false);
+  const [airMonitoringReports, setAirMonitoringReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [savingExclusions, setSavingExclusions] = useState(false);
+  const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
@@ -83,7 +94,7 @@ const ClearanceItems = () => {
     try {
       setLoading(true);
       const [itemsData, clearanceData] = await Promise.all([
-        asbestosClearanceReportService.getByClearanceId(clearanceId),
+        asbestosClearanceService.getItems(clearanceId),
         asbestosClearanceService.getById(clearanceId),
       ]);
 
@@ -104,19 +115,26 @@ const ClearanceItems = () => {
     e.preventDefault();
     try {
       const itemData = {
-        ...form,
-        clearanceId: clearanceId,
+        locationDescription: form.locationDescription,
+        materialDescription: form.materialDescription,
+        asbestosType: form.asbestosType,
+        photograph: form.photograph,
+        notes: form.notes,
       };
 
       if (editingItem) {
-        await asbestosClearanceReportService.update(editingItem._id, itemData);
+        await asbestosClearanceService.updateItem(
+          clearanceId,
+          editingItem._id,
+          itemData
+        );
         setSnackbar({
           open: true,
           message: "Item updated successfully",
           severity: "success",
         });
       } else {
-        await asbestosClearanceReportService.create(itemData);
+        await asbestosClearanceService.addItem(clearanceId, itemData);
         setSnackbar({
           open: true,
           message: "Item created successfully",
@@ -155,7 +173,7 @@ const ClearanceItems = () => {
   const handleDelete = async (item) => {
     if (window.confirm("Are you sure you want to delete this item?")) {
       try {
-        await asbestosClearanceReportService.delete(item._id);
+        await asbestosClearanceService.deleteItem(clearanceId, item._id);
         setSnackbar({
           open: true,
           message: "Item deleted successfully",
@@ -290,10 +308,197 @@ const ClearanceItems = () => {
   const convertToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
+  };
+
+  const fetchAirMonitoringReports = async () => {
+    if (!clearance?.projectId?._id) {
+      setSnackbar({
+        open: true,
+        message: "No project found for this clearance",
+        severity: "error",
+      });
+      return;
+    }
+
+    try {
+      setLoadingReports(true);
+      const reports = await asbestosClearanceService.getAirMonitoringReports(
+        clearance.projectId._id
+      );
+      setAirMonitoringReports(reports);
+    } catch (error) {
+      console.error("Error fetching air monitoring reports:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to fetch air monitoring reports",
+        severity: "error",
+      });
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const handleOpenAirMonitoringReportsDialog = () => {
+    setAirMonitoringReportsDialogOpen(true);
+    fetchAirMonitoringReports();
+  };
+
+  const handleSelectAirMonitoringReport = async (report) => {
+    try {
+      setSelectedReport(report);
+
+      // Generate the air monitoring report PDF
+      const { generateShiftReport } = await import(
+        "../../utils/generateShiftReport"
+      );
+      const {
+        shiftService,
+        jobService,
+        sampleService,
+        projectService,
+        clientService,
+      } = await import("../../services/api");
+
+      // Get the shift data
+      const shiftResponse = await shiftService.getById(report._id);
+      const shift = shiftResponse.data;
+
+      // Get the job data
+      const jobResponse = await jobService.getById(report.jobId);
+      const job = jobResponse.data;
+
+      // Get samples for this shift
+      const samplesResponse = await sampleService.getByShift(report._id);
+      const samples = samplesResponse.data || [];
+
+      // Get project data
+      let project = job.project;
+      if (project && typeof project === "string") {
+        const projectResponse = await projectService.getById(project);
+        project = projectResponse.data;
+      }
+      if (project && project.client && typeof project.client === "string") {
+        const clientResponse = await clientService.getById(project.client);
+        project.client = clientResponse.data;
+      }
+
+      // Generate the report and get the PDF data URL
+      const pdfDataUrl = await generateShiftReport({
+        shift: shift,
+        job: job,
+        samples: samples,
+        project: project,
+        returnPdfData: true, // This will return the PDF data URL instead of downloading
+      });
+
+      // Extract base64 data from data URL
+      const base64Data = pdfDataUrl.split(",")[1];
+
+      // Upload the report to the clearance
+      await asbestosClearanceService.uploadAirMonitoringReport(clearanceId, {
+        reportData: base64Data,
+      });
+
+      setSnackbar({
+        open: true,
+        message: "Air monitoring report selected and uploaded successfully",
+        severity: "success",
+      });
+
+      setAirMonitoringReportsDialogOpen(false);
+      setSelectedReport(null);
+      fetchData(); // Refresh clearance data
+    } catch (error) {
+      console.error("Error selecting air monitoring report:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to select air monitoring report",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAirMonitoringFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setAirMonitoringFile(file);
+    }
+  };
+
+  const handleUploadAirMonitoringReport = async () => {
+    if (!airMonitoringFile) {
+      setSnackbar({
+        open: true,
+        message: "Please select a file to upload",
+        severity: "error",
+      });
+      return;
+    }
+
+    try {
+      setUploadingReport(true);
+
+      // Convert file to base64
+      const base64Data = await convertToBase64(airMonitoringFile);
+
+      // Upload to backend
+      await asbestosClearanceService.uploadAirMonitoringReport(clearanceId, {
+        reportData: base64Data,
+      });
+
+      setSnackbar({
+        open: true,
+        message: "Air monitoring report uploaded successfully",
+        severity: "success",
+      });
+
+      setAirMonitoringDialogOpen(false);
+      setAirMonitoringFile(null);
+      fetchData(); // Refresh clearance data
+    } catch (error) {
+      console.error("Error uploading air monitoring report:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload air monitoring report",
+        severity: "error",
+      });
+    } finally {
+      setUploadingReport(false);
+    }
+  };
+
+  const handleRemoveAirMonitoringReport = async () => {
+    if (
+      window.confirm(
+        "Are you sure you want to remove the air monitoring report?"
+      )
+    ) {
+      try {
+        // Update the clearance to remove the air monitoring report
+        await asbestosClearanceService.update(clearanceId, {
+          airMonitoringReport: null,
+        });
+
+        setSnackbar({
+          open: true,
+          message: "Air monitoring report removed successfully",
+          severity: "success",
+        });
+
+        fetchData(); // Refresh clearance data
+      } catch (error) {
+        console.error("Error removing air monitoring report:", error);
+        setSnackbar({
+          open: true,
+          message: "Failed to remove air monitoring report",
+          severity: "error",
+        });
+      }
+    }
   };
 
   if (loading) {
@@ -360,6 +565,122 @@ const ClearanceItems = () => {
             Add Item
           </Button>
         </Box>
+
+        {/* Air Monitoring Buttons */}
+        {clearance?.airMonitoring && (
+          <Box display="flex" gap={2} sx={{ mt: 2 }} alignItems="center">
+            {clearance.airMonitoringReport && (
+              <Typography
+                variant="body2"
+                color="error"
+                sx={{ fontWeight: "medium" }}
+              >
+                ✓ Air Monitoring Report Attached
+              </Typography>
+            )}
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleOpenAirMonitoringReportsDialog}
+              startIcon={<DescriptionIcon />}
+            >
+              {clearance.airMonitoringReport
+                ? "Replace Air Monitoring Report"
+                : "Select Air Monitoring Report"}
+            </Button>
+            {clearance.airMonitoringReport && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleRemoveAirMonitoringReport}
+                startIcon={<DeleteIcon />}
+              >
+                Remove Report
+              </Button>
+            )}
+          </Box>
+        )}
+
+        {/* Job Specific Exclusions */}
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Typography variant="h6" color={colors.grey[100]} sx={{ mb: 2 }}>
+              Job Specific Exclusions
+            </Typography>
+            <TextField
+              fullWidth
+              label="Job Specific Exclusions"
+              value={clearance?.jobSpecificExclusions || ""}
+              onChange={(e) => {
+                // Update local state for the text field
+                setClearance((prev) => ({
+                  ...prev,
+                  jobSpecificExclusions: e.target.value,
+                }));
+              }}
+              multiline
+              rows={4}
+              placeholder="Enter job-specific exclusions that will be added to the Inspection Exclusions section of the report..."
+              helperText={
+                clearance?.jobSpecificExclusions && !savingExclusions
+                  ? "This text will be appended to the standard Inspection Exclusions section in the clearance report."
+                  : savingExclusions
+                  ? "Saving..."
+                  : "This text will be appended to the standard Inspection Exclusions section in the clearance report."
+              }
+              InputProps={{
+                endAdornment: savingExclusions ? (
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                ) : null,
+              }}
+            />
+            <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={async () => {
+                  try {
+                    setSavingExclusions(true);
+                    await asbestosClearanceService.update(clearanceId, {
+                      jobSpecificExclusions:
+                        clearance?.jobSpecificExclusions || "",
+                    });
+                    setSnackbar({
+                      open: true,
+                      message: "Job specific exclusions saved successfully",
+                      severity: "success",
+                    });
+                    setExclusionsLastSaved(new Date());
+                  } catch (error) {
+                    console.error(
+                      "Error saving job specific exclusions:",
+                      error
+                    );
+                    setSnackbar({
+                      open: true,
+                      message: "Failed to save job specific exclusions",
+                      severity: "error",
+                    });
+                  } finally {
+                    setSavingExclusions(false);
+                  }
+                }}
+                disabled={savingExclusions}
+              >
+                {savingExclusions ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : (
+                  "Save Exclusions"
+                )}
+              </Button>
+            </Box>
+            {exclusionsLastSaved && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Last saved: {formatDate(exclusionsLastSaved)}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
 
         <Card sx={{ mt: 3 }}>
           <CardContent>
@@ -580,6 +901,120 @@ const ClearanceItems = () => {
               </Button>
             </DialogActions>
           </form>
+        </Dialog>
+
+        {/* Air Monitoring Reports Selection Dialog */}
+        <Dialog
+          open={airMonitoringReportsDialogOpen}
+          onClose={() => setAirMonitoringReportsDialogOpen(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>Select Air Monitoring Report</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select an air monitoring report from the list below. This will
+                be included in the clearance report as Appendix B.
+              </Typography>
+
+              {loadingReports ? (
+                <Box
+                  display="flex"
+                  justifyContent="center"
+                  alignItems="center"
+                  height="200px"
+                >
+                  <CircularProgress />
+                </Box>
+              ) : airMonitoringReports.length === 0 ? (
+                <Alert severity="info">
+                  No air monitoring reports found for this project. Reports must
+                  be completed and authorized to appear here.
+                </Alert>
+              ) : (
+                <Box sx={{ maxHeight: 400, overflow: "auto" }}>
+                  {airMonitoringReports.map((report, index) => (
+                    <Card
+                      key={report._id}
+                      sx={{
+                        mb: 2,
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "action.hover",
+                        },
+                        border: selectedReport?._id === report._id ? 2 : 1,
+                        borderColor:
+                          selectedReport?._id === report._id
+                            ? "primary.main"
+                            : "divider",
+                      }}
+                      onClick={() => handleSelectAirMonitoringReport(report)}
+                    >
+                      <CardContent sx={{ py: 2 }}>
+                        <Box
+                          display="flex"
+                          justifyContent="space-between"
+                          alignItems="flex-start"
+                        >
+                          <Box flex={1}>
+                            <Box
+                              display="flex"
+                              alignItems="center"
+                              gap={1}
+                              mb={1}
+                            >
+                              <Typography
+                                variant="subtitle1"
+                                fontWeight="medium"
+                              >
+                                {report.name}
+                              </Typography>
+                              <Chip
+                                label={
+                                  report.reportApprovedBy
+                                    ? "Authorized"
+                                    : report.status
+                                }
+                                color={
+                                  report.reportApprovedBy
+                                    ? "success"
+                                    : "default"
+                                }
+                                size="small"
+                              />
+                            </Box>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              mb={0.5}
+                            >
+                              Job: {report.jobName}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Date: {formatDate(report.date)}
+                              {report.reportIssueDate &&
+                                ` • Issue Date: ${formatDate(
+                                  report.reportIssueDate
+                                )}`}
+                            </Typography>
+                          </Box>
+                          {selectedReport?._id === report._id && (
+                            <CircularProgress size={20} />
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAirMonitoringReportsDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogActions>
         </Dialog>
 
         {/* Snackbar for notifications */}

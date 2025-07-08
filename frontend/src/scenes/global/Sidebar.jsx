@@ -360,7 +360,7 @@ const Sidebar = () => {
           <PermissionGate requiredPermissions={["timesheets.view"]}>
             <Item
               title="Timesheets"
-              to="/timesheets"
+              to="/timesheets/monthly"
               icon={<AccessTimeIcon />}
             />
           </PermissionGate>
