@@ -50,7 +50,13 @@ async function compressBase64Image(base64String, targetSizeKB = 100, maxWidth = 
     const imageBuffer = Buffer.from(base64Data, 'base64');
     
     // Load image with Jimp
-    const image = await Jimp.read(imageBuffer);
+    let image;
+    try {
+      image = await Jimp.read(imageBuffer);
+    } catch (readError) {
+      console.error('Error reading image with Jimp:', readError);
+      return base64String;
+    }
     
     // Debug: Check if image is a valid Jimp instance
     console.log('Type of image:', typeof image);
@@ -68,8 +74,17 @@ async function compressBase64Image(base64String, targetSizeKB = 100, maxWidth = 
     
     // Resize if needed
     if (originalWidth > maxWidth || originalHeight > maxHeight) {
-      image.scaleToFit(maxWidth, maxHeight);
-      console.log('Resized to:', image.bitmap.width, 'x', image.bitmap.height);
+      // Ensure maxWidth and maxHeight are valid numbers
+      const validMaxWidth = typeof maxWidth === 'number' && maxWidth > 0 ? maxWidth : 800;
+      const validMaxHeight = typeof maxHeight === 'number' && maxHeight > 0 ? maxHeight : 600;
+      
+      try {
+        image.scaleToFit(validMaxWidth, validMaxHeight);
+        console.log('Resized to:', image.bitmap.width, 'x', image.bitmap.height);
+      } catch (resizeError) {
+        console.error('Error resizing image:', resizeError);
+        // Continue without resizing
+      }
     }
 
     // Always convert to JPEG for compression
@@ -80,6 +95,11 @@ async function compressBase64Image(base64String, targetSizeKB = 100, maxWidth = 
     let tempImage = image;
 
     do {
+      // Type check for Jimp image
+      if (!tempImage || typeof tempImage.getBufferAsync !== 'function') {
+        console.warn('tempImage is not a valid Jimp image. Skipping compression.');
+        return base64String;
+      }
       // Convert to JPEG buffer
       compressedBuffer = await tempImage.getBufferAsync(Jimp.MIME_JPEG);
       // Reload as Jimp image to apply quality

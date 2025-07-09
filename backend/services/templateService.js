@@ -1,4 +1,6 @@
-const ReportTemplate = require('../models/ReportTemplate');
+const NonFriableClearance = require('../models/NonFriableClearance');
+const FriableClearance = require('../models/FriableClearance');
+const mongoose = require('mongoose');
 
 /**
  * Fetch template content by type
@@ -7,29 +9,84 @@ const ReportTemplate = require('../models/ReportTemplate');
  */
 const getTemplateByType = async (templateType) => {
   try {
-    const template = await ReportTemplate.findOne({ templateType });
+    let template = null;
+    
+    if (templateType === "asbestosClearanceNonFriable") {
+      template = await NonFriableClearance.findOne();
+    } else if (templateType === "asbestosClearanceFriable") {
+      template = await FriableClearance.findOne();
+    }
+    
     if (!template) {
       console.log(`Template not found for type: ${templateType}, creating default...`);
+      
+      // Find a system user or create a default ObjectId for createdBy
+      const User = require('../models/User');
+      let systemUser = await User.findOne({ role: 'admin' }).limit(1);
+      let createdBy = systemUser ? systemUser._id : new mongoose.Types.ObjectId();
+      
+      // Determine the title based on template type
+      let title = "ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      if (templateType === "asbestosClearanceNonFriable") {
+        title = "NON-FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      } else if (templateType === "asbestosClearanceFriable") {
+        title = "FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      }
+      
       // Create default template if it doesn't exist
-      const defaultTemplate = new ReportTemplate({
-        templateType,
-        createdBy: 'system', // You might want to pass a user ID here
-        standardSections: {
-          // Default content for non-friable clearance
-          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING NON-FRIABLE CLEARANCE INSPECTIONS",
-          backgroundInformationContent: "Following completion of non-friable asbestos removal works undertaken by a suitably licenced Asbestos Removal Contractor, a clearance inspection must be completed by an independent LAA / a competent person. The clearance inspection includes an assessment of the following:\n\nVisual inspection of the work area for asbestos dust or debris\nVisual inspection of the adjacent area including the access and egress pathways for visible asbestos dust and debris\n\nIt is required that a Non-Friable Clearance Certificate be issued on completion of a successful inspection. The issuer needs to ensure:\n\nThis certificate should be issued prior to the area being re-occupied. This chain of events should occur regardless of whether the site is a commercial or residential property.\nThe asbestos removal area and areas immediately surrounding it are visibly clean from asbestos contamination\nThe removal area does not pose a risk to health safety and safety from exposure to asbestos",
+      let standardSections = {};
+      
+      if (templateType === "asbestosClearanceFriable") {
+        // Friable clearance content
+        standardSections = {
+          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING FRIABLE CLEARANCE INSPECTIONS",
+          backgroundInformationContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           legislativeRequirementsTitle: "LEGISLATIVE REQUIREMENTS",
-          legislativeRequirementsContent: "Non-Friable Clearance Certificates should be written in general accordance with and with reference to:\n\nACT Work Health and Safety (WHS) Act 2011\nACT Work Health and Safety Regulation 2011\nACT Work Health and Safety (How to Safely Remove Asbestos Code of Practice) 2022",
+          legislativeRequirementsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
-          nonFriableClearanceCertificateLimitationsTitle: "NON-FRIABLE CLEARANCE CERTIFICATE LIMITATIONS",
-          nonFriableClearanceCertificateLimitationsContent: "The visual clearance inspection was only carried out in the locations outlined within this document. L&D did not inspect any areas of the property that fall outside of the locations listed in this certificate and therefore make no comment regarding the presence or condition of other ACM that may or may not be present. When undertaking the inspection, the LAA tries to inspect as much of the asbestos removal area as possible. However, no inspection is absolute. Should suspect ACM be identified following the inspection, works should cease until an assessment of the materials is completed.",
+          friableClearanceCertificateLimitationsTitle: "FRIABLE CLEARANCE CERTIFICATE LIMITATIONS",
+          friableClearanceCertificateLimitationsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           inspectionDetailsTitle: "INSPECTION DETAILS",
-          inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. Photographs of the Asbestos Removal Area and a Site Plan are presented in Appendix A and Appendix B respectively.",
+          inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
           
           inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
-          inspectionExclusionsContent: "This clearance certificate is specific to the scope of removal works detailed above. ACM may be present beyond the inspected area. Asbestos fibre cement packers remain under the windowsill. The packers were sprayed with black spray. The packers should be removed prior to commencing works that may disturb or damage the material.",
+          inspectionExclusionsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
+          clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
+          
+          signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
+          
+          footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
+        };
+        
+        template = new FriableClearance({
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Clearance Inspection Report"
+          },
+          standardSections
+        });
+      } else {
+        // Non-friable clearance content
+        standardSections = {
+          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING NON-FRIABLE CLEARANCE INSPECTIONS",
+          backgroundInformationContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          legislativeRequirementsTitle: "LEGISLATIVE REQUIREMENTS",
+          legislativeRequirementsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          nonFriableClearanceCertificateLimitationsTitle: "NON-FRIABLE CLEARANCE CERTIFICATE LIMITATIONS",
+          nonFriableClearanceCertificateLimitationsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          inspectionDetailsTitle: "INSPECTION DETAILS",
+          inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
+          
+          inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
+          inspectionExclusionsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
@@ -37,10 +94,20 @@ const getTemplateByType = async (templateType) => {
           signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
           
           footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
-        }
-      });
-      await defaultTemplate.save();
-      return defaultTemplate;
+        };
+        
+        template = new NonFriableClearance({
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Clearance Inspection Report"
+          },
+          standardSections
+        });
+      }
+      
+      await template.save();
+      return template;
     }
     return template;
   } catch (error) {
@@ -109,7 +176,28 @@ const replacePlaceholders = async (content, data) => {
     '{ASBESTOS_REMOVALIST}': data.asbestosRemovalist || 'Unknown Removalist',
     '{LAA_NAME}': data.LAA || data.laaName || 'Unknown LAA',
     '{LAA_LICENSE}': laaLicenceNumber,
-    '{INSPECTION_TIME}': 'Inspection Time',
+    '{INSPECTION_TIME}': (() => {
+      if (data.inspectionTime) {
+        // Convert 24-hour format to 12-hour format with AM/PM
+        const timeMatch = data.inspectionTime.match(/^(\d{1,2}):(\d{2})$/);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1]);
+          const minutes = timeMatch[2];
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          
+          // Convert to 12-hour format
+          if (hours === 0) {
+            hours = 12; // Midnight
+          } else if (hours > 12) {
+            hours = hours - 12; // Afternoon/evening
+          }
+          
+          return `${hours}:${minutes} ${ampm}`;
+        }
+        return data.inspectionTime; // Return as-is if format doesn't match
+      }
+      return 'Inspection Time';
+    })(),
     '{INSPECTION_DATE}': data.clearanceDate 
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
@@ -121,7 +209,23 @@ const replacePlaceholders = async (content, data) => {
     '{PROJECT_NAME}': data.projectId?.name || data.project?.name || 'Unknown Project',
     '{PROJECT_NUMBER}': data.projectId?.projectID || data.project?.projectID || 'Unknown Project ID',
     '{SITE_ADDRESS}': data.projectId?.name || data.project?.name || 'Unknown Address',
-    '{SIGNATURE_IMAGE}': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : '[SIGNATURE_PLACEHOLDER]'
+    '{SIGNATURE_IMAGE}': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : '[SIGNATURE_PLACEHOLDER]',
+    '{APPENDIX_REFERENCES}': (() => {
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      const hasAirMonitoring = data.airMonitoring;
+      
+      if (hasSitePlan && hasAirMonitoring) {
+        return 'Photographs of the Asbestos Removal Area, Site Plan, and Air Monitoring Report are presented in Appendix A, Appendix B, and Appendix C respectively.';
+      } else if (hasSitePlan) {
+        return 'Photographs of the Asbestos Removal Area and Site Plan are presented in Appendix A and Appendix B respectively.';
+      } else if (hasAirMonitoring) {
+        return 'Photographs of the Asbestos Removal Area and Air Monitoring Report are presented in Appendix A and Appendix B respectively.';
+      } else {
+        return 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
+      }
+    })(),
+    '{AIR_MONITORING_REFERENCE}': data.airMonitoring ? 'and air monitoring' : '',
+    '{AIR_MONITORING_RESULTS}': data.airMonitoring ? `Air monitoring was conducted and results were below the clearance indicator of 0.01 fibres per mL.` : ''
   };
 
   let result = content;
@@ -129,11 +233,54 @@ const replacePlaceholders = async (content, data) => {
     result = result.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
   });
 
-  // Convert line breaks to HTML line breaks for proper display in PDF
-  result = result.replace(/\n/g, '<br>');
-
-  // Note: Bullet points are handled by HTML templates, not automatic conversion
-  // This prevents double bullet points when templates already contain <ul> and <li> tags
+  // Convert line breaks to HTML
+  result = result.replace(/\r?\n/g, '<br>');
+  
+  // Apply simple formatting
+  // Process bullet points by splitting into lines and grouping consecutive [BULLET] lines, allowing blank lines between
+  const lines = result.split('<br>');
+  let processedLines = [];
+  let currentBulletList = [];
+  let inBulletBlock = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === '') {
+      // Blank line: if in a bullet block, just skip
+      if (inBulletBlock) continue;
+      // Otherwise, add a blank line
+      processedLines.push('');
+      continue;
+    }
+    if (line.startsWith('[BULLET]')) {
+      // Start or continue a bullet block
+      const bulletContent = line.substring(8);
+      currentBulletList.push(bulletContent);
+      inBulletBlock = true;
+    } else {
+      // If we have accumulated bullets, create the ul element
+      if (currentBulletList.length > 0) {
+        const bulletItems = currentBulletList.map(content => `<li>${content}</li>`).join('');
+        processedLines.push(`<ul class="bullets">${bulletItems}</ul>`);
+        currentBulletList = [];
+        inBulletBlock = false;
+      }
+      // Add the current line
+      processedLines.push(line);
+    }
+  }
+  // Handle any remaining bullets at the end
+  if (currentBulletList.length > 0) {
+    const bulletItems = currentBulletList.map(content => `<li>${content}</li>`).join('');
+    processedLines.push(`<ul class="bullets">${bulletItems}</ul>`);
+  }
+  result = processedLines.join('<br>');
+  
+  // Convert **text** to bold
+  result = result.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Convert [BR] to line breaks
+  result = result.replace(/\[BR\]/g, '<br>');
 
   return result;
 };

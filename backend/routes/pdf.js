@@ -110,7 +110,7 @@ const HTML_TEMPLATES = {
         text-transform: uppercase;
       }
       .address {
-        font-size: 1.1rem;
+        font-size: 1.21rem;
         margin-bottom: 32px;
         color: #222;
       }
@@ -126,7 +126,7 @@ const HTML_TEMPLATES = {
       .cover-left .company-details {
         font-size: 0.95rem;
         color: #222;
-        margin-top: 160px;
+        margin-top: 220px;
         line-height: 1.5;
         text-align: left;
       }
@@ -134,9 +134,9 @@ const HTML_TEMPLATES = {
         position: absolute;
         right: 32px;
         bottom: 32px;
-        width: 180px;
+        width: 207px;
         background: rgba(255, 255, 255, 0.95);
-        padding: 10px 18px 10px 10px;
+        padding: 5px 9px 5px 5px;
         border-radius: 6px;
         z-index: 10;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -298,7 +298,7 @@ const HTML_TEMPLATES = {
         margin: 0 0 12px 0;
         padding: 0;
         list-style: none;
-        font-size: 1.06rem;
+        font-size: 0.795rem;
       }
       .details-list li {
         margin-bottom: 4px;
@@ -372,7 +372,7 @@ const HTML_TEMPLATES = {
 
         <div class="section-label">Document Details</div>
         <ul class="details-list">
-          <li>File Name: [PROJECT_ID]_Clearance_Report.pdf</li>
+          <li>File Name: [FILENAME]</li>
           <li>Issue Date: [CLEARANCE_DATE]</li>
           <li>Report Author: [LAA_NAME]</li>
           <li>Report Authoriser: [LAA_NAME]</li>
@@ -489,7 +489,7 @@ const HTML_TEMPLATES = {
         text-align: justify;
       }
       .bullets {
-        margin: 0 0 12px 24px;
+        margin: 0 0 8px 16px;
         padding: 0;
         font-size: 0.8rem;
         color: #222;
@@ -497,8 +497,22 @@ const HTML_TEMPLATES = {
         text-align: justify;
       }
       .bullets li {
-        margin-bottom: 6px;
-        list-style-type: disc;
+        margin-bottom: 4px;
+        list-style-type: none;
+        position: relative;
+        padding-left: 20px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        text-align: justify;
+      }
+      .bullets li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        top: -0.2em;
+        font-size: 2.4em;
+        color: #222;
+        line-height: 1;
       }
       .footer {
         position: absolute;
@@ -667,6 +681,32 @@ const HTML_TEMPLATES = {
       .asbestos-table th {
         background: #f5f5f5;
         font-weight: 700;
+      }
+      .bullets {
+        margin: 0 0 8px 16px;
+        padding: 0;
+        font-size: 0.8rem;
+        color: #222;
+        line-height: 1.5;
+        text-align: justify;
+      }
+      .bullets li {
+        margin-bottom: 4px;
+        list-style-type: none;
+        position: relative;
+        padding-left: 20px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        text-align: justify;
+      }
+      .bullets li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        top: -0.2em;
+        font-size: 2.4em;
+        color: #222;
+        line-height: 1;
       }
       .signature-block {
         margin-top: 12px;
@@ -1217,6 +1257,156 @@ const HTML_TEMPLATES = {
       </div>
     </div>
   </body>
+</html>`,
+  page8: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asbestos Clearance Report - Site Plan</title>
+    <link
+      href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Montserrat", Arial, sans-serif;
+        background: #fff;
+      }
+      .page {
+        width: 800px;
+        height: 1130px;
+        margin: 40px auto;
+        background: #fff;
+        box-shadow: 0 4px 32px rgba(0, 0, 0, 0.12);
+        position: relative;
+        padding: 0 0 0 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 16px 48px 0 48px;
+      }
+      .logo {
+        width: 243px;
+        height: auto;
+        display: block;
+        background: #fff;
+      }
+      .company-details {
+        text-align: right;
+        font-size: 0.75rem;
+        color: #222;
+        line-height: 1.5;
+        margin-top: 8px;
+      }
+      .company-details .website {
+        color: #16b12b;
+        font-weight: 500;
+      }
+      .header-line {
+        width: calc(100% - 96px);
+        height: 4px;
+        background: #16b12b;
+        margin: 8px auto 0 auto;
+        border-radius: 2px;
+      }
+      .content {
+        padding: 10px 48px 24px 48px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .section-header {
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 10px 0 10px 0;
+        letter-spacing: 0.01em;
+        color: #222;
+        text-align: center;
+      }
+      .section-header.first-section {
+        margin-top: 18px;
+      }
+      .site-plan-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+      .centered-text {
+        font-size: 1.8rem;
+        text-transform: uppercase;
+        color: #222;
+        text-align: center;
+        letter-spacing: 0.02em;
+      }
+      .appendix-title {
+        font-weight: 700;
+        color: #16b12b;
+      }
+      .photographs-text {
+        font-weight: 400;
+      }
+      .report-content {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 16px;
+        width: calc(100% - 96px);
+        margin: 0 auto;
+        text-align: justify;
+        font-size: 0.75rem;
+        color: #222;
+      }
+      .footer-line {
+        width: 100%;
+        height: 4px;
+        background: #16b12b;
+        margin-bottom: 6px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <img
+          class="logo"
+          src="[LOGO_PATH]"
+          alt="Company Logo"
+        />
+        <div class="company-details">
+          Lancaster & Dickenson Consulting Pty Ltd<br />
+          4/6 Dacre Street<br />
+          Mitchell ACT 2911<br />
+          W: <span class="website">www.landd.com.au</span>
+        </div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        [SITE_PLAN_CONTENT]
+      </div>
+      <div class="footer">
+        <div class="footer-line"></div>
+        [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+      </div>
+    </div>
+  </body>
 </html>`
 };
 
@@ -1227,6 +1417,162 @@ const HTML_TEMPLATES = {
  * @returns {string} - Populated HTML string
  */
 // Function to generate main content pages with overflow detection
+/**
+ * Generate site plan page HTML
+ * @param {Object} data - Clearance data
+ * @param {string} appendixLetter - Appendix letter (B, C, etc.)
+ * @param {string} logoBase64 - Base64 encoded logo
+ * @returns {string} - HTML for site plan page
+ */
+const generateSitePlanPage = (data, appendixLetter = 'B', logoBase64) => {
+  // Determine the file type and create appropriate HTML
+  const fileType = data.sitePlanFile.startsWith('/9j/') ? 'image/jpeg' : 
+                  data.sitePlanFile.startsWith('iVBORw0KGgo') ? 'image/png' : 
+                  'application/pdf';
+  
+  let sitePlanContent = '';
+  
+  if (fileType.startsWith('image/')) {
+    // For images, embed directly with caption
+    sitePlanContent = `
+      <div class="site-plan-container" style="text-align: center; margin-top: 20px;">
+        <img src="data:${fileType};base64,${data.sitePlanFile}" 
+             alt="Site Plan" 
+             style="max-width: 100%; max-height: 60%; object-fit: contain; margin-bottom: 15px;" />
+        <div style="font-size: 14px; font-weight: 600; color: #222; margin-top: 10px;">
+          Figure 1: Asbestos Removal Site Plan
+        </div>
+      </div>
+    `;
+  } else {
+    // For PDFs, show a placeholder (PDFs will be merged separately)
+    sitePlanContent = `
+      <div class="site-plan-content">
+        <div class="centered-text">
+          <div class="appendix-title">APPENDIX ${appendixLetter}</div>
+          <div class="photographs-text">SITE PLAN</div>
+          <div class="site-plan-note">Site plan document attached</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Asbestos Clearance Report - Site Plan</title>
+        <link
+          href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
+          rel="stylesheet"
+        />
+        <style>
+          body {
+            margin: 0;
+            padding: 0;
+            font-family: "Montserrat", Arial, sans-serif;
+            background: #fff;
+          }
+          .page {
+            width: 800px;
+            height: 1130px;
+            margin: 40px auto;
+            background: #fff;
+            box-shadow: 0 4px 32px rgba(0, 0, 0, 0.12);
+            position: relative;
+            padding: 0 0 0 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 16px 48px 0 48px;
+          }
+          .logo {
+            width: 243px;
+            height: auto;
+            display: block;
+            background: #fff;
+          }
+          .company-details {
+            text-align: right;
+            font-size: 0.75rem;
+            color: #222;
+            line-height: 1.5;
+            margin-top: 8px;
+          }
+          .company-details .website {
+            color: #16b12b;
+            font-weight: 500;
+          }
+          .header-line {
+            width: calc(100% - 96px);
+            height: 4px;
+            background: #16b12b;
+            margin: 8px auto 0 auto;
+            border-radius: 2px;
+          }
+          .content {
+            padding: 10px 48px 24px 48px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+          }
+          .footer {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 16px;
+            width: calc(100% - 96px);
+            margin: 0 auto;
+            text-align: justify;
+            font-size: 0.75rem;
+            color: #222;
+          }
+          .footer-line {
+            width: 100%;
+            height: 4px;
+            background: #16b12b;
+            margin-bottom: 6px;
+            border-radius: 2px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="header">
+            <img
+              class="logo"
+              src="data:image/png;base64,${logoBase64}"
+              alt="Company Logo"
+            />
+            <div class="company-details">
+              Lancaster & Dickenson Consulting Pty Ltd<br />
+              4/6 Dacre Street<br />
+              Mitchell ACT 2911<br />
+              W: <span class="website">www.landd.com.au</span>
+            </div>
+          </div>
+          <div class="header-line"></div>
+          <div class="content">
+            ${sitePlanContent}
+          </div>
+          <div class="footer">
+            <div class="footer-line"></div>
+            ${data.clearanceType || 'Non-friable'} Clearance Certificate: ${data.projectId?.name || data.project?.name || 'Unknown Site'}
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
 const generateMainContentPages = async (data) => {
   // Generate the main content (page 4) with overflow detection
   const mainContentTemplate = HTML_TEMPLATES.page4;
@@ -1418,15 +1764,26 @@ const generateMainContentPages = async (data) => {
   }
 };
 
-const populateTemplate = async (htmlTemplate, data) => {
+const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B') => {
   
-  // Fetch template content for non-friable clearance
+  // Determine template type based on clearance type
+  let templateType = 'asbestosClearanceNonFriable'; // default
+  if (data.clearanceType === 'Friable') {
+    templateType = 'asbestosClearanceFriable';
+  }
+  
+  // Fetch template content based on clearance type
   let templateContent = null;
   try {
-    templateContent = await getTemplateByType('asbestosClearanceNonFriable');
-    console.log('Template content fetched successfully');
+    console.log(`[DEBUG] Attempting to fetch template for type: ${templateType}`);
+    templateContent = await getTemplateByType(templateType);
+    console.log(`[DEBUG] Template content fetched successfully for ${templateType}`);
+    console.log(`[DEBUG] Template content has standardSections:`, !!templateContent?.standardSections);
+    if (templateContent?.standardSections) {
+      console.log(`[DEBUG] Available sections:`, Object.keys(templateContent.standardSections));
+    }
   } catch (error) {
-    console.error('Error fetching template content:', error);
+    console.error('[DEBUG] Error fetching template content:', error);
     // Continue with hardcoded content as fallback
   }
 
@@ -1612,10 +1969,10 @@ const populateTemplate = async (htmlTemplate, data) => {
           <div class="photo-details">
             <div class="photo-number">Photograph ${photoNumber}</div>
             <div class="photo-location">
-              Location: ${item.locationDescription || 'Unknown Location'}
+              ${item.locationDescription || 'Unknown Location'}
             </div>
             <div class="photo-materials">
-              Materials Description: ${item.materialDescription || 'Unknown Material'}
+              ${item.materialDescription || 'Unknown Material'}
             </div>
           </div>
         </div>
@@ -1623,17 +1980,31 @@ const populateTemplate = async (htmlTemplate, data) => {
     }).join('');
   };
 
-  const generateAirMonitoringContent = () => {
+  const generateAirMonitoringContent = (appendixLetter = 'B') => {
     // Always show placeholder since the actual report is appended as a separate page
     return `
       <div class="air-monitoring-content">
         <div class="centered-text">
-          <div class="appendix-title">APPENDIX B</div>
+          <div class="appendix-title">APPENDIX ${appendixLetter}</div>
           <div class="photographs-text">AIR MONITORING REPORT</div>
         </div>
       </div>
     `;
   };
+
+  const generateSitePlanContent = (appendixLetter = 'B') => {
+    // Always show placeholder since the actual site plan is appended as a separate page
+    return `
+      <div class="site-plan-content">
+        <div class="centered-text">
+          <div class="appendix-title">APPENDIX ${appendixLetter}</div>
+          <div class="photographs-text">SITE PLAN</div>
+        </div>
+      </div>
+    `;
+  };
+
+
 
   // Debug: Log only the LAA value for troubleshooting
   console.log('[LAA DEBUG] LAA value from clearance:', data.LAA);
@@ -1644,6 +2015,13 @@ const populateTemplate = async (htmlTemplate, data) => {
     '[SITE_NAME]': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
     '[SITE_ADDRESS]': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
     '[PROJECT_ID]': data.projectId?.projectID || data.project?.projectID || data.projectId || 'Unknown Project',
+    '[FILENAME]': (() => {
+      const projectId = data.projectId?.projectID || data.project?.projectID || data.projectId || 'Unknown';
+      const siteName = data.projectId?.name || data.project?.name || data.siteName || 'Unknown';
+      const clearanceDate = data.clearanceDate ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
+      const clearanceType = data.clearanceType || 'Non-friable';
+      return `${projectId}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
+    })(),
     '[CLEARANCE_DATE]': data.clearanceDate 
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
@@ -1652,18 +2030,30 @@ const populateTemplate = async (htmlTemplate, data) => {
     '[ASBESTOS_REMOVALIST]': data.asbestosRemovalist || 'Unknown Removalist',
     '[LAA_NAME]': data.LAA || data.laaName || 'Unknown LAA',
     '[LAA_LICENSE]': laaLicenceNumber,
-    '[INSPECTION_TIME]': 'Inspection Time',
+    '[INSPECTION_TIME]': data.inspectionTime || 'Inspection Time',
     '[INSPECTION_DATE]': data.clearanceDate 
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
     '[REPORT_TYPE]': data.clearanceType || 'Non-friable',
     '[REMOVAL_ITEMS_TABLE]': generateRemovalItemsTable(),
     '[PHOTOGRAPHS_CONTENT]': generatePhotographsContent(),
-    '[AIR_MONITORING_CONTENT]': generateAirMonitoringContent(),
-    // Conditional Appendix B text
-    '[APPENDIX_B_TEXT]': data.airMonitoring 
-      ? 'Photographs of the Asbestos Removal Area and a Site Plan are presented in Appendix A and Appendix B respectively.'
-      : 'Photographs of the Asbestos Removal Area are presented in Appendix A.',
+    '[AIR_MONITORING_CONTENT]': generateAirMonitoringContent(appendixLetter),
+    '[SITE_PLAN_CONTENT]': generateSitePlanContent(appendixLetter),
+    // Dynamic Appendix text based on what's included
+    '[APPENDIX_B_TEXT]': (() => {
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      const hasAirMonitoring = data.airMonitoring;
+      
+      if (hasSitePlan && hasAirMonitoring) {
+        return 'Photographs of the Asbestos Removal Area, Site Plan, and Air Monitoring Report are presented in Appendix A, Appendix B, and Appendix C respectively.';
+      } else if (hasSitePlan) {
+        return 'Photographs of the Asbestos Removal Area and Site Plan are presented in Appendix A and Appendix B respectively.';
+      } else if (hasAirMonitoring) {
+        return 'Photographs of the Asbestos Removal Area and Air Monitoring Report are presented in Appendix A and Appendix B respectively.';
+      } else {
+        return 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
+      }
+    })(),
     
     // Signature placeholder
     '[SIGNATURE_IMAGE]': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : '[SIGNATURE_PLACEHOLDER]',
@@ -1673,8 +2063,14 @@ const populateTemplate = async (htmlTemplate, data) => {
     '[BACKGROUND_INFORMATION_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, data) : 'Background information content not available',
     '[LEGISLATIVE_REQUIREMENTS_TITLE]': templateContent?.standardSections?.legislativeRequirementsTitle || 'Legislative Requirements',
     '[LEGISLATIVE_REQUIREMENTS_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.legislativeRequirementsContent, data) : 'Legislative requirements content not available',
-    '[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE]': templateContent?.standardSections?.nonFriableClearanceCertificateLimitationsTitle || 'Non-Friable Clearance Certificate Limitations',
-    '[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, data) : 'Non-friable clearance certificate limitations content not available',
+    
+    // Handle limitations based on clearance type
+    '[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE]': data.clearanceType === 'Friable' 
+      ? (templateContent?.standardSections?.friableClearanceCertificateLimitationsTitle || 'Friable Clearance Certificate Limitations')
+      : (templateContent?.standardSections?.nonFriableClearanceCertificateLimitationsTitle || 'Non-Friable Clearance Certificate Limitations'),
+    '[NON_FRIABLE_CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT]': data.clearanceType === 'Friable'
+      ? (templateContent ? await replacePlaceholders(templateContent.standardSections.friableClearanceCertificateLimitationsContent, data) : 'Friable clearance certificate limitations content not available')
+      : (templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, data) : 'Non-friable clearance certificate limitations content not available'),
     '[INSPECTION_DETAILS_TITLE]': templateContent?.standardSections?.inspectionDetailsTitle || 'Inspection Details',
     '[INSPECTION_DETAILS_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, data) : 'Inspection details content not available',
     '[INSPECTION_EXCLUSIONS_TITLE]': templateContent?.standardSections?.inspectionExclusionsTitle || 'Inspection Exclusions',
@@ -1682,7 +2078,68 @@ const populateTemplate = async (htmlTemplate, data) => {
     '[CLEARANCE_CERTIFICATION_TITLE]': templateContent?.standardSections?.clearanceCertificationTitle || 'Clearance Certification',
     '[CLEARANCE_CERTIFICATION_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, data) : 'Clearance certification content not available',
     '[SIGN_OFF_CONTENT]': templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, data) : 'Sign-off content not available',
-    '[FOOTER_TEXT]': templateContent ? await replacePlaceholders(templateContent.standardSections.footerText, data) : `${data.clearanceType || 'Non-friable'} Clearance Certificate: ${data.projectId?.name || data.project?.name || 'Unknown Site'}`
+    '[FOOTER_TEXT]': templateContent ? await replacePlaceholders(templateContent.standardSections.footerText, data) : `${data.clearanceType || 'Non-friable'} Clearance Certificate: ${data.projectId?.name || data.project?.name || 'Unknown Site'}`,
+    
+    // Dynamic conditional text based on site plan and air monitoring
+    '[SITE_PLAN_TEXT]': (() => {
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      return hasSitePlan ? 'A site plan of the Asbestos Removal Area is presented in Appendix B.' : '';
+    })(),
+    '[AIR_MONITORING_TEXT]': (() => {
+      const hasAirMonitoring = data.airMonitoring;
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      const appendixLetter = hasSitePlan ? 'C' : 'B';
+      return hasAirMonitoring ? `Results of air monitoring were satisfactory (below the recommended control limit of 0.01 fibres per mL). The air monitoring report for this clearance is presented in Appendix ${appendixLetter} of this report.` : '';
+    })(),
+    // Template service placeholder for appendix references
+    '{APPENDIX_REFERENCES}': (() => {
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      const hasAirMonitoring = data.airMonitoring;
+      
+      console.log('[DEBUG] Appendix references - hasSitePlan:', hasSitePlan, 'hasAirMonitoring:', hasAirMonitoring);
+      
+      if (hasSitePlan && hasAirMonitoring) {
+        const text = 'Photographs of the Asbestos Removal Area, Site Plan, and Air Monitoring Report are presented in Appendix A, Appendix B, and Appendix C respectively.';
+        console.log('[DEBUG] Appendix text (both):', text);
+        return text;
+      } else if (hasSitePlan) {
+        const text = 'Photographs of the Asbestos Removal Area and Site Plan are presented in Appendix A and Appendix B respectively.';
+        console.log('[DEBUG] Appendix text (site plan only):', text);
+        return text;
+      } else if (hasAirMonitoring) {
+        const text = 'Photographs of the Asbestos Removal Area and Air Monitoring Report are presented in Appendix A and Appendix B respectively.';
+        console.log('[DEBUG] Appendix text (air monitoring only):', text);
+        return text;
+      } else {
+        const text = 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
+        console.log('[DEBUG] Appendix text (neither):', text);
+        return text;
+      }
+    })(),
+    '[APPENDIX_REFERENCES]': (() => {
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      const hasAirMonitoring = data.airMonitoring;
+      
+      console.log('[DEBUG] Appendix references (square brackets) - hasSitePlan:', hasSitePlan, 'hasAirMonitoring:', hasAirMonitoring);
+      
+      if (hasSitePlan && hasAirMonitoring) {
+        const text = 'Photographs of the Asbestos Removal Area, Site Plan, and Air Monitoring Report are presented in Appendix A, Appendix B, and Appendix C respectively.';
+        console.log('[DEBUG] Appendix text (both):', text);
+        return text;
+      } else if (hasSitePlan) {
+        const text = 'Photographs of the Asbestos Removal Area and Site Plan are presented in Appendix A and Appendix B respectively.';
+        console.log('[DEBUG] Appendix text (site plan only):', text);
+        return text;
+      } else if (hasAirMonitoring) {
+        const text = 'Photographs of the Asbestos Removal Area and Air Monitoring Report are presented in Appendix A and Appendix B respectively.';
+        console.log('[DEBUG] Appendix text (air monitoring only):', text);
+        return text;
+      } else {
+        const text = 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
+        console.log('[DEBUG] Appendix text (neither):', text);
+        return text;
+      }
+    })(),
   };
 
   let populatedHTML = templateWithLogoPath;
@@ -1844,10 +2301,10 @@ const generatePDFFromHTML = async (templateType, data) => {
               <div class="photo-details">
                 <div class="photo-number">Photograph ${photoNumber}</div>
                 <div class="photo-location">
-                  Location: ${item.locationDescription || 'Unknown Location'}
+                  ${item.locationDescription || 'Unknown Location'}
                 </div>
                 <div class="photo-materials">
-                  Materials Description: ${item.materialDescription || 'Unknown Material'}
+                  ${item.materialDescription || 'Unknown Material'}
                 </div>
               </div>
             </div>
@@ -1861,10 +2318,34 @@ const generatePDFFromHTML = async (templateType, data) => {
       }
     }
     
-    // Add Appendix B (page 7) - only if air monitoring is enabled
-    if (data.airMonitoring) {
-      const populatedAppendixB = await populateTemplate(templates[6], data);
-      pagesContent += `<div class="page-break">${populatedAppendixB}</div>`;
+    // Determine appendix numbering based on what's included
+    const hasSitePlan = data.sitePlan && data.sitePlanFile;
+    const hasAirMonitoring = data.airMonitoring;
+    
+    console.log('[DEBUG] Site plan check:', {
+      sitePlan: data.sitePlan,
+      sitePlanFile: !!data.sitePlanFile,
+      hasSitePlan: hasSitePlan
+    });
+    
+    // Add Site Plan as Appendix B (if present)
+    if (hasSitePlan) {
+      console.log('[DEBUG] Adding site plan page as Appendix B');
+      // Use the new site plan template for cover page
+      const populatedSitePlanTemplate = await populateTemplate(HTML_TEMPLATES.page8, data, 'B');
+      pagesContent += `<div class="page-break">${populatedSitePlanTemplate}</div>`;
+      // Then add the actual site plan content page
+      const sitePlanPage = generateSitePlanPage(data, 'B', logoBase64);
+      pagesContent += `<div class="page-break">${sitePlanPage}</div>`;
+    } else {
+      console.log('[DEBUG] No site plan to add');
+    }
+    
+    // Add Air Monitoring Report as Appendix B or C (depending on site plan presence)
+    if (hasAirMonitoring) {
+      const appendixLetter = hasSitePlan ? 'C' : 'B';
+      const populatedAirMonitoring = await populateTemplate(templates[6], data, appendixLetter);
+      pagesContent += `<div class="page-break">${populatedAirMonitoring}</div>`;
     }
 
     const completeHTML = `
@@ -2010,14 +2491,34 @@ const generatePDFFromHTML = async (templateType, data) => {
         console.log('Merging air monitoring report with clearance PDF...');
         const mergedPdf = await mergePDFs(pdf, data.airMonitoringReport);
         console.log('PDFs merged successfully, new size:', mergedPdf.length);
-        return mergedPdf;
+        return mergedPdf; // Return merged PDF immediately
       } catch (error) {
         console.error('Error merging PDFs:', error);
         console.log('Returning original PDF without air monitoring report');
-        return pdf;
       }
     } else {
       console.log('No air monitoring report found in data');
+    }
+
+    // If there's a site plan PDF, merge it with the generated PDF
+    if (data.sitePlan && data.sitePlanFile && !data.sitePlanFile.startsWith('/9j/') && !data.sitePlanFile.startsWith('iVBORw0KGgo')) {
+      console.log('=== SITE PLAN PDF DEBUG ===');
+      console.log('sitePlanFile exists:', !!data.sitePlanFile);
+      console.log('sitePlanFile type:', typeof data.sitePlanFile);
+      console.log('sitePlanFile length:', data.sitePlanFile ? data.sitePlanFile.length : 'N/A');
+      
+      try {
+        console.log('Merging site plan PDF with clearance PDF...');
+        const mergedPdf = await mergePDFs(pdf, data.sitePlanFile);
+        console.log('PDFs merged successfully, new size:', mergedPdf.length);
+        return mergedPdf;
+      } catch (error) {
+        console.error('Error merging site plan PDFs:', error);
+        console.log('Returning PDF without site plan');
+        return pdf;
+      }
+    } else {
+      console.log('No site plan PDF found in data or site plan is an image');
     }
     
     return pdf;
