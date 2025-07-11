@@ -27,5 +27,8 @@
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
+  },
+  "config": {
+    "puppeteer_skip_chromium_download": "true"
   }
 }
