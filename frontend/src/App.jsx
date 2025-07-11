@@ -33,6 +33,8 @@ import GraticulePage from "./scenes/calibrations/air-mon-calibrations/pages/Grat
 import PrimaryFlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/PrimaryFlowmeterPage";
 import EquipmentList from "./scenes/calibrations/EquipmentList.jsx";
 import FibreIdAnalysis from "./scenes/fibreID/AnalysisPage.jsx";
+import AssessmentJobsPage from "./scenes/assessments";
+import AssessmentItemsPage from "./scenes/assessments/AssessmentItems";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
@@ -588,6 +590,26 @@ function App() {
                               requiredPermissions={["fibre.view"]}
                             >
                               <FibreIdAnalysis />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/assessments"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <AssessmentJobsPage />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/assessments/:id/items"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <AssessmentItemsPage />
                             </PermissionRoute>
                           }
                         />

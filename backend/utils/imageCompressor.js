@@ -72,49 +72,51 @@ async function compressBase64Image(base64String, targetSizeKB = 100, maxWidth = 
     
     console.log('Original dimensions:', originalWidth, 'x', originalHeight);
     
-    // Resize if needed
-    if (originalWidth > maxWidth || originalHeight > maxHeight) {
-      // Ensure maxWidth and maxHeight are valid numbers
-      const validMaxWidth = typeof maxWidth === 'number' && maxWidth > 0 ? maxWidth : 800;
-      const validMaxHeight = typeof maxHeight === 'number' && maxHeight > 0 ? maxHeight : 600;
-      
-      try {
-        image.scaleToFit(validMaxWidth, validMaxHeight);
-        console.log('Resized to:', image.bitmap.width, 'x', image.bitmap.height);
-      } catch (resizeError) {
-        console.error('Error resizing image:', resizeError);
-        // Continue without resizing
-      }
-    }
-
-    // Always convert to JPEG for compression
-    let quality = 90; // Start with high quality
+    // Simple compression: just convert to JPEG with lower quality
+    // Skip resizing since the Jimp resize API is broken
+    let quality = 70; // Start with lower quality for better compression
     let compressedBuffer;
     let compressedBase64;
     let currentSizeKB;
-    let tempImage = image;
 
-    do {
-      // Type check for Jimp image
-      if (!tempImage || typeof tempImage.getBufferAsync !== 'function') {
-        console.warn('tempImage is not a valid Jimp image. Skipping compression.');
-        return base64String;
-      }
-      // Convert to JPEG buffer
-      compressedBuffer = await tempImage.getBufferAsync(Jimp.MIME_JPEG);
-      // Reload as Jimp image to apply quality
-      tempImage = await Jimp.read(compressedBuffer);
-      tempImage.quality(quality);
-      compressedBuffer = await tempImage.getBufferAsync(Jimp.MIME_JPEG);
+    try {
+      // Try to get buffer with quality parameter
+      compressedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG, quality);
       compressedBase64 = compressedBuffer.toString('base64');
       currentSizeKB = Math.round(compressedBase64.length * 0.75 / 1024);
       console.log(`Quality ${quality}% -> ${currentSizeKB}KB`);
-      quality -= 10;
-      if (quality < 10) {
-        console.log('Reached minimum quality (10%)');
-        break;
+      
+      // If still too large, try even lower quality
+      if (currentSizeKB > targetSizeKB && quality > 30) {
+        quality = 50;
+        compressedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG, quality);
+        compressedBase64 = compressedBuffer.toString('base64');
+        currentSizeKB = Math.round(compressedBase64.length * 0.75 / 1024);
+        console.log(`Quality ${quality}% -> ${currentSizeKB}KB`);
       }
-    } while (currentSizeKB > targetSizeKB);
+      
+      // If still too large, try minimum quality
+      if (currentSizeKB > targetSizeKB && quality > 20) {
+        quality = 30;
+        compressedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG, quality);
+        compressedBase64 = compressedBuffer.toString('base64');
+        currentSizeKB = Math.round(compressedBase64.length * 0.75 / 1024);
+        console.log(`Quality ${quality}% -> ${currentSizeKB}KB`);
+      }
+      
+    } catch (qualityError) {
+      console.error('Error applying quality:', qualityError);
+      // If quality setting fails, just use the current image without quality parameter
+      try {
+        compressedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG);
+        compressedBase64 = compressedBuffer.toString('base64');
+        currentSizeKB = Math.round(compressedBase64.length * 0.75 / 1024);
+        console.log(`Using default quality -> ${currentSizeKB}KB`);
+      } catch (bufferError) {
+        console.error('Error getting buffer:', bufferError);
+        return base64String;
+      }
+    }
 
     const compressedMimeType = 'image/jpeg';
     console.log('Final compressed base64 length:', compressedBase64.length);

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const AsbestosClearance = require("../models/AsbestosClearance");
+const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 
@@ -85,17 +85,20 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, jobSpecificExclusions, notes } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
       clearanceDate,
+      inspectionTime,
       status: status || "in progress",
       clearanceType,
       LAA,
       asbestosRemovalist,
       airMonitoring: airMonitoring || false,
       airMonitoringReport: airMonitoringReport || null,
+      sitePlan: sitePlan || false,
+      sitePlanFile: sitePlanFile || null,
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
       createdBy: req.user.id,
@@ -124,7 +127,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, jobSpecificExclusions, notes } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -133,12 +136,15 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 
     clearance.projectId = projectId || clearance.projectId;
     clearance.clearanceDate = clearanceDate || clearance.clearanceDate;
+    clearance.inspectionTime = inspectionTime || clearance.inspectionTime;
     clearance.status = status || clearance.status;
     clearance.clearanceType = clearanceType || clearance.clearanceType;
     clearance.LAA = LAA || clearance.LAA;
     clearance.asbestosRemovalist = asbestosRemovalist || clearance.asbestosRemovalist;
     clearance.airMonitoring = airMonitoring !== undefined ? airMonitoring : clearance.airMonitoring;
     clearance.airMonitoringReport = airMonitoringReport !== undefined ? airMonitoringReport : clearance.airMonitoringReport;
+    clearance.sitePlan = sitePlan !== undefined ? sitePlan : clearance.sitePlan;
+    clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
     clearance.updatedBy = req.user.id;

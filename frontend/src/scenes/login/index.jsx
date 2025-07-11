@@ -155,7 +155,7 @@ const Login = () => {
 
         <form onSubmit={handleSubmit}>
           <TextField
-            label="Email"
+            label=""
             type="email"
             fullWidth
             value={email}
@@ -164,7 +164,7 @@ const Login = () => {
             margin="normal"
           />
           <TextField
-            label="Password"
+            label=""
             type={showPassword ? "text" : "password"}
             fullWidth
             value={password}

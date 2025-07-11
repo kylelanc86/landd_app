@@ -30,7 +30,7 @@ const SurveysDashboard = () => {
       icon: (
         <HomeIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
       ),
-      path: "/surveys/asbestos",
+      path: "/assessments", // changed from /surveys/asbestos
       requiredPermission: "asbestos.view",
     },
     {

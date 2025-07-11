@@ -21,8 +21,12 @@ const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
 const asbestosRemovalJobRoutes = require('./routes/asbestosRemovalJobs');
-const reportTemplateRoutes = require('./routes/reportTemplates');
+
+const asbestosClearanceTemplateRoutes = require('./routes/asbestosClearanceTemplates');
+const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates');
+const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
 const pdfRoutes = require('./routes/pdf');
+const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 
 // Load environment variables
 dotenv.config();
@@ -115,9 +119,15 @@ connectDB()
     app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
     app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
     app.use('/api/asbestos-removal-jobs', asbestosRemovalJobRoutes);
-    app.use('/api/report-templates', reportTemplateRoutes);
+
+    app.use('/api/asbestos-clearance-templates', asbestosClearanceTemplateRoutes);
+    app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
+    app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
 
+    const requireAuth = require('./middleware/auth');
+    app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);
+    
     // Error handling middleware
     app.use((err, req, res, next) => {
       console.error('=== Error Details ===');

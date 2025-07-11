@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asbestos Clearance Report - Version Control</title>
+    <link
+      href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Montserrat", Arial, sans-serif;
+        background: #fff;
+      }
+      .page {
+        width: 800px;
+        height: 1130px;
+        margin: 40px auto;
+        background: #fff;
+        box-shadow: 0 4px 32px rgba(0, 0, 0, 0.12);
+        position: relative;
+        padding: 0 0 0 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 16px 48px 0 48px;
+      }
+      .logo {
+        width: 243px;
+        height: auto;
+        display: block;
+        background: #fff;
+      }
+      .company-details {
+        text-align: right;
+        font-size: 0.75rem;
+        color: #222;
+        line-height: 1.5;
+        margin-top: 8px;
+      }
+      .company-details .website {
+        color: #16b12b;
+        font-weight: 500;
+      }
+      .green-line {
+        width: calc(100% - 96px);
+        height: 4px;
+        background: #16b12b;
+        margin: 8px auto 0 auto;
+        border-radius: 2px;
+      }
+      .content {
+        padding: 10px 48px 24px 48px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .title {
+        font-size: 1.35rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 40px 0 0 0;
+        letter-spacing: 0.01em;
+      }
+      .address {
+        font-size: 1.1rem;
+        margin: 8px 0 32px 0;
+        color: #222;
+      }
+      .section {
+        margin-bottom: 24px;
+      }
+      .section-label {
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        color: #222;
+      }
+      .section-content {
+        font-size: 0.8rem;
+        color: #222;
+        line-height: 1.5;
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+      .table th,
+      .table td {
+        border: 1px solid #ddd;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        text-align: left;
+      }
+      .table th {
+        background: #f5f5f5;
+        font-weight: 700;
+      }
+      .footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 16px;
+        width: calc(100% - 96px);
+        margin: 0 auto;
+        text-align: justify;
+        font-size: 0.75rem;
+        color: #222;
+      }
+      .footer-line {
+        width: 100%;
+        height: 4px;
+        background: #16b12b;
+        margin-bottom: 6px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="/frontend/public/logo.png" alt="Company Logo" />
+        <div class="company-details">
+          Lancaster & Dickenson Consulting Pty Ltd<br />
+          4/6 Dacre Street<br />
+          Mitchell ACT 2911<br />
+          W: <span class="website">www.landd.com.au</span>
+        </div>
+      </div>
+      <div class="green-line"></div>
+      <div class="content">
+        <div class="title">FRIABLE REMOVAL CLEARANCE CERTIFICATE</div>
+        <div class="address">12 Arndell St, Macquarie ACT 2614, Australia</div>
+
+        <div class="section">
+          <div class="section-label">PREPARED FOR:</div>
+          <div class="section-content">
+            Client Name<br />
+            Client Address<br />
+            Contact Information
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">PREPARED BY:</div>
+          <div class="section-content">
+            Lancaster & Dickenson Consulting Pty Ltd<br />
+            4/6 Dacre Street, Mitchell ACT 2911<br />
+            enquiries@landd.com.au<br />
+            (02) 6241 2779
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">DOCUMENT DETAILS</div>
+          <div class="section-content">
+            <table class="table">
+              <tr>
+                <th>Document Type</th>
+                <td>Asbestos Clearance Certificate</td>
+              </tr>
+              <tr>
+                <th>Project Reference</th>
+                <td>LDJ04512</td>
+              </tr>
+              <tr>
+                <th>Site Address</th>
+                <td>12 Arndell St, Macquarie ACT 2614, Australia</td>
+              </tr>
+              <tr>
+                <th>Clearance Date</th>
+                <td>27/06/2025</td>
+              </tr>
+              <tr>
+                <th>Report Date</th>
+                <td>27/06/2025</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-label">REVISION HISTORY</div>
+          <div class="section-content">
+            <table class="table">
+              <tr>
+                <th>Version</th>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Author</th>
+              </tr>
+              <tr>
+                <td>1.0</td>
+                <td>27/06/2025</td>
+                <td>Initial Issue</td>
+                <td>L&D Consulting</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="footer-line"></div>
+        Friable Clearance Certificate: 12 Arndell St, Macquarie ACT 2614,
+        Australia
+      </div>
+    </div>
+  </body>
+</html>

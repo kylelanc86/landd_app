@@ -84,6 +84,9 @@ const ClearanceItems = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [savingExclusions, setSavingExclusions] = useState(false);
   const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
+  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
+  const [sitePlanFile, setSitePlanFile] = useState(null);
+  const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
@@ -501,6 +504,97 @@ const ClearanceItems = () => {
     }
   };
 
+  const handleSitePlanFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setSitePlanFile(file);
+    }
+  };
+
+  const handleUploadSitePlan = async () => {
+    if (!sitePlanFile) {
+      setSnackbar({
+        open: true,
+        message: "Please select a file first",
+        severity: "error",
+      });
+      return;
+    }
+
+    try {
+      setUploadingSitePlan(true);
+
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          // Extract just the base64 data from the data URL
+          const dataUrl = event.target.result;
+          const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
+
+          // Update the clearance with the site plan file
+          await asbestosClearanceService.update(clearanceId, {
+            sitePlanFile: base64Data,
+          });
+
+          setSnackbar({
+            open: true,
+            message: "Site plan uploaded successfully",
+            severity: "success",
+          });
+
+          setSitePlanDialogOpen(false);
+          setSitePlanFile(null);
+          fetchData(); // Refresh clearance data
+        } catch (error) {
+          console.error("Error uploading site plan:", error);
+          setSnackbar({
+            open: true,
+            message: "Failed to upload site plan",
+            severity: "error",
+          });
+        } finally {
+          setUploadingSitePlan(false);
+        }
+      };
+      reader.readAsDataURL(sitePlanFile);
+    } catch (error) {
+      console.error("Error processing site plan file:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to process site plan file",
+        severity: "error",
+      });
+      setUploadingSitePlan(false);
+    }
+  };
+
+  const handleRemoveSitePlan = async () => {
+    if (window.confirm("Are you sure you want to remove the site plan?")) {
+      try {
+        // Update the clearance to remove the site plan file
+        await asbestosClearanceService.update(clearanceId, {
+          sitePlanFile: null,
+        });
+
+        setSnackbar({
+          open: true,
+          message: "Site plan removed successfully",
+          severity: "success",
+        });
+
+        fetchData(); // Refresh clearance data
+      } catch (error) {
+        console.error("Error removing site plan:", error);
+        setSnackbar({
+          open: true,
+          message: "Failed to remove site plan",
+          severity: "error",
+        });
+      }
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -596,6 +690,41 @@ const ClearanceItems = () => {
                 startIcon={<DeleteIcon />}
               >
                 Remove Report
+              </Button>
+            )}
+          </Box>
+        )}
+
+        {/* Site Plan Buttons */}
+        {clearance?.sitePlan && (
+          <Box display="flex" gap={2} sx={{ mt: 2 }} alignItems="center">
+            {clearance.sitePlanFile && (
+              <Typography
+                variant="body2"
+                color="success.main"
+                sx={{ fontWeight: "medium" }}
+              >
+                ✓ Site Plan Attached
+              </Typography>
+            )}
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => setSitePlanDialogOpen(true)}
+              startIcon={<UploadIcon />}
+            >
+              {clearance.sitePlanFile
+                ? "Replace Site Plan"
+                : "Upload Site Plan"}
+            </Button>
+            {clearance.sitePlanFile && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleRemoveSitePlan}
+                startIcon={<DeleteIcon />}
+              >
+                Remove Site Plan
               </Button>
             )}
           </Box>
@@ -1013,6 +1142,68 @@ const ClearanceItems = () => {
           <DialogActions>
             <Button onClick={() => setAirMonitoringReportsDialogOpen(false)}>
               Cancel
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Site Plan Upload Dialog */}
+        <Dialog
+          open={sitePlanDialogOpen}
+          onClose={() => setSitePlanDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Upload Site Plan</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Upload a site plan file (PDF, JPG, or PNG). This will be
+                included in the clearance report as Appendix B.
+              </Typography>
+
+              <Box sx={{ mb: 2 }}>
+                <input
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  style={{ display: "none" }}
+                  id="site-plan-file-upload"
+                  type="file"
+                  onChange={handleSitePlanFileUpload}
+                />
+                <label htmlFor="site-plan-file-upload">
+                  <Button
+                    variant="outlined"
+                    component="span"
+                    startIcon={<UploadIcon />}
+                    fullWidth
+                  >
+                    {sitePlanFile ? sitePlanFile.name : "Choose Site Plan File"}
+                  </Button>
+                </label>
+              </Box>
+
+              {sitePlanFile && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Selected file: {sitePlanFile.name} (
+                  {(sitePlanFile.size / 1024 / 1024).toFixed(2)} MB)
+                </Alert>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSitePlanDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleUploadSitePlan}
+              variant="contained"
+              disabled={!sitePlanFile || uploadingSitePlan}
+              startIcon={
+                uploadingSitePlan ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <UploadIcon />
+                )
+              }
+            >
+              {uploadingSitePlan ? "Uploading..." : "Upload Site Plan"}
             </Button>
           </DialogActions>
         </Dialog>

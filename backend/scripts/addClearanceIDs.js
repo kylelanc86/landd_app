@@ -27,7 +27,7 @@ db.once("open", async () => {
     console.log(`Found ${clearanceCount} asbestos clearance documents`);
 
     // Check if asbestos clearance reports collection exists
-    const reportCollection = database.collection("asbestosclearancereports");
+    const reportCollection = database.collection("asbestosclearanceitems");
     const reportCount = await reportCollection.countDocuments();
     console.log(`Found ${reportCount} asbestos clearance report documents`);
 

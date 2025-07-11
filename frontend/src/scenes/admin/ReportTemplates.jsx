@@ -119,64 +119,120 @@ const ReportTemplates = () => {
     },
   ];
 
-  // Sample data for preview
-  const sampleData = {
-    CLIENT_NAME: "Sample Client Pty Ltd",
-    ASBESTOS_TYPE: "non-friable",
-    SITE_NAME: "123 Sample Street, Canberra ACT",
-    ASBESTOS_REMOVALIST: "Professional Asbestos Removal",
-    LAA_NAME: "Patrick Cerone",
-    LAA_LICENSE: "AA00031",
-    INSPECTION_TIME: "09:00 AM",
-    INSPECTION_DATE: "25 July 2024",
-    REPORT_TYPE: "Non-friable",
-    PROJECT_NAME: "Sample Asbestos Removal Project",
-    PROJECT_NUMBER: "PRJ-2024-001",
-    SITE_ADDRESS: "123 Sample Street, Canberra ACT 2600",
-    CLEARANCE_DATE: "25 July 2024",
-    CLEARANCE_TIME: "09:00 AM",
+  // Template sections organized by page for detailed editing
+  const getTemplateSections = (templateType) => {
+    // Asbestos clearance templates (both non-friable and friable)
+    if (
+      templateType === "asbestosClearanceNonFriable" ||
+      templateType === "asbestosClearanceFriable"
+    ) {
+      const baseSections = {
+        "Background Information": [
+          "backgroundInformationTitle",
+          "backgroundInformationContent",
+        ],
+        "Legislative Requirements": [
+          "legislativeRequirementsTitle",
+          "legislativeRequirementsContent",
+        ],
+        "Inspection Details": [
+          "inspectionDetailsTitle",
+          "inspectionDetailsContent",
+        ],
+        "Inspection Exclusions": [
+          "inspectionExclusionsTitle",
+          "inspectionExclusionsContent",
+        ],
+        "Clearance Certification": [
+          "clearanceCertificationTitle",
+          "clearanceCertificationContent",
+        ],
+        "Sign-off": ["signOffContent"],
+        Footer: ["footerText"],
+      };
+
+      // Add template-specific limitations sections
+      if (templateType === "asbestosClearanceNonFriable") {
+        baseSections["Non-Friable Clearance Certificate Limitations"] = [
+          "nonFriableClearanceCertificateLimitationsTitle",
+          "nonFriableClearanceCertificateLimitationsContent",
+        ];
+      } else if (templateType === "asbestosClearanceFriable") {
+        baseSections["Friable Clearance Certificate Limitations"] = [
+          "friableClearanceCertificateLimitationsTitle",
+          "friableClearanceCertificateLimitationsContent",
+        ];
+      }
+
+      return baseSections;
+    }
+
+    // Lead assessment template
+    if (templateType === "leadAssessment") {
+      return {
+        "Executive Summary": [
+          "executiveSummaryTitle",
+          "executiveSummaryContent",
+        ],
+        "Site Description": ["siteDescriptionTitle", "siteDescriptionContent"],
+        "Assessment Methodology": [
+          "assessmentMethodologyTitle",
+          "assessmentMethodologyContent",
+        ],
+        "Sampling Results": ["samplingResultsTitle", "samplingResultsContent"],
+        "Risk Assessment": ["riskAssessmentTitle", "riskAssessmentContent"],
+        Recommendations: ["recommendationsTitle", "recommendationsContent"],
+        Conclusion: ["conclusionTitle", "conclusionContent"],
+        Footer: ["footerText"],
+      };
+    }
+
+    // Asbestos assessment template
+    if (templateType === "asbestosAssessment") {
+      return {
+        Introduction: ["introductionTitle", "introductionContent"],
+        "Survey Findings": ["surveyFindingsTitle", "surveyFindingsContent"],
+        "Discussion and Conclusions": ["discussionTitle", "discussionContent"],
+        "Risk Assessment": ["riskAssessmentTitle", "riskAssessmentContent"],
+        "Determining Suitable Control Measures": [
+          "controlMeasuresTitle",
+          "controlMeasuresContent",
+        ],
+        "Requirements for Remediation/Removal Works Involving ACM": [
+          "remediationRequirementsTitle",
+          "remediationRequirementsContent",
+        ],
+        Legislation: ["legislationTitle", "legislationContent"],
+        "Assessment Limitations/Caveats": [
+          "assessmentLimitationsTitle",
+          "assessmentLimitationsContent",
+        ],
+        "Sign-off": ["signOffContent"],
+        Signature: ["signaturePlaceholder"],
+        Footer: ["footerText"],
+      };
+    }
+
+    // Default empty sections for unknown template types
+    return {};
   };
 
-  // Template sections organized by page for detailed editing
-  const templateSections = {
-    "Background Information": [
-      "backgroundInformationTitle",
-      "backgroundInformationContent",
-    ],
-    "Legislative Requirements": [
-      "legislativeRequirementsTitle",
-      "legislativeRequirementsContent",
-    ],
-    "Non-Friable Clearance Certificate Limitations": [
-      "nonFriableClearanceCertificateLimitationsTitle",
-      "nonFriableClearanceCertificateLimitationsContent",
-    ],
-    "Inspection Details": [
-      "inspectionDetailsTitle",
-      "inspectionDetailsContent",
-    ],
-    "Inspection Exclusions": [
-      "inspectionExclusionsTitle",
-      "inspectionExclusionsContent",
-    ],
-    "Clearance Certification": [
-      "clearanceCertificationTitle",
-      "clearanceCertificationContent",
-    ],
-    "Sign-off": ["signOffContent"],
-    Footer: ["footerText"],
-  };
+  // State for template sections
+  const [templateSections, setTemplateSections] = useState({});
 
   // Load templates on component mount
   useEffect(() => {
     const loadTemplates = async () => {
       try {
         setLoading(true);
-        // Remove automatic initialization to prevent overwriting custom changes
-        // await reportTemplateService.initializeDefaultTemplates();
 
         // Load all templates
         const allTemplates = await reportTemplateService.getAllTemplates();
+        console.log("Loaded templates:", allTemplates);
+        console.log(
+          "Template types found:",
+          allTemplates.map((t) => t.templateType)
+        );
 
         // Convert array to object with templateType as key
         const templatesObj = {};
@@ -184,10 +240,12 @@ const ReportTemplates = () => {
           templatesObj[template.templateType] = template;
         });
 
+        console.log("Templates object:", templatesObj);
+        console.log("Available template types:", Object.keys(templatesObj));
         setTemplates(templatesObj);
 
-        // Set initial preview data
-        setPreviewData(sampleData);
+        // Set initial preview data (empty for template content)
+        setPreviewData({});
       } catch (error) {
         console.error("Error loading templates:", error);
         setSaveStatus({
@@ -203,8 +261,17 @@ const ReportTemplates = () => {
     loadTemplates();
   }, []);
 
+  // Update template sections when selected template changes
+  useEffect(() => {
+    const sections = getTemplateSections(selectedTemplate);
+    console.log("Setting template sections for:", selectedTemplate, sections);
+    setTemplateSections(sections);
+  }, [selectedTemplate]);
+
   const handleTemplateChange = (event) => {
-    setSelectedTemplate(event.target.value);
+    const newTemplateType = event.target.value;
+    setSelectedTemplate(newTemplateType);
+    setPreviewData({});
   };
 
   const handleEdit = (section, data) => {
@@ -282,10 +349,16 @@ const ReportTemplates = () => {
   const handleDetailedSave = async () => {
     try {
       const currentTemplate = selectedTemplate;
+      const template = templates[currentTemplate];
+
+      // Determine which section key to use based on template type
+      const sectionKey = template.standardSections
+        ? "standardSections"
+        : "leadAssessmentSections";
 
       // Update template via API
       await reportTemplateService.updateTemplate(currentTemplate, {
-        standardSections: {
+        [sectionKey]: {
           [editingSection]: editData,
         },
       });
@@ -295,8 +368,8 @@ const ReportTemplates = () => {
         ...prev,
         [currentTemplate]: {
           ...prev[currentTemplate],
-          standardSections: {
-            ...prev[currentTemplate]?.standardSections,
+          [sectionKey]: {
+            ...prev[currentTemplate]?.[sectionKey],
             [editingSection]: editData,
           },
         },
@@ -467,6 +540,12 @@ const ReportTemplates = () => {
   const renderDetailedTemplateSection = (sectionName, fields) => {
     const currentTemplate = selectedTemplate;
     const template = templates[currentTemplate];
+    console.log("renderDetailedTemplateSection called with:", {
+      sectionName,
+      fields,
+      currentTemplate,
+      template: !!template,
+    });
     if (!template) return null;
 
     return (
@@ -879,10 +958,10 @@ const ReportTemplates = () => {
 
   const renderAvailablePlaceholders = () => {
     // Available placeholders for reference
-    const availablePlaceholders = [
-      "CLIENT_NAME",
+    const basePlaceholders = ["CLIENT_NAME", "SITE_NAME", "SITE_ADDRESS"];
+
+    const asbestosPlaceholders = [
       "ASBESTOS_TYPE",
-      "SITE_NAME",
       "ASBESTOS_REMOVALIST",
       "LAA_NAME",
       "LAA_LICENSE",
@@ -891,11 +970,47 @@ const ReportTemplates = () => {
       "REPORT_TYPE",
       "PROJECT_NAME",
       "PROJECT_NUMBER",
-      "SITE_ADDRESS",
       "CLEARANCE_DATE",
       "CLEARANCE_TIME",
       "SIGNATURE_IMAGE",
     ];
+
+    const leadPlaceholders = [
+      "BUILDING_DESCRIPTION",
+      "CONSTRUCTION_YEAR",
+      "NUMBER_OF_SAMPLES",
+      "NUMBER_OF_ISSUES",
+      "REPORT_DATE",
+      "ASSESSOR_NAME",
+      "ASSESSOR_LICENSE",
+    ];
+
+    const asbestosAssessmentPlaceholders = [
+      "LAA_NAME",
+      "LAA_LICENSE",
+      "ASSESSMENT_DATE",
+      "ASSESSMENT_SCOPE_BULLETS",
+      "IDENTIFIED_ASBESTOS_ITEMS",
+      "PROJECT_NAME",
+      "PROJECT_NUMBER",
+    ];
+
+    // Determine which placeholders to show based on selected template
+    let availablePlaceholders = basePlaceholders;
+
+    if (
+      selectedTemplate === "asbestosClearanceNonFriable" ||
+      selectedTemplate === "asbestosClearanceFriable"
+    ) {
+      availablePlaceholders = [...basePlaceholders, ...asbestosPlaceholders];
+    } else if (selectedTemplate === "leadAssessment") {
+      availablePlaceholders = [...basePlaceholders, ...leadPlaceholders];
+    } else if (selectedTemplate === "asbestosAssessment") {
+      availablePlaceholders = [
+        ...basePlaceholders,
+        ...asbestosAssessmentPlaceholders,
+      ];
+    }
 
     return (
       <Grid item xs={12}>
@@ -994,7 +1109,7 @@ const ReportTemplates = () => {
           </Card>
         </Grid>
 
-        {/* Standard Sections */}
+        {/* Template Sections */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
@@ -1007,49 +1122,54 @@ const ReportTemplates = () => {
                 }}
               >
                 <Typography variant="h6" color="black">
-                  Standard Sections
+                  Template Sections
                 </Typography>
                 <IconButton
-                  onClick={() =>
-                    handleEdit(
-                      "standardSections",
-                      template.standardSections || {}
-                    )
-                  }
+                  onClick={() => {
+                    const sections =
+                      template.standardSections ||
+                      template.leadAssessmentSections ||
+                      {};
+                    const sectionKey = template.standardSections
+                      ? "standardSections"
+                      : "leadAssessmentSections";
+                    handleEdit(sectionKey, sections);
+                  }}
                   size="small"
                 >
                   <EditIcon />
                 </IconButton>
               </Box>
               <Grid container spacing={2}>
-                {template.standardSections &&
-                  Object.entries(template.standardSections).map(
-                    ([key, value]) => (
-                      <Grid item xs={12} md={6} key={key}>
-                        <Box
-                          sx={{
-                            p: 2,
-                            border: `1px solid ${colors.grey[700]}`,
-                            borderRadius: 1,
-                          }}
+                {(template.standardSections ||
+                  template.leadAssessmentSections) &&
+                  Object.entries(
+                    template.standardSections || template.leadAssessmentSections
+                  ).map(([key, value]) => (
+                    <Grid item xs={12} md={6} key={key}>
+                      <Box
+                        sx={{
+                          p: 2,
+                          border: `1px solid ${colors.grey[700]}`,
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle2"
+                          color="black"
+                          sx={{ mb: 1 }}
                         >
-                          <Typography
-                            variant="subtitle2"
-                            color="black"
-                            sx={{ mb: 1 }}
-                          >
-                            {key.charAt(0).toUpperCase() +
-                              key.slice(1).replace(/([A-Z])/g, " $1")}
-                          </Typography>
-                          <Typography variant="body2" color="black">
-                            {value.length > 150
-                              ? `${value.substring(0, 150)}...`
-                              : value}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    )
-                  )}
+                          {key.charAt(0).toUpperCase() +
+                            key.slice(1).replace(/([A-Z])/g, " $1")}
+                        </Typography>
+                        <Typography variant="body2" color="black">
+                          {value && value.length > 150
+                            ? `${value.substring(0, 150)}...`
+                            : value}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  ))}
               </Grid>
             </CardContent>
           </Card>
@@ -1168,9 +1288,19 @@ const ReportTemplates = () => {
               {showPreview && renderPreview()}
 
               {/* Detailed Template Sections */}
-              {Object.entries(templateSections).map(([sectionName, fields]) =>
-                renderDetailedTemplateSection(sectionName, fields)
+              {console.log(
+                "Rendering template sections:",
+                Object.entries(templateSections)
               )}
+              {Object.entries(templateSections).map(([sectionName, fields]) => {
+                console.log(
+                  "Rendering section:",
+                  sectionName,
+                  "with fields:",
+                  fields
+                );
+                return renderDetailedTemplateSection(sectionName, fields);
+              })}
             </Grid>
           )}
         </Box>

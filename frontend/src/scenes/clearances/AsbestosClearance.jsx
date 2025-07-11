@@ -30,6 +30,7 @@ import {
   Card,
   CardContent,
   Snackbar,
+  Autocomplete,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
@@ -38,6 +39,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import TodayIcon from "@mui/icons-material/Today";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import { projectService, userService } from "../../services/api";
@@ -80,12 +82,14 @@ const AsbestosClearance = () => {
   const [form, setForm] = useState({
     projectId: "",
     clearanceDate: "",
+    inspectionTime: "",
     clearanceType: "Non-friable",
     LAA: "",
     asbestosRemovalist: "",
     airMonitoring: false,
     airMonitoringReport: null,
-    jobSpecificExclusions: "",
+    sitePlan: false,
+    sitePlanFile: null,
     notes: "",
   });
 
@@ -194,12 +198,14 @@ const AsbestosClearance = () => {
       clearanceDate: clearance.clearanceDate
         ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
         : "",
+      inspectionTime: clearance.inspectionTime || "",
       clearanceType: clearance.clearanceType,
       LAA: clearance.LAA,
       asbestosRemovalist: clearance.asbestosRemovalist,
       airMonitoring: clearance.airMonitoring || false,
       airMonitoringReport: clearance.airMonitoringReport || null,
-      jobSpecificExclusions: clearance.jobSpecificExclusions || "",
+      sitePlan: clearance.sitePlan || false,
+      sitePlanFile: clearance.sitePlanFile || null,
       notes: clearance.notes || "",
     });
     setDialogOpen(true);
@@ -272,14 +278,36 @@ const AsbestosClearance = () => {
     setForm({
       projectId: "",
       clearanceDate: "",
+      inspectionTime: roundTimeToNearest5Minutes(),
       clearanceType: "Non-friable",
       LAA: "",
       asbestosRemovalist: "",
       airMonitoring: false,
       airMonitoringReport: null,
-      jobSpecificExclusions: "",
+      sitePlan: false,
+      sitePlanFile: null,
       notes: "",
     });
+  };
+
+  const setDateToToday = () => {
+    const today = new Date().toISOString().split("T")[0];
+    setForm({ ...form, clearanceDate: today });
+  };
+
+  const roundTimeToNearest5Minutes = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = Math.round(minutes / 5) * 5;
+    now.setMinutes(roundedMinutes);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    return now.toTimeString().slice(0, 5); // Returns HH:MM format
+  };
+
+  const setTimeToNow = () => {
+    const currentTime = roundTimeToNearest5Minutes();
+    setForm({ ...form, inspectionTime: currentTime });
   };
 
   const getStatusColor = (status) => {
@@ -388,7 +416,6 @@ const AsbestosClearance = () => {
                       <TableCell>Clearance Date</TableCell>
                       <TableCell>Project Name</TableCell>
                       <TableCell>Type</TableCell>
-                      <TableCell>Air Monitoring</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Actions</TableCell>
                     </TableRow>
@@ -415,15 +442,6 @@ const AsbestosClearance = () => {
                             {getProjectDisplayName(clearance.projectId)}
                           </TableCell>
                           <TableCell>{clearance.clearanceType}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={clearance.airMonitoring ? "Yes" : "No"}
-                              color={
-                                clearance.airMonitoring ? "success" : "default"
-                              }
-                              size="small"
-                            />
-                          </TableCell>
                           <TableCell>
                             <Chip
                               label={clearance.status}
@@ -489,48 +507,97 @@ const AsbestosClearance = () => {
             <DialogContent>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
-                  <FormControl fullWidth required>
-                    <InputLabel>Project</InputLabel>
-                    <Select
-                      value={form.projectId}
-                      onChange={(e) =>
-                        setForm({ ...form, projectId: e.target.value })
-                      }
-                      label="Project"
-                    >
-                      {(projects || []).length > 0 ? (
-                        (projects || []).map((project) => (
-                          <MenuItem key={project._id} value={project._id}>
-                            {project.projectID}: {project.name}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>No projects available</MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
+                  <Autocomplete
+                    options={projects}
+                    getOptionLabel={(option) =>
+                      option.projectID + ": " + option.name
+                    }
+                    value={
+                      projects.find((p) => p._id === form.projectId) || null
+                    }
+                    onChange={(_, newValue) =>
+                      setForm({
+                        ...form,
+                        projectId: newValue ? newValue._id : "",
+                      })
+                    }
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Project"
+                        margin="normal"
+                        required
+                      />
+                    )}
+                    isOptionEqualToValue={(option, value) =>
+                      option._id === value._id
+                    }
+                  />
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="date"
-                    label="Clearance Date"
-                    value={form.clearanceDate}
-                    onChange={(e) =>
-                      setForm({ ...form, clearanceDate: e.target.value })
-                    }
-                    required
-                    InputLabelProps={{ shrink: true }}
-                  />
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+                    <TextField
+                      fullWidth
+                      type="date"
+                      label="Clearance Date"
+                      value={form.clearanceDate}
+                      onChange={(e) =>
+                        setForm({ ...form, clearanceDate: e.target.value })
+                      }
+                      required
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={setDateToToday}
+                      startIcon={<TodayIcon />}
+                      sx={{ minWidth: "auto", px: 2 }}
+                      title="Set date to today"
+                    >
+                      Today
+                    </Button>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
+                    <TextField
+                      fullWidth
+                      type="time"
+                      label="Inspection Time"
+                      value={form.inspectionTime}
+                      onChange={(e) =>
+                        setForm({ ...form, inspectionTime: e.target.value })
+                      }
+                      required
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={setTimeToNow}
+                      sx={{ minWidth: "auto", px: 2 }}
+                      title="Set time to current time (rounded to nearest 5 minutes)"
+                    >
+                      Now
+                    </Button>
+                  </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth required>
                     <InputLabel>Clearance Type</InputLabel>
                     <Select
                       value={form.clearanceType}
-                      onChange={(e) =>
-                        setForm({ ...form, clearanceType: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const newClearanceType = e.target.value;
+                        setForm({
+                          ...form,
+                          clearanceType: newClearanceType,
+                          // Automatically enable air monitoring for friable clearance
+                          airMonitoring:
+                            newClearanceType === "Friable"
+                              ? true
+                              : form.airMonitoring,
+                        });
+                      }}
                       label="Clearance Type"
                     >
                       <MenuItem value="Non-friable">Non-friable</MenuItem>
@@ -585,10 +652,15 @@ const AsbestosClearance = () => {
                         onChange={(e) =>
                           setForm({ ...form, airMonitoring: e.target.checked })
                         }
+                        disabled={form.clearanceType === "Friable"}
                         color="primary"
                       />
                     }
-                    label="Include Air Monitoring Report"
+                    label={`Include Air Monitoring Report${
+                      form.clearanceType === "Friable"
+                        ? " (Required for Friable Clearance)"
+                        : ""
+                    }`}
                   />
                 </Grid>
                 {form.airMonitoring && (
@@ -636,20 +708,63 @@ const AsbestosClearance = () => {
                   </Grid>
                 )}
                 <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Job Specific Exclusions"
-                    value={form.jobSpecificExclusions}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        jobSpecificExclusions: e.target.value,
-                      })
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.sitePlan}
+                        onChange={(e) =>
+                          setForm({ ...form, sitePlan: e.target.checked })
+                        }
+                        color="primary"
+                      />
                     }
-                    multiline
-                    rows={3}
+                    label="Include Site Plan"
                   />
                 </Grid>
+                {form.sitePlan && (
+                  <Grid item xs={12}>
+                    <input
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      style={{ display: "none" }}
+                      id="site-plan-upload"
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            // Extract just the base64 data from the data URL
+                            const dataUrl = event.target.result;
+                            const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
+                            setForm({
+                              ...form,
+                              sitePlanFile: base64Data,
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label htmlFor="site-plan-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        startIcon={<PictureAsPdfIcon />}
+                      >
+                        Upload Site Plan (PDF, JPG, PNG)
+                      </Button>
+                    </label>
+                    {form.sitePlanFile && (
+                      <Typography
+                        variant="body2"
+                        color="success.main"
+                        sx={{ mt: 1 }}
+                      >
+                        ✓ Site plan uploaded successfully
+                      </Typography>
+                    )}
+                  </Grid>
+                )}
                 <Grid item xs={12}>
                   <TextField
                     fullWidth

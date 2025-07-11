@@ -322,6 +322,74 @@ export const generateHTMLPDF = async (templateType, data) => {
   return generateHTMLTemplatePDF(templateType, data);
     };
 
+export const generateAssessmentPDF = async (assessmentData) => {
+  try {
+    console.log('Starting assessment PDF generation with data:', assessmentData);
+    
+    // Get the API base URL from the environment
+    const apiBaseUrl = process.env.NODE_ENV === 'development' 
+      ? "http://localhost:5000/api" 
+      : "https://landd-app-backend1.onrender.com/api";
+    
+    const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-assessment?t=${Date.now()}`;
+    console.log('Calling backend URL:', requestUrl);
+
+    // Call the server-side PDF generation endpoint with cache busting
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      },
+      body: JSON.stringify({ assessmentData: assessmentData })
+    });
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate assessment PDF');
+    }
+
+    // Get the PDF blob
+    const pdfBlob = await response.blob();
+    console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
+
+    // Create a download link
+    const url = window.URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    // Generate filename with new format
+    const jobReference = assessmentData.projectId?.projectID || 'Unknown';
+    const siteName = assessmentData.projectId?.name || 'Unknown Site';
+    const assessmentDate = assessmentData.assessmentDate 
+      ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-')
+      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+    
+    const fileName = `${jobReference}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
+    link.download = fileName;
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Clean up
+    window.URL.revokeObjectURL(url);
+
+    console.log('Assessment PDF downloaded successfully:', fileName);
+    return fileName;
+  } catch (error) {
+    console.error('Error generating assessment PDF:', error);
+    throw error;
+  }
+};
+
 export const generateHTMLTemplatePDF = async (templateType, data) => {
   try {
     console.log('Starting server-side PDF generation with data:', data);
@@ -364,8 +432,15 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
     const link = document.createElement('a');
     link.href = url;
 
-    // Generate filename
-    const fileName = `asbestos-clearance-${data.projectId?.name || 'report'}-${new Date().toISOString().split('T')[0]}.pdf`;
+    // Generate filename with new format
+    const jobReference = data.projectId?.projectID || 'Unknown';
+    const clearanceType = data.clearanceType || 'Non-friable';
+    const siteName = data.projectId?.name || 'Unknown Site';
+    const clearanceDate = data.clearanceDate 
+      ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-')
+      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+    
+    const fileName = `${jobReference}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
     link.download = fileName;
 
     // Trigger download
