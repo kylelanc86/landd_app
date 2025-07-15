@@ -1,9 +1,9 @@
 services:
-  # Backend service
+  # Backend service (Standard deployment)
   - type: web
     name: landd_app-backend1
     env: node
-    buildCommand: cd backend && npm install && npm run build
+    buildCommand: cd backend && npm ci --only=production --no-optional --no-audit --no-fund
     startCommand: cd backend && npm start
     envVars:
       - key: NODE_ENV
@@ -18,16 +18,40 @@ services:
         value: 5000
       - key: FRONTEND_URL
         value: https://app.landd.com.au
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "true"
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: "/usr/bin/google-chrome-stable"
+
+  # Alternative: Backend service with Docker (uncomment if standard deployment fails)
+  # - type: web
+  #   name: landd_app-backend1-docker
+  #   env: docker
+  #   dockerfilePath: ./backend/Dockerfile
+  #   dockerContext: ./backend
+  #   envVars:
+  #     - key: NODE_ENV
+  #       value: production
+  #     - key: MONGODB_URI
+  #       sync: false
+  #     - key: JWT_SECRET
+  #       sync: false
+  #     - key: JWT_EXPIRE
+  #       value: 7d
+  #     - key: PORT
+  #       value: 5000
+  #     - key: FRONTEND_URL
+  #       value: https://app.landd.com.au
 
   # Frontend service
   - type: web
     name: landd_app-frontend1
     env: node
-    buildCommand: cd frontend && npm install && npm run build
+    buildCommand: cd frontend && npm ci && npm run build
     startCommand: cd frontend && npx serve -s build -l 3000 --single
     envVars:
       - key: REACT_APP_API_URL
-        value: https://landd-app-backend1.onrender.com/api
+        value: https://landd_app-backend1.onrender.com/api
       - key: NODE_ENV
         value: production 
   
