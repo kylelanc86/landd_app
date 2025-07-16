@@ -1,9 +1,6 @@
 # Multi-stage build for better performance
 FROM node:18-alpine AS deps
 
-# Install yarn globally
-RUN npm install -g yarn
-
 # Install system dependencies for Puppeteer and Jimp
 RUN apk add --no-cache \
   chromium \
