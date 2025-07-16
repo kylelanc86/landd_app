@@ -3,7 +3,7 @@ services:
     name: landd_app-frontend
     env: node
     buildCommand: npm install --production --no-optional && npm run build
-    startCommand: npx serve -s build -l 3000 --single
+    startCommand: node server.js
     plan: starter
     envVars:
       - key: REACT_APP_API_URL
