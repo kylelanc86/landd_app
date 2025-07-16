@@ -6,31 +6,31 @@ WORKDIR /app
 
 # Install system dependencies for Puppeteer and Jimp
 RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    && rm -rf /var/cache/apk/*
+  chromium \
+  nss \
+  freetype \
+  freetype-dev \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont \
+  && rm -rf /var/cache/apk/*
 
 # Set Puppeteer environment variables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+  PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy package files
 COPY package*.json .npmrc ./
 
 # Install dependencies with optimizations
-RUN npm install --only=production --no-optional --no-audit --no-fund --prefer-offline
+RUN npm install --only=production --no-optional --no-audit --no-fund --prefer-offline --no-package-lock
 
 # Copy application code
 COPY . .
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+  adduser -S nodejs -u 1001
 
 # Change ownership of the app directory
 RUN chown -R nodejs:nodejs /app
