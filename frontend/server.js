@@ -31,31 +31,26 @@ if (fs.existsSync(buildPath)) {
   }
 }
 
-// Serve static files from the React app build directory with proper headers
-app.use(express.static(buildPath, {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    } else if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (filePath.endsWith('.json')) {
-      res.setHeader('Content-Type', 'application/json');
-    }
+// Helper function to set proper headers
+const setStaticHeaders = (res, filePath) => {
+  if (filePath.endsWith('.js')) {
+    res.setHeader('Content-Type', 'application/javascript');
+  } else if (filePath.endsWith('.css')) {
+    res.setHeader('Content-Type', 'text/css');
+  } else if (filePath.endsWith('.json')) {
+    res.setHeader('Content-Type', 'application/json');
   }
-}));
+};
 
-// Also serve static files from /admin path for custom domain compatibility
-app.use('/admin', express.static(buildPath, {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    } else if (filePath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (filePath.endsWith('.json')) {
-      res.setHeader('Content-Type', 'application/json');
-    }
-  }
-}));
+// Serve static files from the React app build directory with proper headers
+app.use(express.static(buildPath, { setHeaders: setStaticHeaders }));
+
+// Serve static files from various subdirectory paths to handle React Router issues
+const subdirectories = ['/admin', '/records', '/projects', '/clients', '/air-monitoring', '/timesheets', '/surveys', '/clearances', '/reports', '/fibre-id', '/calibrations', '/equipment', '/users', '/profile', '/dashboard', '/invoices', '/calendar', '/laboratory', '/databases', '/asbestos-removal'];
+
+subdirectories.forEach(subdir => {
+  app.use(subdir, express.static(buildPath, { setHeaders: setStaticHeaders }));
+});
 
 // Add a test route to check if server is working
 app.get('/api/test', (req, res) => {
