@@ -53,7 +53,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "postbuild": "echo 'Build completed successfully' && ls -la build/"
   },
   "eslintConfig": {
     "extends": [
