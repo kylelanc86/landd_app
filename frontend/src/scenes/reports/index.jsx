@@ -638,7 +638,11 @@ const Reports = () => {
       {/* Recent Projects Section */}
       {recentProjects.length > 0 && (
         <Paper sx={{ p: 3, mb: 3, backgroundColor: colors.primary[50] }}>
-          <Typography variant="h6" gutterBottom sx={{ color: colors.primary[700] }}>
+          <Typography
+            variant="h6"
+            gutterBottom
+            sx={{ color: colors.primary[700] }}
+          >
             Recent Projects
           </Typography>
           {loadingRecentProjects ? (
@@ -664,48 +668,58 @@ const Reports = () => {
                       onClick={() => handleRecentProjectClick(project)}
                       sx={{ p: 2 }}
                     >
-                      <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                        <Avatar 
-                          sx={{ 
-                            mr: 2, 
+                      <Box
+                        sx={{ display: "flex", alignItems: "center", mb: 1 }}
+                      >
+                        <Avatar
+                          sx={{
+                            mr: 2,
                             bgcolor: colors.primary[500],
                             width: 40,
-                            height: 40
+                            height: 40,
                           }}
                         >
                           <FolderIcon />
                         </Avatar>
                         <IconButton
                           size="small"
-                          onClick={(e) => handleRemoveRecentProject(project._id, e)}
+                          onClick={(e) =>
+                            handleRemoveRecentProject(project._id, e)
+                          }
                           color="error"
-                          sx={{ 
+                          sx={{
                             ml: "auto",
                             "&:hover": {
                               backgroundColor: "error.light",
-                            }
+                            },
                           }}
                         >
                           <CloseIcon fontSize="small" />
                         </IconButton>
                       </Box>
-                      <Typography variant="body2" fontWeight="medium" gutterBottom>
+                      <Typography
+                        variant="body2"
+                        fontWeight="medium"
+                        gutterBottom
+                      >
                         {project.projectID}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary" display="block">
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                      >
                         {project.name}
                       </Typography>
                       {project.client?.name && (
-                        <Typography variant="caption" color="text.secondary" display="block">
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          display="block"
+                        >
                           {project.client.name}
                         </Typography>
                       )}
-                      <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
-                        <AccessTimeIcon fontSize="small" sx={{ mr: 0.5, fontSize: "0.875rem" }} />
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(project.lastAccessed).toLocaleDateString()}
-                        </Typography>
-                      </Box>
                     </CardActionArea>
                   </Card>
                 </Grid>
