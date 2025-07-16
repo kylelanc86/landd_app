@@ -182,4 +182,36 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// GET /api/assessments/:id/chain-of-custody - generate Chain of Custody PDF
+router.get('/:id/chain-of-custody', async (req, res) => {
+  try {
+    const assessment = await AsbestosAssessment.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name email contact"
+        }
+      })
+      .populate('assessorId');
+    
+    if (!assessment) {
+      return res.status(404).json({ message: 'Assessment job not found' });
+    }
+
+    // Generate Chain of Custody PDF
+    const { generateChainOfCustodyPDF } = require('../services/chainOfCustodyService');
+    const pdfBuffer = await generateChainOfCustodyPDF(assessment);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="ChainOfCustody_${assessment.projectId.projectID}.pdf"`);
+    res.send(pdfBuffer);
+    
+  } catch (err) {
+    console.error('Error generating Chain of Custody PDF:', err);
+    res.status(500).json({ message: 'Failed to generate Chain of Custody PDF', error: err.message });
+  }
+});
+
 module.exports = router; 

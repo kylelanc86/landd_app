@@ -17,10 +17,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Alert,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import { PhotoCamera, ArrowBack } from "@mui/icons-material";
+import { PhotoCamera, ArrowBack, Description } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
+import asbestosAssessmentService from "../../../services/asbestosAssessmentService";
 
 const AssessmentSamples = () => {
   const theme = useTheme();
@@ -30,6 +32,8 @@ const AssessmentSamples = () => {
   const [materialDescription, setMaterialDescription] = useState("");
   const [asbestosContent, setAsbestosContent] = useState("");
   const [samples, setSamples] = useState([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleAsbestosContentChange = (event) => {
     setAsbestosContent(event.target.value);
@@ -53,6 +57,35 @@ const AssessmentSamples = () => {
 
   const handleBack = () => {
     navigate("/asbestos-assessment");
+  };
+
+  const handleGenerateChainOfCustody = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      // For now, we'll use a mock assessment ID since the full assessment system isn't implemented yet
+      // In a real implementation, this would come from the current assessment context
+      const mockAssessmentId = "mock-assessment-id";
+      
+      const pdfBlob = await asbestosAssessmentService.generateChainOfCustody(mockAssessmentId);
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ChainOfCustody_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      console.error('Error generating Chain of Custody:', err);
+      setError('Failed to generate Chain of Custody PDF. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -235,7 +268,14 @@ const AssessmentSamples = () => {
         </Paper>
       )}
 
-      <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
+      {/* Error Display */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
         <Button
           variant="outlined"
           startIcon={<ArrowBack />}
@@ -254,6 +294,22 @@ const AssessmentSamples = () => {
           }}
         >
           Save and Close
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<Description />}
+          onClick={handleGenerateChainOfCustody}
+          disabled={loading}
+          sx={{
+            borderColor: theme.palette.secondary[500],
+            color: theme.palette.secondary[500],
+            "&:hover": {
+              borderColor: theme.palette.secondary[600],
+              backgroundColor: theme.palette.secondary[50],
+            },
+          }}
+        >
+          {loading ? "Generating..." : "Generate Chain of Custody"}
         </Button>
       </Box>
 

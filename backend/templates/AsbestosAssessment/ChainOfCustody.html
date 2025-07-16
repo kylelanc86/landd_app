@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>L&D SAMPLE ANALYSIS – CHAIN OF CUSTODY FORM</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 30px;
+      }
+
+      .logo-section {
+        display: flex;
+        align-items: center;
+      }
+
+      .logo {
+        width: 40px;
+        height: 40px;
+        background-color: #16b12b;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 20px;
+        margin-right: 10px;
+      }
+
+      .company-name {
+        font-weight: bold;
+        font-size: 14px;
+      }
+
+      .header-right {
+        text-align: right;
+      }
+
+      .document-id {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .print-timestamp {
+        font-size: 10px;
+        color: #666;
+      }
+
+      .title {
+        background-color: #16b12b;
+        color: white;
+        text-align: center;
+        padding: 15px;
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 30px;
+      }
+
+      .section {
+        margin-bottom: 25px;
+      }
+
+      .section-title {
+        background-color: #16b12b;
+        color: white;
+        padding: 8px 12px;
+        font-weight: bold;
+        font-size: 13px;
+      }
+
+      .section-content {
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-top: none;
+      }
+
+      .form-row {
+        display: flex;
+        margin-bottom: 12px;
+        align-items: center;
+      }
+
+      .form-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .form-label {
+        font-weight: bold;
+        min-width: 120px;
+        margin-right: 15px;
+      }
+
+      .form-input {
+        flex: 1;
+        border-bottom: 1px solid #000;
+        padding: 2px 0;
+        min-height: 16px;
+      }
+
+      .form-input.half {
+        flex: 0.5;
+        margin-right: 20px;
+      }
+
+      .checkbox-group {
+        display: flex;
+        gap: 20px;
+        margin-top: 8px;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .checkbox {
+        width: 12px;
+        height: 12px;
+        border: 1px solid #000;
+      }
+
+      .sub-text {
+        font-size: 10px;
+        color: #666;
+        margin-top: 3px;
+      }
+
+      .sample-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+
+      .sample-table th,
+      .sample-table td {
+        border: 1px solid #000;
+        padding: 8px;
+        text-align: center;
+        font-size: 11px;
+      }
+
+      .sample-table th {
+        background-color: #f0f0f0;
+        font-weight: bold;
+      }
+
+      .sample-table th.sample-ref {
+        width: 20%;
+      }
+
+      .sample-table th.sample-type {
+        width: 30%;
+      }
+
+      .sample-table th.analysis-required {
+        width: 50%;
+      }
+
+      .analysis-subheader {
+        font-size: 10px;
+        font-weight: normal;
+      }
+
+      .footer {
+        background-color: #16b12b;
+        color: white;
+        padding: 10px 15px;
+        margin-top: 30px;
+        font-size: 10px;
+      }
+
+      .footer-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .footer-left {
+        text-align: left;
+      }
+
+      .footer-right {
+        text-align: right;
+      }
+
+      .page-number {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .page-checkbox {
+        width: 12px;
+        height: 12px;
+        border: 1px solid white;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="logo-section">
+        <div class="logo">D</div>
+        <div class="company-name">LANCASTER AND DICKENSON CONSULTING</div>
+      </div>
+      <div class="header-right">
+        <div class="company-name">LANCASTER & DICKENSON CONSULTING</div>
+        <div class="document-id">LDHM-018a: L&D Supplied Sample COC</div>
+        <div class="print-timestamp">Printed: [PRINT_DATE]</div>
+      </div>
+    </div>
+
+    <div class="title">L&D SAMPLE ANALYSIS – CHAIN OF CUSTODY FORM</div>
+
+    <div class="section">
+      <div class="section-title">SECTION 1 – CLIENT DETAILS</div>
+      <div class="section-content">
+        <div class="form-row">
+          <div class="form-label">Client Name:</div>
+          <div class="form-input">[CLIENT_NAME]</div>
+          <div class="form-label" style="margin-left: 20px">
+            Client Contact:
+          </div>
+          <div class="form-input">[CLIENT_CONTACT]</div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Client Email:</div>
+          <div class="form-input">[CLIENT_EMAIL]</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">SECTION 2 – REPORT DETAILS</div>
+      <div class="section-content">
+        <div class="form-row">
+          <div class="form-label">Site Name:</div>
+          <div class="form-input">[SITE_NAME]</div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">L&D Reference:</div>
+          <div class="form-input">[L&D_REFERENCE]</div>
+          <div class="form-label" style="margin-left: 20px">Sample Date:</div>
+          <div class="form-input">[SAMPLE_DATE]</div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Sampler:</div>
+          <div class="form-input">[SAMPLER]</div>
+          <div class="form-label" style="margin-left: 20px">
+            No. of Samples:
+          </div>
+          <div class="form-input">[NUMBER_OF_SAMPLES]</div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Turnaround Required:</div>
+          <div class="form-input"></div>
+        </div>
+        <div class="sub-text">(fibre counts = same day)</div>
+        <div class="checkbox-group">
+          <div class="checkbox-item">
+            <div class="checkbox"></div>
+            <span>5 Days</span>
+          </div>
+          <div class="checkbox-item">
+            <div class="checkbox"></div>
+            <span>3 Days</span>
+          </div>
+          <div class="checkbox-item">
+            <div class="checkbox"></div>
+            <span>24 hr (weekday)</span>
+          </div>
+          <div class="checkbox-item">
+            <div class="checkbox"></div>
+            <span>2hr (no ashing)</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">Received by:</div>
+          <div class="form-input">[RECEIVED_BY]</div>
+          <div class="form-label" style="margin-left: 20px">Signature:</div>
+          <div class="form-input">[SIGNATURE]</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">SECTION 3 – SAMPLE DETAILS</div>
+      <div class="section-content">
+        <table class="sample-table">
+          <thead>
+            <tr>
+              <th class="sample-ref">Sample Ref.</th>
+              <th class="sample-type">Sample type</th>
+              <th class="analysis-required" colspan="4">Analysis required</th>
+            </tr>
+            <tr>
+              <th></th>
+              <th></th>
+              <th class="analysis-subheader">Bulk ID</th>
+              <th class="analysis-subheader">Soil/Dust AS4964</th>
+              <th class="analysis-subheader">WA Guidelines</th>
+              <th class="analysis-subheader">Non-NATA</th>
+            </tr>
+          </thead>
+          <tbody>
+            [SAMPLE_ROWS]
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="footer-content">
+        <div class="footer-left">
+          <div>
+            L&D Sample Submission Form (Chain of Custody) – Lancaster &
+            Dickenson Pty Ltd
+          </div>
+          <div>AS ISO/IEC 17025</div>
+        </div>
+        <div class="footer-right">
+          <div>Rev: 2</div>
+          <div>Next Review Date: June 2025</div>
+          <div class="page-number">
+            <span>1 of 1</span>
+            <div class="page-checkbox"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
