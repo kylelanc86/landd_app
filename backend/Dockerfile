@@ -1,8 +1,8 @@
-# Use Node.js 18 LTS
-FROM node:18-alpine
+# Multi-stage build for better performance
+FROM node:18-alpine AS deps
 
-# Set working directory
-WORKDIR /app
+# Install yarn globally
+RUN npm install -g yarn
 
 # Install system dependencies for Puppeteer and Jimp
 RUN apk add --no-cache \
@@ -20,10 +20,33 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy package files
-COPY package*.json .npmrc ./
+COPY package*.json yarn.lock .npmrc ./
 
-# Install dependencies with optimizations
-RUN npm install --only=production --no-optional --no-audit --no-fund --prefer-offline --no-package-lock
+# Install dependencies with yarn (much faster than npm)
+RUN yarn install --production --frozen-lockfile --no-optional --prefer-offline
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Install system dependencies for Puppeteer and Jimp
+RUN apk add --no-cache \
+  chromium \
+  nss \
+  freetype \
+  freetype-dev \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont \
+  && rm -rf /var/cache/apk/*
+
+# Set Puppeteer environment variables
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+  PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
 
 # Copy application code
 COPY . .

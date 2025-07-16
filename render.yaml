@@ -6,6 +6,13 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: starter
+    buildFilter:
+      paths:
+        - backend/**
+    buildCommand: |
+      cd backend
+      npm ci --only=production --no-optional --prefer-offline
+      docker build -t backend .
     envVars:
       - key: NODE_ENV
         value: production
