@@ -19,6 +19,12 @@ import {
   IconButton,
   Tooltip,
   InputAdornment,
+  Grid,
+  Card,
+  CardContent,
+  CardActionArea,
+  Avatar,
+  Divider,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -26,11 +32,15 @@ import {
   Download as DownloadIcon,
   Print as PrintIcon,
   Clear as ClearIcon,
+  Folder as FolderIcon,
+  AccessTime as AccessTimeIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { tokens } from "../../theme";
 import projectService from "../../services/projectService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
+import recentProjectsService from "../../services/recentProjectsService";
 import {
   shiftService,
   jobService,
@@ -52,7 +62,47 @@ const Reports = () => {
   const [loadingReports, setLoadingReports] = useState(false);
   const [error, setError] = useState("");
   const [projectsWithReports, setProjectsWithReports] = useState(new Set());
+  const [recentProjects, setRecentProjects] = useState([]);
+  const [loadingRecentProjects, setLoadingRecentProjects] = useState(false);
   const navigate = useNavigate();
+
+  // Load recent projects on component mount
+  useEffect(() => {
+    loadRecentProjects();
+  }, []);
+
+  const loadRecentProjects = async () => {
+    try {
+      setLoadingRecentProjects(true);
+      const projects = await recentProjectsService.getRecentProjectsWithData(
+        projectService
+      );
+      setRecentProjects(projects);
+    } catch (error) {
+      console.error("Error loading recent projects:", error);
+    } finally {
+      setLoadingRecentProjects(false);
+    }
+  };
+
+  const handleRecentProjectClick = async (project) => {
+    try {
+      // Add to recent projects
+      recentProjectsService.addRecentProject(project);
+
+      // Navigate to project reports page
+      navigate(`/reports/project/${project._id}`);
+    } catch (error) {
+      console.error("Error handling recent project click:", error);
+      setError("Failed to load project");
+    }
+  };
+
+  const handleRemoveRecentProject = (projectId, event) => {
+    event.stopPropagation(); // Prevent triggering the card click
+    recentProjectsService.removeRecentProject(projectId);
+    setRecentProjects((prev) => prev.filter((p) => p._id !== projectId));
+  };
 
   // Search projects function - using the same approach as projects page
   const handleSearch = async (searchValue = searchTerm) => {
@@ -560,9 +610,10 @@ const Reports = () => {
                             size="small"
                             color="secondary"
                             disabled={!hasReports}
-                            onClick={() =>
-                              (window.location.href = `/reports/project/${project._id}`)
-                            }
+                            onClick={() => {
+                              recentProjectsService.addRecentProject(project);
+                              navigate(`/reports/project/${project._id}`);
+                            }}
                           >
                             Load Reports
                           </Button>
@@ -582,6 +633,86 @@ const Reports = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
+      )}
+
+      {/* Recent Projects Section */}
+      {recentProjects.length > 0 && (
+        <Paper sx={{ p: 3, mb: 3, backgroundColor: colors.primary[50] }}>
+          <Typography variant="h6" gutterBottom sx={{ color: colors.primary[700] }}>
+            Recent Projects
+          </Typography>
+          {loadingRecentProjects ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <Grid container spacing={2}>
+              {recentProjects.map((project) => (
+                <Grid item xs={12} sm={6} md={4} key={project._id}>
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      cursor: "pointer",
+                      "&:hover": {
+                        backgroundColor: "action.hover",
+                        boxShadow: 2,
+                      },
+                      transition: "all 0.2s ease-in-out",
+                    }}
+                  >
+                    <CardActionArea
+                      onClick={() => handleRecentProjectClick(project)}
+                      sx={{ p: 2 }}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                        <Avatar 
+                          sx={{ 
+                            mr: 2, 
+                            bgcolor: colors.primary[500],
+                            width: 40,
+                            height: 40
+                          }}
+                        >
+                          <FolderIcon />
+                        </Avatar>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleRemoveRecentProject(project._id, e)}
+                          color="error"
+                          sx={{ 
+                            ml: "auto",
+                            "&:hover": {
+                              backgroundColor: "error.light",
+                            }
+                          }}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                      <Typography variant="body2" fontWeight="medium" gutterBottom>
+                        {project.projectID}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {project.name}
+                      </Typography>
+                      {project.client?.name && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {project.client.name}
+                        </Typography>
+                      )}
+                      <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
+                        <AccessTimeIcon fontSize="small" sx={{ mr: 0.5, fontSize: "0.875rem" }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(project.lastAccessed).toLocaleDateString()}
+                        </Typography>
+                      </Box>
+                    </CardActionArea>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </Paper>
       )}
 
       {/* Reports Table */}

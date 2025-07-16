@@ -29,6 +29,7 @@ import projectService from "../../services/projectService";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
+import recentProjectsService from "../../services/recentProjectsService";
 import {
   shiftService,
   jobService,
@@ -59,7 +60,11 @@ const ProjectReports = () => {
 
       // Get project details
       const projectResponse = await projectService.getById(projectId);
-      setProject(projectResponse.data);
+      const projectData = projectResponse.data;
+      setProject(projectData);
+      
+      // Add to recent projects
+      recentProjectsService.addRecentProject(projectData);
 
       const allReports = [];
 
