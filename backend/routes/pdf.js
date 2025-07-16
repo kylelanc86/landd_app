@@ -44,16 +44,37 @@ function writeLog(message) {
   console.log(message);
 }
 
-// Load the logo from backend assets
-const logoPath = path.join(__dirname, '../assets/logo.png');
-const logoBase64 = fs.readFileSync(logoPath).toString('base64');
+// Load the logo from backend assets with error handling
+let logoBase64 = '';
+let backgroundBase64 = '';
 
-// Load the background image using the same method as logos
-const backgroundPath = path.join(__dirname, '../assets/logo.png'); // Placeholder, update if you add a real background
-console.log('Background image path:', backgroundPath);
-console.log('Background image exists:', fs.existsSync(backgroundPath));
-const backgroundBase64 = fs.readFileSync(backgroundPath).toString('base64');
-console.log('Background image loaded, base64 length:', backgroundBase64.length);
+try {
+  const logoPath = path.join(__dirname, '../assets/logo.png');
+  console.log('Logo path:', logoPath);
+  console.log('Logo exists:', fs.existsSync(logoPath));
+  
+  if (fs.existsSync(logoPath)) {
+    logoBase64 = fs.readFileSync(logoPath).toString('base64');
+    console.log('Logo loaded successfully, base64 length:', logoBase64.length);
+  } else {
+    console.warn('Logo file not found, using empty string');
+  }
+  
+  // Load the background image using the same method as logos
+  const backgroundPath = path.join(__dirname, '../assets/logo.png'); // Placeholder, update if you add a real background
+  console.log('Background image path:', backgroundPath);
+  console.log('Background image exists:', fs.existsSync(backgroundPath));
+  
+  if (fs.existsSync(backgroundPath)) {
+    backgroundBase64 = fs.readFileSync(backgroundPath).toString('base64');
+    console.log('Background image loaded, base64 length:', backgroundBase64.length);
+  } else {
+    console.warn('Background image file not found, using empty string');
+  }
+} catch (error) {
+  console.error('Error loading logo/background images:', error);
+  console.warn('Continuing without logo/background images');
+}
 
 // HTML templates for asbestos clearance reports - Using the actual 7-page template structure
 const HTML_TEMPLATES = {
