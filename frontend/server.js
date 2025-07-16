@@ -11,23 +11,38 @@ app.use((req, res, next) => {
   next();
 });
 
-// Add some debugging middleware
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url} - Host: ${req.headers.host}`);
-  next();
-});
-
-// Check if build directory exists
+// Check if build directory exists and log its contents
 const buildPath = path.join(__dirname, 'build');
 console.log('Build directory path:', buildPath);
 console.log('Build directory exists:', fs.existsSync(buildPath));
 
 if (fs.existsSync(buildPath)) {
   console.log('Build directory contents:', fs.readdirSync(buildPath));
+  
+  // Check if static directory exists
+  const staticPath = path.join(buildPath, 'static');
+  if (fs.existsSync(staticPath)) {
+    console.log('Static directory contents:', fs.readdirSync(staticPath));
+    
+    const jsPath = path.join(staticPath, 'js');
+    if (fs.existsSync(jsPath)) {
+      console.log('JS directory contents:', fs.readdirSync(jsPath));
+    }
+  }
 }
 
-// Serve static files from the React app build directory
-app.use(express.static(buildPath));
+// Serve static files from the React app build directory with proper headers
+app.use(express.static(buildPath, {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json');
+    }
+  }
+}));
 
 // Add a test route to check if server is working
 app.get('/api/test', (req, res) => {
@@ -57,5 +72,4 @@ app.listen(PORT, () => {
   console.log(`Frontend server is running on port ${PORT}`);
   console.log(`Static files served from root path`);
   console.log(`Server ready to handle requests`);
-  console.log(`Test endpoint available at: http://localhost:${PORT}/api/test`);
 }); 
