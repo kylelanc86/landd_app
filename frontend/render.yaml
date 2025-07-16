@@ -7,7 +7,7 @@ services:
     plan: starter
     envVars:
       - key: REACT_APP_API_URL
-        value: https://landd_app-backend.onrender.com/api
+        value: https://landd-app-backend-docker.onrender.com/api
       - key: NODE_ENV
         value: production
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
