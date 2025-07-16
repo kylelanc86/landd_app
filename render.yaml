@@ -5,7 +5,7 @@ services:
     env: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    plan: starter
+    plan: professional
     buildFilter:
       paths:
         - backend/**
@@ -13,6 +13,7 @@ services:
       cd backend
       npm ci --only=production --no-optional --prefer-offline
       docker build -t backend .
+    buildTimeout: 2700
     envVars:
       - key: NODE_ENV
         value: production
