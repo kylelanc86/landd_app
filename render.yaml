@@ -9,10 +9,6 @@ services:
     buildFilter:
       paths:
         - backend/**
-    buildCommand: |
-      cd backend
-      npm ci --only=production --no-optional --prefer-offline
-      docker build -t backend .
     buildTimeout: 2700
     envVars:
       - key: NODE_ENV
