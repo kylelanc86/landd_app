@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const leadAssessmentDefaultContent = require("./defaultcontent/LeadAssessmentContent");
+const leadAssessmentDefaultContent = require("./defaultContent/LeadAssessmentContent");
 
 const leadAssessmentSchema = new mongoose.Schema(
   {
