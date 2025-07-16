@@ -44,12 +44,12 @@ function writeLog(message) {
   console.log(message);
 }
 
-// Load the compressed logo from frontend (23KB - good quality, reasonable size)
-const logoPath = path.join(__dirname, '../../frontend/public/logo-compressed.png');
+// Load the logo from backend assets
+const logoPath = path.join(__dirname, '../assets/logo.png');
 const logoBase64 = fs.readFileSync(logoPath).toString('base64');
 
 // Load the background image using the same method as logos
-const backgroundPath = path.join(__dirname, '../../frontend/public/images/clearance_front.jpg');
+const backgroundPath = path.join(__dirname, '../assets/logo.png'); // Placeholder, update if you add a real background
 console.log('Background image path:', backgroundPath);
 console.log('Background image exists:', fs.existsSync(backgroundPath));
 const backgroundBase64 = fs.readFileSync(backgroundPath).toString('base64');
