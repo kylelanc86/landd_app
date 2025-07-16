@@ -185,7 +185,20 @@ router.delete('/:id', async (req, res) => {
 // GET /api/assessments/:id/chain-of-custody - generate Chain of Custody PDF
 router.get('/:id/chain-of-custody', async (req, res) => {
   try {
-    const assessment = await AsbestosAssessment.findById(req.params.id)
+    console.log('=== CHAIN OF CUSTODY REQUEST START ===');
+    console.log('Assessment ID:', req.params.id);
+    
+    // First, let's test if we can find the assessment
+    const assessment = await AsbestosAssessment.findById(req.params.id);
+    console.log('Assessment lookup result:', assessment ? 'Found' : 'Not found');
+    
+    if (!assessment) {
+      console.log('Assessment not found');
+      return res.status(404).json({ message: 'Assessment job not found' });
+    }
+
+    // Now populate the related data
+    const populatedAssessment = await AsbestosAssessment.findById(req.params.id)
       .populate({
         path: "projectId",
         select: "projectID name client",
@@ -196,20 +209,30 @@ router.get('/:id/chain-of-custody', async (req, res) => {
       })
       .populate('assessorId');
     
-    if (!assessment) {
-      return res.status(404).json({ message: 'Assessment job not found' });
-    }
+    console.log('Populated assessment data:', {
+      id: populatedAssessment._id,
+      projectId: populatedAssessment.projectId?._id,
+      projectName: populatedAssessment.projectId?.name,
+      clientName: populatedAssessment.projectId?.client?.name,
+      assessorName: populatedAssessment.assessorId ? `${populatedAssessment.assessorId.firstName} ${populatedAssessment.assessorId.lastName}` : 'Unknown'
+    });
 
     // Generate Chain of Custody PDF
+    console.log('Generating PDF...');
     const { generateChainOfCustodyPDF } = require('../services/chainOfCustodyService');
-    const pdfBuffer = await generateChainOfCustodyPDF(assessment);
+    const pdfBuffer = await generateChainOfCustodyPDF(populatedAssessment);
+    console.log('PDF generated successfully, size:', pdfBuffer.length);
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="ChainOfCustody_${assessment.projectId.projectID}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="ChainOfCustody_${populatedAssessment.projectId?.projectID || 'Unknown'}.pdf"`);
     res.send(pdfBuffer);
     
+    console.log('=== CHAIN OF CUSTODY REQUEST END ===');
+    
   } catch (err) {
-    console.error('Error generating Chain of Custody PDF:', err);
+    console.error('=== CHAIN OF CUSTODY ERROR ===');
+    console.error('Error:', err.message);
+    console.error('Stack:', err.stack);
     res.status(500).json({ message: 'Failed to generate Chain of Custody PDF', error: err.message });
   }
 });

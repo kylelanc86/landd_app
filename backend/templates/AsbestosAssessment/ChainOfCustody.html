@@ -8,7 +8,7 @@
       body {
         font-family: Arial, sans-serif;
         margin: 0;
-        padding: 20px;
+        padding: 10px;
         font-size: 12px;
         line-height: 1.4;
       }
@@ -26,16 +26,8 @@
       }
 
       .logo {
-        width: 40px;
-        height: 40px;
-        background-color: #16b12b;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 20px;
+        width: 60px;
+        height: 60px;
         margin-right: 10px;
       }
 
@@ -69,7 +61,7 @@
       }
 
       .section {
-        margin-bottom: 25px;
+        margin-bottom: 0;
       }
 
       .section-title {
@@ -158,14 +150,10 @@
       }
 
       .sample-table th.sample-ref {
-        width: 20%;
+        width: 50%;
       }
 
       .sample-table th.sample-type {
-        width: 30%;
-      }
-
-      .sample-table th.analysis-required {
         width: 50%;
       }
 
@@ -212,7 +200,11 @@
   <body>
     <div class="header">
       <div class="logo-section">
-        <div class="logo">D</div>
+        <img
+          src="data:image/png;base64,LOGO_BASE64"
+          alt="L&D Logo"
+          class="logo"
+        />
         <div class="company-name">LANCASTER AND DICKENSON CONSULTING</div>
       </div>
       <div class="header-right">
@@ -251,7 +243,7 @@
         </div>
         <div class="form-row">
           <div class="form-label">L&D Reference:</div>
-          <div class="form-input">[L&D_REFERENCE]</div>
+          <div class="form-input">[LD_REFERENCE]</div>
           <div class="form-label" style="margin-left: 20px">Sample Date:</div>
           <div class="form-input">[SAMPLE_DATE]</div>
         </div>
@@ -303,15 +295,6 @@
             <tr>
               <th class="sample-ref">Sample Ref.</th>
               <th class="sample-type">Sample type</th>
-              <th class="analysis-required" colspan="4">Analysis required</th>
-            </tr>
-            <tr>
-              <th></th>
-              <th></th>
-              <th class="analysis-subheader">Bulk ID</th>
-              <th class="analysis-subheader">Soil/Dust AS4964</th>
-              <th class="analysis-subheader">WA Guidelines</th>
-              <th class="analysis-subheader">Non-NATA</th>
             </tr>
           </thead>
           <tbody>

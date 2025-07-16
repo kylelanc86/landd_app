@@ -1,10 +1,10 @@
 services:
-  # Backend service (Standard deployment)
+  # Backend service with Docker (has Chrome installed)
   - type: web
     name: landd_app-backend1
-    env: node
-    buildCommand: cd backend && npm ci --only=production --no-optional --no-audit --no-fund
-    startCommand: cd backend && npm start
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     envVars:
       - key: NODE_ENV
         value: production
@@ -18,30 +18,8 @@ services:
         value: 5000
       - key: FRONTEND_URL
         value: https://app.landd.com.au
-      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
-        value: "true"
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: "/usr/bin/google-chrome-stable"
 
-  # Alternative: Backend service with Docker (uncomment if standard deployment fails)
-  # - type: web
-  #   name: landd_app-backend1-docker
-  #   env: docker
-  #   dockerfilePath: ./backend/Dockerfile
-  #   dockerContext: ./backend
-  #   envVars:
-  #     - key: NODE_ENV
-  #       value: production
-  #     - key: MONGODB_URI
-  #       sync: false
-  #     - key: JWT_SECRET
-  #       sync: false
-  #     - key: JWT_EXPIRE
-  #       value: 7d
-  #     - key: PORT
-  #       value: 5000
-  #     - key: FRONTEND_URL
-  #       value: https://app.landd.com.au
+
 
   # Frontend service
   - type: web

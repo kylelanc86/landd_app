@@ -33,8 +33,8 @@ import GraticulePage from "./scenes/calibrations/air-mon-calibrations/pages/Grat
 import PrimaryFlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/PrimaryFlowmeterPage";
 import EquipmentList from "./scenes/calibrations/EquipmentList.jsx";
 import FibreIdAnalysis from "./scenes/fibreID/AnalysisPage.jsx";
-import AssessmentJobsPage from "./scenes/assessments";
-import AssessmentItemsPage from "./scenes/assessments/AssessmentItems";
+import AssessmentJobsPage from "./scenes/surveys/asbestos";
+import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
@@ -46,9 +46,7 @@ const EditSample = lazy(() => import("./scenes/air-monitoring/edit-sample"));
 const Analysis = lazy(() => import("./scenes/air-monitoring/analysis"));
 const Users = lazy(() => import("./scenes/users"));
 const Profile = lazy(() => import("./scenes/profile"));
-const AsbestosAssessment = lazy(() =>
-  import("./scenes/surveys/asbestos/AsbestosAssessment")
-);
+
 const AsbestosClearance = lazy(() =>
   import("./scenes/clearances/AsbestosClearance")
 );
@@ -59,9 +57,6 @@ const ClearanceReports = lazy(() =>
   import("./scenes/clearances/AsbestosClearance")
 );
 
-const AssessmentSamples = lazy(() =>
-  import("./scenes/surveys/asbestos/assessment-samples")
-);
 const Clients = lazy(() => import("./scenes/clients"));
 const AdminDashboard = lazy(() => import("./scenes/admin/AdminDashboard"));
 const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
@@ -296,31 +291,7 @@ function App() {
                             </Suspense>
                           }
                         />
-                        <Route
-                          path="/asbestos-assessment"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["asbestos.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <AsbestosAssessment />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
 
-                        <Route
-                          path="/asbestos-assessment/samples"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["asbestos.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <AssessmentSamples />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
                         <Route
                           path="/surveys"
                           element={
@@ -333,18 +304,7 @@ function App() {
                             </PermissionRoute>
                           }
                         />
-                        <Route
-                          path="/surveys/asbestos"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["asbestos.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <AsbestosAssessment />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
+
                         <Route
                           path="/surveys/lead"
                           element={

@@ -71,9 +71,7 @@ const Item = ({ title, to, icon }) => {
   const navigate = useNavigate();
 
   const isActive =
-    to === "/asbestos-assessment"
-      ? location.pathname === to
-      : location.pathname === to || location.pathname.startsWith(`${to}/`);
+    location.pathname === to || location.pathname.startsWith(`${to}/`);
 
   // Handle navigation with refresh
   const handleNavigation = () => {
