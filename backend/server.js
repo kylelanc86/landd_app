@@ -124,6 +124,21 @@ connectDB()
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
+    
+    // Debug: Log all registered routes
+    console.log('=== Registered Routes ===');
+    app._router.stack.forEach((middleware) => {
+      if (middleware.route) {
+        console.log(`${Object.keys(middleware.route.methods).join(',').toUpperCase()} ${middleware.route.path}`);
+      } else if (middleware.name === 'router') {
+        middleware.handle.stack.forEach((handler) => {
+          if (handler.route) {
+            console.log(`${Object.keys(handler.route.methods).join(',').toUpperCase()} ${middleware.regexp.source}${handler.route.path}`);
+          }
+        });
+      }
+    });
+    console.log('========================');
 
     const requireAuth = require('./middleware/auth');
     app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);

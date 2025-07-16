@@ -3466,6 +3466,14 @@ router.get('/test', (req, res) => {
   });
 });
 
+// Simple test route to verify router is working
+router.get('/ping', (req, res) => {
+  res.json({ 
+    message: 'PDF router is working',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Test route to check Puppeteer functionality
 router.get('/test-puppeteer', async (req, res) => {
   let browser;
