@@ -5,6 +5,7 @@ services:
     env: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
+    plan: starter
     envVars:
       - key: NODE_ENV
         value: production
@@ -25,8 +26,12 @@ services:
   - type: web
     name: landd_app-frontend1
     env: node
-    buildCommand: cd frontend && npm ci && npm run build
+    buildCommand: cd frontend && npm install --production && npm run build
     startCommand: cd frontend && npx serve -s build -l 3000 --single
+    buildFilter:
+      paths:
+        - frontend/**
+    plan: starter
     envVars:
       - key: REACT_APP_API_URL
         value: https://landd_app-backend1.onrender.com/api
