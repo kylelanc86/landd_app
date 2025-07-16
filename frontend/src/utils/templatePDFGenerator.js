@@ -329,7 +329,7 @@ export const generateAssessmentPDF = async (assessmentData) => {
     // Get the API base URL from the environment
     const apiBaseUrl = process.env.NODE_ENV === 'development' 
       ? "http://localhost:5000/api" 
-      : "https://landd-app-backend1.onrender.com/api";
+      : "https://landd-app-backend-docker.onrender.com/api";
     
     const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-assessment?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
@@ -397,7 +397,7 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
     // Get the API base URL from the environment
     const apiBaseUrl = process.env.NODE_ENV === 'development' 
       ? "http://localhost:5000/api" 
-      : "https://landd-app-backend1.onrender.com/api";
+      : "https://landd-app-backend-docker.onrender.com/api";
     
     const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-clearance?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
