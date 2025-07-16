@@ -34,6 +34,7 @@
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.1",
     "canvg": "^4.0.1",
+    "dompurify": "^3.0.8",
     "lodash": "^4.17.21",
     "pdfmake": "^0.2.20",
     "react": "^18.2.0",
