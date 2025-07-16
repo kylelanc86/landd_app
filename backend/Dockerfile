@@ -23,7 +23,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 COPY package*.json .npmrc ./
 
 # Install dependencies with optimizations
-RUN npm ci --only=production --no-optional --no-audit --no-fund --cache .npm-cache
+RUN npm install --only=production --no-optional --no-audit --no-fund --prefer-offline
 
 # Copy application code
 COPY . .

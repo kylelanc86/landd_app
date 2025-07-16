@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: landd_app-frontend
+    env: node
+    buildCommand: npm install --production --no-optional && npm run build
+    startCommand: npx serve -s build -l 3000 --single
+    plan: starter
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://landd_app-backend.onrender.com/api
+      - key: NODE_ENV
+        value: production
+      - key: REACT_APP_GOOGLE_MAPS_API_KEY
+        sync: false 

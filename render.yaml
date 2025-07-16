@@ -1,7 +1,7 @@
 services:
   # Backend service with Docker (has Chrome installed)
   - type: web
-    name: landd_app-backend1
+    name: landd_app-backend
     env: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
@@ -19,25 +19,3 @@ services:
         value: 5000
       - key: FRONTEND_URL
         value: https://app.landd.com.au
-
-
-
-  # Frontend service
-  - type: web
-    name: landd_app-frontend1
-    env: node
-    buildCommand: cd frontend && npm install --production && npm run build
-    startCommand: cd frontend && npx serve -s build -l 3000 --single
-    buildFilter:
-      paths:
-        - frontend/**
-    plan: starter
-    envVars:
-      - key: REACT_APP_API_URL
-        value: https://landd_app-backend1.onrender.com/api
-      - key: NODE_ENV
-        value: production 
-  
-  envVars:
-  - key: REACT_APP_GOOGLE_MAPS_API_KEY
-    sync: false  # Set this in Render dashboard
