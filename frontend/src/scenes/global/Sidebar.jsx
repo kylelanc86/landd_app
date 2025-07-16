@@ -267,6 +267,7 @@ const Sidebar = () => {
         background: #ffffff !important;
         border-right: 1px solid #e0e0e0 !important;
         width: 242px !important;
+        position: relative !important;
       }
       
       /* Reduce spacing between menu items */
@@ -306,7 +307,10 @@ const Sidebar = () => {
 
   return (
     <ProSidebar collapsed={false}>
-      <Menu iconShape="square">
+      <Menu
+        iconShape="square"
+        style={{ display: "flex", flexDirection: "column", height: "100%" }}
+      >
         <MenuItem
           style={{
             margin: "10px 0 20px 0",
@@ -409,12 +413,18 @@ const Sidebar = () => {
 
           <CollapsibleSection
             title="FIBRE ID"
-            to="/fibreID"
+            to="/fibre-id"
             icon={<ScienceIcon />}
           />
         </Box>
 
-        <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, p: 2 }}>
+        <Box
+          sx={{
+            p: 2,
+            backgroundColor: "#ffffff",
+                       marginTop: "auto",
+          }}
+        >
           <SectionDivider />
           <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
             <Item title="Admin" to="/admin" icon={<SettingsIcon />} />

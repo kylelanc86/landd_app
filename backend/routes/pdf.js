@@ -2519,8 +2519,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       // Continue with hardcoded content as fallback
     }
     
-    // Launch browser
-    browser = await puppeteer.launch({
+    // Launch browser with better cross-platform support
+    const launchOptions = {
       headless: 'new',
       args: [
         '--no-sandbox',
@@ -2531,9 +2531,42 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         '--no-zygote',
         '--single-process',
         '--disable-gpu'
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'
-    });
+      ]
+    };
+    // Add executable path if specified
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
+    } else {
+      console.log('Using default Chrome path');
+    }
+    try {
+      browser = await puppeteer.launch(launchOptions);
+      console.log('Browser launched successfully');
+    } catch (launchError) {
+      console.error('Failed to launch browser with default options:', launchError.message);
+      // Try with different options for Windows
+      console.log('Trying alternative launch options...');
+      const alternativeOptions = {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process'
+        ]
+      };
+      try {
+        browser = await puppeteer.launch(alternativeOptions);
+        console.log('Browser launched with alternative options');
+      } catch (secondError) {
+        console.error('Failed to launch browser with alternative options:', secondError.message);
+        throw new Error(`Failed to launch Chrome browser. Please ensure Chrome is installed and accessible. Error: ${secondError.message}`);
+      }
+    }
     
     const page = await browser.newPage();
     
@@ -3062,8 +3095,8 @@ const generatePDFFromHTML = async (templateType, data) => {
     writeLog('Template type: ' + templateType);
     writeLog('Data received for project: ' + (data.projectId?.name || 'Unknown project'));
     
-    // Launch browser
-    browser = await puppeteer.launch({
+    // Launch browser with better cross-platform support
+    const launchOptions = {
       headless: 'new',
       args: [
         '--no-sandbox',
@@ -3074,9 +3107,42 @@ const generatePDFFromHTML = async (templateType, data) => {
         '--no-zygote',
         '--single-process',
         '--disable-gpu'
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'
-    });
+      ]
+    };
+    // Add executable path if specified
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
+    } else {
+      console.log('Using default Chrome path');
+    }
+    try {
+      browser = await puppeteer.launch(launchOptions);
+      console.log('Browser launched successfully');
+    } catch (launchError) {
+      console.error('Failed to launch browser with default options:', launchError.message);
+      // Try with different options for Windows
+      console.log('Trying alternative launch options...');
+      const alternativeOptions = {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process'
+        ]
+      };
+      try {
+        browser = await puppeteer.launch(alternativeOptions);
+        console.log('Browser launched with alternative options');
+      } catch (secondError) {
+        console.error('Failed to launch browser with alternative options:', secondError.message);
+        throw new Error(`Failed to launch Chrome browser. Please ensure Chrome is installed and accessible. Error: ${secondError.message}`);
+      }
+    }
     
     const page = await browser.newPage();
     
@@ -3400,48 +3466,48 @@ router.get('/test', (req, res) => {
   });
 });
 
-// Test route to verify page 3 splitting functionality
-router.get('/test-page3-split', async (req, res) => {
+// Test route to check Puppeteer functionality
+router.get('/test-puppeteer', async (req, res) => {
+  let browser;
   try {
-    // Create test data with forcePageSplit enabled
-    const testData = {
-      clearanceType: 'Non-friable',
-      projectId: {
-        name: 'Test Site Address',
-        client: {
-          name: 'Test Client'
-        }
-      },
-      LAA: 'John Smith',
-      clearanceDate: '2024-01-15',
-      inspectionTime: '14:30',
-      inspectionDate: '2024-01-15',
-      asbestosRemovalist: 'Test Removalist',
-      siteName: 'Test Site',
-      clientName: 'Test Client',
-      clearanceItems: Array.from({ length: 25 }, (_, i) => ({
-        locationDescription: `Test Location ${i + 1}`,
-        materialDescription: `Test Material ${i + 1}`,
-        condition: 'Good',
-        action: 'Removed'
-      })),
-      forcePageSplit: true
-    };
+    console.log('Testing Puppeteer...');
     
-    console.log('Testing page 3 split functionality...');
-    const mainContentPages = await generateMainContentPages(testData);
-    
-    res.json({
-      message: 'Page 3 split test completed',
-      pagesGenerated: mainContentPages.length,
-      expectedPages: 2,
-      success: mainContentPages.length === 2,
-      timestamp: new Date().toISOString()
+    // Check if Puppeteer can launch
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
     });
     
+    const page = await browser.newPage();
+    await page.setContent('<html><body><h1>Puppeteer Test</h1></body></html>');
+    const pdf = await page.pdf({ format: 'A4' });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="test.pdf"');
+    res.send(pdf);
+    
   } catch (error) {
-    console.error('Error in page 3 split test:', error);
-    res.status(500).json({ error: 'Test failed', details: error.message });
+    console.error('Puppeteer test failed:', error);
+    res.status(500).json({ 
+      error: 'Puppeteer test failed', 
+      message: error.message,
+      stack: error.stack,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 'not set'
+    });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 
@@ -3501,8 +3567,14 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
+    console.error('Error stack:', error.stack);
     writeLog('ERROR generating assessment PDF: ' + error.message);
-    res.status(500).json({ error: 'Failed to generate assessment PDF: ' + error.message });
+    writeLog('ERROR stack: ' + error.stack);
+    res.status(500).json({ 
+      error: 'Failed to generate assessment PDF', 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -3562,7 +3634,14 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
     
   } catch (error) {
     console.error('Error in PDF generation route:', error);
-    res.status(500).json({ error: 'Failed to generate PDF', details: error.message });
+    console.error('Error stack:', error.stack);
+    writeLog('ERROR in PDF generation route: ' + error.message);
+    writeLog('ERROR stack: ' + error.stack);
+    res.status(500).json({ 
+      error: 'Failed to generate PDF', 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

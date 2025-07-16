@@ -22,17 +22,19 @@ import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
 import MonthlyTimesheet from "./scenes/timesheets/monthly";
-import Calibrations from "./scenes/calibrations/air-mon-calibrations";
-import AirPumpPage from "./scenes/calibrations/air-mon-calibrations/pages/AirPumpPage";
-import AirPumpCalibrationPage from "./scenes/calibrations/air-mon-calibrations/pages/AirPumpCalibrationPage";
-import FlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/FlowmeterPage";
-import EFAPage from "./scenes/calibrations/air-mon-calibrations/pages/EFAPage";
-import MicroscopePage from "./scenes/calibrations/air-mon-calibrations/pages/MicroscopePage";
-import AcetoneVaporiserPage from "./scenes/calibrations/air-mon-calibrations/pages/AcetoneVaporiserPage";
-import GraticulePage from "./scenes/calibrations/air-mon-calibrations/pages/GraticulePage";
-import PrimaryFlowmeterPage from "./scenes/calibrations/air-mon-calibrations/pages/PrimaryFlowmeterPage";
-import EquipmentList from "./scenes/calibrations/EquipmentList.jsx";
+import Calibrations from "./scenes/calibrations";
+import AirPumpPage from "./scenes/calibrations/AirPumpPage.jsx";
+import AirPumpCalibrationPage from "./scenes/calibrations/AirPumpCalibrationPage.jsx";
+import FlowmeterPage from "./scenes/calibrations/FlowmeterPage.jsx";
+import EFAPage from "./scenes/calibrations/EFAPage.jsx";
+import MicroscopePage from "./scenes/calibrations/MicroscopePage.jsx";
+import AcetoneVaporiserPage from "./scenes/calibrations/AcetoneVaporiserPage.jsx";
+import GraticulePage from "./scenes/calibrations/GraticulePage.jsx";
+import PrimaryFlowmeterPage from "./scenes/calibrations/PrimaryFlowmeterPage.jsx";
+import EquipmentList from "./scenes/records/EquipmentList.jsx";
 import FibreIdAnalysis from "./scenes/fibreID/AnalysisPage.jsx";
+import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
+import AsbestosAssessmentJobs from "./scenes/fibreID/AsbestosAssessmentJobs.jsx";
 import AssessmentJobsPage from "./scenes/surveys/asbestos";
 import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 
@@ -544,12 +546,32 @@ function App() {
                           }
                         />
                         <Route
-                          path="/fibreID"
+                          path="/fibre-id"
                           element={
                             <PermissionRoute
                               requiredPermissions={["fibre.view"]}
                             >
                               <FibreIdAnalysis />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre-id/client-supplied"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <ClientSuppliedJobs />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre-id/ldjobs"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <AsbestosAssessmentJobs />
                             </PermissionRoute>
                           }
                         />

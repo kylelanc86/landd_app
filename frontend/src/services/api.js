@@ -142,6 +142,7 @@ export const projectService = {
     if (params.search) queryParams.append('search', params.search);
     if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
+    if (params.projectType) queryParams.append('projectType', params.projectType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
@@ -277,6 +278,18 @@ export const timesheetService = {
     const response = await api.put(`/timesheets/status/${date}`, { status, userId });
     return response.data;
   }
+};
+
+// Asbestos Assessment service
+export const asbestosAssessmentService = {
+  getAsbestosAssessments: () => api.get('/asbestos-assessments'),
+  getAsbestosAssessmentById: (id) => api.get(`/asbestos-assessments/${id}`),
+  createAsbestosAssessment: (data) => api.post('/asbestos-assessments', data),
+  updateAsbestosAssessment: (id, data) => api.put(`/asbestos-assessments/${id}`, data),
+  deleteAsbestosAssessment: (id) => api.delete(`/asbestos-assessments/${id}`),
+  markSampleReadyForAnalysis: (assessmentId, itemId, readyForAnalysis) => 
+    api.patch(`/asbestos-assessments/${assessmentId}/items/${itemId}/ready-for-analysis`, { readyForAnalysis }),
+  getAssessmentsWithReadySamples: () => api.get('/asbestos-assessments/ready-for-analysis')
 };
 
 export default api; 

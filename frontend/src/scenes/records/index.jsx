@@ -124,7 +124,7 @@ const Records = () => {
       onClick: () => navigate("/records/impartiality-risks"),
     },
     {
-      title: "Feedback",
+      title: "Client Feedback",
       icon: <FeedbackIcon />,
       color: "success",
       onClick: () => navigate("/records/feedback"),
@@ -217,7 +217,7 @@ const Records = () => {
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
         Records
       </Typography>
-
+      
       {/* Tab Navigation */}
       <Paper
         elevation={0}
