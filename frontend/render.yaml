@@ -11,4 +11,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
-        sync: false 
+        sync: false
+      - key: BASE_PATH
+        value: /admin 
