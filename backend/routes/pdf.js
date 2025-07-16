@@ -3495,6 +3495,15 @@ router.get('/ping', (req, res) => {
   });
 });
 
+// Test route to check if the clearance endpoint is accessible
+router.get('/test-clearance-endpoint', (req, res) => {
+  res.json({ 
+    message: 'Clearance endpoint is accessible',
+    timestamp: new Date().toISOString(),
+    endpoint: '/generate-asbestos-clearance'
+  });
+});
+
 // Test route to check Puppeteer functionality
 router.get('/test-puppeteer', async (req, res) => {
   let browser;
@@ -3610,6 +3619,9 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
 // Route to generate asbestos clearance PDF
 router.post('/generate-asbestos-clearance', async (req, res) => {
   try {
+    console.log('=== PDF GENERATION REQUEST RECEIVED ===');
+    console.log('Request headers:', req.headers);
+    console.log('Request body keys:', Object.keys(req.body || {}));
     writeLog('=== PDF GENERATION REQUEST RECEIVED ===');
     writeLog('Request received for clearance ID: ' + req.body.clearanceData?._id);
     const { clearanceData } = req.body;

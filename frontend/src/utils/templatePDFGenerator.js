@@ -402,57 +402,84 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
     const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-clearance?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
-    // Call the server-side PDF generation endpoint with cache busting
-    const response = await fetch(requestUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      },
-      body: JSON.stringify({ clearanceData: data })
-    });
+    // Create an AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to generate PDF');
+    try {
+      // Call the server-side PDF generation endpoint with cache busting and timeout
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
+        body: JSON.stringify({ clearanceData: data }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId); // Clear timeout if request completes
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error text:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { error: errorText || 'Failed to generate PDF' };
+        }
+        throw new Error(errorData.error || 'Failed to generate PDF');
+      }
+
+      // Get the PDF blob
+      const pdfBlob = await response.blob();
+      console.log('PDF blob size:', pdfBlob.size, 'bytes');
+
+      if (pdfBlob.size === 0) {
+        throw new Error('Generated PDF is empty');
+      }
+
+      // Create a download link
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Generate filename with new format
+      const jobReference = data.projectId?.projectID || 'Unknown';
+      const clearanceType = data.clearanceType || 'Non-friable';
+      const siteName = data.projectId?.name || 'Unknown Site';
+      const clearanceDate = data.clearanceDate 
+        ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-')
+        : new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
+      
+      const fileName = `${jobReference}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
+      link.download = fileName;
+
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      
+      console.log('PDF generation completed successfully:', fileName);
+      return fileName;
+      
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('PDF generation timed out after 5 minutes. Please try again.');
+      }
+      throw fetchError;
     }
-
-    // Get the PDF blob
-    const pdfBlob = await response.blob();
-    console.log('PDF blob size:', pdfBlob.size, 'bytes');
-
-    // Create a download link
-    const url = window.URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = url;
-
-    // Generate filename with new format
-    const jobReference = data.projectId?.projectID || 'Unknown';
-    const clearanceType = data.clearanceType || 'Non-friable';
-    const siteName = data.projectId?.name || 'Unknown Site';
-    const clearanceDate = data.clearanceDate 
-      ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-')
-      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-    
-    const fileName = `${jobReference}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
-    link.download = fileName;
-
-    // Trigger download
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Clean up
-    window.URL.revokeObjectURL(url);
-    
-    console.log('PDF generation completed successfully:', fileName);
-    return fileName;
     
   } catch (error) {
     console.error("Error generating HTML template PDF:", error);
