@@ -11,7 +11,7 @@ const jobRoutes = require('./routes/jobs');
 const sampleRoutes = require('./routes/samples');
 const invoiceRoutes = require('./routes/invoices');
 const usersRouter = require('./routes/users');
-const xeroRoutes = require('./routes/xero');
+// const xeroRoutes = require('./routes/xero');
 const shiftRoutes = require('./routes/shifts');
 const timesheetRoutes = require('./routes/timesheets');
 const calendarEntriesRouter = require('./routes/calendarEntries');
@@ -109,7 +109,7 @@ connectDB()
     app.use('/api/samples', sampleRoutes);
     app.use('/api/invoices', invoiceRoutes);
     app.use('/api/users', usersRouter);
-    app.use('/api/xero', xeroRoutes);
+    // app.use('/api/xero', xeroRoutes);
     app.use('/api/air-monitoring-shifts', shiftRoutes);
     app.use('/api/timesheets', timesheetRoutes);
     app.use('/api/calendar-entries', calendarEntriesRouter);

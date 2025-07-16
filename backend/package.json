@@ -24,8 +24,7 @@
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.3",
     "pdf-lib": "^1.17.1",
-    "puppeteer": "^21.11.0",
-    "xero-node": "^11.1.0"
+    "puppeteer": "^21.11.0"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"
