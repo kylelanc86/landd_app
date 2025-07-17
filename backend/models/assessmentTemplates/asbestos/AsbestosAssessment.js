@@ -11,6 +11,7 @@ const AssessmentItemSchema = new mongoose.Schema({
   risk: { type: String, required: true },
   photograph: { type: String },
   recommendationActions: { type: String },
+  readyForAnalysis: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

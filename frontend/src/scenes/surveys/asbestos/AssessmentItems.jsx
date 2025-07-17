@@ -23,6 +23,7 @@ import {
   Select,
   Alert,
   Chip,
+  Checkbox,
 } from "@mui/material";
 import {
   PhotoCamera as PhotoCameraIcon,
@@ -44,7 +45,10 @@ import {
 } from "@mui/icons-material";
 import { useParams, useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
-import { projectService } from "../../../services/api";
+import {
+  projectService,
+  asbestosAssessmentService,
+} from "../../../services/api";
 
 const AssessmentItemsPage = () => {
   const { id } = useParams();
@@ -295,22 +299,28 @@ const AssessmentItemsPage = () => {
     }
   };
 
-  const handleDeclareSamplesCollected = async () => {
-    if (!assessment?.projectId?._id) return;
-    try {
-      await projectService.update(assessment.projectId._id, {
-        status: "Samples submitted",
-      });
-      setStatusMessage({
-        type: "success",
-        text: "Status updated to 'Samples submitted'!",
-      });
-      // Optionally, refetch assessment/project data here
-    } catch (err) {
-      setStatusMessage({
-        type: "error",
-        text: err.message || "Failed to update status.",
-      });
+  const handleMarkReadyForAnalysis = async () => {
+    if (
+      window.confirm(
+        "Are you sure you want to mark the entire assessment as ready for analysis?"
+      )
+    ) {
+      try {
+        await asbestosAssessmentService.markAssessmentReadyForAnalysis(id);
+        // Refresh assessment status
+        const updatedAssessment = await assessmentService.getJob(id);
+        setAssessment(updatedAssessment);
+        setStatusMessage({
+          type: "success",
+          text: "Assessment marked as ready for analysis.",
+        });
+      } catch (err) {
+        console.error("Error marking assessment ready for analysis:", err);
+        setStatusMessage({
+          type: "error",
+          text: "Failed to mark assessment ready for analysis.",
+        });
+      }
     }
   };
 
@@ -372,10 +382,10 @@ const AssessmentItemsPage = () => {
             variant="contained"
             color="success"
             startIcon={<CheckCircleIcon />}
-            onClick={handleDeclareSamplesCollected}
-            disabled={assessment?.projectId?.status === "Samples submitted"}
+            onClick={handleMarkReadyForAnalysis}
+            disabled={assessment?.status === "ready-for-analysis"}
           >
-            Declare All Samples Collected
+            Mark Job Ready for Analysis
           </Button>
         </Box>
       </Box>

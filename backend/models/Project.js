@@ -46,10 +46,7 @@ const projectSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      'Assigned',
       'In progress',
-      'Samples submitted',
-      'Lab Analysis Complete',
       'Report sent for review',
       'Ready for invoicing',
       'Invoice sent',
@@ -58,7 +55,7 @@ const projectSchema = new mongoose.Schema({
       'Quote sent',
       'Cancelled'
     ],
-    default: 'Assigned'
+    default: 'In progress'
   },
   address: {
     type: String,

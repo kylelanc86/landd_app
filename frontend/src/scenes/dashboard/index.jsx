@@ -5,6 +5,9 @@ import {
   Grid,
   Card,
   CardContent,
+  CardActionArea,
+    CardMedia,
+  Chip,
   CircularProgress,
   Button,
   Dialog,
@@ -28,7 +31,7 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { projectService, invoiceService } from "../../services/api";
 import { ACTIVE_STATUSES } from "../../components/JobStatus";
 import Header from "../../components/Header";
@@ -193,7 +196,8 @@ const Dashboard = () => {
           dailyTimesheetData.totalTime % 60
         }m`,
         icon: <AccessTimeIcon />,
-        bgcolor: tokens.primary[700],
+        bgcolor: "#1976d2",
+        chipLabel: "Timesheet",
         onClick: () => navigate("/timesheets"),
         subtitle:
           dailyTimesheetData.status.charAt(0).toUpperCase() +
@@ -204,7 +208,8 @@ const Dashboard = () => {
         title: "Active Projects Database",
         value: stats.activeProjects.toString(),
         icon: <AssignmentIcon />,
-        bgcolor: tokens.primary[700],
+        bgcolor: "#2e7d32",
+        chipLabel: "Active",
         onClick: () => navigateToProjects(navigate, { status: "all_active" }),
       },
       {
@@ -212,7 +217,8 @@ const Dashboard = () => {
         title: "Projects: Report Ready for Review",
         value: stats.reviewProjects.toString(),
         icon: <RateReviewIcon />,
-        bgcolor: tokens.secondary[700],
+        bgcolor: "#ed6c02",
+        chipLabel: "Review",
         onClick: () =>
           navigateToProjects(navigate, { status: "Report sent for review" }),
       },
@@ -221,7 +227,8 @@ const Dashboard = () => {
         title: "Projects: Ready for Invoicing",
         value: stats.invoiceProjects.toString(),
         icon: <ReceiptOutlinedIcon />,
-        bgcolor: tokens.neutral[700],
+        bgcolor: "#9c27b0",
+        chipLabel: "Invoice",
         onClick: () =>
           navigateToProjects(navigate, { status: "Ready for invoicing" }),
       },
@@ -230,7 +237,8 @@ const Dashboard = () => {
         title: "Outstanding Invoices Database",
         value: stats.outstandingInvoices.toString(),
         icon: <AttachMoneyIcon />,
-        bgcolor: tokens.primary[600],
+        bgcolor: "#d32f2f",
+        chipLabel: "Outstanding",
         onClick: () => navigateToInvoices(navigate),
       },
       {
@@ -238,7 +246,8 @@ const Dashboard = () => {
         title: "Projects: Lab Analysis Complete",
         value: stats.labCompleteProjects.toString(),
         icon: <ScienceIcon />,
-        bgcolor: tokens.secondary[600],
+        bgcolor: "#1976d2",
+        chipLabel: "Lab Complete",
         onClick: () =>
           navigateToProjects(navigate, { status: "Lab Analysis Complete" }),
       },
@@ -247,7 +256,8 @@ const Dashboard = () => {
         title: "Projects: Samples Submitted",
         value: stats.samplesSubmittedProjects.toString(),
         icon: <SendIcon />,
-        bgcolor: tokens.primary[500],
+        bgcolor: "#2e7d32",
+        chipLabel: "Submitted",
         onClick: () =>
           navigateToProjects(navigate, { status: "Samples submitted" }),
       },
@@ -256,7 +266,8 @@ const Dashboard = () => {
         title: "Projects: In Progress",
         value: stats.inProgressProjects.toString(),
         icon: <PlayArrowIcon />,
-        bgcolor: tokens.neutral[600],
+        bgcolor: "#ed6c02",
+        chipLabel: "In Progress",
         onClick: () => navigateToProjects(navigate, { status: "In progress" }),
       },
     ],
@@ -322,7 +333,12 @@ const Dashboard = () => {
   return (
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="h3" component="h1" gutterBottom sx={{ mt: 3, mb: 4 }}>
+        <Typography
+          variant="h3"
+          component="h1"
+          gutterBottom
+          sx={{ mt: 3, mb: 4 }}
+        >
           Dashboard
         </Typography>
         <Button
@@ -352,60 +368,73 @@ const Dashboard = () => {
                 sx={{
                   "& > *": {
                     flex: "0 0 calc(25% - 15px)",
-                    minWidth: "250px",
-                    height: "140px",
+                    minWidth: "280px",
+                    height: "200px",
                   },
                 }}
               >
                 {displayWidgets.map((item, index) => (
                   <Draggable key={item.id} draggableId={item.id} index={index}>
                     {(provided, snapshot) => (
-                      <Box
+                      <Card
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        backgroundColor={item.bgcolor}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
                         sx={{
-                          cursor: "pointer",
+                          height: "200px",
+                          transition: "all 0.3s ease-in-out",
                           "&:hover": {
-                            opacity: 0.9,
+                            transform: "translateY(-4px)",
+                            boxShadow: 4,
                           },
                           transform: snapshot.isDragging
                             ? "scale(1.02)"
                             : "none",
-                          transition: "transform 0.2s ease",
+                          cursor: "pointer",
                           borderRadius: "8px",
                         }}
                         onClick={() => handleCardClick(item)}
                       >
-                        <Card
+                        <CardActionArea
                           sx={{
-                            width: "100%",
                             height: "100%",
-                            backgroundColor: "transparent",
-                            boxShadow: "none",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "stretch",
                           }}
                         >
-                          <CardContent
+                          <CardMedia
+                            component="div"
                             sx={{
+                              height: 120,
+                              backgroundColor: item.bgcolor,
                               display: "flex",
-                              flexDirection: "column",
                               alignItems: "center",
                               justifyContent: "center",
-                              height: "100%",
                               position: "relative",
                             }}
                           >
+                            {React.cloneElement(item.icon, {
+                              sx: { fontSize: 50, color: "white" },
+                            })}
+                            <Chip
+                              label={item.chipLabel}
+                              sx={{
+                                position: "absolute",
+                                top: 8,
+                                right: 8,
+                                backgroundColor: "rgba(255,255,255,0.9)",
+                                fontWeight: "bold",
+                                fontSize: "0.7rem",
+                              }}
+                            />
                             <Box
                               {...provided.dragHandleProps}
                               sx={{
                                 position: "absolute",
                                 top: 8,
-                                right: 8,
+                                left: 8,
                                 color: "white",
-                                opacity: 0.5,
+                                opacity: 0.7,
                                 "&:hover": {
                                   opacity: 1,
                                 },
@@ -413,42 +442,41 @@ const Dashboard = () => {
                             >
                               <DragIndicatorIcon />
                             </Box>
-                            <Box
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="center"
-                              mb={2}
+                          </CardMedia>
+                          <CardContent
+                            sx={{
+                              flexGrow: 1,
+                              display: "flex",
+                              flexDirection: "column",
+                              justifyContent: "center",
+                              p: 2,
+                            }}
+                          >
+                            <Typography
+                              variant="h6"
+                              component="div"
+                              sx={{
+                                fontSize: "0.9rem",
+                                fontWeight: "bold",
+                                mb: 1,
+                                textAlign: "center",
+                              }}
                             >
-                              {item.icon}
-                            </Box>
-                            <Box
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="center"
-                              gap={1}
+                              {item.title}
+                            </Typography>
+                            <Typography
+                              variant="h4"
+                              component="div"
+                              sx={{
+                                color: item.bgcolor,
+                                fontSize: "1.5rem",
+                                fontWeight: "bold",
+                                textAlign: "center",
+                                mb: 1,
+                              }}
                             >
-                              <Typography
-                                variant="h6"
-                                component="div"
-                                sx={{
-                                  color: "black",
-                                  fontSize: "1.05rem",
-                                }}
-                              >
-                                {item.title}:
-                              </Typography>
-                              <Typography
-                                variant="h6"
-                                component="div"
-                                sx={{
-                                  color: "#2e7d32",
-                                  fontSize: "1.05rem",
-                                  fontStyle: "bold",
-                                }}
-                              >
-                                {item.value}
-                              </Typography>
-                            </Box>
+                              {item.value}
+                            </Typography>
                             {item.subtitle && (
                               <Typography
                                 variant="body2"
@@ -456,17 +484,17 @@ const Dashboard = () => {
                                   color:
                                     item.subtitle === "Incomplete"
                                       ? "#ff6b6b"
-                                      : "#000000",
+                                      : "#666",
                                   textAlign: "center",
-                                  mt: 1,
+                                  fontSize: "0.8rem",
                                 }}
                               >
                                 {item.subtitle}
                               </Typography>
                             )}
                           </CardContent>
-                        </Card>
-                      </Box>
+                        </CardActionArea>
+                      </Card>
                     )}
                   </Draggable>
                 ))}

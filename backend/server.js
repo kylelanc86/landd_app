@@ -27,6 +27,8 @@ const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates')
 const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
 const pdfRoutes = require('./routes/pdf');
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
+const sampleItemsRoutes = require('./routes/sampleItems');
+const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
 
 // Load environment variables
 dotenv.config();
@@ -124,8 +126,13 @@ connectDB()
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
-    
-    // Debug: Log all registered routes
+
+    const requireAuth = require('./middleware/auth');
+    app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);
+    app.use('/api/sample-items', requireAuth, sampleItemsRoutes);
+    app.use('/api/client-supplied-jobs', requireAuth, clientSuppliedJobsRoutes);
+
+    // Debug: Log all registered routes (moved after all routes are registered)
     console.log('=== Registered Routes ===');
     app._router.stack.forEach((middleware) => {
       if (middleware.route) {
@@ -139,9 +146,6 @@ connectDB()
       }
     });
     console.log('========================');
-
-    const requireAuth = require('./middleware/auth');
-    app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);
     
     // Error handling middleware
     app.use((err, req, res, next) => {

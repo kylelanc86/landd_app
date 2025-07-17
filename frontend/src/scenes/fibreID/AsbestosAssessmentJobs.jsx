@@ -41,10 +41,15 @@ const AsbestosAssessmentJobs = () => {
   const fetchAsbestosAssessments = async () => {
     try {
       setLoading(true);
-      // Fetch asbestos assessments that have samples ready for analysis
-      const response =
-        await asbestosAssessmentService.getAssessmentsWithReadySamples();
-      setAssessments(response.data || []);
+      // Fetch all asbestos assessments
+      const response = await asbestosAssessmentService.getAsbestosAssessments();
+
+      // Filter to only show jobs that are ready for analysis
+      const jobsReadyForAnalysis = (response.data || []).filter(
+        (assessment) => assessment.status === "ready-for-analysis"
+      );
+
+      setAssessments(jobsReadyForAnalysis);
     } catch (error) {
       console.error("Error fetching asbestos assessments:", error);
     } finally {
@@ -72,7 +77,7 @@ const AsbestosAssessmentJobs = () => {
   );
 
   const handleViewAssessment = (assessmentId) => {
-    navigate(`/fibre-id/ldjobs/${assessmentId}`);
+    navigate(`/fibre-id/ldjobs/${assessmentId}/samples`);
   };
 
   const handleBackToHome = () => {
@@ -80,14 +85,13 @@ const AsbestosAssessmentJobs = () => {
   };
 
   const getReadySamplesCount = (assessment) => {
-    if (!assessment.items) return 0;
-    return assessment.items.filter((item) => item.readyForAnalysis).length;
+    return assessment.items?.length || 0;
   };
 
   const getStatusColor = (assessment) => {
-    const readyCount = getReadySamplesCount(assessment);
-    if (readyCount === 0) return "default";
-    if (readyCount <= 5) return "warning";
+    const itemCount = getReadySamplesCount(assessment);
+    if (itemCount === 0) return "default";
+    if (itemCount <= 5) return "warning";
     return "success";
   };
 
@@ -112,8 +116,7 @@ const AsbestosAssessmentJobs = () => {
           Asbestos Assessment Jobs
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-          View asbestos assessment jobs with samples ready for fibre
-          identification analysis
+          View asbestos assessment jobs ready for fibre identification analysis
         </Typography>
 
         {/* Search Bar */}
@@ -144,14 +147,12 @@ const AsbestosAssessmentJobs = () => {
                   <TableCell sx={{ fontWeight: "bold" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Client</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Assessor</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Sample Date</TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>LAA</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>
-                    Assessment Date
+                    No. of Samples
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
-                    Ready Samples
-                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -165,7 +166,7 @@ const AsbestosAssessmentJobs = () => {
                 ) : filteredAssessments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center">
-                      No asbestos assessment jobs with ready samples found
+                      No asbestos assessment jobs ready for analysis found
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -188,8 +189,11 @@ const AsbestosAssessmentJobs = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
-                            {assessment.projectId?.client?.name ||
-                              "Unknown Client"}
+                            {assessment.assessmentDate
+                              ? new Date(
+                                  assessment.assessmentDate
+                                ).toLocaleDateString("en-GB")
+                              : "N/A"}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -200,28 +204,19 @@ const AsbestosAssessmentJobs = () => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2">
-                            {assessment.assessmentDate
-                              ? new Date(
-                                  assessment.assessmentDate
-                                ).toLocaleDateString("en-GB")
-                              : "N/A"}
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: "medium" }}
+                          >
+                            {readyCount}
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            badgeContent={readyCount}
-                            color={getStatusColor(assessment)}
-                            sx={{
-                              "& .MuiBadge-badge": {
-                                fontSize: "0.75rem",
-                                height: "20px",
-                                minWidth: "20px",
-                              },
-                            }}
-                          >
-                            <ScienceIcon color="action" />
-                          </Badge>
+                          <Chip
+                            label={assessment.status || "ready-for-analysis"}
+                            color="success"
+                            size="small"
+                          />
                         </TableCell>
                         <TableCell>
                           <IconButton
@@ -229,7 +224,6 @@ const AsbestosAssessmentJobs = () => {
                             color="primary"
                             size="small"
                             title="View Assessment Details"
-                            disabled={readyCount === 0}
                           >
                             <ViewIcon />
                           </IconButton>

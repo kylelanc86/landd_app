@@ -3,10 +3,7 @@ import { Box, Typography, Chip } from "@mui/material";
 
 export const JOB_STATUS = {
   // Active Jobs
-  ASSIGNED: "Assigned",
   IN_PROGRESS: "In progress",
-  SAMPLES_SUBMITTED: "Samples submitted",
-  LAB_ANALYSIS_COMPLETE: "Lab Analysis Complete",
   REPORT_SENT_FOR_REVIEW: "Report sent for review",
   READY_FOR_INVOICING: "Ready for invoicing",
   INVOICE_SENT: "Invoice sent",
@@ -19,10 +16,7 @@ export const JOB_STATUS = {
 };
 
 export const ACTIVE_STATUSES = [
-  JOB_STATUS.ASSIGNED,
   JOB_STATUS.IN_PROGRESS,
-  JOB_STATUS.SAMPLES_SUBMITTED,
-  JOB_STATUS.LAB_ANALYSIS_COMPLETE,
   JOB_STATUS.REPORT_SENT_FOR_REVIEW,
   JOB_STATUS.READY_FOR_INVOICING,
   JOB_STATUS.INVOICE_SENT,
@@ -37,10 +31,7 @@ export const INACTIVE_STATUSES = [
 
 export const getStatusColor = (status) => {
   const statusColors = {
-    [JOB_STATUS.ASSIGNED]: "#2196f3", // Blue
     [JOB_STATUS.IN_PROGRESS]: "#ff9800", // Orange
-    [JOB_STATUS.SAMPLES_SUBMITTED]: "#9c27b0", // Purple
-    [JOB_STATUS.LAB_ANALYSIS_COMPLETE]: "#4caf50", // Green
     [JOB_STATUS.REPORT_SENT_FOR_REVIEW]: "#f44336", // Red
     [JOB_STATUS.READY_FOR_INVOICING]: "#795548", // Brown
     [JOB_STATUS.INVOICE_SENT]: "#607d8b", // Blue Grey

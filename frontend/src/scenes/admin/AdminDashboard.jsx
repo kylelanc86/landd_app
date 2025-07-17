@@ -6,11 +6,14 @@ import {
   Card,
   CardContent,
   CardActionArea,
+  CardMedia,
+  Chip,
   useTheme,
 } from "@mui/material";
 import {
   PeopleOutlined as PeopleIcon,
   Assessment as AssessmentIcon,
+  ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme";
@@ -29,19 +32,21 @@ const AdminDashboard = () => {
       id: "users",
       title: "User Management",
       description: "Manage user accounts, roles, and permissions",
-      icon: <PeopleIcon sx={{ fontSize: 40, color: colors.secondary[500] }} />,
+      icon: <PeopleIcon />,
       path: "/users",
       requiredPermission: "users.view",
+      color: "#1976d2",
+      chipLabel: "Users",
     },
     {
       id: "report-templates",
       title: "Report Templates",
       description: "Manage standardized content for different report types",
-      icon: (
-        <AssessmentIcon sx={{ fontSize: 40, color: colors.secondary[200] }} />
-      ),
+      icon: <AssessmentIcon />,
       path: "/admin/report-templates",
       requiredPermission: "admin.view",
+      color: "#2e7d32",
+      chipLabel: "Templates",
     },
   ];
 
@@ -56,57 +61,87 @@ const AdminDashboard = () => {
           Admin Dashboard
         </Typography>
         <Box sx={{ mt: 4 }}>
-          <Grid container spacing={3}>
+          <Grid container spacing={4}>
             {adminModules.map((module) => (
               <Grid item xs={12} md={6} lg={6} key={module.id}>
                 <Card
                   sx={{
                     height: "100%",
-                    transition:
-                      "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+                    transition: "all 0.3s ease-in-out",
                     "&:hover": {
                       transform: "translateY(-4px)",
-                      boxShadow: "0px 8px 25px rgba(0, 0, 0, 0.15)",
+                      boxShadow: 4,
                     },
                   }}
                 >
                   <CardActionArea
                     onClick={() => handleModuleClick(module)}
-                    sx={{ height: "100%", p: 3 }}
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                    }}
                   >
-                    <CardContent
+                    <CardMedia
+                      component="div"
                       sx={{
+                        height: 200,
+                        backgroundColor: module.color,
                         display: "flex",
-                        flexDirection: "column",
                         alignItems: "center",
-                        textAlign: "center",
-                        p: 0,
+                        justifyContent: "center",
+                        position: "relative",
                       }}
                     >
-                      <Box sx={{ mb: 2 }}>{module.icon}</Box>
-                      <Typography
-                        variant="h5"
-                        color={"black"}
-                        fontWeight="bold"
-                        sx={{ mb: 1 }}
-                      >
+                      {React.cloneElement(module.icon, {
+                        sx: { fontSize: 80, color: "white" },
+                      })}
+                      <Chip
+                        label={module.chipLabel}
+                        sx={{
+                          position: "absolute",
+                          top: 16,
+                          right: 16,
+                          backgroundColor: "rgba(255,255,255,0.9)",
+                          fontWeight: "bold",
+                        }}
+                      />
+                    </CardMedia>
+                    <CardContent
+                      sx={{
+                        flexGrow: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <Typography variant="h5" component="h2" gutterBottom>
                         {module.title}
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={colors.grey[300]}
+                        color="text.secondary"
                         sx={{ mb: 2 }}
                       >
                         {module.description}
                       </Typography>
                       <Box
                         sx={{
-                          width: "100%",
-                          height: 2,
-                          backgroundColor: colors.secondary[500],
-                          borderRadius: 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: "auto",
                         }}
-                      />
+                      >
+                        <Typography
+                          variant="body2"
+                          color="primary"
+                          sx={{ fontWeight: "bold" }}
+                        >
+                          View {module.title}
+                        </Typography>
+                        <ArrowForwardIcon color="primary" />
+                      </Box>
                     </CardContent>
                   </CardActionArea>
                 </Card>

@@ -61,15 +61,15 @@ const loadImages = () => {
     } else {
       console.warn('Logo file not found, using empty string');
     }
-    
-    // Load the background image using the same method as logos
+
+// Load the background image using the same method as logos
     const backgroundPath = path.join(__dirname, '../assets/logo.png'); // Placeholder, update if you add a real background
-    console.log('Background image path:', backgroundPath);
-    console.log('Background image exists:', fs.existsSync(backgroundPath));
+console.log('Background image path:', backgroundPath);
+console.log('Background image exists:', fs.existsSync(backgroundPath));
     
     if (fs.existsSync(backgroundPath)) {
       backgroundBase64 = fs.readFileSync(backgroundPath).toString('base64');
-      console.log('Background image loaded, base64 length:', backgroundBase64.length);
+console.log('Background image loaded, base64 length:', backgroundBase64.length);
     } else {
       console.warn('Background image file not found, using empty string');
     }

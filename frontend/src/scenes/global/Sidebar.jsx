@@ -18,6 +18,8 @@ import StorageIcon from "@mui/icons-material/Storage";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ConstructionIcon from "@mui/icons-material/Construction";
+import SearchIcon from '@mui/icons-material/Search';
+import FolderCopyIcon from '@mui/icons-material/FolderCopy';
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -394,7 +396,7 @@ const Sidebar = () => {
           <CollapsibleSection
             title="RECORDS"
             to="/records"
-            icon={<DescriptionIcon />}
+            icon={<FolderCopyIcon />}
           />
 
           <SectionDivider />
@@ -402,7 +404,7 @@ const Sidebar = () => {
           <CollapsibleSection
             title="SURVEYS"
             to="/surveys"
-            icon={<HomeIcon />}
+            icon={<SearchIcon />}
           />
 
           <CollapsibleSection

@@ -6,12 +6,15 @@ import {
   Card,
   CardContent,
   CardActionArea,
+  CardMedia,
+  Chip,
   useTheme,
 } from "@mui/material";
 import {
   Home as HomeIcon,
   Science as ScienceIcon,
   Assessment as AssessmentIcon,
+  ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme";
@@ -28,35 +31,31 @@ const SurveysDashboard = () => {
       id: "asbestos-assessment",
       title: "Asbestos Assessment",
       description: "Conduct asbestos surveys and assessments",
-      icon: (
-        <HomeIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
-      ),
+      icon: <HomeIcon />,
       path: "/assessments", // changed from /surveys/asbestos
       requiredPermission: "asbestos.view",
+      color: "#1976d2",
+      chipLabel: "Assessment",
     },
     {
       id: "lead-assessment",
       title: "Lead Assessment",
       description: "Conduct lead paint surveys and assessments",
-      icon: (
-        <AssessmentIcon
-          sx={{ fontSize: 40, color: theme.palette.secondary.main }}
-        />
-      ),
+      icon: <AssessmentIcon />,
       path: "/surveys/lead",
       requiredPermission: "asbestos.view",
+      color: "#2e7d32",
+      chipLabel: "Lead",
     },
     {
       id: "mould-assessment",
       title: "Mould Assessment",
       description: "Conduct mould surveys and assessments",
-      icon: (
-        <ScienceIcon
-          sx={{ fontSize: 40, color: theme.palette.secondary.main }}
-        />
-      ),
+      icon: <ScienceIcon />,
       path: "/surveys/mould",
       requiredPermission: "asbestos.view",
+      color: "#ed6c02",
+      chipLabel: "Mould",
     },
   ];
 
@@ -71,57 +70,87 @@ const SurveysDashboard = () => {
           Surveys
         </Typography>
         <Box sx={{ mt: 4 }}>
-          <Grid container spacing={3}>
+          <Grid container spacing={4}>
             {surveyModules.map((module) => (
               <Grid item xs={12} md={6} lg={4} key={module.id}>
                 <Card
                   sx={{
                     height: "100%",
-                    transition:
-                      "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+                    transition: "all 0.3s ease-in-out",
                     "&:hover": {
                       transform: "translateY(-4px)",
-                      boxShadow: "0px 8px 25px rgba(0, 0, 0, 0.15)",
+                      boxShadow: 4,
                     },
                   }}
                 >
                   <CardActionArea
                     onClick={() => handleModuleClick(module)}
-                    sx={{ height: "100%", p: 3 }}
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                    }}
                   >
-                    <CardContent
+                    <CardMedia
+                      component="div"
                       sx={{
+                        height: 200,
+                        backgroundColor: module.color,
                         display: "flex",
-                        flexDirection: "column",
                         alignItems: "center",
-                        textAlign: "center",
-                        p: 0,
+                        justifyContent: "center",
+                        position: "relative",
                       }}
                     >
-                      <Box sx={{ mb: 2 }}>{module.icon}</Box>
-                      <Typography
-                        variant="h5"
-                        color="#000000"
-                        fontWeight="bold"
-                        sx={{ mb: 1 }}
-                      >
+                      {React.cloneElement(module.icon, {
+                        sx: { fontSize: 80, color: "white" },
+                      })}
+                      <Chip
+                        label={module.chipLabel}
+                        sx={{
+                          position: "absolute",
+                          top: 16,
+                          right: 16,
+                          backgroundColor: "rgba(255,255,255,0.9)",
+                          fontWeight: "bold",
+                        }}
+                      />
+                    </CardMedia>
+                    <CardContent
+                      sx={{
+                        flexGrow: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <Typography variant="h5" component="h2" gutterBottom>
                         {module.title}
                       </Typography>
                       <Typography
                         variant="body2"
-                        color={theme.palette.text.secondary}
+                        color="text.secondary"
                         sx={{ mb: 2 }}
                       >
                         {module.description}
                       </Typography>
                       <Box
                         sx={{
-                          width: "100%",
-                          height: 2,
-                          backgroundColor: theme.palette.secondary.main,
-                          borderRadius: 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: "auto",
                         }}
-                      />
+                      >
+                        <Typography
+                          variant="body2"
+                          color="primary"
+                          sx={{ fontWeight: "bold" }}
+                        >
+                          View {module.title}
+                        </Typography>
+                        <ArrowForwardIcon color="primary" />
+                      </Box>
                     </CardContent>
                   </CardActionArea>
                 </Card>

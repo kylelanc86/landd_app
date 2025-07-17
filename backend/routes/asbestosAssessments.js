@@ -156,6 +156,40 @@ router.put('/:id/items/:itemId', async (req, res) => {
   }
 });
 
+// PATCH /api/assessments/:id/ready-for-analysis - mark entire assessment as ready for analysis
+router.patch('/:id/ready-for-analysis', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    job.status = "ready-for-analysis";
+    job.updatedAt = new Date();
+    await job.save();
+    
+    res.json(job);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to mark assessment ready for analysis', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/ready-for-analysis - mark item as ready for analysis
+router.patch('/:id/items/:itemId/ready-for-analysis', async (req, res) => {
+  try {
+    const { readyForAnalysis } = req.body;
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    
+    item.readyForAnalysis = readyForAnalysis;
+    item.updatedAt = new Date();
+    await job.save();
+    
+    res.json(item);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to update item ready for analysis status', error: err.message });
+  }
+});
+
 // DELETE /api/assessments/:id/items/:itemId - delete item
 router.delete('/:id/items/:itemId', async (req, res) => {
   try {

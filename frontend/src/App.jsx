@@ -32,9 +32,12 @@ import AcetoneVaporiserPage from "./scenes/calibrations/AcetoneVaporiserPage.jsx
 import GraticulePage from "./scenes/calibrations/GraticulePage.jsx";
 import PrimaryFlowmeterPage from "./scenes/calibrations/PrimaryFlowmeterPage.jsx";
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
-import FibreIdAnalysis from "./scenes/fibreID/AnalysisPage.jsx";
+import FibreIdIndex from "./scenes/fibreID/index.jsx";
+import AnalysisPage from "./scenes/fibreID/AnalysisPage.jsx";
 import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
 import AsbestosAssessmentJobs from "./scenes/fibreID/AsbestosAssessmentJobs.jsx";
+import AsbestosAssessmentSamples from "./scenes/fibreID/AsbestosAssessmentSamples.jsx";
+import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
 import AssessmentJobsPage from "./scenes/surveys/asbestos";
 import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 
@@ -547,7 +550,7 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["fibre.view"]}
                             >
-                              <FibreIdAnalysis />
+                              <FibreIdIndex />
                             </PermissionRoute>
                           }
                         />
@@ -568,6 +571,42 @@ function App() {
                               requiredPermissions={["fibre.view"]}
                             >
                               <AsbestosAssessmentJobs />
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre-id/ldjobs/:assessmentId/samples"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosAssessmentSamples />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre-id/client-supplied/:jobId/samples"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ClientSuppliedSamples />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre-id/analysis/:sampleId"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AnalysisPage />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />

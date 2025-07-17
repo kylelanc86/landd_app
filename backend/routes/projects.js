@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const Project = require('../models/Project');
+const Client = require('../models/Client');
+const User = require('../models/User');
+const Timesheet = require('../models/Timesheet');
+const ClientSuppliedJob = require('../models/ClientSuppliedJob');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
-const User = require('../models/User');
-const Timesheet = require('../models/Timesheet');
 
 // Define active and inactive statuses at module level
 const activeStatuses = [
@@ -193,6 +195,26 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
     
     // Save the project (this will trigger the pre-save hook)
     const newProject = await project.save();
+    
+    // If this is a client supplied project, automatically create a job
+    if (newProject.department === 'Client Supplied') {
+      try {
+        const jobCount = await ClientSuppliedJob.countDocuments();
+        const jobNumber = `CSJ-${String(jobCount + 1).padStart(4, '0')}`;
+        
+        const job = new ClientSuppliedJob({
+          projectId: newProject._id,
+          jobNumber,
+          status: 'Pending'
+        });
+        
+        await job.save();
+        console.log(`Automatically created client supplied job ${jobNumber} for project ${newProject.projectID}`);
+      } catch (jobError) {
+        console.error('Error creating automatic client supplied job:', jobError);
+        // Don't fail the project creation if job creation fails
+      }
+    }
     
     // Populate the users before sending response
     const populatedProject = await Project.findById(newProject._id)

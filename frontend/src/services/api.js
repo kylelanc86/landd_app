@@ -193,6 +193,20 @@ export const sampleService = {
   delete: (id) => api.delete(`/samples/${id}`)
 };
 
+// Sample Items service (for fibre ID analysis)
+export const sampleItemsService = {
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.projectId) queryParams.append('projectId', params.projectId);
+    return api.get(`/sample-items?${queryParams.toString()}`);
+  },
+  getById: (id) => api.get(`/sample-items/${id}`),
+  create: (data) => api.post('/sample-items', data),
+  createBulk: (data) => api.post('/sample-items/bulk', data),
+  update: (id, data) => api.put(`/sample-items/${id}`, data),
+  delete: (id) => api.delete(`/sample-items/${id}`)
+};
+
 export const shiftService = {
   getAll: () => api.get('/air-monitoring-shifts'),
   getById: (id) => api.get(`/air-monitoring-shifts/${id}`),
@@ -282,14 +296,33 @@ export const timesheetService = {
 
 // Asbestos Assessment service
 export const asbestosAssessmentService = {
-  getAsbestosAssessments: () => api.get('/asbestos-assessments'),
-  getAsbestosAssessmentById: (id) => api.get(`/asbestos-assessments/${id}`),
-  createAsbestosAssessment: (data) => api.post('/asbestos-assessments', data),
-  updateAsbestosAssessment: (id, data) => api.put(`/asbestos-assessments/${id}`, data),
-  deleteAsbestosAssessment: (id) => api.delete(`/asbestos-assessments/${id}`),
+  getAsbestosAssessments: () => api.get('/assessments'),
+  getAsbestosAssessmentById: (id) => api.get(`/assessments/${id}`),
+  createAsbestosAssessment: (data) => api.post('/assessments', data),
+  updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
+  deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),
   markSampleReadyForAnalysis: (assessmentId, itemId, readyForAnalysis) => 
-    api.patch(`/asbestos-assessments/${assessmentId}/items/${itemId}/ready-for-analysis`, { readyForAnalysis }),
-  getAssessmentsWithReadySamples: () => api.get('/asbestos-assessments/ready-for-analysis')
+    api.patch(`/assessments/${assessmentId}/items/${itemId}/ready-for-analysis`, { readyForAnalysis }),
+  markAssessmentReadyForAnalysis: (assessmentId) => 
+    api.patch(`/assessments/${assessmentId}/ready-for-analysis`),
+  getAssessmentsWithReadySamples: () => api.get('/assessments/ready-for-analysis')
+};
+
+// Client Supplied Jobs service
+export const clientSuppliedJobsService = {
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.projectId) queryParams.append('projectId', params.projectId);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    return api.get(`/client-supplied-jobs?${queryParams.toString()}`);
+  },
+  getById: (id) => api.get(`/client-supplied-jobs/${id}`),
+  create: (data) => api.post('/client-supplied-jobs', data),
+  update: (id, data) => api.put(`/client-supplied-jobs/${id}`, data),
+  delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
+  getByProject: (projectId) => api.get(`/client-supplied-jobs/project/${projectId}`)
 };
 
 export default api; 

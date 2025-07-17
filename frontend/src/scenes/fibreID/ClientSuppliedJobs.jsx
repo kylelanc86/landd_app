@@ -24,49 +24,83 @@ import {
   ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { projectService } from "../../services/api";
+import {
+  clientSuppliedJobsService,
+  sampleItemsService,
+} from "../../services/api";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [sampleCounts, setSampleCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    fetchClientSuppliedProjects();
+    fetchClientSuppliedJobs();
   }, []);
 
-  const fetchClientSuppliedProjects = async () => {
+  // Refresh data when component comes into focus (e.g., when returning from samples page)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (jobs.length > 0) {
+        fetchSampleCounts(jobs);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [jobs]);
+
+  const fetchClientSuppliedJobs = async () => {
     try {
       setLoading(true);
-      // Fetch projects that are client supplied (not asbestos assessments)
-      const response = await projectService.getAll({
-        department: "Client Supplied",
-      });
-      console.log("API Response:", response);
-      console.log("Response data:", response.data);
-      console.log("Response data.data:", response.data?.data);
-      // Handle different response structures
-      const projectsData = response.data?.data || response.data || [];
-      console.log("Final projects data:", projectsData);
-      setProjects(Array.isArray(projectsData) ? projectsData : []);
+      // Fetch all client supplied jobs
+      const response = await clientSuppliedJobsService.getAll();
+
+      const jobsData = response.data || [];
+      const jobsArray = Array.isArray(jobsData) ? jobsData : [];
+      setJobs(jobsArray);
+
+      // Fetch sample counts for each job
+      await fetchSampleCounts(jobsArray);
     } catch (error) {
-      console.error("Error fetching client supplied projects:", error);
-      setProjects([]);
+      console.error("Error fetching client supplied jobs:", error);
+      setJobs([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredProjects = (Array.isArray(projects) ? projects : []).filter(
-    (project) =>
-      project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchSampleCounts = async (jobsArray) => {
+    const counts = {};
+    for (const job of jobsArray) {
+      try {
+        const response = await sampleItemsService.getAll({
+          projectId: job.projectId._id || job.projectId,
+        });
+        counts[job._id] = response.data?.length || 0;
+      } catch (error) {
+        console.error(`Error fetching sample count for job ${job._id}:`, error);
+        counts[job._id] = 0;
+      }
+    }
+    setSampleCounts(counts);
+  };
+
+  const filteredJobs = (Array.isArray(jobs) ? jobs : []).filter(
+    (job) =>
+      job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.projectId?.client?.name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      job.projectId?.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleViewProject = (projectId) => {
-    navigate(`/fibre-id/client-supplied/${projectId}`);
+  const handleViewJob = (jobId) => {
+    // Ensure we're passing a string ID, not an object
+    const actualJobId = typeof jobId === "object" ? jobId._id : jobId;
+    navigate(`/fibre-id/client-supplied/${actualJobId}/samples`);
   };
 
   const handleBackToHome = () => {
@@ -107,8 +141,7 @@ const ClientSuppliedJobs = () => {
           Client Supplied Jobs
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-          View and manage client supplied projects for fibre identification
-          analysis
+          View and manage client supplied jobs for fibre identification analysis
         </Typography>
 
         {/* Search Bar */}
@@ -129,7 +162,7 @@ const ClientSuppliedJobs = () => {
           />
         </Box>
 
-        {/* Projects Table */}
+        {/* Jobs Table */}
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
           <TableContainer>
             <Table stickyHeader>
@@ -139,73 +172,78 @@ const ClientSuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold" }}>
                     Project Name
                   </TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Sample Date</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Client</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>
-                    Created Date
+                    No. of Samples
                   </TableCell>
+                  <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      Loading projects...
+                    <TableCell colSpan={7} align="center">
+                      Loading jobs...
                     </TableCell>
                   </TableRow>
-                ) : filteredProjects.length === 0 ? (
+                ) : filteredJobs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      No client supplied projects found
+                    <TableCell colSpan={7} align="center">
+                      No client supplied jobs found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredProjects.map((project) => (
-                    <TableRow key={project._id} hover>
+                  filteredJobs.map((job) => (
+                    <TableRow key={job._id} hover>
                       <TableCell>
                         <Typography
                           variant="body2"
                           sx={{ fontWeight: "medium" }}
                         >
-                          {project.projectID || "N/A"}
+                          {job.projectId?.projectID || "N/A"}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {project.name || "Unnamed Project"}
+                          {job.projectId?.name || "Unnamed Project"}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {project.client?.name || "Unknown Client"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={project.status || "active"}
-                          color={getStatusColor(project.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {project.createdAt
-                            ? new Date(project.createdAt).toLocaleDateString(
+                          {job.projectId?.d_Date
+                            ? new Date(job.projectId.d_Date).toLocaleDateString(
                                 "en-GB"
                               )
                             : "N/A"}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <IconButton
-                          onClick={() => handleViewProject(project._id)}
+                        <Typography variant="body2">
+                          {job.projectId?.client?.name || "N/A"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {sampleCounts[job._id] || 0}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={job.status || "Unknown"}
+                          color={getStatusColor(job.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          onClick={() => handleViewJob(job._id)}
                           color="primary"
                           size="small"
-                          title="View Project Details"
                         >
-                          <ViewIcon />
-                        </IconButton>
+                          Items
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
