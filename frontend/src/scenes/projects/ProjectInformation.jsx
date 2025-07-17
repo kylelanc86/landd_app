@@ -210,28 +210,17 @@ const ProjectInformation = () => {
   }, [id, navigate]);
 
   useEffect(() => {
-    console.log("Google Maps useEffect triggered");
     const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-    console.log("Environment variables:", {
-      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
-        ? "API Key Found"
-        : "API Key Missing",
-      NODE_ENV: process.env.NODE_ENV,
-    });
 
     if (!apiKey) {
       console.error(
-        "Google Maps API key is missing. Please check your .env file."
+        "Google Maps API key is missing. Please check your environment configuration."
       );
       return;
     }
 
-    console.log("Loading Google Maps API...");
     loadGoogleMapsApi(apiKey)
       .then((google) => {
-        console.log("Google Maps loaded successfully:", google);
-        console.log("Google Maps version:", google.maps.version);
-        console.log("Places API available:", !!google.maps.places);
         setGoogleMaps(google);
         // Initialize the autocomplete service
         const autocompleteService =
@@ -239,8 +228,6 @@ const ProjectInformation = () => {
         const placesService = new google.maps.places.PlacesService(
           document.createElement("div")
         );
-        console.log("Autocomplete service created:", autocompleteService);
-        console.log("Places service created:", placesService);
         setAutocompleteService(autocompleteService);
         setPlacesService(placesService);
       })

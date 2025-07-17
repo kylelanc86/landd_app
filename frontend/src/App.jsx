@@ -147,9 +147,7 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["clients.view"]}
                             >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <Clients />
-                              </Suspense>
+                              <Navigate to="/databases?db=clients" replace />
                             </PermissionRoute>
                           }
                         />
@@ -227,9 +225,7 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["projects.view"]}
                             >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <Projects />
-                              </Suspense>
+                              <Navigate to="/databases?db=projects" replace />
                             </PermissionRoute>
                           }
                         />
@@ -259,7 +255,7 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["invoices.view"]}
                             >
-                              <Invoices />
+                              <Navigate to="/databases?db=invoices" replace />
                             </PermissionRoute>
                           }
                         />

@@ -451,7 +451,7 @@ const calculateDaysDifference = (dueDate) => {
 };
 
 // Main Projects component
-const Projects = () => {
+const Projects = ({ initialFilters = {} }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -570,23 +570,16 @@ const Projects = () => {
   // Initialize Google Places Autocomplete
   useEffect(() => {
     const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-    console.log("Projects - Environment variables:", {
-      REACT_APP_GOOGLE_MAPS_API_KEY: apiKey
-        ? "API Key Found"
-        : "API Key Missing",
-      NODE_ENV: process.env.NODE_ENV,
-    });
 
     if (!apiKey) {
       console.error(
-        "Google Maps API key is missing. Please check your .env file."
+        "Google Maps API key is missing. Please check your environment configuration."
       );
       return;
     }
 
     loadGoogleMapsApi(apiKey)
       .then((google) => {
-        console.log("Projects - Google Maps loaded successfully");
         setGoogleMaps(google);
         // Initialize the autocomplete service
         const autocompleteService =
@@ -598,7 +591,7 @@ const Projects = () => {
         setPlacesService(placesService);
       })
       .catch((error) => {
-        console.error("Projects - Error loading Google Maps script:", error);
+        console.error("Error loading Google Maps script:", error);
       });
   }, []);
 
@@ -707,35 +700,51 @@ const Projects = () => {
     const urlStatus = urlParams.get("status");
     const urlActive = urlParams.get("active");
 
+    // Apply initial filters from props (from databases page)
+    const appliedFilters = {
+      ...defaultFilters,
+      searchTerm: initialFilters.search || "",
+      departmentFilter: initialFilters.department || "all",
+      statusFilter: initialFilters.status || "all",
+    };
+
     if (savedFilters) {
       try {
         const parsedFilters = JSON.parse(savedFilters);
         return {
-          ...defaultFilters,
+          ...appliedFilters,
           ...parsedFilters,
           // Override with URL parameters if they exist
-          searchTerm: urlParams.get("search") || parsedFilters.searchTerm || "",
+          searchTerm:
+            urlParams.get("search") ||
+            initialFilters.search ||
+            parsedFilters.searchTerm ||
+            "",
           departmentFilter:
             urlParams.get("department") ||
+            initialFilters.department ||
             parsedFilters.departmentFilter ||
             "all",
           statusFilter:
             urlStatus ||
             urlParams.get("status") ||
+            initialFilters.status ||
             parsedFilters.statusFilter ||
             "all",
         };
       } catch (error) {
         console.error("Error parsing saved filters:", error);
         return {
-          ...defaultFilters,
-          statusFilter: urlStatus || defaultFilters.statusFilter,
+          ...appliedFilters,
+          statusFilter:
+            urlStatus || initialFilters.status || defaultFilters.statusFilter,
         };
       }
     }
     return {
-      ...defaultFilters,
-      statusFilter: urlStatus || defaultFilters.statusFilter,
+      ...appliedFilters,
+      statusFilter:
+        urlStatus || initialFilters.status || defaultFilters.statusFilter,
     };
   });
 

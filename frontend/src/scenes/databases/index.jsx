@@ -78,33 +78,57 @@ const DatabaseWidget = ({
 const Databases = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [selectedDatabase, setSelectedDatabase] = useState("projects");
+
+  // Get the database type from URL parameters, default to "projects"
+  const urlParams = new URLSearchParams(location.search);
+  const urlDatabase = urlParams.get("db");
+  const initialDatabase = urlDatabase || "projects";
+
+  const [selectedDatabase, setSelectedDatabase] = useState(initialDatabase);
+
+  const handleDatabaseChange = (database) => {
+    setSelectedDatabase(database);
+    // Update URL without reloading the page
+    const newUrl = `/databases?db=${database}`;
+    navigate(newUrl, { replace: true });
+  };
 
   const databaseWidgets = [
     {
       title: "Project Database",
       icon: <AssignmentIcon />,
       color: "primary",
-      onClick: () => setSelectedDatabase("projects"),
+      onClick: () => handleDatabaseChange("projects"),
     },
     {
       title: "Client Database",
       icon: <PeopleIcon />,
       color: "primary",
-      onClick: () => setSelectedDatabase("clients"),
+      onClick: () => handleDatabaseChange("clients"),
     },
     {
       title: "Invoice Database",
       icon: <ReceiptOutlinedIcon />,
       color: "primary",
-      onClick: () => setSelectedDatabase("invoices"),
+      onClick: () => handleDatabaseChange("invoices"),
     },
   ];
 
   const renderSelectedContent = () => {
+    // Get additional filters from URL parameters
+    const statusFilter = urlParams.get('status');
+    const departmentFilter = urlParams.get('department');
+    const searchFilter = urlParams.get('search');
+    
+    const filters = {
+      status: statusFilter,
+      department: departmentFilter,
+      search: searchFilter
+    };
+
     switch (selectedDatabase) {
       case "projects":
-        return <Projects />;
+        return <Projects initialFilters={filters} />;
       case "clients":
         return <Clients />;
       case "invoices":
