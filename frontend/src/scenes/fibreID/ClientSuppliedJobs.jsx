@@ -41,7 +41,7 @@ const ClientSuppliedJobs = () => {
       setLoading(true);
       // Fetch projects that are client supplied (not asbestos assessments)
       const response = await projectService.getAll({
-        projectType: "client-supplied",
+        department: "Client Supplied",
       });
       console.log("API Response:", response);
       // Handle different response structures
