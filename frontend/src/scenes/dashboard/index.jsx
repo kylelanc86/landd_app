@@ -40,6 +40,12 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { format } from "date-fns";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import {
+  navigateToProjects,
+  navigateToClients,
+  navigateToInvoices,
+  navigateToDatabase,
+} from "../../utils/navigationHelpers";
 
 const Dashboard = () => {
   const theme = useTheme();
@@ -182,86 +188,79 @@ const Dashboard = () => {
     () => [
       {
         id: "dailyTimesheet",
-        title: "Daily Timesheet",
+        title: "My Daily Timesheet",
         value: `${Math.floor(dailyTimesheetData.totalTime / 60)}h ${
           dailyTimesheetData.totalTime % 60
         }m`,
         icon: <AccessTimeIcon />,
         bgcolor: tokens.primary[700],
-        path: "/timesheets",
-        queryParams: {
-          date: format(new Date(), "yyyy-MM-dd"),
-          userId: currentUser?._id,
-        },
+        onClick: () => navigate("/timesheets"),
         subtitle:
           dailyTimesheetData.status.charAt(0).toUpperCase() +
           dailyTimesheetData.status.slice(1),
       },
       {
         id: "active",
-        title: "Active Projects",
+        title: "Active Projects Database",
         value: stats.activeProjects.toString(),
         icon: <AssignmentIcon />,
         bgcolor: tokens.primary[700],
-        path: "/projects",
-        queryParams: { active: "active" },
+        onClick: () => navigateToProjects(navigate, { status: "all_active" }),
       },
       {
         id: "review",
-        title: "Report Ready for Review",
+        title: "Projects: Report Ready for Review",
         value: stats.reviewProjects.toString(),
         icon: <RateReviewIcon />,
         bgcolor: tokens.secondary[700],
-        path: "/projects",
-        queryParams: { status: "Report sent for review", active: "all" },
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Report sent for review" }),
       },
       {
         id: "invoice",
-        title: "Ready for Invoicing",
+        title: "Projects: Ready for Invoicing",
         value: stats.invoiceProjects.toString(),
         icon: <ReceiptOutlinedIcon />,
         bgcolor: tokens.neutral[700],
-        path: "/projects",
-        queryParams: { status: "Ready for invoicing", active: "all" },
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Ready for invoicing" }),
       },
       {
         id: "outstanding",
-        title: "Outstanding Invoices",
+        title: "Outstanding Invoices Database",
         value: stats.outstandingInvoices.toString(),
         icon: <AttachMoneyIcon />,
         bgcolor: tokens.primary[600],
-        path: "/invoices",
-        queryParams: { status: "unpaid" },
+        onClick: () => navigateToInvoices(navigate),
       },
       {
         id: "labComplete",
-        title: "Lab Analysis Complete",
+        title: "Projects: Lab Analysis Complete",
         value: stats.labCompleteProjects.toString(),
         icon: <ScienceIcon />,
         bgcolor: tokens.secondary[600],
-        path: "/projects",
-        queryParams: { status: "Lab analysis complete", active: "all" },
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Lab Analysis Complete" }),
       },
       {
         id: "samplesSubmitted",
-        title: "Samples Submitted",
+        title: "Projects: Samples Submitted",
         value: stats.samplesSubmittedProjects.toString(),
         icon: <SendIcon />,
         bgcolor: tokens.primary[500],
-        path: "/projects",
-        queryParams: { status: "Samples submitted", active: "all" },
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Samples submitted" }),
       },
       {
         id: "inProgress",
-        title: "In Progress",
+        title: "Projects: In Progress",
         value: stats.inProgressProjects.toString(),
         icon: <PlayArrowIcon />,
         bgcolor: tokens.neutral[600],
-        path: "/projects",
-        queryParams: { status: "In progress", active: "all" },
+        onClick: () => navigateToProjects(navigate, { status: "In progress" }),
       },
     ],
-    [dailyTimesheetData, stats, currentUser]
+    [dailyTimesheetData, stats, currentUser, navigate]
   );
 
   // Get ordered and visible widgets
@@ -284,8 +283,9 @@ const Dashboard = () => {
   }, [widgetOrder, gridItems, visibleWidgets]);
 
   const handleCardClick = (item) => {
-    const queryParams = new URLSearchParams(item.queryParams).toString();
-    navigate(`${item.path}?${queryParams}`);
+    if (typeof item.onClick === "function") {
+      item.onClick();
+    }
   };
 
   const handleWidgetToggle = (widgetId) => {
@@ -322,7 +322,9 @@ const Dashboard = () => {
   return (
     <Box m="20px">
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Header title="DASHBOARD" subtitle="Welcome to your dashboard" />
+        <Typography variant="h3" component="h1" gutterBottom sx={{ mt: 3, mb: 4 }}>
+          Dashboard
+        </Typography>
         <Button
           variant="contained"
           startIcon={<WidgetsIcon />}

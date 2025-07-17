@@ -87,9 +87,10 @@ const AsbestosRemoval = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Header title="Asbestos Removal Jobs" />
-
+    <Box m="20px">
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
+          Asbestos Removal
+        </Typography>
 
       {/* Service Cards */}
       <Grid container spacing={3}>

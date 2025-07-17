@@ -1,7 +1,8 @@
 import React from "react";
-import { Box, Typography, Paper, Container, Breadcrumbs, Link } from "@mui/material";
+import { Box, Typography, Paper, Breadcrumbs, Link } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+import Header from "../../components/Header";
 
 const Incidents = () => {
   const navigate = useNavigate();
@@ -11,11 +12,12 @@ const Incidents = () => {
   };
 
   return (
-    <Container maxWidth="lg">
+    <Box m="20px">
+      <Header
+        title="INCIDENTS & NON-CONFORMANCES"
+        subtitle="Manage incident and non-conformance records"
+      />
       <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Incidents & Non-conformances
-        </Typography>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link
             component="button"
@@ -26,21 +28,23 @@ const Incidents = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Records Home
           </Link>
-          <Typography color="text.primary">Incidents & Non-conformances</Typography>
+          <Typography color="text.primary">
+            Incidents & Non-conformances
+          </Typography>
         </Breadcrumbs>
-        
+
         <Paper sx={{ p: 3, mt: 2 }}>
           <Typography variant="h6" gutterBottom>
             Incidents & Non-conformances Management
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            This page will contain incidents and non-conformances functionality. Content will
-            be implemented shortly.
+            This page will contain incidents and non-conformances functionality.
+            Content will be implemented shortly.
           </Typography>
         </Paper>
       </Box>
-    </Container>
+    </Box>
   );
 };
 
-export default Incidents; 
+export default Incidents;

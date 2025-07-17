@@ -1,22 +1,23 @@
 import React from "react";
-import { Box, Typography, Paper, Container, Breadcrumbs, Link } from "@mui/material";
+import { Box, Typography, Paper, Breadcrumbs, Link } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+import Header from "../../components/Header";
 
-  const ApprovedSuppliers = () => {
-    const navigate = useNavigate();
+const ApprovedSuppliers = () => {
+  const navigate = useNavigate();
 
-    const handleBackToHome = () => {
-      navigate("/records");
-    };
+  const handleBackToHome = () => {
+    navigate("/records");
+  };
 
   return (
-    <Container maxWidth="lg">
+    <Box m="20px">
+      <Header
+        title="APPROVED SUPPLIERS"
+        subtitle="Manage approved supplier records"
+      />
       <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Approved Suppliers
-        </Typography>
-        
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link
             component="button"
@@ -27,7 +28,9 @@ import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
             <ArrowBackIcon sx={{ mr: 1 }} />
             Records Home
           </Link>
-          <Typography color="text.primary">Approved Suppliers Records</Typography>
+          <Typography color="text.primary">
+            Approved Suppliers Records
+          </Typography>
         </Breadcrumbs>
 
         <Paper sx={{ p: 3, mt: 2 }}>
@@ -40,7 +43,7 @@ import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
           </Typography>
         </Paper>
       </Box>
-    </Container>
+    </Box>
   );
 };
 

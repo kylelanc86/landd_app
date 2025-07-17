@@ -1,7 +1,8 @@
 import React from "react";
-import { Box, Typography, Paper, Container, Breadcrumbs, Link } from "@mui/material";
+import { Box, Typography, Paper, Breadcrumbs, Link } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+import Header from "../../components/Header";
 
 const AssetRegister = () => {
   const navigate = useNavigate();
@@ -10,11 +11,12 @@ const AssetRegister = () => {
     navigate("/records");
   };
   return (
-    <Container maxWidth="lg">
+    <Box m="20px">
+      <Header
+        title="ASSET REGISTER"
+        subtitle="Manage company assets and equipment"
+      />
       <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Asset Register
-        </Typography>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link
             component="button"
@@ -37,7 +39,7 @@ const AssetRegister = () => {
           </Typography>
         </Paper>
       </Box>
-    </Container>
+    </Box>
   );
 };
 

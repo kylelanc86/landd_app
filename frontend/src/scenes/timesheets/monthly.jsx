@@ -167,8 +167,9 @@ const MonthlyTimesheet = () => {
         alignItems="center"
         mb="20px"
       >
-        <Header title="Monthly Timesheet" />
-      </Box>
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
+        Timesheets
+      </Typography>      </Box>
 
       <Paper
         elevation={3}

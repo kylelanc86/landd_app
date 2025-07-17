@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
+import Header from "../../components/Header";
 
 const AdminDashboard = () => {
   const theme = useTheme();
@@ -51,20 +52,9 @@ const AdminDashboard = () => {
   return (
     <PermissionGate requiredPermissions={["admin.view"]}>
       <Box m="20px">
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography
-            variant="h2"
-            color={"black"}
-            fontWeight="bold"
-            sx={{ mb: "5px" }}
-          >
-            Admin Dashboard
-          </Typography>
-        </Box>
-        <Typography variant="h5" color={colors.secondary[500]}>
-          Manage system settings and configurations
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
+          Admin Dashboard
         </Typography>
-
         <Box sx={{ mt: 4 }}>
           <Grid container spacing={3}>
             {adminModules.map((module) => (

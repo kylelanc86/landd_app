@@ -16,6 +16,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme";
 import PermissionGate from "../../components/PermissionGate";
+import Header from "../../components/Header";
 
 const SurveysDashboard = () => {
   const theme = useTheme();
@@ -66,20 +67,9 @@ const SurveysDashboard = () => {
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="20px">
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography
-            variant="h2"
-            color="#000000"
-            fontWeight="bold"
-            sx={{ mb: "5px" }}
-          >
-            Surveys Dashboard
-          </Typography>
-        </Box>
-        <Typography variant="h5" color={theme.palette.secondary.main}>
-          Manage and conduct various types of surveys
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
+          Surveys
         </Typography>
-
         <Box sx={{ mt: 4 }}>
           <Grid container spacing={3}>
             {surveyModules.map((module) => (
