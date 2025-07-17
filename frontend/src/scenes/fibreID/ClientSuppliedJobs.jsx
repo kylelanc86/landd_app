@@ -44,8 +44,11 @@ const ClientSuppliedJobs = () => {
         department: "Client Supplied",
       });
       console.log("API Response:", response);
+      console.log("Response data:", response.data);
+      console.log("Response data.data:", response.data?.data);
       // Handle different response structures
-      const projectsData = response.data?.projects || response.data || [];
+      const projectsData = response.data?.data || response.data || [];
+      console.log("Final projects data:", projectsData);
       setProjects(Array.isArray(projectsData) ? projectsData : []);
     } catch (error) {
       console.error("Error fetching client supplied projects:", error);
