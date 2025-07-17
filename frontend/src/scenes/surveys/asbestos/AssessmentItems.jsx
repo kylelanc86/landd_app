@@ -44,7 +44,7 @@ import {
 } from "@mui/icons-material";
 import { useParams, useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
-import { projectService } from ../../../services/api";
+import { projectService } from "../../../services/api";
 
 const AssessmentItemsPage = () => {
   const { id } = useParams();
