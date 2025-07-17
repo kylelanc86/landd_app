@@ -590,45 +590,40 @@ const Timesheets = () => {
 
   return (
     <Box m="20px">
+      {/* Header and Monthly View button OUTSIDE of styled container */}
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
         mb={3}
-        sx={{
-          p: 2,
-          backgroundColor: theme.palette.background.paper,
-          borderRadius: 2,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          border: `1px solid ${theme.palette.divider}`,
-        }}
       >
-        <Header title="Daily Timesheet" />
-        <Box display="flex" gap={2}>
-          <Button
-            variant="contained"
-            onClick={() => navigate("/timesheets/monthly")}
-            sx={{
-              backgroundColor: theme.palette.secondary.main,
-              color: theme.palette.secondary.contrastText,
-              borderRadius: "12px",
-              fontWeight: 600,
-              textTransform: "none",
-              px: 3,
-              py: 1.5,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              "&:hover": {
-                backgroundColor: theme.palette.secondary.dark,
-                boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
-                transform: "translateY(-1px)",
-              },
-            }}
-          >
-            Monthly View
-          </Button>
-        </Box>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Daily Timesheet
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => navigate("/timesheets/monthly")}
+          sx={{
+            backgroundColor: theme.palette.primary.dark,
+            color: theme.palette.primary.contrastText,
+            borderRadius: "12px",
+            fontWeight: 600,
+            textTransform: "none",
+            px: 3,
+            py: 1.5,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            "&:hover": {
+              backgroundColor: theme.palette.primary.main,
+              boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
+              transform: "translateY(-1px)",
+            },
+          }}
+        >
+          Monthly View
+        </Button>
       </Box>
 
+      {/* Main content in Paper */}
       <Paper
         elevation={3}
         sx={{
@@ -751,7 +746,7 @@ const Timesheets = () => {
 
         <Box
           sx={{
-            height: "600px",
+            height: "850px",
             "& .fc": {
               fontFamily: theme.typography.fontFamily,
               backgroundColor: theme.palette.background.paper,
@@ -819,7 +814,7 @@ const Timesheets = () => {
               padding: "4px 8px",
               fontSize: "0.875rem",
               fontWeight: 500,
-              },
+            },
             "& .fc-event-time": {
               fontWeight: 600,
               fontSize: "0.75rem",
