@@ -40,9 +40,11 @@ import {
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
   PictureAsPdf as PictureAsPdfIcon,
+  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 import { useParams, useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
+import { projectService } from ../../../services/api";
 
 const AssessmentItemsPage = () => {
   const { id } = useParams();
@@ -70,6 +72,7 @@ const AssessmentItemsPage = () => {
   const [compressionStatus, setCompressionStatus] = useState(null);
   const [assessment, setAssessment] = useState(null);
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [statusMessage, setStatusMessage] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -292,6 +295,25 @@ const AssessmentItemsPage = () => {
     }
   };
 
+  const handleDeclareSamplesCollected = async () => {
+    if (!assessment?.projectId?._id) return;
+    try {
+      await projectService.update(assessment.projectId._id, {
+        status: "Samples submitted",
+      });
+      setStatusMessage({
+        type: "success",
+        text: "Status updated to 'Samples submitted'!",
+      });
+      // Optionally, refetch assessment/project data here
+    } catch (err) {
+      setStatusMessage({
+        type: "error",
+        text: err.message || "Failed to update status.",
+      });
+    }
+  };
+
   return (
     <Box m="20px">
       {/* Back Button */}
@@ -346,8 +368,23 @@ const AssessmentItemsPage = () => {
           >
             Add Item
           </Button>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<CheckCircleIcon />}
+            onClick={handleDeclareSamplesCollected}
+            disabled={assessment?.projectId?.status === "Samples submitted"}
+          >
+            Declare All Samples Collected
+          </Button>
         </Box>
       </Box>
+
+      {statusMessage && (
+        <Alert severity={statusMessage.type} sx={{ mt: 2 }}>
+          {statusMessage.text}
+        </Alert>
+      )}
 
       {/* Abbreviations Box */}
       <Box
