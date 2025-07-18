@@ -9,6 +9,8 @@ import {
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 
 const PDFLoadingOverlay = ({ open, message = "Generating PDF..." }) => {
+  console.log("PDFLoadingOverlay render - open:", open, "message:", message);
+
   return (
     <Backdrop
       sx={{

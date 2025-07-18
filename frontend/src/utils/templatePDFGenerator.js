@@ -325,11 +325,11 @@ export const generateHTMLPDF = async (templateType, data) => {
 export const generateAssessmentPDF = async (assessmentData) => {
   try {
     console.log('Starting assessment PDF generation with data:', assessmentData);
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     
-    // Get the API base URL from the environment
-    const apiBaseUrl = process.env.NODE_ENV === 'development' 
-      ? "http://localhost:5000/api" 
-      : "https://landd-app-backend-docker.onrender.com/api";
+    // Use the same API configuration as the rest of the app
+    const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
     const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-assessment?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
@@ -351,7 +351,14 @@ export const generateAssessmentPDF = async (assessmentData) => {
     console.log('Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      console.error('Response error text:', errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { error: errorText || 'Failed to generate assessment PDF' };
+      }
       throw new Error(errorData.error || 'Failed to generate assessment PDF');
     }
 
@@ -394,10 +401,8 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
   try {
     console.log('Starting server-side PDF generation with data:', data);
     
-    // Get the API base URL from the environment
-    const apiBaseUrl = process.env.NODE_ENV === 'development' 
-      ? "http://localhost:5000/api" 
-      : "https://landd-app-backend-docker.onrender.com/api";
+    // Use the same API configuration as the rest of the app
+    const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
     const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-clearance?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
