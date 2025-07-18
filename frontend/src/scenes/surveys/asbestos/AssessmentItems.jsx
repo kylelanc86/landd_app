@@ -49,6 +49,7 @@ import {
   projectService,
   asbestosAssessmentService,
 } from "../../../services/api";
+import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
 
 const AssessmentItemsPage = () => {
   const { id } = useParams();
@@ -326,6 +327,12 @@ const AssessmentItemsPage = () => {
 
   return (
     <Box m="20px">
+      {/* PDF Loading Overlay */}
+      <PDFLoadingOverlay
+        open={generatingPDF}
+        message="Generating Asbestos Assessment PDF..."
+      />
+
       {/* Back Button */}
       <Box sx={{ mb: 2 }}>
         <Button

@@ -2608,14 +2608,52 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     const fs = require('fs');
     const path = require('path');
     
-    // Load assessment-specific templates
-    const coverTemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentCoverMockup-Page1.html'), 'utf8');
-    const versionControlTemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentVersionControlMockup-page2.html'), 'utf8');
-    const sampleRegisterTemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentReportPage3.html'), 'utf8');
-    const discussionTemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentDiscussionConclusions.html'), 'utf8');
-    const sampleItemTemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentSampleRegisterItem.html'), 'utf8');
-    const glossaryTemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentGlossary.html'), 'utf8');
-    const appendixATemplate = fs.readFileSync(path.join(__dirname, '../templates/AsbestosAssessment/AsbestosAssessmentAppendixA.html'), 'utf8');
+    // Load assessment-specific templates with better error handling
+    const templateDir = path.join(__dirname, '../templates/AsbestosAssessment');
+    console.log('Template directory:', templateDir);
+    console.log('Template directory exists:', fs.existsSync(templateDir));
+    
+    if (!fs.existsSync(templateDir)) {
+      throw new Error(`Template directory not found: ${templateDir}`);
+    }
+    
+    const templateFiles = {
+      cover: 'AsbestosAssessmentCoverMockup-Page1.html',
+      versionControl: 'AsbestosAssessmentVersionControlMockup-page2.html',
+      sampleRegister: 'AsbestosAssessmentReportPage3.html',
+      discussion: 'AsbestosAssessmentDiscussionConclusions.html',
+      sampleItem: 'AsbestosAssessmentSampleRegisterItem.html',
+      glossary: 'AsbestosAssessmentGlossary.html',
+      appendixA: 'AsbestosAssessmentAppendixA.html'
+    };
+    
+    // Check if all template files exist
+    for (const [key, filename] of Object.entries(templateFiles)) {
+      const filePath = path.join(templateDir, filename);
+      console.log(`Checking ${key} template: ${filePath}`);
+      console.log(`File exists: ${fs.existsSync(filePath)}`);
+      if (!fs.existsSync(filePath)) {
+        throw new Error(`Template file not found: ${filePath}`);
+      }
+    }
+    
+    // Load templates with error handling
+    let coverTemplate, versionControlTemplate, sampleRegisterTemplate, discussionTemplate, sampleItemTemplate, glossaryTemplate, appendixATemplate;
+    
+    try {
+      coverTemplate = fs.readFileSync(path.join(templateDir, templateFiles.cover), 'utf8');
+      versionControlTemplate = fs.readFileSync(path.join(templateDir, templateFiles.versionControl), 'utf8');
+      sampleRegisterTemplate = fs.readFileSync(path.join(templateDir, templateFiles.sampleRegister), 'utf8');
+      discussionTemplate = fs.readFileSync(path.join(templateDir, templateFiles.discussion), 'utf8');
+      sampleItemTemplate = fs.readFileSync(path.join(templateDir, templateFiles.sampleItem), 'utf8');
+      glossaryTemplate = fs.readFileSync(path.join(templateDir, templateFiles.glossary), 'utf8');
+      appendixATemplate = fs.readFileSync(path.join(templateDir, templateFiles.appendixA), 'utf8');
+      
+      console.log('All template files loaded successfully');
+    } catch (error) {
+      console.error('Error loading template files:', error);
+      throw new Error(`Failed to load template files: ${error.message}`);
+    }
     
     // Populate templates with data - use the same approach as clearance
     const populatedCover = await populateTemplate(coverTemplate, data, 'B', logoBase64, backgroundBase64);
@@ -3516,6 +3554,41 @@ router.get('/test-clearance-endpoint', (req, res) => {
     timestamp: new Date().toISOString(),
     endpoint: '/generate-asbestos-clearance'
   });
+});
+
+// Test route to check template file accessibility
+router.get('/test-templates', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  const templateDir = path.join(__dirname, '../templates/AsbestosAssessment');
+  const templateFiles = {
+    cover: 'AsbestosAssessmentCoverMockup-Page1.html',
+    versionControl: 'AsbestosAssessmentVersionControlMockup-page2.html',
+    sampleRegister: 'AsbestosAssessmentReportPage3.html',
+    discussion: 'AsbestosAssessmentDiscussionConclusions.html',
+    sampleItem: 'AsbestosAssessmentSampleRegisterItem.html',
+    glossary: 'AsbestosAssessmentGlossary.html',
+    appendixA: 'AsbestosAssessmentAppendixA.html'
+  };
+  
+  const results = {
+    templateDir,
+    templateDirExists: fs.existsSync(templateDir),
+    files: {}
+  };
+  
+  for (const [key, filename] of Object.entries(templateFiles)) {
+    const filePath = path.join(templateDir, filename);
+    results.files[key] = {
+      filename,
+      path: filePath,
+      exists: fs.existsSync(filePath),
+      size: fs.existsSync(filePath) ? fs.statSync(filePath).size : null
+    };
+  }
+  
+  res.json(results);
 });
 
 // Test route to check Puppeteer functionality

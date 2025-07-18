@@ -32,6 +32,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
 import { formatDate, formatDateForInput } from "../../../utils/dateUtils";
+import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
 import projectService from "../../../services/projectService";
 import asbestosAssessmentService from "../../../services/asbestosAssessmentService";
 
@@ -211,6 +212,12 @@ const AssessmentJobsPage = () => {
 
   return (
     <Box m="20px">
+      {/* PDF Loading Overlay */}
+      <PDFLoadingOverlay
+        open={generatingCOC !== null}
+        message="Generating Chain of Custody PDF..."
+      />
+
       <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
         Asbestos Assessment Jobs
       </Typography>

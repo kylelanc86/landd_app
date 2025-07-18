@@ -45,6 +45,7 @@ import PermissionGate from "../../components/PermissionGate";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import { compressImage, needsCompression } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
+import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const ClearanceItems = () => {
   const colors = tokens;
@@ -87,6 +88,8 @@ const ClearanceItems = () => {
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
   const [sitePlanFile, setSitePlanFile] = useState(null);
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
+  const [generatingAirMonitoringPDF, setGeneratingAirMonitoringPDF] =
+    useState(false);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
@@ -353,6 +356,7 @@ const ClearanceItems = () => {
   const handleSelectAirMonitoringReport = async (report) => {
     try {
       setSelectedReport(report);
+      setGeneratingAirMonitoringPDF(true);
 
       // Generate the air monitoring report PDF
       const { generateShiftReport } = await import(
@@ -422,6 +426,8 @@ const ClearanceItems = () => {
         message: "Failed to select air monitoring report",
         severity: "error",
       });
+    } finally {
+      setGeneratingAirMonitoringPDF(false);
     }
   };
 
@@ -619,6 +625,12 @@ const ClearanceItems = () => {
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="20px">
+        {/* PDF Loading Overlay */}
+        <PDFLoadingOverlay
+          open={generatingAirMonitoringPDF}
+          message="Generating Air Monitoring Report PDF..."
+        />
+
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Box display="flex" alignItems="center" gap={2}>
             <IconButton

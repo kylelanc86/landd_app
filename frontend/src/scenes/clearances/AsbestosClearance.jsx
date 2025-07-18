@@ -46,6 +46,7 @@ import { projectService, userService } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import PermissionGate from "../../components/PermissionGate";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
+import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 // ASBESTOS_REMOVALISTS array from air monitoring modal
 const ASBESTOS_REMOVALISTS = [
@@ -373,6 +374,12 @@ const AsbestosClearance = () => {
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="20px">
+        {/* PDF Loading Overlay */}
+        <PDFLoadingOverlay
+          open={generatingPDF}
+          message="Generating Asbestos Clearance PDF..."
+        />
+
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography
             variant="h4"
