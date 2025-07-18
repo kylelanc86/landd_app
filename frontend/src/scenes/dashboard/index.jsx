@@ -197,7 +197,6 @@ const Dashboard = () => {
         }m`,
         icon: <AccessTimeIcon />,
         bgcolor: "#1976d2",
-        chipLabel: "Timesheet",
         onClick: () => navigate("/timesheets"),
         subtitle:
           dailyTimesheetData.status.charAt(0).toUpperCase() +
@@ -209,7 +208,6 @@ const Dashboard = () => {
         value: stats.activeProjects.toString(),
         icon: <AssignmentIcon />,
         bgcolor: "#2e7d32",
-        chipLabel: "Active",
         onClick: () => navigateToProjects(navigate, { status: "all_active" }),
       },
       {
@@ -218,7 +216,6 @@ const Dashboard = () => {
         value: stats.reviewProjects.toString(),
         icon: <RateReviewIcon />,
         bgcolor: "#ed6c02",
-        chipLabel: "Review",
         onClick: () =>
           navigateToProjects(navigate, { status: "Report sent for review" }),
       },
@@ -228,7 +225,6 @@ const Dashboard = () => {
         value: stats.invoiceProjects.toString(),
         icon: <ReceiptOutlinedIcon />,
         bgcolor: "#9c27b0",
-        chipLabel: "Invoice",
         onClick: () =>
           navigateToProjects(navigate, { status: "Ready for invoicing" }),
       },
@@ -238,7 +234,6 @@ const Dashboard = () => {
         value: stats.outstandingInvoices.toString(),
         icon: <AttachMoneyIcon />,
         bgcolor: "#d32f2f",
-        chipLabel: "Outstanding",
         onClick: () => navigateToInvoices(navigate),
       },
 
@@ -248,7 +243,6 @@ const Dashboard = () => {
         value: stats.samplesSubmittedProjects.toString(),
         icon: <SendIcon />,
         bgcolor: "#2e7d32",
-        chipLabel: "Submitted",
         onClick: () =>
           navigateToProjects(navigate, { status: "Samples submitted" }),
       },
@@ -258,7 +252,6 @@ const Dashboard = () => {
         value: stats.inProgressProjects.toString(),
         icon: <PlayArrowIcon />,
         bgcolor: "#ed6c02",
-        chipLabel: "In Progress",
         onClick: () => navigateToProjects(navigate, { status: "In progress" }),
       },
     ],
@@ -417,17 +410,7 @@ const Dashboard = () => {
                             {React.cloneElement(item.icon, {
                               sx: { fontSize: 50, color: "white" },
                             })}
-                            <Chip
-                              label={item.chipLabel}
-                              sx={{
-                                position: "absolute",
-                                top: 8,
-                                right: 8,
-                                backgroundColor: "rgba(255,255,255,0.9)",
-                                fontWeight: "bold",
-                                fontSize: "0.7rem",
-                              }}
-                            />
+
                             <Box
                               {...provided.dragHandleProps}
                               sx={{
