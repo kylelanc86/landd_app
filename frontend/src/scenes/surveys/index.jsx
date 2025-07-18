@@ -15,6 +15,10 @@ import {
   Science as ScienceIcon,
   Assessment as AssessmentIcon,
   ArrowForward as ArrowForwardIcon,
+  Business as BusinessIcon,
+  Security as SecurityIcon,
+  Apartment as ApartmentIcon,
+  WaterDrop as WaterDropIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme";
@@ -30,32 +34,50 @@ const SurveysDashboard = () => {
     {
       id: "asbestos-assessment",
       title: "Asbestos Assessment",
-      description: "Conduct asbestos surveys and assessments",
       icon: <HomeIcon />,
       path: "/assessments", // changed from /surveys/asbestos
       requiredPermission: "asbestos.view",
       color: "#1976d2",
-      chipLabel: "Assessment",
+    },
+    {
+      id: "residential-asbestos-assessment",
+      title: "Residential Asbestos Assessment",
+      icon: <ApartmentIcon />,
+      path: "/surveys/residential-asbestos",
+      requiredPermission: "asbestos.view",
+      color: "#388e3c",
+    },
+    {
+      id: "asbestos-management-plan",
+      title: "Asbestos Management Plan",
+      icon: <BusinessIcon />,
+      path: "/surveys/asbestos-management-plan",
+      requiredPermission: "asbestos.view",
+      color: "#7b1fa2",
+    },
+    {
+      id: "hazardous-materials-management-plan",
+      title: "Hazardous Materials Management Plan",
+      icon: <SecurityIcon />,
+      path: "/surveys/hazardous-materials-management-plan",
+      requiredPermission: "asbestos.view",
+      color: "#d32f2f",
     },
     {
       id: "lead-assessment",
       title: "Lead Assessment",
-      description: "Conduct lead paint surveys and assessments",
       icon: <AssessmentIcon />,
       path: "/surveys/lead",
       requiredPermission: "asbestos.view",
       color: "#2e7d32",
-      chipLabel: "Lead",
     },
     {
-      id: "mould-assessment",
-      title: "Mould Assessment",
-      description: "Conduct mould surveys and assessments",
-      icon: <ScienceIcon />,
-      path: "/surveys/mould",
+      id: "mould-moisture-assessment",
+      title: "Mould & Moisture Assessment",
+      icon: <WaterDropIcon />,
+      path: "/surveys/mould-moisture",
       requiredPermission: "asbestos.view",
       color: "#ed6c02",
-      chipLabel: "Mould",
     },
   ];
 
@@ -100,22 +122,11 @@ const SurveysDashboard = () => {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        position: "relative",
                       }}
                     >
                       {React.cloneElement(module.icon, {
                         sx: { fontSize: 80, color: "white" },
                       })}
-                      <Chip
-                        label={module.chipLabel}
-                        sx={{
-                          position: "absolute",
-                          top: 16,
-                          right: 16,
-                          backgroundColor: "rgba(255,255,255,0.9)",
-                          fontWeight: "bold",
-                        }}
-                      />
                     </CardMedia>
                     <CardContent
                       sx={{
@@ -126,13 +137,6 @@ const SurveysDashboard = () => {
                     >
                       <Typography variant="h5" component="h2" gutterBottom>
                         {module.title}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 2 }}
-                      >
-                        {module.description}
                       </Typography>
                       <Box
                         sx={{

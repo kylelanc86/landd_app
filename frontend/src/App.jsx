@@ -72,8 +72,19 @@ const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
 const LeadAssessment = lazy(() =>
   import("./scenes/surveys/lead/LeadAssessment")
 );
-const MouldAssessment = lazy(() =>
-  import("./scenes/surveys/mould/MouldAssessment")
+
+// New survey page components
+const ResidentialAsbestosAssessment = lazy(() =>
+  import("./scenes/surveys/residential-asbestos")
+);
+const AsbestosManagementPlan = lazy(() =>
+  import("./scenes/surveys/asbestos-management-plan")
+);
+const HazardousMaterialsManagementPlan = lazy(() =>
+  import("./scenes/surveys/hazardous-materials-management-plan")
+);
+const MouldMoistureAssessment = lazy(() =>
+  import("./scenes/surveys/mould-moisture")
 );
 const LeadClearance = lazy(() => import("./scenes/clearances/LeadClearance"));
 const MouldValidation = lazy(() =>
@@ -319,13 +330,49 @@ function App() {
                           }
                         />
                         <Route
-                          path="/surveys/mould"
+                          path="/surveys/residential-asbestos"
                           element={
                             <PermissionRoute
                               requiredPermissions={["asbestos.view"]}
                             >
                               <Suspense fallback={<LoadingSpinner />}>
-                                <MouldAssessment />
+                                <ResidentialAsbestosAssessment />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys/asbestos-management-plan"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AsbestosManagementPlan />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys/hazardous-materials-management-plan"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <HazardousMaterialsManagementPlan />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/surveys/mould-moisture"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["asbestos.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <MouldMoistureAssessment />
                               </Suspense>
                             </PermissionRoute>
                           }

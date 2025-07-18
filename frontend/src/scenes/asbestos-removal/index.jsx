@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import Header from "../../components/Header";
 import {
   Box,
@@ -16,8 +16,6 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { tokens } from "../../theme";
 import { useTheme } from "@mui/material/styles";
-import AirMonitoring from "../air-monitoring";
-import AsbestosClearance from "../clearances/AsbestosClearance";
 
 const AsbestosRemovalWidget = ({
   title,
@@ -25,7 +23,6 @@ const AsbestosRemovalWidget = ({
   color = "#1976d2",
   chipLabel,
   onClick,
-  active,
 }) => (
   <Card
     sx={{
@@ -35,9 +32,6 @@ const AsbestosRemovalWidget = ({
         transform: "translateY(-4px)",
         boxShadow: 4,
       },
-      ...(active && {
-        border: `2px solid ${color}`,
-      }),
     }}
   >
     <CardActionArea
@@ -106,7 +100,6 @@ const AsbestosRemoval = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState(null);
 
   const asbestosRemovalWidgets = [
     {
@@ -114,24 +107,16 @@ const AsbestosRemoval = () => {
       icon: <MonitorIcon />,
       color: "#1976d2",
       chipLabel: "Monitoring",
-      onClick: () => setActiveSection("air-monitoring"),
+      onClick: () => navigate("/air-monitoring"),
     },
     {
       title: "Clearances",
       icon: <AssessmentIcon />,
       color: "#2e7d32",
       chipLabel: "Clearance",
-      onClick: () => setActiveSection("clearances"),
+      onClick: () => navigate("/clearances"),
     },
   ];
-
-  const renderAirMonitoringSection = () => {
-    return <AirMonitoring />;
-  };
-
-  const renderClearancesSection = () => {
-    return <AsbestosClearance />;
-  };
 
   return (
     <Box m="20px">
@@ -145,20 +130,10 @@ const AsbestosRemoval = () => {
           <Grid item xs={12} md={6} key={index}>
             <AsbestosRemovalWidget
               {...widget}
-              active={
-                activeSection ===
-                (widget.title === "Air Monitoring"
-                  ? "air-monitoring"
-                  : "clearances")
-              }
             />
           </Grid>
         ))}
       </Grid>
-
-      {/* Content Sections */}
-      {activeSection === "air-monitoring" && renderAirMonitoringSection()}
-      {activeSection === "clearances" && renderClearancesSection()}
     </Box>
   );
 };

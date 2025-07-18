@@ -54,13 +54,13 @@ const DatabaseWidget = ({
         <Box sx={{ mb: 2, display: "flex", justifyContent: "center" }}>
           {React.cloneElement(icon, {
             sx: {
-              fontSize: 30,
+              fontSize: 40,
               color: isActive ? `${color}.dark` : `${color}.main`,
             },
           })}
         </Box>
         <Typography
-          variant="h6"
+          variant="h3"
           component="h2"
           gutterBottom
           sx={{
@@ -95,19 +95,19 @@ const Databases = () => {
 
   const databaseWidgets = [
     {
-      title: "Project Database",
+      title: "PROJECTS",
       icon: <AssignmentIcon />,
       color: "primary",
       onClick: () => handleDatabaseChange("projects"),
     },
     {
-      title: "Client Database",
+      title: "CLIENTS",
       icon: <PeopleIcon />,
       color: "primary",
       onClick: () => handleDatabaseChange("clients"),
     },
     {
-      title: "Invoice Database",
+      title: "INVOICES",
       icon: <ReceiptOutlinedIcon />,
       color: "primary",
       onClick: () => handleDatabaseChange("invoices"),

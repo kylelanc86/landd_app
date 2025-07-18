@@ -18,6 +18,8 @@ import {
   DialogActions,
   TextField,
   Autocomplete,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -25,6 +27,7 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   Article as ArticleIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
@@ -202,11 +205,35 @@ const AssessmentJobsPage = () => {
     }
   };
 
+  const handleBackToSurveys = () => {
+    navigate("/surveys");
+  };
+
   return (
     <Box m="20px">
-      <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Typography variant="h2" fontWeight="bold" sx={{ mb: "5px" }}>
-          Asbestos Assessment Jobs
+      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+        Asbestos Assessment Jobs
+      </Typography>
+      <Breadcrumbs sx={{ mb: 3 }}>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={handleBackToSurveys}
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          <ArrowBackIcon sx={{ mr: 1 }} />
+          Surveys Home
+        </Link>
+        <Typography color="text.primary">Asbestos Assessment Jobs</Typography>
+      </Breadcrumbs>
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{ mb: 3 }}
+      >
+        <Typography variant="h5" fontWeight="bold">
+          Assessment Jobs
         </Typography>
         <Button
           variant="contained"
