@@ -105,7 +105,17 @@ xero.verifyState = (state) => {
 xero.setTenantId = async (tenantId) => {
   try {
     console.log('Setting tenant ID:', tenantId);
-  currentTenantId = tenantId;
+    currentTenantId = tenantId;
+    
+    // If tenantId is null, we're clearing it
+    if (tenantId === null) {
+      console.log('Clearing tenant ID');
+      // Update the token set in the Xero client
+      if (xero.tokenSet) {
+        xero.tokenSet.tenantId = null;
+      }
+      return;
+    }
     
     // Store tenant ID in the token document
     const token = await XeroToken.getToken();
@@ -119,7 +129,7 @@ xero.setTenantId = async (tenantId) => {
         xero.tokenSet.tenantId = tenantId;
       }
     } else {
-      console.error('No token found to save tenant ID');
+      console.log('No token found to save tenant ID (this is normal when disconnecting)');
     }
   } catch (error) {
     console.error('Error setting tenant ID:', error);
@@ -189,16 +199,49 @@ xero.readTokenSet = async () => {
       if (tokenSet.expires_at < (Date.now() + 300000)) {
         console.log('Token is expired or about to expire, attempting refresh');
         try {
-          const newTokenSet = await xero.refreshToken();
-          if (newTokenSet && newTokenSet.access_token) {
-            console.log('Successfully refreshed token');
-            await xero.setTokenSet(newTokenSet);
-            isTokenInitialized = true;
-            return newTokenSet;
+          // Implement manual token refresh since xero.refreshToken() is not working
+          const refreshResponse = await fetch('https://identity.xero.com/connect/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+              grant_type: 'refresh_token',
+              refresh_token: tokenSet.refresh_token,
+              client_id: process.env.XERO_CLIENT_ID,
+              client_secret: process.env.XERO_CLIENT_SECRET
+            }).toString()
+          });
+
+          if (!refreshResponse.ok) {
+            const errorText = await refreshResponse.text();
+            console.error('Token refresh failed:', {
+              status: refreshResponse.status,
+              statusText: refreshResponse.statusText,
+              error: errorText
+            });
+            throw new Error(`Token refresh failed: ${refreshResponse.status} ${refreshResponse.statusText}`);
           }
+
+          const newTokenSet = await refreshResponse.json();
+          console.log('Successfully refreshed token');
+          
+          // Add expiration timestamp if not present
+          if (!newTokenSet.expires_at && newTokenSet.expires_in) {
+            newTokenSet.expires_at = Date.now() + (newTokenSet.expires_in * 1000);
+          }
+          
+          // Preserve tenant ID and other fields
+          newTokenSet.tenantId = tokenSet.tenantId;
+          newTokenSet.scope = tokenSet.scope;
+          
+          await xero.setTokenSet(newTokenSet);
+          isTokenInitialized = true;
+          return newTokenSet;
         } catch (refreshError) {
           console.error('Failed to refresh token:', refreshError);
-          return null;
+          // Return the existing token even if expired - let the API call fail naturally
+          return tokenSet;
         }
       }
       
@@ -269,7 +312,7 @@ xero.setTokenSet = async (tokenSet) => {
     const savedToken = await XeroToken.setToken(tokenSet);
     console.log('Token saved to MongoDB successfully');
     
-    // Set the token in the Xero client
+    // Set the token directly in the Xero client
     xero.tokenSet = tokenSet;
     isTokenInitialized = true;
     
@@ -412,19 +455,36 @@ xero.isInitialized = () => {
   return !!xero.tokenSet && !!xero.tokenSet.access_token;
 };
 
-// Override the accountingApi methods to ensure token is set
+// Add a method to clear invalid tokens
+xero.clearInvalidToken = async () => {
+  try {
+    console.log('Clearing invalid token...');
+    await XeroToken.deleteAll();
+    xero.tokenSet = null;
+    isTokenInitialized = false;
+    currentTenantId = null;
+    console.log('Invalid token cleared successfully');
+  } catch (error) {
+    console.error('Error clearing invalid token:', error);
+  }
+};
+
+// Ensure token is properly set before API calls
 const originalAccountingApi = xero.accountingApi;
 xero.accountingApi = new Proxy(originalAccountingApi, {
   get: function(target, prop) {
     const originalMethod = target[prop];
     if (typeof originalMethod === 'function') {
       return async function(...args) {
-        // Only initialize token if not already initialized
-        if (!isTokenInitialized) {
+        // Ensure token is set in the Xero client before making API calls
+        if (!xero.tokenSet || !xero.tokenSet.access_token) {
           const tokenSet = await xero.readTokenSet();
           if (!tokenSet || !tokenSet.access_token) {
             throw new Error('No valid token available');
           }
+          // Set the token directly in the client
+          xero.tokenSet = tokenSet;
+          isTokenInitialized = true;
         }
         
         return originalMethod.apply(target, args);

@@ -50,17 +50,18 @@ const DatabaseWidget = ({
         alignItems: "stretch",
       }}
     >
-      <CardContent sx={{ flexGrow: 1, textAlign: "center", p: 3 }}>
-        <Box sx={{ mb: 2, display: "flex", justifyContent: "center" }}>
+      <CardContent sx={{ flexGrow: 1, textAlign: "center", p: 1 }}>
+        <Box sx={{ m: 1, display: "flex", justifyContent: "center" }}>
           {React.cloneElement(icon, {
             sx: {
-              fontSize: 40,
+              fontSize: 30,
               color: isActive ? `${color}.dark` : `${color}.main`,
             },
           })}
         </Box>
         <Typography
-          variant="h3"
+          fontSize={22}
+          fontWeight={"bold"}
           component="h2"
           gutterBottom
           sx={{

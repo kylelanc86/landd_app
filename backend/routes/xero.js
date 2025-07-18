@@ -54,7 +54,7 @@ router.get('/status', auth, async (req, res) => {
       expiresAt: tokenSet?.expires_at ? new Date(tokenSet.expires_at).toISOString() : null
     });
     
-    const tenantId = xero.getTenantId();
+    const tenantId = await xero.getTenantId();
     console.log('Tenant ID:', tenantId);
     
     const connected = !!(tokenSet && tokenSet.access_token);
@@ -171,7 +171,7 @@ router.get('/callback', async (req, res) => {
       xero.setTenantId(tenants[0].tenantId);
       
       // Verify tenant ID was saved
-      const savedTenantId = xero.getTenantId();
+      const savedTenantId = await xero.getTenantId();
       if (!savedTenantId) {
         throw new Error('Failed to verify saved tenant ID');
       }
@@ -207,7 +207,7 @@ router.get('/contacts', auth, checkXeroConnection, async (req, res) => {
 // Get Xero invoices
 router.get('/invoices', auth, checkXeroConnection, async (req, res) => {
   try {
-    const tenantId = xero.getTenantId();
+    const tenantId = await xero.getTenantId();
     if (!tenantId) {
       return res.status(400).json({ 
         error: 'No tenant selected',
@@ -229,16 +229,53 @@ router.get('/invoices', auth, checkXeroConnection, async (req, res) => {
 // Disconnect from Xero
 router.post('/disconnect', auth, async (req, res) => {
   try {
-    const tokenPath = path.join(__dirname, '../tokens/xero-token.json');
-    const tenantPath = path.join(__dirname, '../tokens/xero-tenant.json');
+    console.log('Disconnecting from Xero...');
     
-    if (fs.existsSync(tokenPath)) {
-      fs.unlinkSync(tokenPath);
-    }
-    if (fs.existsSync(tenantPath)) {
-      fs.unlinkSync(tenantPath);
+    // First, try to revoke the token with Xero if we have one
+    try {
+      const tokenSet = await xero.readTokenSet();
+      if (tokenSet && tokenSet.access_token) {
+        console.log('Revoking token with Xero...');
+        
+        // Call Xero's token revocation endpoint
+        const revokeResponse = await fetch('https://identity.xero.com/connect/revocation', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': `Basic ${Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString('base64')}`
+          },
+          body: new URLSearchParams({
+            token: tokenSet.access_token,
+            token_type_hint: 'access_token'
+          }).toString()
+        });
+        
+        if (revokeResponse.ok) {
+          console.log('Successfully revoked token with Xero');
+        } else {
+          console.log('Token revocation failed (this is normal if token was already expired):', revokeResponse.status);
+        }
+      }
+    } catch (revokeError) {
+      console.log('Error revoking token (this is normal if no token exists):', revokeError.message);
     }
     
+    // Clear tokens from MongoDB
+    const XeroToken = require('../models/XeroToken');
+    const deleteResult = await XeroToken.deleteMany({});
+    console.log('Deleted Xero tokens from MongoDB:', deleteResult);
+    
+    // Reset the Xero client state
+    if (xero.tokenSet) {
+      xero.tokenSet = null;
+    }
+    
+    // Reset tenant ID
+    if (typeof xero.setTenantId === 'function') {
+      await xero.setTenantId(null);
+    }
+    
+    console.log('Successfully disconnected from Xero');
     res.json({ 
       success: true,
       message: 'Successfully disconnected from Xero'
@@ -297,6 +334,55 @@ router.post('/invoices/:id/sync', auth, async (req, res) => {
     res.json(invoice);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Create invoice in Xero
+router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
+  try {
+    console.log('Creating invoice in Xero:', req.body);
+    
+    const invoiceData = {
+      Type: 'ACCREC',
+      Contact: {
+        ContactID: req.body.client // Assuming client ID is the Xero contact ID
+      },
+      LineItems: [{
+        Description: req.body.description || 'Invoice line item',
+        Quantity: 1,
+        UnitAmount: req.body.amount,
+        AccountCode: '200' // Default account code for sales
+      }],
+      Date: req.body.date,
+      DueDate: req.body.dueDate,
+      Reference: req.body.invoiceID,
+      Status: 'DRAFT'
+    };
+
+    console.log('Formatted invoice data for Xero:', invoiceData);
+
+    const response = await xero.accountingApi.createInvoices(
+      await xero.getTenantId(),
+      { Invoices: [invoiceData] }
+    );
+
+    console.log('Xero API response:', response);
+
+    if (!response || !response.body || !response.body.Invoices || !response.body.Invoices[0]) {
+      throw new Error('Invalid response from Xero API');
+    }
+
+    const createdInvoice = response.body.Invoices[0];
+    console.log('Successfully created Xero invoice:', createdInvoice.InvoiceID);
+
+    res.json(createdInvoice);
+  } catch (error) {
+    console.error('Error creating invoice in Xero:', error);
+    res.status(500).json({ 
+      error: 'Failed to create invoice in Xero',
+      message: error.message,
+      details: error.response?.body || error.stack
+    });
   }
 });
 

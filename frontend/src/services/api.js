@@ -223,7 +223,11 @@ export const invoiceService = {
   getById: (id) => api.get(`/invoices/${id}`),
   create: (data) => api.post('/invoices', data),
   update: (id, data) => api.put(`/invoices/${id}`, data),
-  delete: (id) => api.delete(`/invoices/${id}`)
+  delete: (id, reason) => api.delete(`/invoices/${id}`, { data: { reason } }), // Soft delete
+  hardDelete: (id) => api.delete(`/invoices/${id}/hard`), // Hard delete (only for non-Xero invoices)
+  restore: (id) => api.post(`/invoices/${id}/restore`), // Restore soft-deleted invoice
+  getDeleted: () => api.get('/invoices/deleted/all'), // Get all deleted invoices
+  getDeletedById: (id) => api.get(`/invoices/deleted/${id}`) // Get specific deleted invoice
 };
 
 // User service
@@ -262,6 +266,7 @@ export const xeroService = {
       throw error;
     }
   },
+  createInvoice: (invoiceData) => api.post('/xero/create-invoice', invoiceData),
   checkStatus: () => api.get('/xero/status'),
   disconnect: () => api.post('/xero/disconnect')
 };

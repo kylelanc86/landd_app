@@ -215,6 +215,23 @@ xeroTokenSchema.statics.setToken = async function(tokenSet) {
   }
 };
 
+xeroTokenSchema.statics.deleteAll = async function() {
+  try {
+    if (!mongoose.connection.readyState) {
+      console.error('MongoDB: Not connected to database');
+      throw new Error('Database not connected');
+    }
+
+    console.log('MongoDB: Deleting all tokens...');
+    const deleteResult = await this.deleteMany({});
+    console.log('MongoDB: Delete all result:', deleteResult);
+    return deleteResult;
+  } catch (error) {
+    console.error('MongoDB: Error deleting all tokens:', error);
+    throw error;
+  }
+};
+
 // Create the model with explicit collection name
 const XeroToken = mongoose.model('XeroToken', xeroTokenSchema, 'xerotokens');
 

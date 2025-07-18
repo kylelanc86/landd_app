@@ -6,7 +6,7 @@ import {
   Card,
   CardContent,
   CardActionArea,
-    CardMedia,
+  CardMedia,
   Chip,
   CircularProgress,
   Button,
@@ -241,16 +241,7 @@ const Dashboard = () => {
         chipLabel: "Outstanding",
         onClick: () => navigateToInvoices(navigate),
       },
-      {
-        id: "labComplete",
-        title: "Projects: Lab Analysis Complete",
-        value: stats.labCompleteProjects.toString(),
-        icon: <ScienceIcon />,
-        bgcolor: "#1976d2",
-        chipLabel: "Lab Complete",
-        onClick: () =>
-          navigateToProjects(navigate, { status: "Lab Analysis Complete" }),
-      },
+
       {
         id: "samplesSubmitted",
         title: "Projects: Samples Submitted",
@@ -315,6 +306,17 @@ const Dashboard = () => {
     setWidgetDialogOpen(false);
   };
 
+  // Calculate optimal number of columns based on widget count
+  const getOptimalColumns = (widgetCount) => {
+    if (widgetCount <= 2) return 2;
+    if (widgetCount <= 4) return 2;
+    if (widgetCount <= 6) return 3;
+    if (widgetCount <= 8) return 4;
+    return 4; // Max 4 columns
+  };
+
+  const optimalColumns = getOptimalColumns(displayWidgets.length);
+
   if (loading) {
     return (
       <Box
@@ -360,14 +362,13 @@ const Dashboard = () => {
           <Droppable droppableId="widgets" direction="horizontal">
             {(provided) => (
               <Box
-                display="flex"
-                flexWrap="wrap"
+                display="grid"
+                gridTemplateColumns={`repeat(${optimalColumns}, 1fr)`}
                 gap="20px"
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 sx={{
                   "& > *": {
-                    flex: "0 0 calc(25% - 15px)",
                     minWidth: "280px",
                     height: "200px",
                   },
