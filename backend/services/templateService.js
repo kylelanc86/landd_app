@@ -23,13 +23,24 @@ const getTemplateByType = async (templateType) => {
   try {
     let template = null;
     
-    if (templateType === "asbestosClearanceNonFriable") {
-      template = await NonFriableClearance.findOne();
-    } else if (templateType === "asbestosClearanceFriable") {
-      template = await FriableClearance.findOne();
-    } else if (templateType === "asbestosAssessment") {
-      template = await AsbestosAssessmentTemplate.findOne();
-    }
+    // Add timeout to prevent hanging database queries
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Template lookup timeout')), 10000); // 10 second timeout
+    });
+    
+    // Race between the database query and timeout
+    const templateQuery = async () => {
+      if (templateType === "asbestosClearanceNonFriable") {
+        return await NonFriableClearance.findOne();
+      } else if (templateType === "asbestosClearanceFriable") {
+        return await FriableClearance.findOne();
+      } else if (templateType === "asbestosAssessment") {
+        return await AsbestosAssessmentTemplate.findOne();
+      }
+      return null;
+    };
+    
+    template = await Promise.race([templateQuery(), timeoutPromise]);
     
     if (!template) {
       console.log(`Template not found for type: ${templateType}, creating default...`);
@@ -207,6 +218,11 @@ const replacePlaceholders = async (content, data) => {
         console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
         const User = require('../models/User');
         
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('User lookup timeout')), 5000); // 5 second timeout
+        });
+        
         // Check if userIdentifier is a valid ObjectId (24 hex characters)
         const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
         console.log('[TEMPLATE SERVICE] Is valid ObjectId:', isValidObjectId);
@@ -224,9 +240,13 @@ const replacePlaceholders = async (content, data) => {
         
         console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
         
-        const user = await User.findOne({
-          $or: queryConditions
-        });
+        // Race between the query and timeout
+        const user = await Promise.race([
+          User.findOne({
+            $or: queryConditions
+          }),
+          timeoutPromise
+        ]);
         
         if (user) {
           console.log('[TEMPLATE SERVICE] Found user:', user.firstName, user.lastName);
@@ -265,6 +285,8 @@ const replacePlaceholders = async (content, data) => {
         }
       } catch (error) {
         console.error('Error looking up user licence and signature:', error);
+        // Continue with default values if lookup fails
+        console.log('[TEMPLATE SERVICE] Using default values due to lookup error');
       }
     }
   }

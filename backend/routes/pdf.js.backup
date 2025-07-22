@@ -2040,8 +2040,6 @@ const generateMainContentPages = async (data) => {
 
 const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBase64Param = null, backgroundBase64Param = null) => {
   
-  console.log(`[POPULATE DEBUG] Starting template population...`);
-  
   // Determine template type based on clearance type
   let templateType = 'asbestosClearanceNonFriable'; // default
   if (data.clearanceType === 'Friable') {
@@ -2051,27 +2049,93 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
   // Fetch template content based on clearance type
   let templateContent = null;
   try {
-    console.log(`[POPULATE DEBUG] Fetching template content for type: ${templateType}`);
-    
-    // Add timeout to prevent hanging
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Template content fetch timeout')), 10000); // 10 second timeout
-    });
-    
-    // Race between the template fetch and timeout
-    templateContent = await Promise.race([
-      getTemplateByType(templateType),
-      timeoutPromise
-    ]);
-    
-    console.log(`[POPULATE DEBUG] Template content fetched successfully`);
+    templateContent = await getTemplateByType(templateType);
   } catch (error) {
-    console.error('[POPULATE DEBUG] Error fetching template content:', error);
+    console.error('Error fetching template content:', error);
     // Continue with hardcoded content as fallback
   }
 
-  // User lookup is now handled by the cached replacePlaceholders function
-  // No need for duplicate database queries here
+  // Look up user's Asbestos Assessor licence number
+  let laaLicenceNumber = 'AA00031'; // Default fallback
+  let userSignature = null;
+  
+  // Handle both clearance (LAA) and assessment (assessorId) user lookups
+  let userIdentifier = data.LAA || data.assessorId;
+  
+  // Handle assessorId object structure for assessments
+  if (data.assessorId && typeof data.assessorId === 'object') {
+    userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
+  }
+  
+  console.log('[USER LOOKUP DEBUG] userIdentifier:', userIdentifier);
+  console.log('[USER LOOKUP DEBUG] data.assessorId:', data.assessorId);
+  console.log('[USER LOOKUP DEBUG] data.LAA:', data.LAA);
+  
+  if (userIdentifier) {
+    try {
+      const User = require('../models/User');
+      
+      // Check if userIdentifier is a valid ObjectId (24 hex characters)
+      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
+      
+      const queryConditions = [
+        { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
+        { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
+        { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
+      ];
+      
+      // Only add ObjectId condition if it's a valid ObjectId
+      if (isValidObjectId) {
+        queryConditions.push({ _id: userIdentifier });
+      }
+      
+      const user = await User.findOne({
+        $or: queryConditions
+      });
+      if (user) {
+        console.log('[USER LOOKUP DEBUG] Found user:', user.firstName, user.lastName);
+        console.log('[USER LOOKUP DEBUG] User signature:', !!user.signature);
+        console.log('[USER LOOKUP DEBUG] User licences:', user.licences?.length || 0);
+        
+        // Get user's signature
+        if (user.signature) {
+          userSignature = user.signature;
+          console.log('[USER LOOKUP DEBUG] User signature found, length:', userSignature.length);
+        } else {
+          console.log('[USER LOOKUP DEBUG] No signature found for user');
+          console.log('[USER LOOKUP DEBUG] User object keys:', Object.keys(user));
+          console.log('[USER LOOKUP DEBUG] User signature field:', user.signature);
+        }
+        
+        if (user.licences && user.licences.length > 0) {
+          console.log('[USER LOOKUP DEBUG] User licences:', user.licences.map(l => ({ type: l.licenceType, number: l.licenceNumber })));
+          
+          // Look specifically for Asbestos Assessor licence first, then LAA
+          const asbestosAssessorLicence = user.licences.find(licence => 
+            licence.licenceType === 'Asbestos Assessor'
+          );
+          
+          if (asbestosAssessorLicence) {
+            laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
+            console.log('[USER LOOKUP DEBUG] Found Asbestos Assessor licence:', laaLicenceNumber);
+          } else {
+            // Fallback to LAA if no Asbestos Assessor licence found
+            const laaLicence = user.licences.find(licence => 
+              licence.licenceType === 'LAA'
+            );
+            if (laaLicence) {
+              laaLicenceNumber = laaLicence.licenceNumber;
+              console.log('[USER LOOKUP DEBUG] Found LAA licence:', laaLicenceNumber);
+            }
+          }
+        }
+      } else {
+        console.log('[USER LOOKUP DEBUG] No user found for identifier:', userIdentifier);
+      }
+    } catch (error) {
+      console.error('Error looking up user licence:', error);
+    }
+  }
   
   // Replace logo placeholders with actual img tags
   let templateWithLogoPath = htmlTemplate.replace(/\[LOGO_PATH\]/g, '');
@@ -2282,7 +2346,10 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
   // Debug: Log only the LAA value for troubleshooting
   console.log('[LAA DEBUG] LAA value from clearance:', data.LAA);
 
-  // Debug final values - these will be populated by replacePlaceholders
+  // Debug final values
+  console.log('[FINAL VALUES DEBUG] laaLicenceNumber:', laaLicenceNumber);
+  console.log('[FINAL VALUES DEBUG] userSignature:', !!userSignature);
+  console.log('[FINAL VALUES DEBUG] userSignature length:', userSignature ? userSignature.length : 'null');
   console.log('[FINAL VALUES DEBUG] CLIENT_NAME:', data.projectId?.client?.name || data.project?.client?.name || data.clientName || 'Unknown Client');
   
   // Replace placeholders with actual data
@@ -2305,7 +2372,8 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
     '[ASBESTOS_TYPE]': data.clearanceType?.toLowerCase() || 'non-friable',
     '[ASBESTOS_REMOVALIST]': data.asbestosRemovalist || 'Unknown Removalist',
     '[LAA_NAME]': data.LAA || data.AUTHOR_NAME || data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.laaName || 'Unknown LAA',
-    // LAA_LICENSE and LAA_LICENCE will be handled by replacePlaceholders with caching
+    '[LAA_LICENSE]': laaLicenceNumber,
+    '[LAA_LICENCE]': laaLicenceNumber, // British spelling for assessment templates
     '[INSPECTION_TIME]': data.inspectionTime || 'Inspection Time',
     '[INSPECTION_DATE]': data.clearanceDate 
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
@@ -2331,7 +2399,8 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
       }
     })(),
     
-    // Signature placeholder will be handled by replacePlaceholders with caching
+    // Signature placeholder
+    '[SIGNATURE_IMAGE]': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : 'Signature not available',
     
     // Template content placeholders
     '[BACKGROUND_INFORMATION_TITLE]': templateContent?.standardSections?.backgroundInformationTitle || 'Background Information Regarding Non-Friable Clearance Inspections',
@@ -2533,10 +2602,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
   const pdfId = `assessment-${data._id || Date.now()}`;
   
   try {
-    console.log(`[PDF DEBUG] Starting assessment PDF generation for ID: ${pdfId}`);
-    console.log(`[PDF DEBUG] Template type: ${templateType}`);
-    console.log(`[PDF DEBUG] Project: ${data.projectId?.name || 'Unknown project'}`);
-    
     backendPerformanceMonitor.startStage('template-loading', pdfId);
     writeLog('Starting assessment PDF generation...');
     writeLog('Template type: ' + templateType);
@@ -2555,8 +2620,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     }
     backendPerformanceMonitor.endStage('template-loading', pdfId);
     backendPerformanceMonitor.startStage('puppeteer-setup', pdfId);
-    
-    console.log(`[PDF DEBUG] Starting Puppeteer browser launch...`);
     
     // Launch browser with deployment-optimized settings
     const launchOptions = {
@@ -2578,26 +2641,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--disable-field-trial-config',
-        "--disable-ipc-flooding-protection",
-        "--disable-default-apps",
-        "--disable-sync",
-        "--disable-translate",
-        "--hide-scrollbars",
-        "--mute-audio",
-        "--no-default-browser-check",
-        "--disable-component-extensions-with-background-pages",
-        "--disable-background-networking",
-        "--disable-client-side-phishing-detection",
-        "--disable-hang-monitor",
-        "--disable-prompt-on-repost",
-        "--disable-domain-reliability",
-        "--disable-features=TranslateUI",
-        "--force-color-profile=srgb",
-        "--metrics-recording-only",
-        "--password-store=basic",
-        "--use-mock-keychain",
-        "--disable-gpu-sandbox",
-        "--disable-software-rasterizer"
+        '--disable-ipc-flooding-protection'
       ]
     };
     
@@ -2606,7 +2650,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       console.log('Production environment detected, using system Chrome');
       // Use the environment variable or default to chromium-browser
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-      console.log('Chrome executable path:', launchOptions.executablePath);
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
@@ -2618,9 +2661,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       console.log('Browser launched successfully');
     } catch (launchError) {
       console.error('Failed to launch browser with default options:', launchError.message);
-      console.error('Launch error stack:', launchError.stack);
       // Try with different options for Windows
-      console.log('Trying minimal launch options for Render...');
+      console.log('Trying alternative launch options...');
       const alternativeOptions = {
         headless: true,
         args: [
@@ -2635,18 +2677,10 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       };
       try {
         browser = await puppeteer.launch(alternativeOptions);
-        console.log('Browser launched with minimal options');
+        console.log('Browser launched with alternative options');
       } catch (secondError) {
         console.error('Failed to launch browser with alternative options:', secondError.message);
-        console.log('Trying without executable path...');
-        const noPathOptions = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
-        try {
-          browser = await puppeteer.launch(noPathOptions);
-          console.log('Browser launched without executable path');
-        } catch (thirdError) {
-          console.error('Failed to launch browser without executable path:', thirdError.message);
-          throw new Error(`Failed to launch Chrome browser after 3 attempts. Last error: ${thirdError.message}`);
-        }
+        throw new Error(`Failed to launch Chrome browser. Please ensure Chrome is installed and accessible. Error: ${secondError.message}`);
       }
     }
     backendPerformanceMonitor.endStage('puppeteer-setup', pdfId);
@@ -2658,10 +2692,9 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     const path = require('path');
     
     // Load assessment-specific templates with better error handling
-    console.log(`[PDF DEBUG] Loading assessment templates...`);
     const templateDir = path.join(__dirname, '../templates/AsbestosAssessment');
-    console.log('[PDF DEBUG] Template directory:', templateDir);
-    console.log('[PDF DEBUG] Template directory exists:', fs.existsSync(templateDir));
+    console.log('Template directory:', templateDir);
+    console.log('Template directory exists:', fs.existsSync(templateDir));
     
     if (!fs.existsSync(templateDir)) {
       throw new Error(`Template directory not found: ${templateDir}`);
@@ -2678,11 +2711,10 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     };
     
     // Check if all template files exist
-    console.log(`[PDF DEBUG] Checking template files...`);
     for (const [key, filename] of Object.entries(templateFiles)) {
       const filePath = path.join(templateDir, filename);
-      console.log(`[PDF DEBUG] Checking ${key} template: ${filePath}`);
-      console.log(`[PDF DEBUG] File exists: ${fs.existsSync(filePath)}`);
+      console.log(`Checking ${key} template: ${filePath}`);
+      console.log(`File exists: ${fs.existsSync(filePath)}`);
       if (!fs.existsSync(filePath)) {
         throw new Error(`Template file not found: ${filePath}`);
       }
@@ -2692,7 +2724,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     let coverTemplate, versionControlTemplate, sampleRegisterTemplate, discussionTemplate, sampleItemTemplate, glossaryTemplate, appendixATemplate;
     
     try {
-      console.log(`[PDF DEBUG] Reading template files...`);
       coverTemplate = fs.readFileSync(path.join(templateDir, templateFiles.cover), 'utf8');
       versionControlTemplate = fs.readFileSync(path.join(templateDir, templateFiles.versionControl), 'utf8');
       sampleRegisterTemplate = fs.readFileSync(path.join(templateDir, templateFiles.sampleRegister), 'utf8');
@@ -2701,26 +2732,20 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       glossaryTemplate = fs.readFileSync(path.join(templateDir, templateFiles.glossary), 'utf8');
       appendixATemplate = fs.readFileSync(path.join(templateDir, templateFiles.appendixA), 'utf8');
       
-      console.log('[PDF DEBUG] All template files loaded successfully');
+      console.log('All template files loaded successfully');
     } catch (error) {
       console.error('Error loading template files:', error);
       throw new Error(`Failed to load template files: ${error.message}`);
     }
     
     // Populate templates with data - use the same approach as clearance
-    console.log(`[PDF DEBUG] Populating cover template...`);
     const populatedCover = await populateTemplate(coverTemplate, data, 'B', logoBase64, backgroundBase64);
-    console.log(`[PDF DEBUG] Populating version control template...`);
     const populatedVersionControl = await populateTemplate(versionControlTemplate, data, 'B', logoBase64);
-    console.log(`[PDF DEBUG] Populating glossary template...`);
     const populatedGlossary = await populateTemplate(glossaryTemplate, data, 'B', logoBase64);
-    console.log(`[PDF DEBUG] Populating appendix A template...`);
     const populatedAppendixA = await populateTemplate(appendixATemplate, data, 'B', logoBase64);
     
     backendPerformanceMonitor.endStage('html-generation', pdfId);
     backendPerformanceMonitor.startStage('pdf-rendering', pdfId);
-    
-    console.log(`[PDF DEBUG] Starting PDF rendering stage...`);
     
     // Generate discussion content with identified asbestos items
     const identifiedAsbestosItems = assessmentItems
@@ -2771,13 +2796,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     // Use template content if available, otherwise use hardcoded template
     let populatedDiscussion;
     if (templateContent && templateContent.standardSections) {
-      // Create discussion content using template sections with timeout
-      const discussionContentPromise = replacePlaceholders(templateContent.standardSections.discussionContent, discussionData);
-      const discussionContentTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Discussion content generation timeout')), 15000); // 15 second timeout
-      });
-      
-      const discussionContent = await Promise.race([discussionContentPromise, discussionContentTimeout]);
+      // Create discussion content using template sections
+      const discussionContent = await replacePlaceholders(templateContent.standardSections.discussionContent, discussionData);
       const discussionTitle = templateContent.standardSections.discussionTitle;
       
       // Replace the hardcoded content in the template with dynamic content
@@ -2799,20 +2819,10 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     // Use template content for sample register if available
     let populatedSampleRegister;
     if (templateContent && templateContent.standardSections) {
-      // Create introduction and survey findings content using template sections with timeout
-      const introductionContentPromise = replacePlaceholders(templateContent.standardSections.introductionContent, sampleRegisterData);
-      const surveyFindingsContentPromise = replacePlaceholders(templateContent.standardSections.surveyFindingsContent, sampleRegisterData);
-      
-      const contentTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Sample register content generation timeout')), 15000); // 15 second timeout
-      });
-      
-      const [introductionContent, surveyFindingsContent] = await Promise.race([
-        Promise.all([introductionContentPromise, surveyFindingsContentPromise]),
-        contentTimeout
-      ]);
-      
+      // Create introduction and survey findings content using template sections
+      const introductionContent = await replacePlaceholders(templateContent.standardSections.introductionContent, sampleRegisterData);
       const introductionTitle = templateContent.standardSections.introductionTitle;
+      const surveyFindingsContent = await replacePlaceholders(templateContent.standardSections.surveyFindingsContent, sampleRegisterData);
       const surveyFindingsTitle = templateContent.standardSections.surveyFindingsTitle;
       
       // Replace the hardcoded content in the template with dynamic content
@@ -2862,11 +2872,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     if (assessmentItems.length > 0) {
       // First page: Introduction + first item (50% taller)
       const firstItem = assessmentItems[0];
-      const firstItemContentPromise = populateTemplate(sampleItemTemplate, firstItem, 'B', logoBase64);
-      const itemTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Sample item template population timeout')), 10000); // 10 second timeout
-      });
-      const firstItemContent = await Promise.race([firstItemContentPromise, itemTimeout]);
+      const firstItemContent = await populateTemplate(sampleItemTemplate, firstItem, 'B', logoBase64);
       
       // Make first item 50% taller by adding extra spacing
       const tallerFirstItem = firstItemContent.replace(
@@ -2893,8 +2899,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
           // Add each item to the page
           for (let i = 0; i < pageItems.length; i++) {
             const item = pageItems[i];
-            const itemContentPromise = populateTemplate(sampleItemTemplate, item, 'B', logoBase64);
-            const itemContent = await Promise.race([itemContentPromise, itemTimeout]);
+            const itemContent = await populateTemplate(sampleItemTemplate, item, 'B', logoBase64);
             pageContent += itemContent;
             
             // Add spacing between items (except for the last item)
@@ -2969,12 +2974,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
             LAA_LICENSE: 'AA00031', // Default license - will be looked up in replacePlaceholders
           };
           
-          const section1ContentPromise = replacePlaceholders(templateContent.standardSections[section1.key + 'Content'], placeholderData);
-          const sectionTimeout = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Section content generation timeout')), 10000); // 10 second timeout
-          });
-          
-          let section1Content = await Promise.race([section1ContentPromise, sectionTimeout]);
+          let section1Content = await replacePlaceholders(templateContent.standardSections[section1.key + 'Content'], placeholderData);
           
           // Special handling for Risk Assessment table
           if (section1.key === 'riskAssessment') {
@@ -2994,8 +2994,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
           const section2Title = templateContent.standardSections[section2.key + 'Title'];
           
           // Use the same placeholder data for consistency
-          const section2ContentPromise = replacePlaceholders(templateContent.standardSections[section2.key + 'Content'], placeholderData);
-          let section2Content = await Promise.race([section2ContentPromise, sectionTimeout]);
+          let section2Content = await replacePlaceholders(templateContent.standardSections[section2.key + 'Content'], placeholderData);
           
           // Special handling for Risk Assessment table
           if (section2.key === 'riskAssessment') {
@@ -3154,7 +3153,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     // Wait for fonts to load to ensure proper rendering
     await page.waitForTimeout(1000);
     
-    console.log('[PDF DEBUG] Calling page.pdf()...');
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -3170,7 +3168,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       scale: 1.0,
       landscape: false
     });
-    console.log('[PDF DEBUG] PDF generated successfully, buffer size:', pdfBuffer.length);
     
     backendPerformanceMonitor.endStage('pdf-rendering', pdfId);
     backendPerformanceMonitor.startStage('compression', pdfId);
@@ -3297,26 +3294,7 @@ const generatePDFFromHTML = async (templateType, data) => {
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--disable-field-trial-config',
-        "--disable-ipc-flooding-protection",
-        "--disable-default-apps",
-        "--disable-sync",
-        "--disable-translate",
-        "--hide-scrollbars",
-        "--mute-audio",
-        "--no-default-browser-check",
-        "--disable-component-extensions-with-background-pages",
-        "--disable-background-networking",
-        "--disable-client-side-phishing-detection",
-        "--disable-hang-monitor",
-        "--disable-prompt-on-repost",
-        "--disable-domain-reliability",
-        "--disable-features=TranslateUI",
-        "--force-color-profile=srgb",
-        "--metrics-recording-only",
-        "--password-store=basic",
-        "--use-mock-keychain",
-        "--disable-gpu-sandbox",
-        "--disable-software-rasterizer"
+        '--disable-ipc-flooding-protection'
       ]
     };
     
@@ -3325,7 +3303,6 @@ const generatePDFFromHTML = async (templateType, data) => {
       console.log('Production environment detected, using system Chrome');
       // Use the environment variable or default to chromium-browser
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-      console.log('Chrome executable path:', launchOptions.executablePath);
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
@@ -3337,9 +3314,8 @@ const generatePDFFromHTML = async (templateType, data) => {
       console.log('Browser launched successfully');
     } catch (launchError) {
       console.error('Failed to launch browser with default options:', launchError.message);
-      console.error('Launch error stack:', launchError.stack);
       // Try with different options for Windows
-      console.log('Trying minimal launch options for Render...');
+      console.log('Trying alternative launch options...');
       const alternativeOptions = {
         headless: true,
         args: [
@@ -3354,18 +3330,10 @@ const generatePDFFromHTML = async (templateType, data) => {
       };
       try {
         browser = await puppeteer.launch(alternativeOptions);
-        console.log('Browser launched with minimal options');
+        console.log('Browser launched with alternative options');
       } catch (secondError) {
         console.error('Failed to launch browser with alternative options:', secondError.message);
-        console.log('Trying without executable path...');
-        const noPathOptions = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
-        try {
-          browser = await puppeteer.launch(noPathOptions);
-          console.log('Browser launched without executable path');
-        } catch (thirdError) {
-          console.error('Failed to launch browser without executable path:', thirdError.message);
-          throw new Error(`Failed to launch Chrome browser after 3 attempts. Last error: ${thirdError.message}`);
-        }
+        throw new Error(`Failed to launch Chrome browser. Please ensure Chrome is installed and accessible. Error: ${secondError.message}`);
       }
     }
     backendPerformanceMonitor.endStage('puppeteer-setup', pdfId);
@@ -3707,7 +3675,6 @@ router.get('/test', (req, res) => {
 
 // Simple test route to verify router is working
 router.get('/ping', (req, res) => {
-  console.log('=== PING ROUTE HIT ===');
   res.json({ 
     message: 'PDF router is working',
     timestamp: new Date().toISOString()
@@ -3805,16 +3772,10 @@ router.get('/test-puppeteer', async (req, res) => {
 
 // Route to generate asbestos assessment PDF
 router.post('/generate-asbestos-assessment', async (req, res) => {
-  console.log('=== ASSESSMENT PDF ROUTE HIT ===');
-  console.log('Request received at:', new Date().toISOString());
-  console.log('Request headers:', Object.keys(req.headers));
-  console.log('Request body keys:', Object.keys(req.body || {}));
-  
   const pdfId = `assessment-${req.body.assessmentData?._id || Date.now()}`;
   const startTime = Date.now();
   
   try {
-    console.log('=== STARTING ASSESSMENT PDF GENERATION ===');
     backendPerformanceMonitor.startTimer(`assessment-pdf-${pdfId}`);
     writeLog('=== ASSESSMENT PDF GENERATION REQUEST RECEIVED ===');
     writeLog('Request received for assessment ID: ' + req.body.assessmentData?._id);
@@ -3885,10 +3846,7 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     
     res.send(compressedPdfBuffer);
   } catch (error) {
-    console.error('=== ASSESSMENT PDF ERROR ===');
     console.error('Error generating assessment PDF:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error occurred at:', new Date().toISOString());
     backendPerformanceMonitor.endTimer(`assessment-pdf-${pdfId}`);
     res.status(500).json({ error: error.message });
   }
