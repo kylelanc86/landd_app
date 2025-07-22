@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -11,6 +11,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
+import performanceMonitor from "../../utils/performanceMonitor";
 
 // Import components for inline display
 import Clients from "../clients";
@@ -87,7 +88,24 @@ const Databases = () => {
 
   const [selectedDatabase, setSelectedDatabase] = useState(initialDatabase);
 
+  // Performance monitoring
+  useEffect(() => {
+    performanceMonitor.startPageLoad("databases-page");
+
+    return () => {
+      performanceMonitor.endPageLoad("databases-page");
+    };
+  }, []);
+
+  // Monitor database switching performance
+  useEffect(() => {
+    if (selectedDatabase) {
+      performanceMonitor.startTimer(`database-switch-${selectedDatabase}`);
+    }
+  }, [selectedDatabase]);
+
   const handleDatabaseChange = (database) => {
+    performanceMonitor.endTimer(`database-switch-${selectedDatabase}`);
     setSelectedDatabase(database);
     // Update URL without reloading the page
     const newUrl = `/databases?db=${database}`;
@@ -117,14 +135,14 @@ const Databases = () => {
 
   const renderSelectedContent = () => {
     // Get additional filters from URL parameters
-    const statusFilter = urlParams.get('status');
-    const departmentFilter = urlParams.get('department');
-    const searchFilter = urlParams.get('search');
-    
+    const statusFilter = urlParams.get("status");
+    const departmentFilter = urlParams.get("department");
+    const searchFilter = urlParams.get("search");
+
     const filters = {
       status: statusFilter,
       department: departmentFilter,
-      search: searchFilter
+      search: searchFilter,
     };
 
     switch (selectedDatabase) {

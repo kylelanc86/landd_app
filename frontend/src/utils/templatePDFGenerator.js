@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import pdfPerformanceMonitor from "./pdfPerformanceMonitor";
 
 export const generateTemplatePDF = async (template, sampleData, replacePlaceholders) => {
   // Create a new PDF document
@@ -323,10 +324,16 @@ export const generateHTMLPDF = async (templateType, data) => {
     };
 
 export const generateAssessmentPDF = async (assessmentData) => {
+  const pdfId = `assessment-${assessmentData._id || Date.now()}`;
+  const generationId = pdfPerformanceMonitor.trackCommonStages(pdfId, 'asbestos-assessment', assessmentData);
+  
   try {
     console.log('Starting assessment PDF generation with data:', assessmentData);
     console.log('Environment:', process.env.NODE_ENV);
     console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+    
+    pdfPerformanceMonitor.endStage('data-preparation', generationId);
+    pdfPerformanceMonitor.startStage('api-request', generationId);
     
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
@@ -347,6 +354,9 @@ export const generateAssessmentPDF = async (assessmentData) => {
       body: JSON.stringify({ assessmentData: assessmentData })
     });
 
+    pdfPerformanceMonitor.endStage('api-request', generationId);
+    pdfPerformanceMonitor.startStage('response-processing', generationId);
+
     console.log('Response status:', response.status);
     console.log('Response headers:', Object.fromEntries(response.headers.entries()));
     
@@ -366,40 +376,46 @@ export const generateAssessmentPDF = async (assessmentData) => {
     const pdfBlob = await response.blob();
     console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
 
+    pdfPerformanceMonitor.endStage('response-processing', generationId);
+    pdfPerformanceMonitor.startStage('download-preparation', generationId);
+
     // Create a download link
     const url = window.URL.createObjectURL(pdfBlob);
     const link = document.createElement('a');
     link.href = url;
-
-    // Generate filename with new format
-    const jobReference = assessmentData.projectId?.projectID || 'Unknown';
-    const siteName = assessmentData.projectId?.name || 'Unknown Site';
-    const assessmentDate = assessmentData.assessmentDate 
-      ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-')
-      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
     
-    const fileName = `${jobReference}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
+    // Generate filename
+    const projectId = assessmentData.projectId?.projectID || assessmentData.jobReference || 'Unknown';
+    const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
+    const assessmentDate = assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
+    const fileName = `${projectId}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
+    
     link.download = fileName;
-
-    // Trigger download
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
-    // Clean up
     window.URL.revokeObjectURL(url);
 
-    console.log('Assessment PDF downloaded successfully:', fileName);
+    pdfPerformanceMonitor.endStage('download-preparation', generationId);
+    pdfPerformanceMonitor.endPDFGeneration(generationId);
+
     return fileName;
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
+    pdfPerformanceMonitor.endPDFGeneration(generationId);
     throw error;
   }
 };
 
 export const generateHTMLTemplatePDF = async (templateType, data) => {
+  const pdfId = `clearance-${data._id || Date.now()}`;
+  const generationId = pdfPerformanceMonitor.trackCommonStages(pdfId, 'asbestos-clearance', data);
+  
   try {
     console.log('Starting server-side PDF generation with data:', data);
+    
+    pdfPerformanceMonitor.endStage('data-preparation', generationId);
+    pdfPerformanceMonitor.startStage('api-request', generationId);
     
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
@@ -428,6 +444,9 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
 
       clearTimeout(timeoutId); // Clear timeout if request completes
 
+      pdfPerformanceMonitor.endStage('api-request', generationId);
+      pdfPerformanceMonitor.startStage('response-processing', generationId);
+
     console.log('Response status:', response.status);
     console.log('Response headers:', Object.fromEntries(response.headers.entries()));
     
@@ -447,48 +466,41 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
     const pdfBlob = await response.blob();
     console.log('PDF blob size:', pdfBlob.size, 'bytes');
 
-      if (pdfBlob.size === 0) {
-        throw new Error('Generated PDF is empty');
-      }
+    pdfPerformanceMonitor.endStage('response-processing', generationId);
+    pdfPerformanceMonitor.startStage('download-preparation', generationId);
 
     // Create a download link
     const url = window.URL.createObjectURL(pdfBlob);
     const link = document.createElement('a');
     link.href = url;
-
-    // Generate filename with new format
-    const jobReference = data.projectId?.projectID || 'Unknown';
-    const clearanceType = data.clearanceType || 'Non-friable';
-    const siteName = data.projectId?.name || 'Unknown Site';
-    const clearanceDate = data.clearanceDate 
-      ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-')
-      : new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
     
-    const fileName = `${jobReference}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
+    // Generate filename
+    const projectId = data.projectId?.projectID || data.project?.projectID || 'Unknown';
+    const siteName = data.projectId?.name || data.project?.name || data.siteName || 'Unknown';
+    const clearanceDate = data.clearanceDate ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
+    const clearanceType = data.clearanceType || 'Non-friable';
+    const fileName = `${projectId}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
+    
     link.download = fileName;
-
-    // Trigger download
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    // Clean up
     window.URL.revokeObjectURL(url);
-    
-    console.log('PDF generation completed successfully:', fileName);
+
+    pdfPerformanceMonitor.endStage('download-preparation', generationId);
+    pdfPerformanceMonitor.endPDFGeneration(generationId);
+
     return fileName;
-      
     } catch (fetchError) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
-        throw new Error('PDF generation timed out after 5 minutes. Please try again.');
+        throw new Error('PDF generation timed out after 5 minutes');
       }
       throw fetchError;
     }
-    
   } catch (error) {
-    console.error("Error generating HTML template PDF:", error);
-    console.error("Error stack:", error.stack);
+    console.error('Error generating PDF:', error);
+    pdfPerformanceMonitor.endPDFGeneration(generationId);
     throw error;
   }
 }; 

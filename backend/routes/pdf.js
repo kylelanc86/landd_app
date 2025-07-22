@@ -5,9 +5,71 @@ const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
 const router = express.Router();
 const { ultraCompressPDF } = require('../utils/pdfCompressor');
-const { compressImagesInHTML } = require('../utils/imageCompressor');
-const { getTemplateByType, replacePlaceholders } = require('../services/templateService');
+// No image compression import needed - using pre-upload compression only
+const { getTemplateByType, replacePlaceholders, clearUserLookupCache } = require('../services/templateService');
 const { generateRiskAssessmentTable } = require('../models/defaultcontent/RiskAssessmentTable');
+
+// Performance monitoring utility for backend
+const backendPerformanceMonitor = {
+  timers: {},
+  stages: {},
+
+  startTimer(name) {
+    this.timers[name] = {
+      start: Date.now(),
+      end: null,
+      duration: null
+    };
+    console.log(`[Backend Performance] Started timer: ${name}`);
+  },
+
+  endTimer(name) {
+    if (this.timers[name]) {
+      this.timers[name].end = Date.now();
+      this.timers[name].duration = this.timers[name].end - this.timers[name].start;
+      console.log(`[Backend Performance] Timer ${name} completed in ${this.timers[name].duration}ms`);
+      delete this.timers[name];
+    }
+  },
+
+  startStage(stageName, pdfId = 'default') {
+    if (!this.stages[pdfId]) {
+      this.stages[pdfId] = {};
+    }
+    this.stages[pdfId][stageName] = {
+      start: Date.now(),
+      end: null,
+      duration: null
+    };
+    console.log(`[Backend Performance] Started stage: ${stageName} for PDF ${pdfId}`);
+  },
+
+  endStage(stageName, pdfId = 'default') {
+    if (this.stages[pdfId] && this.stages[pdfId][stageName]) {
+      this.stages[pdfId][stageName].end = Date.now();
+      this.stages[pdfId][stageName].duration = this.stages[pdfId][stageName].end - this.stages[pdfId][stageName].start;
+      console.log(`[Backend Performance] Stage ${stageName} completed in ${this.stages[pdfId][stageName].duration}ms for PDF ${pdfId}`);
+    }
+  },
+
+  logPerformanceSummary(pdfId, pdfType, totalTime, dataSize = 0) {
+    console.log(`[Backend Performance Summary] ==========================================`);
+    console.log(`[Backend Performance Summary] Type: ${pdfType}`);
+    console.log(`[Backend Performance Summary] Total Time: ${totalTime}ms`);
+    console.log(`[Backend Performance Summary] Data Items: ${dataSize}`);
+    
+    if (totalTime > 30000) {
+      console.warn(`[Backend Performance Summary] ⚠️  Very slow generation detected (>30s)`);
+    } else if (totalTime > 15000) {
+      console.warn(`[Backend Performance Summary] ⚠️  Slow generation detected (>15s)`);
+    } else if (totalTime > 5000) {
+      console.warn(`[Backend Performance Summary] ⚠️  Moderate generation time (>5s)`);
+    } else {
+      console.log(`[Backend Performance Summary] ✅ Good performance (<5s)`);
+    }
+    console.log(`[Backend Performance Summary] ==========================================`);
+  }
+};
 
 // Function to process Risk Assessment content and create a proper table
 const processRiskAssessmentContent = (content) => {
@@ -2537,7 +2599,10 @@ const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
  */
 const generateAssessmentPDFFromHTML = async (templateType, data) => {
   let browser;
+  const pdfId = `assessment-${data._id || Date.now()}`;
+  
   try {
+    backendPerformanceMonitor.startStage('template-loading', pdfId);
     writeLog('Starting assessment PDF generation...');
     writeLog('Template type: ' + templateType);
     writeLog('Data received for project: ' + (data.projectId?.name || 'Unknown project'));
@@ -2553,6 +2618,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       console.error('Error fetching template content:', error);
       // Continue with hardcoded content as fallback
     }
+    backendPerformanceMonitor.endStage('template-loading', pdfId);
+    backendPerformanceMonitor.startStage('puppeteer-setup', pdfId);
     
     // Launch browser with better cross-platform support
     const launchOptions = {
@@ -2602,6 +2669,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         throw new Error(`Failed to launch Chrome browser. Please ensure Chrome is installed and accessible. Error: ${secondError.message}`);
       }
     }
+    backendPerformanceMonitor.endStage('puppeteer-setup', pdfId);
+    backendPerformanceMonitor.startStage('html-generation', pdfId);
     
     const page = await browser.newPage();
     
@@ -2660,6 +2729,9 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     const populatedVersionControl = await populateTemplate(versionControlTemplate, data, 'B', logoBase64);
     const populatedGlossary = await populateTemplate(glossaryTemplate, data, 'B', logoBase64);
     const populatedAppendixA = await populateTemplate(appendixATemplate, data, 'B', logoBase64);
+    
+    backendPerformanceMonitor.endStage('html-generation', pdfId);
+    backendPerformanceMonitor.startStage('pdf-rendering', pdfId);
     
     // Generate discussion content with identified asbestos items
     const identifiedAsbestosItems = assessmentItems
@@ -3055,11 +3127,17 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       </html>
     `;
     
-    // Skip image compression due to Jimp compatibility issues
-    console.log('Skipping image compression due to Jimp compatibility issues');
+    // Skip server-side image compression - using pre-upload compression only
+    console.log('Using pre-upload compressed images, skipping server-side compression...');
     
-    // Set content and generate PDF
-    await page.setContent(completeHTML, { waitUntil: 'networkidle0' });
+    // Set content and generate PDF with optimized settings
+    await page.setContent(completeHTML, { 
+      waitUntil: 'domcontentloaded', // Faster than networkidle0
+      timeout: 30000 
+    });
+    
+    // Wait for fonts to load to ensure proper rendering
+    await page.waitForTimeout(1000);
     
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -3077,7 +3155,16 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       landscape: false
     });
     
+    backendPerformanceMonitor.endStage('pdf-rendering', pdfId);
+    backendPerformanceMonitor.startStage('compression', pdfId);
+    
     writeLog('Assessment PDF generated successfully');
+    
+    backendPerformanceMonitor.endStage('compression', pdfId);
+    
+    // Clear user lookup cache after PDF generation
+    clearUserLookupCache();
+    
     return pdfBuffer;
     
   } catch (error) {
@@ -3087,6 +3174,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     if (browser) {
       await browser.close();
     }
+    // Clear user lookup cache even on error
+    clearUserLookupCache();
   }
 };
 
@@ -3163,7 +3252,10 @@ const populateAssessmentTemplate = (template, data, logoBase64, backgroundBase64
  */
 const generatePDFFromHTML = async (templateType, data) => {
   let browser;
+  const pdfId = `clearance-${data._id || Date.now()}`;
+  
   try {
+    backendPerformanceMonitor.startStage('template-loading', pdfId);
     writeLog('Starting server-side PDF generation with 7-page template...');
     writeLog('Template type: ' + templateType);
     writeLog('Data received for project: ' + (data.projectId?.name || 'Unknown project'));
@@ -3216,6 +3308,8 @@ const generatePDFFromHTML = async (templateType, data) => {
         throw new Error(`Failed to launch Chrome browser. Please ensure Chrome is installed and accessible. Error: ${secondError.message}`);
       }
     }
+    backendPerformanceMonitor.endStage('puppeteer-setup', pdfId);
+    backendPerformanceMonitor.startStage('html-generation', pdfId);
     
     const page = await browser.newPage();
     
@@ -3442,17 +3536,19 @@ const generatePDFFromHTML = async (templateType, data) => {
 
     console.log('Complete HTML generated, length:', completeHTML.length);
     
-    // Compress images in HTML to reduce file size
-    console.log('Compressing images in HTML to 100KB each...');
-    const compressedHTML = await compressImagesInHTML(completeHTML, 100);
-    console.log('Image compression completed, HTML length:', compressedHTML.length);
-    
-
+    // Skip server-side image compression - using pre-upload compression only
+    console.log('Using pre-upload compressed images, skipping server-side compression...');
     
     console.log('Generating PDF with clearance pages and air monitoring report...');
     
-    // Set content and generate PDF
-    await page.setContent(compressedHTML, { waitUntil: 'networkidle0' });
+    // Set content and generate PDF with optimized settings
+    await page.setContent(completeHTML, { 
+      waitUntil: 'domcontentloaded', // Faster than networkidle0
+      timeout: 30000 
+    });
+    
+    // Wait for fonts to load to ensure proper rendering
+    await page.waitForTimeout(1000);
     
     const pdf = await page.pdf({
       format: 'A4',
@@ -3464,13 +3560,16 @@ const generatePDFFromHTML = async (templateType, data) => {
         left: '0'
       },
       preferCSSPageSize: false,
-      // Optimize for smaller file size
       displayHeaderFooter: false,
       omitBackground: false,
-      // Additional optimization settings
       scale: 1.0,
-      landscape: false
+      landscape: false,
+      // Performance optimizations
+      timeout: 30000
     });
+
+    backendPerformanceMonitor.endStage('pdf-rendering', pdfId);
+    backendPerformanceMonitor.startStage('compression', pdfId);
 
     console.log('PDF generation completed successfully');
     console.log('PDF buffer size:', pdf.length);
@@ -3517,6 +3616,11 @@ const generatePDFFromHTML = async (templateType, data) => {
       console.log('No site plan PDF found in data or site plan is an image');
     }
     
+    backendPerformanceMonitor.endStage('compression', pdfId);
+    
+    // Clear user lookup cache after PDF generation
+    clearUserLookupCache();
+    
     return pdf;
     
   } catch (error) {
@@ -3526,6 +3630,8 @@ const generatePDFFromHTML = async (templateType, data) => {
     if (browser) {
       await browser.close();
     }
+    // Clear user lookup cache even on error
+    clearUserLookupCache();
   }
 };
 
@@ -3638,7 +3744,11 @@ router.get('/test-puppeteer', async (req, res) => {
 
 // Route to generate asbestos assessment PDF
 router.post('/generate-asbestos-assessment', async (req, res) => {
+  const pdfId = `assessment-${req.body.assessmentData?._id || Date.now()}`;
+  const startTime = Date.now();
+  
   try {
+    backendPerformanceMonitor.startTimer(`assessment-pdf-${pdfId}`);
     writeLog('=== ASSESSMENT PDF GENERATION REQUEST RECEIVED ===');
     writeLog('Request received for assessment ID: ' + req.body.assessmentData?._id);
     const { assessmentData } = req.body;
@@ -3652,6 +3762,8 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     
     const assessmentItems = assessmentData.items || [];
     writeLog('Assessment items found: ' + assessmentItems.length);
+    
+    backendPerformanceMonitor.startStage('data-preparation', pdfId);
     
     // Add assessment items to the data and fix client mapping
     const enrichedData = {
@@ -3668,44 +3780,57 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
         : (assessmentData.assessorName || 'L&D Consulting')
     };
     
+    backendPerformanceMonitor.endStage('data-preparation', pdfId);
+    backendPerformanceMonitor.startStage('pdf-generation', pdfId);
+    
     writeLog('Generating assessment PDF with template and assessment items...');
     
     // Generate PDF
     const pdfBuffer = await generateAssessmentPDFFromHTML('asbestos-assessment', enrichedData);
     
+    backendPerformanceMonitor.endStage('pdf-generation', pdfId);
+    backendPerformanceMonitor.startStage('response-preparation', pdfId);
+    
     console.log('Assessment PDF generated successfully, buffer size:', pdfBuffer.length);
+    
+    // Skip compression since it's not effective - focus on source optimization
+    console.log('Skipping PDF compression - using source optimization instead');
+    const compressedPdfBuffer = pdfBuffer;
+    
+    console.log('Using original PDF buffer, size:', compressedPdfBuffer.length);
     
     // Generate filename
     const fileName = `asbestos-assessment-${assessmentData.projectId?.name || 'report'}-${new Date().toISOString().split('T')[0]}.pdf`;
     
-    console.log('Sending assessment PDF response with filename:', fileName);
+    console.log('Sending compressed PDF response with filename:', fileName);
     
     // Set response headers with CORS support
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Content-Length', compressedPdfBuffer.length);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     
-    res.send(pdfBuffer);
+    backendPerformanceMonitor.endStage('response-preparation', pdfId);
+    backendPerformanceMonitor.endTimer(`assessment-pdf-${pdfId}`);
     
+    const totalTime = Date.now() - startTime;
+    backendPerformanceMonitor.logPerformanceSummary(pdfId, 'asbestos-assessment', totalTime, assessmentItems.length);
+    
+    res.send(compressedPdfBuffer);
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
-    console.error('Error stack:', error.stack);
-    writeLog('ERROR generating assessment PDF: ' + error.message);
-    writeLog('ERROR stack: ' + error.stack);
-    res.status(500).json({ 
-      error: 'Failed to generate assessment PDF', 
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    backendPerformanceMonitor.endTimer(`assessment-pdf-${pdfId}`);
+    res.status(500).json({ error: error.message });
   }
 });
 
 // Route to generate asbestos clearance PDF
 router.post('/generate-asbestos-clearance', async (req, res) => {
+  const pdfId = `clearance-${req.body.clearanceData?._id || Date.now()}`;
+  const startTime = Date.now();
+  
   try {
+    backendPerformanceMonitor.startTimer(`clearance-pdf-${pdfId}`);
     console.log('=== PDF GENERATION REQUEST RECEIVED ===');
     console.log('Request headers:', req.headers);
     console.log('Request body keys:', Object.keys(req.body || {}));
@@ -3723,16 +3848,24 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
     const clearanceItems = clearanceData.items || [];
     writeLog('Clearance items found: ' + clearanceItems.length);
     
+    backendPerformanceMonitor.startStage('data-preparation', pdfId);
+    
     // Add clearance items to the data
     const enrichedData = {
       ...clearanceData,
       clearanceItems: clearanceItems
     };
     
+    backendPerformanceMonitor.endStage('data-preparation', pdfId);
+    backendPerformanceMonitor.startStage('pdf-generation', pdfId);
+    
     writeLog('Generating PDF with 7-page template and clearance items...');
     
     // Generate PDF
     const pdfBuffer = await generatePDFFromHTML('asbestos-clearance', enrichedData);
+    
+    backendPerformanceMonitor.endStage('pdf-generation', pdfId);
+    backendPerformanceMonitor.startStage('response-preparation', pdfId);
     
     console.log('PDF generated successfully, buffer size:', pdfBuffer.length);
     
@@ -3751,25 +3884,19 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', compressedPdfBuffer.length);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     
-    // Send compressed PDF buffer
+    backendPerformanceMonitor.endStage('response-preparation', pdfId);
+    backendPerformanceMonitor.endTimer(`clearance-pdf-${pdfId}`);
+    
+    const totalTime = Date.now() - startTime;
+    backendPerformanceMonitor.logPerformanceSummary(pdfId, 'asbestos-clearance', totalTime, clearanceItems.length);
+    
     res.send(compressedPdfBuffer);
-    
-    console.log('=== PDF GENERATION COMPLETED SUCCESSFULLY ===');
-    
   } catch (error) {
-    console.error('Error in PDF generation route:', error);
-    console.error('Error stack:', error.stack);
-    writeLog('ERROR in PDF generation route: ' + error.message);
-    writeLog('ERROR stack: ' + error.stack);
-    res.status(500).json({ 
-      error: 'Failed to generate PDF', 
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error('Error generating clearance PDF:', error);
+    backendPerformanceMonitor.endTimer(`clearance-pdf-${pdfId}`);
+    res.status(500).json({ error: error.message });
   }
 });
 

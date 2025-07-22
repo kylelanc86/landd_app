@@ -2,11 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider, CssBaseline, Box } from "@mui/material";
 import { ColorModeContext, useMode } from "./theme";
 import { AuthProvider } from "./context/AuthContext";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState, useEffect } from "react";
 import LoadingSpinner from "./components/LoadingSpinner";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PermissionRoute from "./components/PermissionRoute";
+import PerformanceMonitor from "./components/PerformanceMonitor";
 
 // Regular imports
 import Topbar from "./scenes/global/Topbar";
@@ -133,6 +134,19 @@ const ProjectReports = lazy(() =>
 
 function App() {
   const [theme, colorMode] = useMode();
+  const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
+
+  // Enable performance monitor in development or when SHIFT+P is pressed
+  useEffect(() => {
+    const handleKeyPress = (event) => {
+      if (event.shiftKey && event.key === "P") {
+        setShowPerformanceMonitor((prev) => !prev);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyPress);
+    return () => document.removeEventListener("keydown", handleKeyPress);
+  }, []);
 
   return (
     <ColorModeContext.Provider value={colorMode}>
@@ -969,6 +983,7 @@ function App() {
               />
             </Routes>
           </BrowserRouter>
+          <PerformanceMonitor show={showPerformanceMonitor} />
         </AuthProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>

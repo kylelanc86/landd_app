@@ -42,6 +42,7 @@ import {
   isValidAustralianMobile,
 } from "../../utils/formatters";
 import { debounce } from "lodash";
+import performanceMonitor from "../../utils/performanceMonitor";
 
 const emptyForm = {
   name: "",
@@ -93,9 +94,19 @@ const Clients = () => {
   });
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
 
+  // Performance monitoring
+  useEffect(() => {
+    performanceMonitor.startPageLoad("clients-page");
+
+    return () => {
+      performanceMonitor.endPageLoad("clients-page");
+    };
+  }, []);
+
   // Load user preferences from database
   useEffect(() => {
     const loadUserPreferences = async () => {
+      performanceMonitor.startTimer("load-user-preferences");
       try {
         const response = await userPreferencesService.getPreferences();
         if (response.data?.columnVisibility?.clients) {
@@ -115,6 +126,8 @@ const Clients = () => {
             console.error("Error parsing saved column visibility:", parseError);
           }
         }
+      } finally {
+        performanceMonitor.endTimer("load-user-preferences");
       }
     };
 
@@ -140,8 +153,10 @@ const Clients = () => {
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value) => {
+      performanceMonitor.startTimer("debounced-search");
       setSearch(value);
       setPagination((prev) => ({ ...prev, page: 1 }));
+      performanceMonitor.endTimer("debounced-search");
     }, 300),
     []
   );

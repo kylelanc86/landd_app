@@ -51,6 +51,7 @@ import { useAuth } from "../../context/AuthContext";
 import SyncIcon from "@mui/icons-material/Sync";
 import { hasPermission } from "../../config/permissions";
 import AddIcon from "@mui/icons-material/Add";
+import performanceMonitor from "../../utils/performanceMonitor";
 
 const TERMS_OPTIONS = [
   { label: "Due on receipt", days: 0 },
@@ -102,12 +103,22 @@ const Invoices = () => {
   // Add permission check for Xero sync
   const canSyncXero = hasPermission(currentUser, "xero.sync");
 
+  // Performance monitoring
+  useEffect(() => {
+    performanceMonitor.startPageLoad("invoices-page");
+
+    return () => {
+      performanceMonitor.endPageLoad("invoices-page");
+    };
+  }, []);
+
   useEffect(() => {
     if (authLoading || !currentUser) {
       return;
     }
 
     const fetchData = async () => {
+      performanceMonitor.startTimer("fetch-invoices-data");
       try {
         const [invoicesRes, projectsRes, clientsRes] = await Promise.all([
           invoiceService.getAll(),
@@ -160,6 +171,8 @@ const Invoices = () => {
         console.error("Error fetching data:", err);
         setError("Failed to fetch data");
         setLoading(false);
+      } finally {
+        performanceMonitor.endTimer("fetch-invoices-data");
       }
     };
 
@@ -172,6 +185,7 @@ const Invoices = () => {
     if (authLoading || !currentUser) return;
 
     const checkXeroConnection = async () => {
+      performanceMonitor.startTimer("check-xero-connection");
       try {
         // Check Xero connection status
         const response = await xeroService.checkStatus();
@@ -206,22 +220,10 @@ const Invoices = () => {
           console.log("Xero connection not verified - invalid response");
         }
       } catch (error) {
-        console.log("Xero connection check error:", error);
-        setXeroConnected(false);
-
-        // Handle different types of errors
-        if (error.response?.status === 401) {
-          setXeroError("Not connected to Xero. Please connect to continue.");
-        } else {
-          setXeroError(
-            error.response?.data?.message || "Failed to verify Xero connection"
-          );
-        }
-
-        // Only show error alert for non-auth errors
-        if (error.response?.status !== 401) {
-          setShowXeroAlert(true);
-        }
+        console.error("Error checking Xero connection:", error);
+        setXeroError("Failed to check Xero connection");
+      } finally {
+        performanceMonitor.endTimer("check-xero-connection");
       }
     };
 

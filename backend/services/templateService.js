@@ -3,6 +3,17 @@ const FriableClearance = require('../models/clearanceTemplates/asbestos/FriableC
 const AsbestosAssessmentTemplate = require('../models/assessmentTemplates/asbestos/AsbestosAssessmentTemplate');
 const mongoose = require('mongoose');
 
+// Simple in-memory cache for user lookups during PDF generation
+const userLookupCache = new Map();
+
+/**
+ * Clear the user lookup cache (call this after PDF generation is complete)
+ */
+const clearUserLookupCache = () => {
+  userLookupCache.clear();
+  console.log('[TEMPLATE SERVICE] User lookup cache cleared');
+};
+
 /**
  * Fetch template content by type
  * @param {string} templateType - The type of template to fetch
@@ -184,62 +195,77 @@ const replacePlaceholders = async (content, data) => {
     userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
   }
   
-    if (userIdentifier) {
-    try {
-      console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
-      const User = require('../models/User');
-      
-      // Check if userIdentifier is a valid ObjectId (24 hex characters)
-      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
-      console.log('[TEMPLATE SERVICE] Is valid ObjectId:', isValidObjectId);
-      
-      const queryConditions = [
-        { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
-        { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
-        { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
-      ];
-      
-      // Only add ObjectId condition if it's a valid ObjectId
-      if (isValidObjectId) {
-        queryConditions.push({ _id: userIdentifier });
-      }
-      
-      console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
-      
-      const user = await User.findOne({
-        $or: queryConditions
-      });
-      
-      if (user) {
-        console.log('[TEMPLATE SERVICE] Found user:', user.firstName, user.lastName);
-        console.log('[TEMPLATE SERVICE] User signature exists:', !!user.signature);
-        console.log('[TEMPLATE SERVICE] User licences:', user.licences?.length || 0);
+  if (userIdentifier) {
+    // Check cache first
+    if (userLookupCache.has(userIdentifier)) {
+      const cachedUser = userLookupCache.get(userIdentifier);
+      console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
+      laaLicenceNumber = cachedUser.licenceNumber;
+      userSignature = cachedUser.signature;
+    } else {
+      try {
+        console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
+        const User = require('../models/User');
         
-        // Get user's signature
-        if (user.signature) {
-          userSignature = user.signature;
-          console.log('[TEMPLATE SERVICE] Signature length:', userSignature.length);
+        // Check if userIdentifier is a valid ObjectId (24 hex characters)
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
+        console.log('[TEMPLATE SERVICE] Is valid ObjectId:', isValidObjectId);
+        
+        const queryConditions = [
+          { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
+          { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
+          { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
+        ];
+        
+        // Only add ObjectId condition if it's a valid ObjectId
+        if (isValidObjectId) {
+          queryConditions.push({ _id: userIdentifier });
         }
         
-        // Find the Asbestos Assessor licence
-        if (user.licences && user.licences.length > 0) {
-          console.log('[TEMPLATE SERVICE] Available licences:', user.licences.map(l => ({ type: l.licenceType, number: l.licenceNumber })));
+        console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
+        
+        const user = await User.findOne({
+          $or: queryConditions
+        });
+        
+        if (user) {
+          console.log('[TEMPLATE SERVICE] Found user:', user.firstName, user.lastName);
+          console.log('[TEMPLATE SERVICE] User signature exists:', !!user.signature);
+          console.log('[TEMPLATE SERVICE] User licences:', user.licences?.length || 0);
           
-          const asbestosAssessorLicence = user.licences.find(licence => 
-            licence.licenceType === 'Asbestos Assessor' || 
-            licence.licenceType === 'LAA'
-          );
-          
-          if (asbestosAssessorLicence) {
-            laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
-            console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber);
+          // Get user's signature
+          if (user.signature) {
+            userSignature = user.signature;
+            console.log('[TEMPLATE SERVICE] Signature length:', userSignature.length);
           }
+          
+          // Find the Asbestos Assessor licence
+          if (user.licences && user.licences.length > 0) {
+            console.log('[TEMPLATE SERVICE] Available licences:', user.licences.map(l => ({ type: l.licenceType, number: l.licenceNumber })));
+            
+            const asbestosAssessorLicence = user.licences.find(licence => 
+              licence.licenceType === 'Asbestos Assessor' || 
+              licence.licenceType === 'LAA'
+            );
+            
+            if (asbestosAssessorLicence) {
+              laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
+              console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber);
+            }
+          }
+          
+          // Cache the user data for future lookups
+          userLookupCache.set(userIdentifier, {
+            licenceNumber: laaLicenceNumber,
+            signature: userSignature
+          });
+          console.log('[TEMPLATE SERVICE] Cached user data for:', userIdentifier);
+        } else {
+          console.log('[TEMPLATE SERVICE] No user found for identifier:', userIdentifier);
         }
-      } else {
-        console.log('[TEMPLATE SERVICE] No user found for identifier:', userIdentifier);
+      } catch (error) {
+        console.error('Error looking up user licence and signature:', error);
       }
-    } catch (error) {
-      console.error('Error looking up user licence and signature:', error);
     }
   }
   
@@ -382,5 +408,6 @@ const replacePlaceholders = async (content, data) => {
 
 module.exports = {
   getTemplateByType,
-  replacePlaceholders
+  replacePlaceholders,
+  clearUserLookupCache
 }; 
