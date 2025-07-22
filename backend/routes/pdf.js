@@ -2669,7 +2669,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       console.log('Production environment detected, using system Chrome');
       // Use the environment variable or default to chromium-browser
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-      consolelog('Chrome executable path:', launchOptions.executablePath);
+      console.log('Chrome executable path:', launchOptions.executablePath);
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
@@ -3351,7 +3351,7 @@ const generatePDFFromHTML = async (templateType, data) => {
       console.log('Production environment detected, using system Chrome');
       // Use the environment variable or default to chromium-browser
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-      consolelog('Chrome executable path:', launchOptions.executablePath);
+      console.log('Chrome executable path:', launchOptions.executablePath);
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
