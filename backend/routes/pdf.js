@@ -3803,12 +3803,20 @@ router.get('/test-puppeteer', async (req, res) => {
   }
 });
 
+// Test route to check if requests are reaching the backend
+router.post('/test-assessment-route', async (req, res) => {
+  console.log('=== TEST ASSESSMENT ROUTE HIT ===');
+  console.log('Test request received at:', new Date().toISOString());
+  res.json({ message: 'Test route working', timestamp: new Date().toISOString() });
+});
+
 // Route to generate asbestos assessment PDF
 router.post('/generate-asbestos-assessment', async (req, res) => {
   console.log('=== ASSESSMENT PDF ROUTE HIT ===');
   console.log('Request received at:', new Date().toISOString());
   console.log('Request headers:', Object.keys(req.headers));
   console.log('Request body keys:', Object.keys(req.body || {}));
+
   
   const pdfId = `assessment-${req.body.assessmentData?._id || Date.now()}`;
   const startTime = Date.now();
