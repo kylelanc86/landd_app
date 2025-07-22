@@ -2536,6 +2536,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     console.log(`[PDF DEBUG] Starting assessment PDF generation for ID: ${pdfId}`);
     console.log(`[PDF DEBUG] Template type: ${templateType}`);
     console.log(`[PDF DEBUG] Project: ${data.projectId?.name || 'Unknown project'}`);
+    console.log(`[PDF DEBUG] Step 1: Starting template loading...`);
     
     backendPerformanceMonitor.startStage('template-loading', pdfId);
     writeLog('Starting assessment PDF generation...');
@@ -2546,15 +2547,18 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     const assessmentItems = data.assessmentItems || [];
     
     // Fetch template content from database
+    console.log(`[PDF DEBUG] Step 2: Fetching template content from database...`);
     let templateContent = null;
     try {
       templateContent = await getTemplateByType('asbestosAssessment');
+      console.log(`[PDF DEBUG] Step 2: Template content fetched successfully`);
     } catch (error) {
       console.error('Error fetching template content:', error);
       // Continue with hardcoded content as fallback
     }
     backendPerformanceMonitor.endStage('template-loading', pdfId);
     backendPerformanceMonitor.startStage('puppeteer-setup', pdfId);
+    console.log(`[PDF DEBUG] Step 3: Starting Puppeteer browser setup...`);
     
     console.log(`[PDF DEBUG] Starting Puppeteer browser launch...`);
     
@@ -2658,7 +2662,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     const path = require('path');
     
     // Load assessment-specific templates with better error handling
-    console.log(`[PDF DEBUG] Loading assessment templates...`);
+    console.log(`[PDF DEBUG] Step 4: Loading assessment templates...`);
     const templateDir = path.join(__dirname, '../templates/AsbestosAssessment');
     console.log('[PDF DEBUG] Template directory:', templateDir);
     console.log('[PDF DEBUG] Template directory exists:', fs.existsSync(templateDir));
@@ -2946,6 +2950,11 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         { key: 'assessmentLimitations', title: 'Assessment Limitations/Caveats' },
       ];
       
+      // Create timeout promise for section content generation
+      const sectionTimeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Section content generation timeout')), 10000); // 10 second timeout
+      });
+      
       // Process sections in pairs (2 per page)
       for (let i = 0; i < sectionOrder.length; i += 2) {
         const section1 = sectionOrder[i];
@@ -2970,9 +2979,6 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
           };
           
           const section1ContentPromise = replacePlaceholders(templateContent.standardSections[section1.key + 'Content'], placeholderData);
-          const sectionTimeout = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Section content generation timeout')), 10000); // 10 second timeout
-          });
           
           let section1Content = await Promise.race([section1ContentPromise, sectionTimeout]);
           
@@ -3865,7 +3871,7 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     
     const pdfGenerationPromise = generateAssessmentPDFFromHTML('asbestos-assessment', enrichedData);
     const pdfTimeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('PDF generation timed out after 2 minutes')), 120000); // 2 minute timeout
+      setTimeout(() => reject(new Error('PDF generation timed out after 30 seconds')), 30000); // 30 second timeout
     });
     
     const pdfBuffer = await Promise.race([pdfGenerationPromise, pdfTimeout]);
