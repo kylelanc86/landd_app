@@ -2040,6 +2040,8 @@ const generateMainContentPages = async (data) => {
 
 const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBase64Param = null, backgroundBase64Param = null) => {
   
+  console.log(`[POPULATE DEBUG] Starting template population...`);
+  
   // Determine template type based on clearance type
   let templateType = 'asbestosClearanceNonFriable'; // default
   if (data.clearanceType === 'Friable') {
@@ -2049,9 +2051,11 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
   // Fetch template content based on clearance type
   let templateContent = null;
   try {
+    console.log(`[POPULATE DEBUG] Fetching template content for type: ${templateType}`);
     templateContent = await getTemplateByType(templateType);
+    console.log(`[POPULATE DEBUG] Template content fetched successfully`);
   } catch (error) {
-    console.error('Error fetching template content:', error);
+    console.error('[POPULATE DEBUG] Error fetching template content:', error);
     // Continue with hardcoded content as fallback
   }
 
@@ -2518,6 +2522,10 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
   const pdfId = `assessment-${data._id || Date.now()}`;
   
   try {
+    console.log(`[PDF DEBUG] Starting assessment PDF generation for ID: ${pdfId}`);
+    console.log(`[PDF DEBUG] Template type: ${templateType}`);
+    console.log(`[PDF DEBUG] Project: ${data.projectId?.name || 'Unknown project'}`);
+    
     backendPerformanceMonitor.startStage('template-loading', pdfId);
     writeLog('Starting assessment PDF generation...');
     writeLog('Template type: ' + templateType);
@@ -2536,6 +2544,8 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     }
     backendPerformanceMonitor.endStage('template-loading', pdfId);
     backendPerformanceMonitor.startStage('puppeteer-setup', pdfId);
+    
+    console.log(`[PDF DEBUG] Starting Puppeteer browser launch...`);
     
     // Launch browser with deployment-optimized settings
     const launchOptions = {
@@ -2637,9 +2647,10 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     const path = require('path');
     
     // Load assessment-specific templates with better error handling
+    console.log(`[PDF DEBUG] Loading assessment templates...`);
     const templateDir = path.join(__dirname, '../templates/AsbestosAssessment');
-    console.log('Template directory:', templateDir);
-    console.log('Template directory exists:', fs.existsSync(templateDir));
+    console.log('[PDF DEBUG] Template directory:', templateDir);
+    console.log('[PDF DEBUG] Template directory exists:', fs.existsSync(templateDir));
     
     if (!fs.existsSync(templateDir)) {
       throw new Error(`Template directory not found: ${templateDir}`);
@@ -2656,10 +2667,11 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     };
     
     // Check if all template files exist
+    console.log(`[PDF DEBUG] Checking template files...`);
     for (const [key, filename] of Object.entries(templateFiles)) {
       const filePath = path.join(templateDir, filename);
-      console.log(`Checking ${key} template: ${filePath}`);
-      console.log(`File exists: ${fs.existsSync(filePath)}`);
+      console.log(`[PDF DEBUG] Checking ${key} template: ${filePath}`);
+      console.log(`[PDF DEBUG] File exists: ${fs.existsSync(filePath)}`);
       if (!fs.existsSync(filePath)) {
         throw new Error(`Template file not found: ${filePath}`);
       }
@@ -2669,6 +2681,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     let coverTemplate, versionControlTemplate, sampleRegisterTemplate, discussionTemplate, sampleItemTemplate, glossaryTemplate, appendixATemplate;
     
     try {
+      console.log(`[PDF DEBUG] Reading template files...`);
       coverTemplate = fs.readFileSync(path.join(templateDir, templateFiles.cover), 'utf8');
       versionControlTemplate = fs.readFileSync(path.join(templateDir, templateFiles.versionControl), 'utf8');
       sampleRegisterTemplate = fs.readFileSync(path.join(templateDir, templateFiles.sampleRegister), 'utf8');
@@ -2677,20 +2690,26 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       glossaryTemplate = fs.readFileSync(path.join(templateDir, templateFiles.glossary), 'utf8');
       appendixATemplate = fs.readFileSync(path.join(templateDir, templateFiles.appendixA), 'utf8');
       
-      console.log('All template files loaded successfully');
+      console.log('[PDF DEBUG] All template files loaded successfully');
     } catch (error) {
       console.error('Error loading template files:', error);
       throw new Error(`Failed to load template files: ${error.message}`);
     }
     
     // Populate templates with data - use the same approach as clearance
+    console.log(`[PDF DEBUG] Populating cover template...`);
     const populatedCover = await populateTemplate(coverTemplate, data, 'B', logoBase64, backgroundBase64);
+    console.log(`[PDF DEBUG] Populating version control template...`);
     const populatedVersionControl = await populateTemplate(versionControlTemplate, data, 'B', logoBase64);
+    console.log(`[PDF DEBUG] Populating glossary template...`);
     const populatedGlossary = await populateTemplate(glossaryTemplate, data, 'B', logoBase64);
+    console.log(`[PDF DEBUG] Populating appendix A template...`);
     const populatedAppendixA = await populateTemplate(appendixATemplate, data, 'B', logoBase64);
     
     backendPerformanceMonitor.endStage('html-generation', pdfId);
     backendPerformanceMonitor.startStage('pdf-rendering', pdfId);
+    
+    console.log(`[PDF DEBUG] Starting PDF rendering stage...`);
     
     // Generate discussion content with identified asbestos items
     const identifiedAsbestosItems = assessmentItems
@@ -3098,6 +3117,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     // Wait for fonts to load to ensure proper rendering
     await page.waitForTimeout(1000);
     
+    console.log('[PDF DEBUG] Calling page.pdf()...');
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -3113,6 +3133,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       scale: 1.0,
       landscape: false
     });
+    console.log('[PDF DEBUG] PDF generated successfully, buffer size:', pdfBuffer.length);
     
     backendPerformanceMonitor.endStage('pdf-rendering', pdfId);
     backendPerformanceMonitor.startStage('compression', pdfId);
