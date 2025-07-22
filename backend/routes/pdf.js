@@ -2055,87 +2055,8 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
     // Continue with hardcoded content as fallback
   }
 
-  // Look up user's Asbestos Assessor licence number
-  let laaLicenceNumber = 'AA00031'; // Default fallback
-  let userSignature = null;
-  
-  // Handle both clearance (LAA) and assessment (assessorId) user lookups
-  let userIdentifier = data.LAA || data.assessorId;
-  
-  // Handle assessorId object structure for assessments
-  if (data.assessorId && typeof data.assessorId === 'object') {
-    userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
-  }
-  
-  console.log('[USER LOOKUP DEBUG] userIdentifier:', userIdentifier);
-  console.log('[USER LOOKUP DEBUG] data.assessorId:', data.assessorId);
-  console.log('[USER LOOKUP DEBUG] data.LAA:', data.LAA);
-  
-  if (userIdentifier) {
-    try {
-      const User = require('../models/User');
-      
-      // Check if userIdentifier is a valid ObjectId (24 hex characters)
-      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
-      
-      const queryConditions = [
-        { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
-        { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
-        { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
-      ];
-      
-      // Only add ObjectId condition if it's a valid ObjectId
-      if (isValidObjectId) {
-        queryConditions.push({ _id: userIdentifier });
-      }
-      
-      const user = await User.findOne({
-        $or: queryConditions
-      });
-      if (user) {
-        console.log('[USER LOOKUP DEBUG] Found user:', user.firstName, user.lastName);
-        console.log('[USER LOOKUP DEBUG] User signature:', !!user.signature);
-        console.log('[USER LOOKUP DEBUG] User licences:', user.licences?.length || 0);
-        
-        // Get user's signature
-        if (user.signature) {
-          userSignature = user.signature;
-          console.log('[USER LOOKUP DEBUG] User signature found, length:', userSignature.length);
-        } else {
-          console.log('[USER LOOKUP DEBUG] No signature found for user');
-          console.log('[USER LOOKUP DEBUG] User object keys:', Object.keys(user));
-          console.log('[USER LOOKUP DEBUG] User signature field:', user.signature);
-        }
-        
-        if (user.licences && user.licences.length > 0) {
-          console.log('[USER LOOKUP DEBUG] User licences:', user.licences.map(l => ({ type: l.licenceType, number: l.licenceNumber })));
-          
-          // Look specifically for Asbestos Assessor licence first, then LAA
-          const asbestosAssessorLicence = user.licences.find(licence => 
-            licence.licenceType === 'Asbestos Assessor'
-          );
-          
-          if (asbestosAssessorLicence) {
-            laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
-            console.log('[USER LOOKUP DEBUG] Found Asbestos Assessor licence:', laaLicenceNumber);
-          } else {
-            // Fallback to LAA if no Asbestos Assessor licence found
-            const laaLicence = user.licences.find(licence => 
-              licence.licenceType === 'LAA'
-            );
-            if (laaLicence) {
-              laaLicenceNumber = laaLicence.licenceNumber;
-              console.log('[USER LOOKUP DEBUG] Found LAA licence:', laaLicenceNumber);
-            }
-          }
-        }
-      } else {
-        console.log('[USER LOOKUP DEBUG] No user found for identifier:', userIdentifier);
-      }
-    } catch (error) {
-      console.error('Error looking up user licence:', error);
-    }
-  }
+  // User lookup is now handled by the cached replacePlaceholders function
+  // No need for duplicate database queries here
   
   // Replace logo placeholders with actual img tags
   let templateWithLogoPath = htmlTemplate.replace(/\[LOGO_PATH\]/g, '');
@@ -2346,10 +2267,7 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
   // Debug: Log only the LAA value for troubleshooting
   console.log('[LAA DEBUG] LAA value from clearance:', data.LAA);
 
-  // Debug final values
-  console.log('[FINAL VALUES DEBUG] laaLicenceNumber:', laaLicenceNumber);
-  console.log('[FINAL VALUES DEBUG] userSignature:', !!userSignature);
-  console.log('[FINAL VALUES DEBUG] userSignature length:', userSignature ? userSignature.length : 'null');
+  // Debug final values - these will be populated by replacePlaceholders
   console.log('[FINAL VALUES DEBUG] CLIENT_NAME:', data.projectId?.client?.name || data.project?.client?.name || data.clientName || 'Unknown Client');
   
   // Replace placeholders with actual data
@@ -2372,8 +2290,7 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
     '[ASBESTOS_TYPE]': data.clearanceType?.toLowerCase() || 'non-friable',
     '[ASBESTOS_REMOVALIST]': data.asbestosRemovalist || 'Unknown Removalist',
     '[LAA_NAME]': data.LAA || data.AUTHOR_NAME || data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.laaName || 'Unknown LAA',
-    '[LAA_LICENSE]': laaLicenceNumber,
-    '[LAA_LICENCE]': laaLicenceNumber, // British spelling for assessment templates
+    // LAA_LICENSE and LAA_LICENCE will be handled by replacePlaceholders with caching
     '[INSPECTION_TIME]': data.inspectionTime || 'Inspection Time',
     '[INSPECTION_DATE]': data.clearanceDate 
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
@@ -2399,8 +2316,7 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
       }
     })(),
     
-    // Signature placeholder
-    '[SIGNATURE_IMAGE]': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : 'Signature not available',
+    // Signature placeholder will be handled by replacePlaceholders with caching
     
     // Template content placeholders
     '[BACKGROUND_INFORMATION_TITLE]': templateContent?.standardSections?.backgroundInformationTitle || 'Background Information Regarding Non-Friable Clearance Inspections',
