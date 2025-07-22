@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon",
-    "install:prod": "npm ci --only=production --no-optional --no-audit --no-fund",
-    "postinstall": "node node_modules/puppeteer/install.js"
+    "install:prod": "npm ci --only=production --no-optional --no-audit --no-fund"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

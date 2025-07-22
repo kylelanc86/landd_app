@@ -2,9 +2,8 @@
 FROM node:18-alpine AS deps
 WORKDIR /app
 
-# Install system dependencies for Puppeteer and Jimp
+# Install system dependencies for Puppeteer
 RUN apk add --no-cache \
-  chromium \
   nss \
   freetype \
   freetype-dev \
@@ -13,9 +12,8 @@ RUN apk add --no-cache \
   ttf-freefont \
   && rm -rf /var/cache/apk/*
 
-# Set Puppeteer environment variables
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-  PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Set Puppeteer environment variables for bundled Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
 # Copy package files
 COPY package*.json yarn.lock .npmrc ./
@@ -26,9 +24,8 @@ RUN yarn install --production --frozen-lockfile --no-optional --prefer-offline
 # Production stage
 FROM node:18-alpine AS production
 
-# Install system dependencies for Puppeteer and Jimp
+# Install system dependencies for Puppeteer
 RUN apk add --no-cache \
-  chromium \
   nss \
   freetype \
   freetype-dev \
@@ -37,9 +34,8 @@ RUN apk add --no-cache \
   ttf-freefont \
   && rm -rf /var/cache/apk/*
 
-# Set Puppeteer environment variables
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-  PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Set Puppeteer environment variables for bundled Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 
 WORKDIR /app
 
