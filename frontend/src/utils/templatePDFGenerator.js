@@ -341,36 +341,44 @@ export const generateAssessmentPDF = async (assessmentData) => {
     const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-assessment?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
-    // Call the server-side PDF generation endpoint with cache busting
-    const response = await fetch(requestUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      },
-      body: JSON.stringify({ assessmentData: assessmentData })
-    });
+    // Create an AbortController for timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
-    pdfPerformanceMonitor.endStage('api-request', generationId);
-    pdfPerformanceMonitor.startStage('response-processing', generationId);
+    try {
+      // Call the server-side PDF generation endpoint with cache busting and timeout
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
+        body: JSON.stringify({ assessmentData: assessmentData }),
+        signal: controller.signal
+      });
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Response error text:', errorText);
-      let errorData;
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        errorData = { error: errorText || 'Failed to generate assessment PDF' };
+      clearTimeout(timeoutId); // Clear timeout if request completes
+
+      pdfPerformanceMonitor.endStage('api-request', generationId);
+      pdfPerformanceMonitor.startStage('response-processing', generationId);
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error text:', errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { error: errorText || 'Failed to generate assessment PDF' };
+        }
+        throw new Error(errorData.error || 'Failed to generate assessment PDF');
       }
-      throw new Error(errorData.error || 'Failed to generate assessment PDF');
-    }
 
     // Get the PDF blob
     const pdfBlob = await response.blob();
@@ -400,6 +408,13 @@ export const generateAssessmentPDF = async (assessmentData) => {
     pdfPerformanceMonitor.endPDFGeneration(generationId);
 
     return fileName;
+      } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Assessment PDF generation timed out after 5 minutes');
+      }
+      throw fetchError;
+    }
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
     pdfPerformanceMonitor.endPDFGeneration(generationId);
