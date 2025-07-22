@@ -3670,6 +3670,7 @@ router.get('/test', (req, res) => {
 
 // Simple test route to verify router is working
 router.get('/ping', (req, res) => {
+  console.log('=== PING ROUTE HIT ===');
   res.json({ 
     message: 'PDF router is working',
     timestamp: new Date().toISOString()
@@ -3767,10 +3768,16 @@ router.get('/test-puppeteer', async (req, res) => {
 
 // Route to generate asbestos assessment PDF
 router.post('/generate-asbestos-assessment', async (req, res) => {
+  console.log('=== ASSESSMENT PDF ROUTE HIT ===');
+  console.log('Request received at:', new Date().toISOString());
+  console.log('Request headers:', Object.keys(req.headers));
+  console.log('Request body keys:', Object.keys(req.body || {}));
+  
   const pdfId = `assessment-${req.body.assessmentData?._id || Date.now()}`;
   const startTime = Date.now();
   
   try {
+    console.log('=== STARTING ASSESSMENT PDF GENERATION ===');
     backendPerformanceMonitor.startTimer(`assessment-pdf-${pdfId}`);
     writeLog('=== ASSESSMENT PDF GENERATION REQUEST RECEIVED ===');
     writeLog('Request received for assessment ID: ' + req.body.assessmentData?._id);
@@ -3841,7 +3848,10 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     
     res.send(compressedPdfBuffer);
   } catch (error) {
+    console.error('=== ASSESSMENT PDF ERROR ===');
     console.error('Error generating assessment PDF:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error occurred at:', new Date().toISOString());
     backendPerformanceMonitor.endTimer(`assessment-pdf-${pdfId}`);
     res.status(500).json({ error: error.message });
   }
