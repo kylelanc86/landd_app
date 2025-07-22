@@ -2641,7 +2641,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--disable-field-trial-config',
-        '--disable-ipc-flooding-protection,
+        "--disable-ipc-flooding-protection",
         "--disable-default-apps",
         "--disable-sync",
         "--disable-translate",
@@ -2650,45 +2650,17 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         "--no-default-browser-check",
         "--disable-component-extensions-with-background-pages",
         "--disable-background-networking",
-        "--disable-background-timer-throttling",
         "--disable-client-side-phishing-detection",
         "--disable-hang-monitor",
         "--disable-prompt-on-repost",
         "--disable-domain-reliability",
         "--disable-features=TranslateUI",
-        "--disable-ipc-flooding-protection",
-        "--disable-renderer-backgrounding",
         "--force-color-profile=srgb",
         "--metrics-recording-only",
-        "--no-first-run",
         "--password-store=basic",
         "--use-mock-keychain",
-        "--disable-dev-shm-usage",
         "--disable-gpu-sandbox",
-        "--disable-software-rasterizer",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
-        "--disable-features=TranslateUI",
-        "--disable-ipc-flooding-protection",
-        "--disable-hang-monitor",
-        "--disable-prompt-on-repost",
-        "--disable-domain-reliability",
-        "--disable-component-extensions-with-background-pages",
-        "--disable-background-networking",
-        "--disable-client-side-phishing-detection",
-        "--disable-default-apps",
-        "--disable-sync",
-        "--disable-translate",
-        "--hide-scrollbars",
-        "--mute-audio",
-        "--no-default-browser-check",
-        "--no-first-run",
-        "--password-store=basic",
-        "--use-mock-keychain",
-        "--disable-dev-shm-usage",
-        "--disable-gpu-sandbox",
-        "--disable-software-rasterizer"'
+        "--disable-software-rasterizer"
       ]
     };
     
@@ -2697,8 +2669,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       console.log('Production environment detected, using system Chrome');
       // Use the environment variable or default to chromium-browser
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-      console.log('Chrome executable path:', launchOptions.executablePath);
-      console.log('Chrome executable path:', launchOptions.executablePath);
+      consolelog('Chrome executable path:', launchOptions.executablePath);
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
@@ -2709,11 +2680,11 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       browser = await puppeteer.launch(launchOptions);
       console.log('Browser launched successfully');
     } catch (launchError) {
-      console.error('Failed to launch browserwith default options:', launchError.message);
+      console.error('Failed to launch browser with default options:', launchError.message);
       console.error('Launch error stack:', launchError.stack);
       // Try with different options for Windows
       console.log('Trying minimal launch options for Render...');
-      const minimalOptions = {
+      const alternativeOptions = {
         headless: true,
         args: [
           '--no-sandbox',
@@ -2726,13 +2697,12 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         ]
       };
       try {
-        browser = await puppeteer.launch(minimalOptions);
+        browser = await puppeteer.launch(alternativeOptions);
         console.log('Browser launched with minimal options');
       } catch (secondError) {
-        console.error('Failed to launch browser with minimal options:', secondError.message);
-        console.error('Second error stack:', secondError.stack);
+        console.error('Failed to launch browser with alternative options:', secondError.message);
         console.log('Trying without executable path...');
-        const noPathOptions = { headless: tre, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
+        const noPathOptions = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
         try {
           browser = await puppeteer.launch(noPathOptions);
           console.log('Browser launched without executable path');
@@ -3353,7 +3323,7 @@ const generatePDFFromHTML = async (templateType, data) => {
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--disable-field-trial-config',
-        '--disable-ipc-flooding-protection,
+        "--disable-ipc-flooding-protection",
         "--disable-default-apps",
         "--disable-sync",
         "--disable-translate",
@@ -3362,45 +3332,17 @@ const generatePDFFromHTML = async (templateType, data) => {
         "--no-default-browser-check",
         "--disable-component-extensions-with-background-pages",
         "--disable-background-networking",
-        "--disable-background-timer-throttling",
         "--disable-client-side-phishing-detection",
         "--disable-hang-monitor",
         "--disable-prompt-on-repost",
         "--disable-domain-reliability",
         "--disable-features=TranslateUI",
-        "--disable-ipc-flooding-protection",
-        "--disable-renderer-backgrounding",
         "--force-color-profile=srgb",
         "--metrics-recording-only",
-        "--no-first-run",
         "--password-store=basic",
         "--use-mock-keychain",
-        "--disable-dev-shm-usage",
         "--disable-gpu-sandbox",
-        "--disable-software-rasterizer",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
-        "--disable-features=TranslateUI",
-        "--disable-ipc-flooding-protection",
-        "--disable-hang-monitor",
-        "--disable-prompt-on-repost",
-        "--disable-domain-reliability",
-        "--disable-component-extensions-with-background-pages",
-        "--disable-background-networking",
-        "--disable-client-side-phishing-detection",
-        "--disable-default-apps",
-        "--disable-sync",
-        "--disable-translate",
-        "--hide-scrollbars",
-        "--mute-audio",
-        "--no-default-browser-check",
-        "--no-first-run",
-        "--password-store=basic",
-        "--use-mock-keychain",
-        "--disable-dev-shm-usage",
-        "--disable-gpu-sandbox",
-        "--disable-software-rasterizer"'
+        "--disable-software-rasterizer"
       ]
     };
     
@@ -3409,8 +3351,7 @@ const generatePDFFromHTML = async (templateType, data) => {
       console.log('Production environment detected, using system Chrome');
       // Use the environment variable or default to chromium-browser
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-      console.log('Chrome executable path:', launchOptions.executablePath);
-      console.log('Chrome executable path:', launchOptions.executablePath);
+      consolelog('Chrome executable path:', launchOptions.executablePath);
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
@@ -3421,11 +3362,11 @@ const generatePDFFromHTML = async (templateType, data) => {
       browser = await puppeteer.launch(launchOptions);
       console.log('Browser launched successfully');
     } catch (launchError) {
-      console.error('Failed to launch browserwith default options:', launchError.message);
+      console.error('Failed to launch browser with default options:', launchError.message);
       console.error('Launch error stack:', launchError.stack);
       // Try with different options for Windows
       console.log('Trying minimal launch options for Render...');
-      const minimalOptions = {
+      const alternativeOptions = {
         headless: true,
         args: [
           '--no-sandbox',
@@ -3438,13 +3379,12 @@ const generatePDFFromHTML = async (templateType, data) => {
         ]
       };
       try {
-        browser = await puppeteer.launch(minimalOptions);
+        browser = await puppeteer.launch(alternativeOptions);
         console.log('Browser launched with minimal options');
       } catch (secondError) {
-        console.error('Failed to launch browser with minimal options:', secondError.message);
-        console.error('Second error stack:', secondError.stack);
+        console.error('Failed to launch browser with alternative options:', secondError.message);
         console.log('Trying without executable path...');
-        const noPathOptions = { headless: tre, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
+        const noPathOptions = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] };
         try {
           browser = await puppeteer.launch(noPathOptions);
           console.log('Browser launched without executable path');
