@@ -3999,4 +3999,54 @@ router.options('/generate-asbestos-clearance', (req, res) => {
   res.status(200).end();
 });
 
+// Test endpoint to check if Puppeteer is working
+router.get('/test-puppeteer', async (req, res) => {
+  let browser;
+  try {
+    console.log('[PUPPETEER TEST] Starting Puppeteer test...');
+    
+    const launchOptions = {
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
+    };
+    
+    if (process.env.NODE_ENV === 'production') {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
+    }
+    
+    console.log('[PUPPETEER TEST] Launching browser...');
+    browser = await puppeteer.launch(launchOptions);
+    console.log('[PUPPETEER TEST] Browser launched successfully');
+    
+    console.log('[PUPPETEER TEST] Creating page...');
+    const page = await browser.newPage();
+    console.log('[PUPPETEER TEST] Page created successfully');
+    
+    console.log('[PUPPETEER TEST] Setting content...');
+    await page.setContent('<html><body><h1>Puppeteer Test</h1></body></html>');
+    console.log('[PUPPETEER TEST] Content set successfully');
+    
+    console.log('[PUPPETEER TEST] Generating PDF...');
+    const pdfBuffer = await page.pdf({ format: 'A4' });
+    console.log('[PUPPETEER TEST] PDF generated successfully');
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="puppeteer-test.pdf"');
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('[PUPPETEER TEST] Error:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+});
+
 module.exports = router; 
