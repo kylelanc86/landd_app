@@ -3860,9 +3860,24 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     
     writeLog('Generating assessment PDF with template and assessment items...');
     
-    // Generate PDF
-    const pdfBuffer = await generateAssessmentPDFFromHTML('asbestos-assessment', enrichedData);
+    // TEMPORARY: Skip PDF generation and return test response
+    console.log('TEMPORARY: Skipping PDF generation for testing');
+    const testResponse = {
+      message: 'PDF generation route is working',
+      assessmentId: assessmentData._id,
+      projectName: assessmentData.projectId?.name,
+      timestamp: new Date().toISOString()
+    };
     
+    // Return test response instead of PDF
+    res.json(testResponse);
+    return;
+    
+    // Generate PDF (commented out for testing)
+    // const pdfBuffer = await generateAssessmentPDFFromHTML('asbestos-assessment', enrichedData);
+    
+    // TEMPORARY: Skip PDF response preparation
+    /*
     backendPerformanceMonitor.endStage('pdf-generation', pdfId);
     backendPerformanceMonitor.startStage('response-preparation', pdfId);
     
@@ -3892,6 +3907,7 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     backendPerformanceMonitor.logPerformanceSummary(pdfId, 'asbestos-assessment', totalTime, assessmentItems.length);
     
     res.send(compressedPdfBuffer);
+    */
   } catch (error) {
     console.error('=== ASSESSMENT PDF ERROR ===');
     console.error('Error generating assessment PDF:', error);
