@@ -33,7 +33,7 @@
     "nodemon": "^2.0.22"
   },
   "config": {
-    "puppeteer_skip_chromium_download": "false"
+    "puppeteer_skip_chromium_download": "true"
   },
   "engines": {
     "node": ">=18.0.0",

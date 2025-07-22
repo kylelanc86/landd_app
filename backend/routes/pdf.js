@@ -2645,10 +2645,11 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
       ]
     };
     
-    // Use Puppeteer's bundled Chromium in production
+    // Use system Chrome on Render (much smaller deployment)
     if (process.env.NODE_ENV === 'production') {
-      console.log('Production environment detected, using Puppeteer bundled Chromium');
-      // Don't set executablePath - let Puppeteer use its bundled version
+      console.log('Production environment detected, using system Chrome');
+      // Use the environment variable or default to chromium-browser
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
@@ -3297,10 +3298,11 @@ const generatePDFFromHTML = async (templateType, data) => {
       ]
     };
     
-    // Use Puppeteer's bundled Chromium in production
+    // Use system Chrome on Render (much smaller deployment)
     if (process.env.NODE_ENV === 'production') {
-      console.log('Production environment detected, using Puppeteer bundled Chromium');
-      // Don't set executablePath - let Puppeteer use its bundled version
+      console.log('Production environment detected, using system Chrome');
+      // Use the environment variable or default to chromium-browser
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
     } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);

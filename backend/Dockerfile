@@ -12,8 +12,8 @@ RUN apk add --no-cache \
   ttf-freefont \
   && rm -rf /var/cache/apk/*
 
-# Set Puppeteer environment variables for bundled Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+# Set Puppeteer to skip Chromium download (we'll use system Chrome)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Copy package files
 COPY package*.json yarn.lock .npmrc ./
@@ -34,8 +34,8 @@ RUN apk add --no-cache \
   ttf-freefont \
   && rm -rf /var/cache/apk/*
 
-# Set Puppeteer environment variables for bundled Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+# Set Puppeteer to skip Chromium download (we'll use system Chrome)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /app
 

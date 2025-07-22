@@ -8,7 +8,7 @@ echo "🚀 Starting deployment process..."
 # Set environment variables for optimization
 export NODE_ENV=production
 export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Clean up any existing node_modules
 echo "🧹 Cleaning up existing node_modules..."
