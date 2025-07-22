@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon",
     "install:prod": "npm ci --only=production --no-optional --no-audit --no-fund",
-    "postinstall": "echo 'Installation completed successfully'"
+    "postinstall": "node node_modules/puppeteer/install.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -34,7 +34,7 @@
     "nodemon": "^2.0.22"
   },
   "config": {
-    "puppeteer_skip_chromium_download": "true"
+    "puppeteer_skip_chromium_download": "false"
   },
   "engines": {
     "node": ">=18.0.0",

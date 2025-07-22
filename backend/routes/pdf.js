@@ -2621,7 +2621,7 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
     backendPerformanceMonitor.endStage('template-loading', pdfId);
     backendPerformanceMonitor.startStage('puppeteer-setup', pdfId);
     
-    // Launch browser with better cross-platform support
+    // Launch browser with deployment-optimized settings
     const launchOptions = {
       headless: 'new',
       args: [
@@ -2632,11 +2632,24 @@ const generateAssessmentPDFFromHTML = async (templateType, data) => {
         '--no-first-run',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-field-trial-config',
+        '--disable-ipc-flooding-protection'
       ]
     };
-    // Add executable path if specified
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    
+    // Use Puppeteer's bundled Chromium in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Production environment detected, using Puppeteer bundled Chromium');
+      // Don't set executablePath - let Puppeteer use its bundled version
+    } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
     } else {
@@ -3260,7 +3273,7 @@ const generatePDFFromHTML = async (templateType, data) => {
     writeLog('Template type: ' + templateType);
     writeLog('Data received for project: ' + (data.projectId?.name || 'Unknown project'));
     
-    // Launch browser with better cross-platform support
+    // Launch browser with deployment-optimized settings
     const launchOptions = {
       headless: 'new',
       args: [
@@ -3271,11 +3284,24 @@ const generatePDFFromHTML = async (templateType, data) => {
         '--no-first-run',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-field-trial-config',
+        '--disable-ipc-flooding-protection'
       ]
     };
-    // Add executable path if specified
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    
+    // Use Puppeteer's bundled Chromium in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Production environment detected, using Puppeteer bundled Chromium');
+      // Don't set executablePath - let Puppeteer use its bundled version
+    } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log('Using custom Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
     } else {
