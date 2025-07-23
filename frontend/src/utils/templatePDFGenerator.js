@@ -115,102 +115,87 @@ export const generateAssessmentPDF = async (assessmentData) => {
  * @param {Object} data - Clearance data
  * @returns {Promise<string>} - Generated PDF filename
  */
-export const generateHTMLTemplatePDF = async (templateType, data) => {
-  const pdfId = `clearance-${data._id || Date.now()}`;
-  const generationId = pdfPerformanceMonitor.trackCommonStages(pdfId, 'asbestos-clearance', data);
+export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
+  const startTime = Date.now();
+  const pdfId = `${type}-${data._id || Date.now()}`;
   
   try {
-    console.log('Starting clearance PDF generation with data:', data);
+    // Performance monitoring
+    pdfPerformanceMonitor.startStage('data-preparation', pdfId);
+    
+    console.log(`Starting ${type} PDF generation with data:`, data);
     console.log('Environment:', process.env.NODE_ENV);
     console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     
-    pdfPerformanceMonitor.endStage('data-preparation', generationId);
-    pdfPerformanceMonitor.startStage('api-request', generationId);
+    pdfPerformanceMonitor.endStage('data-preparation', pdfId);
+    pdfPerformanceMonitor.startStage('api-request', pdfId);
     
-    // Use the same API configuration as the rest of the app
-    const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
+    // Determine which endpoint to use
+    const usePDFShift = false; // Temporarily disabled until API key is set up
     
-    const requestUrl = `${apiBaseUrl}/pdf-pdfshift/generate-asbestos-clearance?t=${Date.now()}`;
-    console.log('Calling backend URL:', requestUrl);
-
-    // Create an AbortController for timeout handling
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
-    try {
-      // Call the server-side PDF generation endpoint with cache busting and timeout
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        },
-        body: JSON.stringify({ clearanceData: data }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId); // Clear timeout if request completes
-
-      pdfPerformanceMonitor.endStage('api-request', generationId);
-      pdfPerformanceMonitor.startStage('response-processing', generationId);
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Response error text:', errorText);
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch (e) {
-          errorData = { error: errorText || 'Failed to generate clearance PDF' };
-        }
-        throw new Error(errorData.error || 'Failed to generate clearance PDF');
-      }
-
-      // Get the PDF blob
-      const pdfBlob = await response.blob();
-      console.log('Clearance PDF blob size:', pdfBlob.size, 'bytes');
-
-      pdfPerformanceMonitor.endStage('response-processing', generationId);
-      pdfPerformanceMonitor.startStage('download-preparation', generationId);
-
-      // Create a download link
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      // Generate filename
-      const projectId = data.projectId?.projectID || data.project?.projectID || data.projectId || 'Unknown';
-      const siteName = data.projectId?.name || data.project?.name || data.siteName || 'Unknown';
-      const clearanceDate = data.clearanceDate ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
-      const clearanceType = data.clearanceType || 'Non-friable';
-      const fileName = `${projectId}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
-      
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      pdfPerformanceMonitor.endStage('download-preparation', generationId);
-      pdfPerformanceMonitor.endPDFGeneration(generationId);
-
-      return fileName;
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        throw new Error('Clearance PDF generation timed out after 60 seconds');
-      }
-      throw fetchError;
+    let endpoint;
+    if (usePDFShift) {
+      endpoint = type === 'asbestos-clearance' 
+        ? '/pdf-pdfshift/generate-asbestos-clearance'
+        : '/pdf-pdfshift/generate-asbestos-assessment';
+    } else {
+      endpoint = type === 'asbestos-clearance' 
+        ? '/pdf/generate-asbestos-clearance'
+        : '/pdf/generate-asbestos-assessment';
     }
+    
+    const url = `${process.env.REACT_APP_API_URL}${endpoint}?t=${Date.now()}`;
+    console.log('Calling backend URL:', url);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({
+        clearanceData: type === 'asbestos-clearance' ? data : undefined,
+        assessmentData: type === 'asbestos-assessment' ? data : undefined,
+      }),
+    });
+
+    pdfPerformanceMonitor.endStage('api-request', pdfId);
+    pdfPerformanceMonitor.startStage('response-processing', pdfId);
+
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('Response error text:', errorText);
+      throw new Error(`Failed to generate ${type} PDF`);
+    }
+
+    const pdfBlob = await response.blob();
+    
+    pdfPerformanceMonitor.endStage('response-processing', pdfId);
+
+    // Generate filename
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${type}_${timestamp}.pdf`;
+
+    // Create download link
+    const url2 = window.URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = url2;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url2);
+
+    const totalTime = Date.now() - startTime;
+    pdfPerformanceMonitor.logPerformanceSummary(pdfId, type, totalTime, Object.keys(data).length);
+
+    return { success: true, filename };
+
   } catch (error) {
-    console.error('Error generating clearance PDF:', error);
-    pdfPerformanceMonitor.endPDFGeneration(generationId);
+    console.error(`Error generating ${type} PDF:`, error);
     throw error;
   }
 }; 
