@@ -131,7 +131,7 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     pdfPerformanceMonitor.startStage('api-request', pdfId);
     
     // Determine which endpoint to use
-    const usePDFShift = false; // Temporarily disabled until API key is set up
+    const usePDFShift = true; // Use PDFShift for deployment compatibility
     
     let endpoint;
     if (usePDFShift) {
