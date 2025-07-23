@@ -68,9 +68,9 @@ const generateClearanceHTML = async (clearanceData) => {
         <meta charset="UTF-8">
         <title>Asbestos Clearance Report</title>
         <style>
+          /* DocRaptor-specific styles - let DocRaptor handle page breaks */
           body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-          .page { page-break-after: always; padding: 0; margin: 0; }
-          .page:last-child { page-break-after: avoid; }
+          .page { margin: 0; padding: 0; }
           .logo { max-width: 200px; height: auto; }
           .cover-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
           .cover-content { position: relative; z-index: 1; }

@@ -44,12 +44,32 @@ class DocRaptorService {
         document_content: cleanedHtml,
         document_type: 'pdf',
         test: process.env.NODE_ENV === 'development', // Use test mode in development
-        // Page formatting options to fix scaling and margins
+        // Page formatting options for DocRaptor
         page_size: 'A4',
-        page_margin: '0in', // Set margins to 0 to fill the page completely
-        page_width: '8.27in', // A4 width
-        page_height: '11.69in', // A4 height
-        // Disable default headers/footers that might be causing empty spaces
+        page_margin: '0.25in', // Small margin to prevent content from edge
+        // Use CSS for page breaks instead of DocRaptor's built-in system
+        css: `
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+          }
+          .page {
+            page-break-after: always;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+          }
+          .page:last-child {
+            page-break-after: avoid;
+          }
+        `,
+        // Disable default headers/footers
         header_html: null,
         footer_html: null,
         // Ensure content fills the page properly

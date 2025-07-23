@@ -28,6 +28,7 @@ const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTem
 const { router: pdfRoutes } = require('./routes/pdf');
 const pdfShiftRoutes = require('./routes/pdf-pdfshift');
 const pdfDocRaptorRoutes = require('./routes/pdf-docraptor');
+const pdfDocRaptorV2Routes = require('./routes/pdf-docraptor-v2');
 
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 const sampleItemsRoutes = require('./routes/sampleItems');
@@ -141,6 +142,7 @@ connectDB()
     app.use('/api/pdf', pdfRoutes);
 app.use('/api/pdf-pdfshift', pdfShiftRoutes);
 app.use('/api/pdf-docraptor', pdfDocRaptorRoutes);
+app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     
 
     const requireAuth = require('./middleware/auth');
