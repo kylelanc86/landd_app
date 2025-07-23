@@ -18,10 +18,10 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Copy package files
-COPY package*.json yarn.lock .npmrc ./
+COPY package*.json ./
 
-# Install dependencies with yarn (much faster than npm)
-RUN yarn install --production --frozen-lockfile --no-optional --prefer-offline
+# Install dependencies with npm
+RUN npm ci --only=production --no-optional
 
 # Production stage
 FROM node:18-alpine AS production
