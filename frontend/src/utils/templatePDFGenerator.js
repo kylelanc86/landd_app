@@ -151,7 +151,7 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`,
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
       },
       body: JSON.stringify({
         clearanceData: type === 'asbestos-clearance' ? data : undefined,
