@@ -54,11 +54,7 @@ async function testPDFShift() {
       </html>
     `;
 
-    const pdfBuffer = await pdfShiftService.generatePDF(simpleHTML, {
-      filename: 'test-simple.pdf',
-      format: 'A4',
-      margin: '1in'
-    });
+    const pdfBuffer = await pdfShiftService.generatePDF(simpleHTML);
 
     console.log(`✅ Simple PDF generated successfully (${pdfBuffer.length} bytes)`);
 
@@ -133,11 +129,7 @@ async function testPDFShift() {
       </html>
     `;
 
-    const complexPdfBuffer = await pdfShiftService.generatePDF(complexHTML, {
-      filename: 'test-complex.pdf',
-      format: 'A4',
-      margin: '0.5in'
-    });
+    const complexPdfBuffer = await pdfShiftService.generatePDF(complexHTML);
 
     console.log(`✅ Complex PDF generated successfully (${complexPdfBuffer.length} bytes)`);
 

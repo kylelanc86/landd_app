@@ -67,11 +67,7 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
     console.log(`[${pdfId}] Generating PDF with PDFShift...`);
     
     // Generate PDF using PDFShift
-    const pdfBuffer = await pdfShiftService.generatePDF(htmlContent, {
-      filename: filename,
-      format: 'A4',
-      margin: '1in'
-    });
+    const pdfBuffer = await pdfShiftService.generatePDF(htmlContent);
 
     backendPerformanceMonitor.endStage('pdfshift-generation', pdfId);
     backendPerformanceMonitor.startStage('response-sending', pdfId);
@@ -146,11 +142,7 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     console.log(`[${pdfId}] Generating PDF with PDFShift...`);
     
     // Generate PDF using PDFShift
-    const pdfBuffer = await pdfShiftService.generatePDF(htmlContent, {
-      filename: filename,
-      format: 'A4',
-      margin: '1in'
-    });
+    const pdfBuffer = await pdfShiftService.generatePDF(htmlContent);
 
     backendPerformanceMonitor.endStage('pdfshift-generation', pdfId);
     backendPerformanceMonitor.startStage('response-sending', pdfId);

@@ -2,7 +2,7 @@ const PDFShift = require('pdfshift');
 
 class PDFShiftService {
   constructor() {
-    this.client = new PDFShift(process.env.PDFSHIFT_API_KEY);
+    this.client = PDFShift(process.env.PDFSHIFT_API_KEY);
   }
 
   /**
@@ -15,21 +15,38 @@ class PDFShiftService {
     try {
       console.log('Starting PDFShift PDF generation...');
       
-      const pdfOptions = {
-        source: htmlContent,
-        filename: options.filename || 'report.pdf',
-        ...options
-      };
-
       console.log('PDFShift options:', {
-        filename: pdfOptions.filename,
-        hasCustomCSS: !!options.customCSS,
+        filename: options.filename,
+        hasCustomCSS: !!options.css,
         hasWatermark: !!options.watermark,
         hasHeader: !!options.header,
         hasFooter: !!options.footer
       });
 
-      const pdfBuffer = await this.client.convert(pdfOptions);
+      // Use the prepare() method for advanced options
+      let pdfRequest = this.client.prepare(htmlContent);
+      
+      // Add custom CSS if provided
+      if (options.css) {
+        pdfRequest = pdfRequest.css(options.css);
+      }
+      
+      // Add header if provided
+      if (options.header) {
+        pdfRequest = pdfRequest.header(options.header);
+      }
+      
+      // Add footer if provided
+      if (options.footer) {
+        pdfRequest = pdfRequest.footer(options.footer);
+      }
+      
+      // Add watermark if provided
+      if (options.watermark) {
+        pdfRequest = pdfRequest.watermark(options.watermark);
+      }
+
+      const pdfBuffer = await pdfRequest.convert();
       
       console.log('PDFShift PDF generated successfully, size:', pdfBuffer.length, 'bytes');
       return pdfBuffer;
@@ -50,7 +67,7 @@ class PDFShiftService {
   async generatePDFWithCSS(htmlContent, cssContent, options = {}) {
     return this.generatePDF(htmlContent, {
       ...options,
-      customCSS: cssContent
+      css: cssContent
     });
   }
 
@@ -75,7 +92,7 @@ class PDFShiftService {
   async testConnection() {
     try {
       const testHTML = '<html><body><h1>PDFShift Test</h1><p>This is a test PDF.</p></body></html>';
-      const pdfBuffer = await this.generatePDF(testHTML, { filename: 'test.pdf' });
+      const pdfBuffer = await this.generatePDF(testHTML);
       return pdfBuffer && pdfBuffer.length > 0;
     } catch (error) {
       console.error('PDFShift connection test failed:', error);
