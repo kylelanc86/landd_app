@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asbestos Clearance Report - Main Content</title>
+    <link
+      href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Montserrat", Arial, sans-serif;
+        background: #fff;
+      }
+      .page {
+        width: 800px;
+        height: 1130px;
+        margin: 40px auto;
+        background: #fff;
+        box-shadow: 0 4px 32px rgba(0, 0, 0, 0.12);
+        position: relative;
+        padding: 0 0 0 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 16px 48px 0 48px;
+      }
+      .logo {
+        width: 243px;
+        height: auto;
+        display: block;
+        background: #fff;
+      }
+      .company-details {
+        text-align: right;
+        font-size: 0.75rem;
+        color: #222;
+        line-height: 1.5;
+        margin-top: 8px;
+      }
+      .company-details .website {
+        color: #16b12b;
+        font-weight: 500;
+      }
+      .header-line {
+        width: calc(100% - 96px);
+        height: 4px;
+        background: #16b12b;
+        margin: 8px auto 0 auto;
+        border-radius: 2px;
+      }
+      .content {
+        padding: 10px 48px 24px 48px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+      .section-header {
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 10px 0 10px 0;
+        letter-spacing: 0.01em;
+        color: #222;
+        text-align: justify;
+      }
+      .section-header.first-section {
+        margin-top: 18px;
+      }
+      .section-header:not(.first-section) {
+        margin-top: 10px;
+      }
+      .paragraph {
+        font-size: 0.8rem;
+        margin-bottom: 12px;
+        color: #222;
+        line-height: 1.5;
+        text-align: justify;
+      }
+      .table-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin: 0 0 12px 0;
+        text-align: justify;
+        line-height: 1.5;
+      }
+      .asbestos-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 12px;
+      }
+      .asbestos-table th,
+      .asbestos-table td {
+        border: 2px solid #444;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+        text-align: left;
+        line-height: 1.5;
+      }
+      .asbestos-table th {
+        background: #f5f5f5;
+        font-weight: 700;
+      }
+      .signature-block {
+        margin-top: 12px;
+        margin-bottom: 0;
+        font-size: 0.8rem;
+        color: #222;
+        text-align: justify;
+        line-height: 1.5;
+      }
+      .signature-line {
+        margin: 24px 0 8px 0;
+        width: 180px;
+        border-bottom: 2px solid #444;
+        height: 24px;
+      }
+      .signature-name {
+        font-weight: 700;
+        margin-top: 8px;
+        font-size: 0.8rem;
+      }
+      .signature-licence {
+        font-size: 0.8rem;
+        color: #444;
+      }
+      .signature-image {
+        margin-top: 8px;
+        max-width: 150px;
+        max-height: 75px;
+      }
+      .signature-image img {
+        width: 100%;
+        height: auto;
+      }
+      .footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 16px;
+        width: calc(100% - 96px);
+        margin: 0 auto;
+        text-align: justify;
+        font-size: 0.75rem;
+        color: #222;
+      }
+      .footer-line {
+        width: 100%;
+        height: 4px;
+        background: #16b12b;
+        margin-bottom: 6px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <img
+          class="logo"
+          src="/frontend/public/logo.png"
+          alt="Company Logo"
+        />
+        <div class="company-details">
+          Lancaster & Dickenson Consulting Pty Ltd<br />
+          4/6 Dacre Street<br />
+          Mitchell ACT 2911<br />
+          W: <span class="website">www.landd.com.au</span>
+        </div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        <div class="section-header first-section">Inspection Details</div>
+        <div class="paragraph">
+          Following discussions with Tran Mach, Lancaster and Dickenson
+          Consulting (L &amp; D) were contracted to undertake a visual clearance
+          inspection and air monitoring following the removal of friable asbestos from
+          <b>{Project site name}</b> (herein referred to as 'the Site').
+        </div>
+        <div class="paragraph">
+          Asbestos removal works were undertaken by
+          <b>{asbestos removalist}</b>. <b>{Assessor Name}</b>
+          <b>{Assessor Licence Details}</b> from L&amp;D visited the Site at
+          time on 27/06/2025.
+        </div>
+        <div class="paragraph">
+          Table 1 below outlines the ACM that formed part of the inspection.
+          Photographs of the Asbestos Removal Area and a Site Plan are presented
+          in Appendix A and Appendix B respectively. Air monitoring results are
+          presented in Appendix C.
+        </div>
+        <div class="table-title">Table 1: Asbestos Removal Areas</div>
+        <table class="asbestos-table">
+          <tr>
+            <th>Item</th>
+            <th>Location</th>
+            <th>Material Description</th>
+            <th>Asbestos Type</th>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>Ceiling insulation</td>
+            <td>Sprayed asbestos</td>
+            <td>Friable</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Pipe lagging</td>
+            <td>Asbestos lagging</td>
+            <td>Friable</td>
+          </tr>
+        </table>
+
+        <div class="section-header">Inspection Exclusions</div>
+        <div class="paragraph">
+          This clearance certificate is specific to the scope of removal works
+          detailed above. ACM may be present beyond the inspected area. The
+          clearance inspection and air monitoring was conducted only within the
+          specified work area and adjacent areas as required by legislation.
+        </div>
+
+        <div class="section-header">Clearance Certification</div>
+        <div class="paragraph">
+          An inspection of the asbestos removal area and the surrounding areas
+          (including access and egress pathways) was undertaken on 27/06/2025.
+          Air monitoring was conducted to ensure asbestos fibre levels were below
+          the clearance indicator of 0.01 fibres/mL. The LAA found no visible
+          asbestos residue from asbestos removal work in the asbestos removal area,
+          or in the vicinity of the area, where the asbestos removal works were
+          carried out.
+        </div>
+        <div class="paragraph">
+          The LAA considers that the asbestos removal area does not pose a risk
+          to health and safety from exposure to asbestos and may be re-occupied.
+          The air monitoring results confirm that asbestos fibre levels are below
+          the clearance indicator.
+        </div>
+        <div class="paragraph">
+          Please do not hesitate to contact the undersigned should you have any
+          queries regarding this report.
+        </div>
+        <div class="signature-block">
+          For and on behalf of Lancaster and Dickenson Consulting.<br />
+          <div class="signature-line"></div>
+          <div class="signature-name">{LAA_NAME}</div>
+          <div class="signature-licence">{LAA_LICENSE}</div>
+          <!-- Signature image placeholder -->
+          <div class="signature-image">{SIGNATURE_IMAGE}</div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="footer-line"></div>
+        Friable Clearance Certificate: 12 Arndell St, Macquarie ACT 2614,
+        Australia
+      </div>
+    
+  </body>
+</html> 

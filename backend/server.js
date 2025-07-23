@@ -26,8 +26,7 @@ const asbestosClearanceTemplateRoutes = require('./routes/asbestosClearanceTempl
 const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates');
 const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
 const { router: pdfRoutes } = require('./routes/pdf');
-const pdfBrowserlessRoutes = require('./routes/pdf-browserless');
-const pdfBrowserlessSimpleRoutes = require('./routes/pdf-browserless-simple');
+
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 const sampleItemsRoutes = require('./routes/sampleItems');
 const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
@@ -128,8 +127,7 @@ connectDB()
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
-    app.use('/api/pdf-browserless', pdfBrowserlessRoutes);
-app.use('/api/pdf-browserless-simple', pdfBrowserlessSimpleRoutes);
+    
 
     const requireAuth = require('./middleware/auth');
     app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);

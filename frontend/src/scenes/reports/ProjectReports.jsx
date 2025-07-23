@@ -62,7 +62,7 @@ const ProjectReports = () => {
       const projectResponse = await projectService.getById(projectId);
       const projectData = projectResponse.data;
       setProject(projectData);
-      
+
       // Add to recent projects
       recentProjectsService.addRecentProject(projectData);
 
@@ -258,7 +258,7 @@ const ProjectReports = () => {
         // Open PDF directly in browser using the existing endpoint
         const api = require("../../services/axios").default;
         const response = await api.post(
-          "/pdf-browserless/generate-asbestos-clearance",
+          "/pdf/generate-asbestos-clearance",
           {
             clearanceData: { _id: clearanceId },
           },
