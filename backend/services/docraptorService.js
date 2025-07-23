@@ -60,14 +60,22 @@ class DocRaptorService {
       console.log('- API Key preview:', `${this.apiKey.substring(0, 10)}...`);
       console.log('- Request body size:', JSON.stringify(requestBody).length, 'characters');
 
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`
-        },
-        body: JSON.stringify(requestBody)
-      });
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      try {
+        const response = await fetch(this.apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -79,6 +87,15 @@ class DocRaptorService {
       
       console.log('DocRaptor PDF generated successfully, size:', pdfBuffer.length, 'bytes');
       return pdfBuffer;
+      
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.error('DocRaptor API request timed out after 30 seconds');
+          throw new Error('DocRaptor API request timed out. Please try again.');
+        }
+        throw fetchError;
+      }
       
     } catch (error) {
       console.error('DocRaptor PDF generation failed:', error);

@@ -223,6 +223,9 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
     // Generate HTML content
     console.log(`[${pdfId}] Generating clearance HTML...`);
     const htmlContent = await generateClearanceHTML(clearanceData);
+    
+    console.log(`[${pdfId}] HTML content generated, size: ${htmlContent.length} characters`);
+    console.log(`[${pdfId}] HTML preview (first 500 chars):`, htmlContent.substring(0, 500));
 
     backendPerformanceMonitor.endStage('template-population', pdfId);
     backendPerformanceMonitor.startStage('docraptor-generation', pdfId);
@@ -292,6 +295,9 @@ router.post('/generate-asbestos-assessment', async (req, res) => {
     // Generate HTML content
     console.log(`[${pdfId}] Generating assessment HTML...`);
     const htmlContent = await generateAssessmentHTML(assessmentData);
+    
+    console.log(`[${pdfId}] HTML content generated, size: ${htmlContent.length} characters`);
+    console.log(`[${pdfId}] HTML preview (first 500 chars):`, htmlContent.substring(0, 500));
 
     backendPerformanceMonitor.endStage('template-population', pdfId);
     backendPerformanceMonitor.startStage('docraptor-generation', pdfId);
@@ -360,6 +366,48 @@ router.get('/test', async (req, res) => {
       error: 'DocRaptor test failed',
       details: error.message,
       service: 'DocRaptor'
+    });
+  }
+});
+
+/**
+ * Test DocRaptor with simple HTML
+ */
+router.post('/test-simple', async (req, res) => {
+  try {
+    console.log('Testing DocRaptor with simple HTML...');
+    
+    const simpleHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Simple Test</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { color: blue; }
+        </style>
+      </head>
+      <body>
+        <h1>DocRaptor Test</h1>
+        <p>This is a simple test PDF generated at ${new Date().toISOString()}</p>
+        <p>If you can see this, DocRaptor is working!</p>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(simpleHTML);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="test-simple.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('Simple test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Simple test failed',
+      details: error.message
     });
   }
 });
