@@ -31,16 +31,15 @@ const generateClearanceHTML = async (clearanceData) => {
     const templateSubDir = isFriable ? 'FriableClearance' : 'NonFriableClearance';
     const templatePath = path.join(templateDir, templateSubDir);
     
-    // Load all template files
+    // Load all template files with correct filenames
     const templates = {
-      cover: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceCoverMockup-page1.html'), 'utf8'),
-      versionControl: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceVersionControlMockup-page2.html'), 'utf8'),
-      inspectionDetails: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceBackgroundMockup-page3.html'), 'utf8'),
-      background: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceBackgroundMockup-page3.html'), 'utf8'),
-      appendixA: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceAppendixAMockuppage5.html'), 'utf8'),
-      photographs: fs.readFileSync(path.join(templatePath, 'AsbestosClearancePhotographsMockup-page6.html'), 'utf8'),
-      appendixB: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceAppendixBMockup-page7.html'), 'utf8'),
-      airMonitoring: fs.readFileSync(path.join(templatePath, 'AsbestosClearanceAirMonitoringMockup-page8.html'), 'utf8')
+      cover: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearanceCoverMockup-Page1-Friable.html' : 'AsbestosClearanceCoverMockup-Page1.html'), 'utf8'),
+      versionControl: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearanceVersionControlMockup-page2-Friable.html' : 'AsbestosClearanceVersionControlMockup-page2.html'), 'utf8'),
+      background: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearanceBackgroundMockup-page3-Friable.html' : 'AsbestosClearanceBackgroundMockup-page3.html'), 'utf8'),
+      mainReport: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearanceMainReportMockup-page4-Friable.html' : 'AsbestosClearanceMainReportMockup-page4.html'), 'utf8'),
+      appendixA: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearanceAppendixAMockuppage5-Friable.html' : 'AsbestosClearanceAppendixAMockuppage5.html'), 'utf8'),
+      photographs: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearancePhotographsMockup-page6-Friable.html' : 'AsbestosClearancePhotographsMockup-page6.html'), 'utf8'),
+      appendixB: fs.readFileSync(path.join(templatePath, isFriable ? 'AsbestosClearanceAppendixBMockup-page7-Friable.html' : 'AsbestosClearanceAppendixBMockup-page7.html'), 'utf8')
     };
 
     // Load logo and background images
@@ -80,14 +79,14 @@ const generateClearanceHTML = async (clearanceData) => {
           ${templates.versionControl}
         </div>
         
-        <!-- Page 3: Inspection Details -->
-        <div class="page">
-          ${templates.inspectionDetails}
-        </div>
-        
-        <!-- Page 4: Background -->
+        <!-- Page 3: Background -->
         <div class="page">
           ${templates.background}
+        </div>
+        
+        <!-- Page 4: Main Report -->
+        <div class="page">
+          ${templates.mainReport}
         </div>
         
         <!-- Page 5: Appendix A -->
@@ -103,11 +102,6 @@ const generateClearanceHTML = async (clearanceData) => {
         <!-- Page 7: Appendix B -->
         <div class="page">
           ${templates.appendixB}
-        </div>
-        
-        <!-- Page 8: Air Monitoring -->
-        <div class="page">
-          ${templates.airMonitoring}
         </div>
       </body>
       </html>
