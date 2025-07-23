@@ -1,12 +1,12 @@
 const fetch = require('node-fetch');
 
-class PDFShiftService {
+class DocRaptorService {
   constructor() {
-    this.apiKey = process.env.PDFSHIFT_API_KEY;
-    this.apiUrl = 'https://api.pdfshift.io/v3/convert/pdf';
+    this.apiKey = process.env.DOCRAPTOR_API_KEY;
+    this.apiUrl = 'https://docraptor.com/docs';
     
     // Debug logging
-    console.log('PDFShift Service initialized:');
+    console.log('DocRaptor Service initialized:');
     console.log('- API Key exists:', !!this.apiKey);
     console.log('- API Key length:', this.apiKey ? this.apiKey.length : 0);
     console.log('- API Key preview:', this.apiKey ? `${this.apiKey.substring(0, 10)}...` : 'undefined');
@@ -14,62 +14,75 @@ class PDFShiftService {
   }
 
   /**
-   * Generate PDF from HTML content using PDFShift API
+   * Generate PDF from HTML content using DocRaptor API
    * @param {string} htmlContent - The HTML content to convert
    * @param {Object} options - PDF generation options
    * @returns {Promise<Buffer>} - PDF buffer
    */
   async generatePDF(htmlContent, options = {}) {
     try {
-      console.log('Starting PDFShift PDF generation...');
+      console.log('Starting DocRaptor PDF generation...');
       
       if (!this.apiKey) {
-        throw new Error('PDFSHIFT_API_KEY environment variable is not set');
+        throw new Error('DOCRAPTOR_API_KEY environment variable is not set');
       }
 
+      // Clean HTML content to remove file system references
+      const cleanedHtml = htmlContent
+        .replace(/file:\/\/[^\s"']+/g, '') // Remove file:// URLs
+        .replace(/src="\/frontend\/public\/[^"]*"/g, 'src=""') // Remove /frontend/public/ references
+        .replace(/src="\/[^"]*\.(jpg|jpeg|png|gif|svg|bmp)"[^>]*>/g, 'src=""') // Remove absolute path image references
+        .replace(/src="[^"]*\.(jpg|jpeg|png|gif|svg|bmp)"[^>]*>/g, (match) => {
+          // Convert local file references to base64 or remove them
+          if (match.includes('file://') || match.includes('C:\\') || match.includes('/frontend/') || match.includes('/public/')) {
+            return match.replace(/src="[^"]*"/, 'src=""');
+          }
+          return match;
+        });
+
       const requestBody = {
-        source: htmlContent,
+        document_content: cleanedHtml,
+        document_type: 'pdf',
+        test: process.env.NODE_ENV === 'development', // Use test mode in development
         ...options
       };
 
-      console.log('PDFShift options:', {
+      console.log('DocRaptor options:', {
+        documentType: requestBody.document_type,
+        test: requestBody.test,
         hasCustomCSS: !!options.css,
-        hasWatermark: !!options.watermark,
         hasHeader: !!options.header,
         hasFooter: !!options.footer
       });
 
-      console.log('Making PDFShift API request:');
+      console.log('Making DocRaptor API request:');
       console.log('- URL:', this.apiUrl);
       console.log('- API Key preview:', `${this.apiKey.substring(0, 10)}...`);
       console.log('- Request body size:', JSON.stringify(requestBody).length, 'characters');
-      
-      // Try using API key as query parameter (PDFShift v3 format)
-      const urlWithKey = `${this.apiUrl}?api_key=${this.apiKey}`;
-      console.log('- Final URL:', urlWithKey);
-      
-      const response = await fetch(urlWithKey, {
+
+      const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`
         },
         body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('PDFShift API error:', response.status, errorText);
-        throw new Error(`PDFShift API error: ${response.status} - ${errorText}`);
+        console.error('DocRaptor API error:', response.status, errorText);
+        throw new Error(`DocRaptor API error: ${response.status} - ${errorText}`);
       }
 
       const pdfBuffer = await response.buffer();
       
-      console.log('PDFShift PDF generated successfully, size:', pdfBuffer.length, 'bytes');
+      console.log('DocRaptor PDF generated successfully, size:', pdfBuffer.length, 'bytes');
       return pdfBuffer;
       
     } catch (error) {
-      console.error('PDFShift PDF generation failed:', error);
-      throw new Error(`PDFShift PDF generation failed: ${error.message}`);
+      console.error('DocRaptor PDF generation failed:', error);
+      throw new Error(`DocRaptor PDF generation failed: ${error.message}`);
     }
   }
 
@@ -102,19 +115,19 @@ class PDFShiftService {
   }
 
   /**
-   * Test PDFShift connection
+   * Test DocRaptor connection
    * @returns {Promise<boolean>} - True if connection works
    */
   async testConnection() {
     try {
-      const testHTML = '<html><body><h1>PDFShift Test</h1><p>This is a test PDF.</p></body></html>';
+      const testHTML = '<html><body><h1>DocRaptor Test</h1><p>This is a test PDF.</p></body></html>';
       const pdfBuffer = await this.generatePDF(testHTML);
       return pdfBuffer && pdfBuffer.length > 0;
     } catch (error) {
-      console.error('PDFShift connection test failed:', error);
+      console.error('DocRaptor connection test failed:', error);
       return false;
     }
   }
 }
 
-module.exports = PDFShiftService; 
+module.exports = DocRaptorService; 

@@ -27,6 +27,7 @@ const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates')
 const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
 const { router: pdfRoutes } = require('./routes/pdf');
 const pdfShiftRoutes = require('./routes/pdf-pdfshift');
+const pdfDocRaptorRoutes = require('./routes/pdf-docraptor');
 
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 const sampleItemsRoutes = require('./routes/sampleItems');
@@ -34,6 +35,13 @@ const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
 
 // Load environment variables
 dotenv.config();
+
+// Debug environment variables
+console.log('Environment variables loaded:');
+console.log('- NODE_ENV:', process.env.NODE_ENV);
+console.log('- PDFSHIFT_API_KEY exists:', !!process.env.PDFSHIFT_API_KEY);
+console.log('- PDFSHIFT_API_KEY length:', process.env.PDFSHIFT_API_KEY ? process.env.PDFSHIFT_API_KEY.length : 0);
+console.log('- PDFSHIFT_API_KEY preview:', process.env.PDFSHIFT_API_KEY ? `${process.env.PDFSHIFT_API_KEY.substring(0, 10)}...` : 'undefined');
 
 // Create Express app
 const app = express();
@@ -128,7 +136,8 @@ connectDB()
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
-    app.use('/api/pdf-pdfshift', pdfShiftRoutes);
+app.use('/api/pdf-pdfshift', pdfShiftRoutes);
+app.use('/api/pdf-docraptor', pdfDocRaptorRoutes);
     
 
     const requireAuth = require('./middleware/auth');

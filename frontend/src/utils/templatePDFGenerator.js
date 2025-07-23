@@ -131,13 +131,13 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     pdfPerformanceMonitor.startStage('api-request', pdfId);
     
     // Determine which endpoint to use
-    const usePDFShift = true; // Use PDFShift for deployment compatibility
+    const useDocRaptor = true; // Use DocRaptor for better complex document support
     
     let endpoint;
-    if (usePDFShift) {
+    if (useDocRaptor) {
       endpoint = type === 'asbestos-clearance' 
-        ? '/pdf-pdfshift/generate-asbestos-clearance'
-        : '/pdf-pdfshift/generate-asbestos-assessment';
+        ? '/pdf-docraptor/generate-asbestos-clearance'
+        : '/pdf-docraptor/generate-asbestos-assessment';
     } else {
       endpoint = type === 'asbestos-clearance' 
         ? '/pdf/generate-asbestos-clearance'
