@@ -1,6 +1,8 @@
 require('dotenv').config();
 const PDFShiftService = require('./services/pdfshiftService');
 
+// Test the direct API implementation
+
 async function testPDFShift() {
   console.log('Testing PDFShift integration...');
   
