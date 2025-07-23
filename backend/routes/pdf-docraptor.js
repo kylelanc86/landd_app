@@ -7,6 +7,17 @@ const path = require('path');
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
 
+// Simple health check to verify route is loaded
+router.get('/health', (req, res) => {
+  console.log('DocRaptor health check endpoint hit');
+  res.json({ 
+    status: 'ok', 
+    service: 'DocRaptor',
+    timestamp: new Date().toISOString(),
+    apiKeyExists: !!process.env.DOCRAPTOR_API_KEY
+  });
+});
+
 // Performance monitoring
 const backendPerformanceMonitor = {
   startStage: (stageName, pdfId = 'default') => {
@@ -200,6 +211,9 @@ const generateAssessmentHTML = async (assessmentData) => {
  */
 router.post('/generate-asbestos-clearance', async (req, res) => {
   const pdfId = `clearance-${Date.now()}`;
+  console.log(`[${pdfId}] === CLEARANCE REQUEST RECEIVED ===`);
+  console.log(`[${pdfId}] Request headers:`, req.headers);
+  console.log(`[${pdfId}] Request body keys:`, Object.keys(req.body || {}));
   backendPerformanceMonitor.startStage('request-received', pdfId);
   
   try {
@@ -272,6 +286,9 @@ router.post('/generate-asbestos-clearance', async (req, res) => {
  */
 router.post('/generate-asbestos-assessment', async (req, res) => {
   const pdfId = `assessment-${Date.now()}`;
+  console.log(`[${pdfId}] === ASSESSMENT REQUEST RECEIVED ===`);
+  console.log(`[${pdfId}] Request headers:`, req.headers);
+  console.log(`[${pdfId}] Request body keys:`, Object.keys(req.body || {}));
   backendPerformanceMonitor.startStage('request-received', pdfId);
   
   try {

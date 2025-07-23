@@ -42,6 +42,9 @@ console.log('- NODE_ENV:', process.env.NODE_ENV);
 console.log('- PDFSHIFT_API_KEY exists:', !!process.env.PDFSHIFT_API_KEY);
 console.log('- PDFSHIFT_API_KEY length:', process.env.PDFSHIFT_API_KEY ? process.env.PDFSHIFT_API_KEY.length : 0);
 console.log('- PDFSHIFT_API_KEY preview:', process.env.PDFSHIFT_API_KEY ? `${process.env.PDFSHIFT_API_KEY.substring(0, 10)}...` : 'undefined');
+console.log('- DOCRAPTOR_API_KEY exists:', !!process.env.DOCRAPTOR_API_KEY);
+console.log('- DOCRAPTOR_API_KEY length:', process.env.DOCRAPTOR_API_KEY ? process.env.DOCRAPTOR_API_KEY.length : 0);
+console.log('- DOCRAPTOR_API_KEY preview:', process.env.DOCRAPTOR_API_KEY ? `${process.env.DOCRAPTOR_API_KEY.substring(0, 10)}...` : 'undefined');
 
 // Create Express app
 const app = express();
