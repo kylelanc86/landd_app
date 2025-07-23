@@ -35,7 +35,7 @@ import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
 import reportTemplateService from "../../services/reportTemplateService";
-import { generateTemplatePDF } from "../../utils/templatePDFGenerator";
+import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
 
 const ReportTemplates = () => {
   const theme = useTheme();
@@ -406,10 +406,9 @@ const ReportTemplates = () => {
     setGeneratingPDF(true);
     try {
       // Use the utility function to generate PDF
-      const fileName = await generateTemplatePDF(
-        template,
-        previewData,
-        replacePlaceholders
+      const fileName = await generateHTMLTemplatePDF(
+        selectedTemplate,
+        previewData
       );
 
       setSaveStatus({
@@ -442,7 +441,7 @@ const ReportTemplates = () => {
         throw new Error("Template not found");
       }
 
-      await generateTemplatePDF(template, previewData);
+      await generateHTMLTemplatePDF(selectedTemplate, previewData);
       setSaveStatus({
         show: true,
         message: "PDF generated successfully!",

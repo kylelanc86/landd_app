@@ -2253,29 +2253,7 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
     }).join('');
   };
 
-  const generateAirMonitoringContent = (appendixLetter = 'B') => {
-    // Always show placeholder since the actual report is appended as a separate page
-    return `
-      <div class="air-monitoring-content">
-        <div class="centered-text">
-          <div class="appendix-title">APPENDIX ${appendixLetter}</div>
-          <div class="photographs-text">AIR MONITORING REPORT</div>
-        </div>
-      </div>
-    `;
-  };
 
-  const generateSitePlanContent = (appendixLetter = 'B') => {
-    // Always show placeholder since the actual site plan is appended as a separate page
-    return `
-      <div class="site-plan-content">
-        <div class="centered-text">
-          <div class="appendix-title">APPENDIX ${appendixLetter}</div>
-          <div class="photographs-text">SITE PLAN</div>
-        </div>
-      </div>
-    `;
-  };
 
 
 
@@ -2469,6 +2447,40 @@ const populateTemplate = async (htmlTemplate, data, appendixLetter = 'B', logoBa
   console.log('[TEMPLATE DEBUG] Template contains "[LOGO_PATH]":', htmlTemplate.includes('[LOGO_PATH]'));
 
   return populatedHTML;
+};
+
+/**
+ * Generate air monitoring content for appendix
+ * @param {string} appendixLetter - Appendix letter (B, C, etc.)
+ * @returns {string} - HTML for air monitoring content
+ */
+const generateAirMonitoringContent = (appendixLetter = 'B') => {
+  // Always show placeholder since the actual report is appended as a separate page
+  return `
+    <div class="air-monitoring-content">
+      <div class="centered-text">
+        <div class="appendix-title">APPENDIX ${appendixLetter}</div>
+        <div class="photographs-text">AIR MONITORING REPORT</div>
+      </div>
+    </div>
+  `;
+};
+
+/**
+ * Generate site plan content for appendix
+ * @param {string} appendixLetter - Appendix letter (B, C, etc.)
+ * @returns {string} - HTML for site plan content
+ */
+const generateSitePlanContent = (appendixLetter = 'B') => {
+  // Always show placeholder since the actual site plan is appended as a separate page
+  return `
+    <div class="site-plan-content">
+      <div class="centered-text">
+        <div class="appendix-title">APPENDIX ${appendixLetter}</div>
+        <div class="photographs-text">SITE PLAN</div>
+      </div>
+    </div>
+  `;
 };
 
 /**
@@ -4049,4 +4061,11 @@ router.get('/test-puppeteer', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = {
+  router,
+  HTML_TEMPLATES,
+  generateMainContentPages,
+  generateSitePlanPage,
+  generateAirMonitoringContent,
+  populateTemplate
+}; 

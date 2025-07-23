@@ -258,7 +258,7 @@ const ProjectReports = () => {
         // Open PDF directly in browser using the existing endpoint
         const api = require("../../services/axios").default;
         const response = await api.post(
-          "/pdf/generate-asbestos-clearance",
+          "/pdf-browserless/generate-asbestos-clearance",
           {
             clearanceData: { _id: clearanceId },
           },

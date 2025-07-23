@@ -1,317 +1,4 @@
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import pdfPerformanceMonitor from "./pdfPerformanceMonitor";
-
-export const generateTemplatePDF = async (template, sampleData, replacePlaceholders) => {
-  // Create a new PDF document
-  const doc = new jsPDF();
-  
-  // Set up the page
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const contentWidth = pageWidth - (2 * margin);
-  
-  let y = margin;
-
-  // Helper function to add text with proper spacing
-  const addText = (text, fontSize = 11, fontStyle = "normal", spacing = 8) => {
-    if (!text) return y;
-    
-    doc.setFontSize(fontSize);
-    doc.setFont("helvetica", fontStyle);
-    
-    const lines = doc.splitTextToSize(text, contentWidth);
-    doc.text(text, margin, y, { maxWidth: contentWidth });
-    
-    y += (lines.length * fontSize * 1.2) + spacing;
-    return y;
-  };
-
-  // Helper function to add header
-  const addHeader = (text, fontSize = 14, fontStyle = "bold") => {
-    return addText(text, fontSize, fontStyle, 12);
-  };
-
-  // Front Cover
-  y = addHeader(
-    replacePlaceholders(
-      template.standardSections.frontCoverTitle || "Non-friable Asbestos Removal Clearance"
-    ),
-    16,
-    "bold"
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.frontCoverSubtitle || ""),
-    12,
-    "normal",
-    20
-  );
-
-  // Add a line break
-  y += 10;
-
-  // Company Details
-  if (template.companyDetails) {
-    y = addHeader("Company Details", 12, "bold");
-    Object.entries(template.companyDetails).forEach(([key, value]) => {
-      const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, " $1");
-      y = addText(`${label}: ${value}`, 10, "normal", 4);
-    });
-    y += 10;
-  }
-
-  // Inspection Details
-  y = addHeader(
-    replacePlaceholders(
-      template.standardSections.inspectionDetailsTitle || "Inspection Details"
-    ),
-    12,
-    "bold"
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.inspectionIntroduction || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.inspectionSpecifics || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.tableIntroduction || ""),
-    10,
-    "normal",
-    8
-  );
-
-  // Add a sample inspection table
-  y = addText("Sample Inspection Results:", 10, "bold", 4);
-  
-  // Simple table structure
-  const tableData = [
-    ["Area", "Material Type", "Condition", "Result"],
-    ["Kitchen", "Vinyl Floor Tiles", "Good", "Pass"],
-    ["Bathroom", "Vinyl Floor Tiles", "Good", "Pass"],
-    ["Living Room", "Vinyl Floor Tiles", "Good", "Pass"],
-  ];
-
-  tableData.forEach((row, index) => {
-    const isHeader = index === 0;
-    const fontStyle = isHeader ? "bold" : "normal";
-    const fontSize = isHeader ? 10 : 9;
-    
-    // Calculate column widths
-    const colWidths = [40, 50, 40, 30];
-    let x = margin;
-    
-    row.forEach((cell, colIndex) => {
-      doc.setFontSize(fontSize);
-      doc.setFont("helvetica", fontStyle);
-      doc.text(cell, x, y, { maxWidth: colWidths[colIndex] });
-      x += colWidths[colIndex] + 5;
-    });
-    
-    y += fontSize * 1.2 + 2;
-  });
-  
-  y += 10;
-
-  // Check if we need a new page
-  if (y > pageHeight - 100) {
-    doc.addPage();
-    y = margin;
-  }
-
-  // Clearance Certification
-  y = addHeader(
-    replacePlaceholders(
-      template.standardSections.clearanceCertificationTitle || "Clearance Certification"
-    ),
-    12,
-    "bold"
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.clearanceCertificationText || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.riskAssessmentText || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.contactText || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.behalfText || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.signatureTitle || ""),
-    10,
-    "bold",
-    8
-  );
-
-  // Check if we need a new page
-  if (y > pageHeight - 100) {
-    doc.addPage();
-    y = margin;
-  }
-
-  // Background Information
-  y = addHeader(
-    replacePlaceholders(
-      template.standardSections.backgroundTitle || "Background Information"
-    ),
-    12,
-    "bold"
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.backgroundIntroduction || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.bulletPoint1 || "")}`,
-    10,
-    "normal",
-    4
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.bulletPoint2 || "")}`,
-    10,
-    "normal",
-    4
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.requirementsText || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.bulletPoint3 || "")}`,
-    10,
-    "normal",
-    4
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.bulletPoint4 || "")}`,
-    10,
-    "normal",
-    4
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.bulletPoint5 || "")}`,
-    10,
-    "normal",
-    4
-  );
-
-  // Check if we need a new page
-  if (y > pageHeight - 100) {
-    doc.addPage();
-    y = margin;
-  }
-
-  // Legislative Requirements
-  y = addHeader(
-    replacePlaceholders(
-      template.standardSections.legislativeTitle || "Legislative Requirements"
-    ),
-    12,
-    "bold"
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.legislativeIntroduction || ""),
-    10,
-    "normal",
-    8
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.legislativePoint1 || "")}`,
-    10,
-    "normal",
-    4
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.legislativePoint2 || "")}`,
-    10,
-    "normal",
-    4
-  );
-  y = addText(
-    `• ${replacePlaceholders(template.standardSections.legislativePoint3 || "")}`,
-    10,
-    "normal",
-    4
-  );
-
-  // Limitations
-  y = addHeader(
-    replacePlaceholders(
-      template.standardSections.limitationsTitle || "Limitations"
-    ),
-    12,
-    "bold"
-  );
-  y = addText(
-    replacePlaceholders(template.standardSections.limitationsText || ""),
-    10,
-    "normal",
-    8
-  );
-
-  // Check if we need a new page for signature
-  if (y > pageHeight - 150) {
-    doc.addPage();
-    y = margin;
-  }
-
-  // Signature Section
-  y = addHeader("Authorised Signature", 12, "bold");
-  y += 20; // Space for signature line
-  
-  // Signature line
-  doc.setLineWidth(0.5);
-  doc.line(margin, y, margin + 80, y);
-  y += 5;
-  
-  // Signature details
-  y = addText("Name: John Smith", 10, "normal", 4);
-  y = addText("License: AI000456", 10, "normal", 4);
-  y = addText("Date: 25 July 2024", 10, "normal", 4);
-  
-  y += 20;
-
-  // Footer
-  y = addText(
-    replacePlaceholders(template.standardSections.footerText || ""),
-    9,
-    "normal",
-    8
-  );
-
-  // Save the PDF
-  const fileName = `asbestos-clearance-template-preview-${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(fileName);
-
-  return fileName;
-};
 
 /**
  * Generate PDF from HTML templates using server-side Puppeteer
@@ -321,7 +8,7 @@ export const generateTemplatePDF = async (template, sampleData, replacePlacehold
  */
 export const generateHTMLPDF = async (templateType, data) => {
   return generateHTMLTemplatePDF(templateType, data);
-    };
+};
 
 export const generateAssessmentPDF = async (assessmentData) => {
   const pdfId = `assessment-${assessmentData._id || Date.now()}`;
@@ -380,35 +67,35 @@ export const generateAssessmentPDF = async (assessmentData) => {
         throw new Error(errorData.error || 'Failed to generate assessment PDF');
       }
 
-    // Get the PDF blob
-    const pdfBlob = await response.blob();
-    console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
+      // Get the PDF blob
+      const pdfBlob = await response.blob();
+      console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
 
-    pdfPerformanceMonitor.endStage('response-processing', generationId);
-    pdfPerformanceMonitor.startStage('download-preparation', generationId);
+      pdfPerformanceMonitor.endStage('response-processing', generationId);
+      pdfPerformanceMonitor.startStage('download-preparation', generationId);
 
-    // Create a download link
-    const url = window.URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    
-    // Generate filename
-    const projectId = assessmentData.projectId?.projectID || assessmentData.jobReference || 'Unknown';
-    const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
-    const assessmentDate = assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
-    const fileName = `${projectId}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
-    
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+      // Create a download link
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename
+      const projectId = assessmentData.projectId?.projectID || assessmentData.jobReference || 'Unknown';
+      const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
+      const assessmentDate = assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
+      const fileName = `${projectId}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
+      
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-    pdfPerformanceMonitor.endStage('download-preparation', generationId);
-    pdfPerformanceMonitor.endPDFGeneration(generationId);
+      pdfPerformanceMonitor.endStage('download-preparation', generationId);
+      pdfPerformanceMonitor.endPDFGeneration(generationId);
 
-    return fileName;
-      } catch (fetchError) {
+      return fileName;
+    } catch (fetchError) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
         throw new Error('Assessment PDF generation timed out after 30 seconds');
@@ -422,12 +109,20 @@ export const generateAssessmentPDF = async (assessmentData) => {
   }
 };
 
+/**
+ * Generate PDF from HTML templates using server-side Browserless
+ * @param {string} templateType - Type of template (e.g., 'asbestos-clearance')
+ * @param {Object} data - Clearance data
+ * @returns {Promise<string>} - Generated PDF filename
+ */
 export const generateHTMLTemplatePDF = async (templateType, data) => {
   const pdfId = `clearance-${data._id || Date.now()}`;
   const generationId = pdfPerformanceMonitor.trackCommonStages(pdfId, 'asbestos-clearance', data);
   
   try {
-    console.log('Starting server-side PDF generation with data:', data);
+    console.log('Starting clearance PDF generation with data:', data);
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     
     pdfPerformanceMonitor.endStage('data-preparation', generationId);
     pdfPerformanceMonitor.startStage('api-request', generationId);
@@ -435,86 +130,86 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
-    const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-clearance?t=${Date.now()}`;
+    const requestUrl = `${apiBaseUrl}/pdf-browserless/generate-asbestos-clearance?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
     try {
       // Call the server-side PDF generation endpoint with cache busting and timeout
-    const response = await fetch(requestUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      },
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
         body: JSON.stringify({ clearanceData: data }),
         signal: controller.signal
-    });
+      });
 
       clearTimeout(timeoutId); // Clear timeout if request completes
 
       pdfPerformanceMonitor.endStage('api-request', generationId);
       pdfPerformanceMonitor.startStage('response-processing', generationId);
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-    
-    if (!response.ok) {
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
         const errorText = await response.text();
         console.error('Response error text:', errorText);
         let errorData;
         try {
           errorData = JSON.parse(errorText);
         } catch (e) {
-          errorData = { error: errorText || 'Failed to generate PDF' };
+          errorData = { error: errorText || 'Failed to generate clearance PDF' };
         }
-      throw new Error(errorData.error || 'Failed to generate PDF');
-    }
+        throw new Error(errorData.error || 'Failed to generate clearance PDF');
+      }
 
-    // Get the PDF blob
-    const pdfBlob = await response.blob();
-    console.log('PDF blob size:', pdfBlob.size, 'bytes');
+      // Get the PDF blob
+      const pdfBlob = await response.blob();
+      console.log('Clearance PDF blob size:', pdfBlob.size, 'bytes');
 
-    pdfPerformanceMonitor.endStage('response-processing', generationId);
-    pdfPerformanceMonitor.startStage('download-preparation', generationId);
+      pdfPerformanceMonitor.endStage('response-processing', generationId);
+      pdfPerformanceMonitor.startStage('download-preparation', generationId);
 
-    // Create a download link
-    const url = window.URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    
-    // Generate filename
-    const projectId = data.projectId?.projectID || data.project?.projectID || 'Unknown';
-    const siteName = data.projectId?.name || data.project?.name || data.siteName || 'Unknown';
-    const clearanceDate = data.clearanceDate ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
-    const clearanceType = data.clearanceType || 'Non-friable';
-    const fileName = `${projectId}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
-    
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+      // Create a download link
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename
+      const projectId = data.projectId?.projectID || data.project?.projectID || data.projectId || 'Unknown';
+      const siteName = data.projectId?.name || data.project?.name || data.siteName || 'Unknown';
+      const clearanceDate = data.clearanceDate ? new Date(data.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
+      const clearanceType = data.clearanceType || 'Non-friable';
+      const fileName = `${projectId}: ${clearanceType} Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
+      
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-    pdfPerformanceMonitor.endStage('download-preparation', generationId);
-    pdfPerformanceMonitor.endPDFGeneration(generationId);
+      pdfPerformanceMonitor.endStage('download-preparation', generationId);
+      pdfPerformanceMonitor.endPDFGeneration(generationId);
 
-    return fileName;
+      return fileName;
     } catch (fetchError) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
-        throw new Error('PDF generation timed out after 5 minutes');
+        throw new Error('Clearance PDF generation timed out after 60 seconds');
       }
       throw fetchError;
     }
   } catch (error) {
-    console.error('Error generating PDF:', error);
+    console.error('Error generating clearance PDF:', error);
     pdfPerformanceMonitor.endPDFGeneration(generationId);
     throw error;
   }
