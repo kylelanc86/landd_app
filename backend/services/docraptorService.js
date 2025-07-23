@@ -44,6 +44,16 @@ class DocRaptorService {
         document_content: cleanedHtml,
         document_type: 'pdf',
         test: process.env.NODE_ENV === 'development', // Use test mode in development
+        // Page formatting options to fix scaling and margins
+        page_size: 'A4',
+        page_margin: '0in', // Set margins to 0 to fill the page completely
+        page_width: '8.27in', // A4 width
+        page_height: '11.69in', // A4 height
+        // Disable default headers/footers that might be causing empty spaces
+        header_html: null,
+        footer_html: null,
+        // Ensure content fills the page properly
+        javascript: false, // Disable JavaScript for better compatibility
         ...options
       };
 

@@ -69,7 +69,7 @@ const generateClearanceHTML = async (clearanceData) => {
         <title>Asbestos Clearance Report</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-          .page { page-break-after: always; padding: 20px; }
+          .page { page-break-after: always; padding: 0; margin: 0; }
           .page:last-child { page-break-after: avoid; }
           .logo { max-width: 200px; height: auto; }
           .cover-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
@@ -157,7 +157,7 @@ const generateAssessmentHTML = async (assessmentData) => {
         <title>Asbestos Assessment Report</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-          .page { page-break-after: always; padding: 20px; }
+          .page { page-break-after: always; padding: 0; margin: 0; }
           .page:last-child { page-break-after: avoid; }
           .logo { max-width: 200px; height: auto; }
           table { width: 100%; border-collapse: collapse; margin: 10px 0; }
