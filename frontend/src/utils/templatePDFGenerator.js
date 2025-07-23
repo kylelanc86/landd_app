@@ -25,7 +25,7 @@ export const generateAssessmentPDF = async (assessmentData) => {
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
-    const requestUrl = `${apiBaseUrl}/pdf-pdfshift/generate-asbestos-assessment?t=${Date.now()}`;
+    const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-assessment?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
@@ -130,7 +130,7 @@ export const generateHTMLTemplatePDF = async (templateType, data) => {
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
-    const requestUrl = `${apiBaseUrl}/pdf-pdfshift/generate-asbestos-clearance?t=${Date.now()}`;
+    const requestUrl = `${apiBaseUrl}/pdf/generate-asbestos-clearance?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
