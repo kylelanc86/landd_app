@@ -21,7 +21,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 COPY package*.json ./
 
 # Install dependencies with npm
-RUN npm ci --only=production --no-optional
+RUN npm install --production --no-optional
 
 # Production stage
 FROM node:18-alpine AS production
