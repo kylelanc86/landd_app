@@ -129,9 +129,17 @@
 
       .revision-table th,
       .revision-table td {
-        border: 2px solid #444;
+        border: 1px solid #888;
         padding: 8px 12px;
         font-size: 0.8rem;
+        text-align: left;
+      }
+
+      .document-details-table th,
+      .document-details-table td {
+        border: 1px solid #888;
+        padding: 4px 8px;
+        font-size: 0.795rem;
         text-align: left;
       }
 
@@ -139,6 +147,24 @@
         background: #f5f5f5;
         font-weight: 700;
         text-transform: none;
+      }
+
+      .document-details-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+        font-size: 0.795rem;
+      }
+
+      .document-details-table td {
+        padding: 4px 8px;
+        border: none;
+        vertical-align: top;
+      }
+
+      .document-details-table td:first-child {
+        width: 30%;
+        font-weight: 600;
       }
 
       .footer {
@@ -193,12 +219,24 @@
         </div>
 
         <div class="section-label">Document Details</div>
-        <ul class="details-list">
-          <li>File Name: [FILENAME]</li>
-          <li>Issue Date: [CLEARANCE_DATE]</li>
-          <li>Report Author: [LAA_NAME]</li>
-          <li>Report Authoriser: [LAA_NAME]</li>
-        </ul>
+        <table class="document-details-table">
+          <tr>
+            <td><strong>File Name:</strong></td>
+            <td>[FILENAME]</td>
+          </tr>
+          <tr>
+            <td><strong>Issue Date:</strong></td>
+            <td>[CLEARANCE_DATE]</td>
+          </tr>
+          <tr>
+            <td><strong>Report Author:</strong></td>
+            <td>[LAA_NAME]</td>
+          </tr>
+          <tr>
+            <td><strong>Report Authoriser:</strong></td>
+            <td>[LAA_NAME]</td>
+          </tr>
+        </table>
 
         <div class="section-label">Revision History</div>
         <table class="revision-table">

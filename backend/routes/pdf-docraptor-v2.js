@@ -31,6 +31,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const inspectionDetailsTemplate = fs.readFileSync(path.join(templateDir, 'InspectionDetails.html'), 'utf8');
     const backgroundInformationTemplate = fs.readFileSync(path.join(templateDir, 'BackgroundInformation.html'), 'utf8');
     const appendixACoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
+    const photographsTemplate = fs.readFileSync(path.join(templateDir, 'AsbestosClearancePhotographs.html'), 'utf8');
     const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
     
     // Load logo and background images
@@ -88,6 +89,14 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
+      .replace(/\[ASBESTOS_TYPE\]/g, clearanceData.clearanceType || 'Non-friable')
+      .replace(/\[ASBESTOS_REMOVALIST\]/g, clearanceData.asbestosRemovalist || 'Unknown Removalist')
+      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || clearanceData.laaName || 'Unknown LAA')
+      .replace(/\[LAA_LICENSE\]/g, 'AA00031')
+      .replace(/\[INSPECTION_TIME\]/g, clearanceData.inspectionTime || 'Unknown Time')
+      .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[SIGNATURE_IMAGE\]/g, clearanceData.signatureImage || '')
       .replace(/\[CLEARANCE_ITEMS_TABLE\]/g, generateClearanceItemsTable());
 
     // Populate background information template with data
@@ -98,6 +107,12 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
 
     // Populate appendix A cover template with data
     const populatedAppendixACover = appendixACoverTemplate
+      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+    // Populate photographs template with data
+    const populatedPhotographs = photographsTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
@@ -165,6 +180,11 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         <!-- Appendix A Cover Page -->
         <div class="page">
           ${populatedAppendixACover}
+        </div>
+        
+        <!-- Photographs Page -->
+        <div class="page">
+          ${populatedPhotographs}
         </div>
         
         <!-- Appendix B Cover Page -->

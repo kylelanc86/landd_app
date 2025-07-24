@@ -26,8 +26,6 @@ const asbestosClearanceTemplateRoutes = require('./routes/asbestosClearanceTempl
 const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates');
 const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
 const { router: pdfRoutes } = require('./routes/pdf');
-const pdfShiftRoutes = require('./routes/pdf-pdfshift');
-const pdfDocRaptorRoutes = require('./routes/pdf-docraptor');
 const pdfDocRaptorV2Routes = require('./routes/pdf-docraptor-v2');
 
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
@@ -140,8 +138,6 @@ connectDB()
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
     app.use('/api/pdf', pdfRoutes);
-app.use('/api/pdf-pdfshift', pdfShiftRoutes);
-app.use('/api/pdf-docraptor', pdfDocRaptorRoutes);
 app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     
 

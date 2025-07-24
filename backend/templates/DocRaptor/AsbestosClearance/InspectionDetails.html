@@ -123,11 +123,19 @@
         list-style-position: outside;
         text-indent: -24px;
         padding-left: 24px;
+        line-height: 1.4;
+      }
+
+      .bullets li::marker {
+        font-size: 200%;
+        color: #222;
       }
 
       .table-container {
         margin: 15px 0;
         page-break-inside: avoid;
+        width: 100%;
+        align-self: stretch;
       }
 
       .clearance-table {
@@ -137,6 +145,51 @@
         font-size: 0.75rem;
         margin: 10px 0;
         table-layout: auto;
+        min-width: 100%;
+      }
+
+      .clearance-table th,
+      .clearance-table td {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+
+      .signature-block {
+        margin-top: 12px;
+        margin-bottom: 0;
+        font-size: 0.8rem;
+        color: #222;
+        text-align: justify;
+        line-height: 1.5;
+      }
+
+      .signature-line {
+        margin: 24px 0 8px 0;
+        width: 180px;
+        border-bottom: 2px solid #444;
+        height: 24px;
+      }
+
+      .signature-name {
+        font-weight: 700;
+        margin-top: 8px;
+        font-size: 0.8rem;
+      }
+
+      .signature-licence {
+        font-size: 0.8rem;
+        color: #444;
+      }
+
+      .signature-image {
+        margin-top: 8px;
+        max-width: 150px;
+        max-height: 75px;
+      }
+
+      .signature-image img {
+        width: 100%;
+        height: auto;
       }
 
       .clearance-table th {
@@ -213,6 +266,7 @@
         </div>
 
         <div class="table-container">
+          Table 1: Asbestos Removal Items
           <table class="clearance-table">
             <thead>
               <tr>
@@ -248,6 +302,20 @@
         <div class="paragraph">
           The LAA considers that the asbestos removal area does not pose a risk
           to health and safety from exposure to asbestos and may be re-occupied.
+        </div>
+
+        <div class="paragraph">
+          Please do not hesitate to contact the undersigned should you have any
+          queries regarding this report.
+        </div>
+        <div class="paragraph">
+          For and on behalf of Lancaster and Dickenson Consulting.<br />
+          <div class="signature-line"></div>
+          <div class="signature-name">[LAA_NAME]</div>
+          <div class="signature-licence">
+            Licensed Asbestos Assessor - [LAA_LICENSE]
+          </div>
+          <div class="signature-image">[SIGNATURE_IMAGE]</div>
         </div>
       </div>
       <div class="footer">
