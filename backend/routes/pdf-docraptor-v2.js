@@ -149,28 +149,7 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
       // DocRaptor-specific options for better page handling
       page_size: 'A4',
-      page_margin: '0.25in',
-      css: `
-        @page {
-          size: A4;
-          margin: 0.25in;
-        }
-        body {
-          margin: 0;
-          padding: 0;
-          font-family: Arial, sans-serif;
-        }
-        .page {
-          page-break-after: always;
-          margin: 0;
-          padding: 0;
-          width: 100%;
-          height: 100%;
-        }
-        .page:last-child {
-          page-break-after: avoid;
-        }
-      `
+      page_margin: '0in' // NO DocRaptor margins - let template CSS handle everything
     });
 
     backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
@@ -247,7 +226,7 @@ router.post('/test-v2', async (req, res) => {
     
     const pdfBuffer = await docRaptorService.generatePDF(simpleHTML, {
       page_size: 'A4',
-      page_margin: '0.25in'
+      page_margin: '0in'
     });
     
     res.setHeader('Content-Type', 'application/pdf');
@@ -260,6 +239,515 @@ router.post('/test-v2', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'V2 test failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Test DocRaptor SVG scaling
+ */
+router.post('/test-svg-scaling', async (req, res) => {
+  try {
+    console.log('Testing DocRaptor SVG scaling...');
+    
+    const svgTestHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>DocRaptor SVG Scaling Test</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+          }
+          .page {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            background: #fff;
+          }
+          .test-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+          }
+          .test-text {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: red;
+            z-index: 10;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="test-text">SVG Scaling Test - Red dot should be at top-left corner</div>
+          <svg class="test-svg" viewBox="0 0 595 842" xmlns="http://www.w3.org/2000/svg">
+            <!-- Test rectangle covering entire viewBox -->
+            <rect x="0" y="0" width="595" height="842" fill="lightblue" stroke="blue" stroke-width="2"/>
+            <!-- Test diagonal line from top-left to bottom-right -->
+            <line x1="0" y1="0" x2="595" y2="842" stroke="red" stroke-width="5"/>
+            <!-- Test horizontal line at y=200 -->
+            <line x1="0" y1="200" x2="595" y2="200" stroke="green" stroke-width="3"/>
+            <!-- Test vertical line at x=297.5 (center) -->
+            <line x1="297.5" y1="0" x2="297.5" y2="842" stroke="purple" stroke-width="3"/>
+            <!-- Test circle at center -->
+            <circle cx="297.5" cy="421" r="50" fill="yellow" stroke="black" stroke-width="2"/>
+          </svg>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(svgTestHTML, {
+      page_size: 'A4',
+      page_margin: '0in'
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="svg-scaling-test.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('SVG scaling test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'SVG scaling test failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Test DocRaptor SVG viewBox and clipping
+ */
+router.post('/test-svg-viewbox', async (req, res) => {
+  try {
+    console.log('Testing DocRaptor SVG viewBox and clipping...');
+    
+    const viewBoxTestHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>DocRaptor SVG ViewBox Test</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+          }
+          .page {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            background: #fff;
+          }
+          .test-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+          }
+          .test-text {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: red;
+            z-index: 10;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="test-text">ViewBox Test - Red line should extend to edges</div>
+          <svg class="test-svg" viewBox="-50 -50 695 942" xmlns="http://www.w3.org/2000/svg">
+            <!-- Background to show viewBox -->
+            <rect x="-50" y="-50" width="695" height="942" fill="lightgray" stroke="blue" stroke-width="2"/>
+            <!-- Test line that should extend to edges -->
+            <line x1="-50" y1="-50" x2="645" y2="892" stroke="red" stroke-width="10"/>
+            <!-- Test diagonal shape -->
+            <polygon points="-50,-50 645,150 645,692 -50,892" fill="yellow" stroke="black" stroke-width="3"/>
+          </svg>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(viewBoxTestHTML, {
+      page_size: 'A4',
+      page_margin: '0in'
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="svg-viewbox-test.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('SVG viewBox test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'SVG viewBox test failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Test DocRaptor SVG coordinate mapping
+ */
+router.post('/test-svg-coordinates', async (req, res) => {
+  try {
+    console.log('Testing DocRaptor SVG coordinate mapping...');
+    
+    const coordinateTestHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>DocRaptor SVG Coordinate Test</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+          }
+          .page {
+            width: 100%;
+            height: 842px;
+            position: relative;
+            background: #fff;
+          }
+          .test-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+          }
+          .test-text {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 10px;
+            color: red;
+            z-index: 10;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="test-text">Coordinate Test - Red dots at y=0, y=200, y=642, y=842</div>
+          <svg class="test-svg" viewBox="0 0 595 842" xmlns="http://www.w3.org/2000/svg">
+            <!-- Background rectangle -->
+            <rect x="0" y="0" width="595" height="842" fill="lightgray" stroke="black" stroke-width="1"/>
+            <!-- Test dots at key coordinates -->
+            <circle cx="50" cy="0" r="5" fill="red"/> <!-- Top edge -->
+            <circle cx="50" cy="200" r="5" fill="red"/> <!-- Middle top -->
+            <circle cx="50" cy="642" r="5" fill="red"/> <!-- Middle bottom -->
+            <circle cx="50" cy="842" r="5" fill="red"/> <!-- Bottom edge -->
+            <!-- Test lines -->
+            <line x1="0" y1="0" x2="595" y2="0" stroke="blue" stroke-width="2"/> <!-- Top edge -->
+            <line x1="0" y1="200" x2="595" y2="200" stroke="green" stroke-width="2"/> <!-- Middle top -->
+            <line x1="0" y1="642" x2="595" y2="642" stroke="green" stroke-width="2"/> <!-- Middle bottom -->
+            <line x1="0" y1="842" x2="595" y2="842" stroke="blue" stroke-width="2"/> <!-- Bottom edge -->
+          </svg>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(coordinateTestHTML, {
+      page_size: 'A4',
+      page_margin: '0in'
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="svg-coordinate-test.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('SVG coordinate test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'SVG coordinate test failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Test minimal cover page structure
+ */
+router.post('/test-cover-structure', async (req, res) => {
+  try {
+    console.log('Testing minimal cover page structure...');
+    
+    const coverTestHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Cover Page Structure Test</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+          }
+          .page {
+            width: 100%;
+            height: 842px;
+            position: relative;
+            background: #fff;
+            margin: 0;
+            padding: 0;
+          }
+          .cover-white-shape {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            margin: 0;
+            padding: 0;
+          }
+          .cover-left {
+            width: 50%;
+            position: relative;
+            z-index: 3;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+          }
+          .green-bracket {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 4;
+            pointer-events: none;
+            margin: 0;
+            padding: 0;
+          }
+          .test-text {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 10px;
+            color: red;
+            z-index: 10;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="test-text">Cover Structure Test - White shape should fill left half</div>
+          <svg class="cover-white-shape" viewBox="0 0 595 842" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="0,0 595,200 595,642 0,842" fill="white"/>
+          </svg>
+          <div class="cover-left">
+            <svg class="green-bracket" viewBox="0 0 595 842" xmlns="http://www.w3.org/2000/svg">
+              <polyline points="0,0 595,200" stroke="#16b12b" stroke-width="12" fill="none"/>
+              <polyline points="595,196 595,646" stroke="#16b12b" stroke-width="12" fill="none"/>
+              <polyline points="595,642 0,842" stroke="#16b12b" stroke-width="12" fill="none"/>
+            </svg>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(coverTestHTML, {
+      page_size: 'A4',
+      page_margin: '0in'
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="cover-structure-test.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('Cover structure test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Cover structure test failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Test different A4 dimensions
+ */
+router.post('/test-a4-dimensions-v2', async (req, res) => {
+  try {
+    console.log('Testing different A4 dimensions...');
+    
+    const dimensionTestHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>DocRaptor A4 Dimension Test V2</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+          }
+          .page {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #fff;
+          }
+          .test-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+          }
+          .test-text {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+            color: red;
+            z-index: 10;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="test-text">Testing different viewBox values</div>
+          <svg class="test-svg" viewBox="0 0 794 1123" xmlns="http://www.w3.org/2000/svg">
+            <!-- Test with 794x1123 (US Letter equivalent) -->
+            <rect x="0" y="0" width="794" height="1123" fill="none" stroke="red" stroke-width="5"/>
+            <circle cx="50" cy="50" r="20" fill="blue"/>
+          </svg>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(dimensionTestHTML, {
+      page_size: 'A4',
+      page_margin: '0in'
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="a4-dimension-test-v2.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('A4 dimension test V2 error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'A4 dimension test V2 failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Test SVG without viewBox
+ */
+router.post('/test-svg-simple', async (req, res) => {
+  try {
+    console.log('Testing SVG without viewBox...');
+    
+    const simpleTestHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Simple SVG Test</title>
+        <style>
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+          }
+          .page {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #fff;
+          }
+          .test-text {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 12px;
+            color: red;
+            z-index: 10;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="test-text">Simple SVG Test - No viewBox</div>
+          <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="100%" height="100%" fill="none" stroke="red" stroke-width="5"/>
+            <circle cx="50" cy="50" r="20" fill="blue"/>
+          </svg>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const pdfBuffer = await docRaptorService.generatePDF(simpleTestHTML, {
+      page_size: 'A4',
+      page_margin: '0in'
+    });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="svg-simple-test.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('Simple SVG test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Simple SVG test failed',
       details: error.message
     });
   }

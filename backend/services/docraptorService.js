@@ -46,7 +46,7 @@ class DocRaptorService {
         test: process.env.NODE_ENV === 'development', // Use test mode in development
         // Page formatting options for DocRaptor
         page_size: 'A4',
-        page_margin: '0.25in', // Small margin to prevent content from edge
+        page_margin: '0in', // NO DocRaptor margins - let CSS handle everything
         // Use CSS for page breaks instead of DocRaptor's built-in system
         css: `
           @page {
@@ -57,6 +57,8 @@ class DocRaptorService {
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
+            width: 100%;
+            height: 100%;
           }
           .page {
             page-break-after: always;
@@ -64,6 +66,7 @@ class DocRaptorService {
             padding: 0;
             width: 100%;
             height: 100%;
+            position: relative;
           }
           .page:last-child {
             page-break-after: avoid;

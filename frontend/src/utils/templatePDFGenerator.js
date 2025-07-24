@@ -136,7 +136,7 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     let endpoint;
     if (useDocRaptor) {
       endpoint = type === 'asbestos-clearance' 
-        ? '/pdf-docraptor/generate-asbestos-clearance'
+        ? '/pdf-docraptor-v2/generate-asbestos-clearance-v2'  // Use V2 endpoint
         : '/pdf-docraptor/generate-asbestos-assessment';
     } else {
       endpoint = type === 'asbestos-clearance' 
