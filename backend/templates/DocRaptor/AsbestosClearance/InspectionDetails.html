@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asbestos Clearance Report - Inspection Details</title>
+    <link
+      href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* DocRaptor-optimized CSS */
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Montserrat", Arial, sans-serif;
+        background: #fff;
+        width: 100%;
+        height: 100%;
+      }
+
+      .page {
+        width: 100%;
+        height: 100vh;
+        position: relative;
+        background: #fff;
+        margin: 0;
+        padding: 0;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 16px 48px 0 48px;
+        margin: 0;
+      }
+
+      .logo {
+        width: 243px;
+        height: auto;
+        display: block;
+        background: #fff;
+        margin: 0;
+      }
+
+      .company-details {
+        text-align: right;
+        font-size: 0.75rem;
+        color: #222;
+        line-height: 1.5;
+        margin-top: 8px;
+        margin: 0;
+      }
+
+      .company-details .website {
+        color: #16b12b;
+        font-weight: 500;
+      }
+
+      .header-line {
+        width: calc(100% - 96px);
+        height: 4px;
+        background: #16b12b;
+        margin: 8px auto 0 auto;
+        border-radius: 2px;
+      }
+
+      .content {
+        padding: 10px 48px 24px 48px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: flex-start;
+        margin: 0;
+      }
+
+      .section-header {
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 10px 0 10px 0;
+        letter-spacing: 0.01em;
+        color: #222;
+        text-align: left !important;
+        width: 100%;
+      }
+
+      .section-header.first-section {
+        margin-top: 18px;
+      }
+
+      .section-header:not(.first-section) {
+        margin-top: 10px;
+      }
+
+      .paragraph {
+        font-size: 0.8rem;
+        margin-bottom: 12px;
+        color: #222;
+        line-height: 1.5;
+        text-align: justify;
+      }
+
+      .bullets {
+        margin: 0 0 12px 24px;
+        padding: 0;
+        font-size: 0.8rem;
+        color: #222;
+        line-height: 1.5;
+        text-align: justify;
+      }
+
+      .bullets li {
+        margin-bottom: 8px;
+        list-style-type: disc;
+        list-style-position: outside;
+        text-indent: -24px;
+        padding-left: 24px;
+      }
+
+      .table-container {
+        margin: 15px 0;
+        page-break-inside: avoid;
+      }
+
+      .clearance-table {
+        width: 100% !important;
+        max-width: none;
+        border-collapse: collapse;
+        font-size: 0.75rem;
+        margin: 10px 0;
+        table-layout: auto;
+      }
+
+      .clearance-table th {
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+        font-weight: 700;
+        color: #222;
+      }
+
+      .clearance-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+        color: #222;
+        vertical-align: top;
+      }
+
+      .clearance-table tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+
+      .footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 16px;
+        width: calc(100% - 96px);
+        margin: 0 auto;
+        text-align: justify;
+        font-size: 0.75rem;
+        color: #222;
+      }
+
+      .footer-line {
+        width: 100%;
+        height: 4px;
+        background: #16b12b;
+        margin-bottom: 6px;
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="[LOGO_PATH]" alt="Company Logo" />
+        <div class="company-details">
+          Lancaster & Dickenson Consulting Pty Ltd<br />
+          4/6 Dacre Street<br />
+          Mitchell ACT 2911<br />
+          W: <span class="website">www.landd.com.au</span>
+        </div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        <div class="section-header first-section">INSPECTION DETAILS</div>
+        <div class="paragraph">
+          Following discussions with [CLIENT_NAME], Lancaster and Dickenson
+          Consulting (L & D) were contracted to undertake a visual clearance
+          inspection following the removal of [ASBESTOS_TYPE] asbestos from
+          [SITE_NAME] (herein referred to as 'the Site').
+        </div>
+        <div class="paragraph">
+          Asbestos removal works were undertaken by [ASBESTOS_REMOVALIST].
+          [LAA_NAME] (ACT Licensed Asbestos Assessor - [LAA_LICENSE]) from L&D
+          visited the Site at [INSPECTION_TIME] on [INSPECTION_DATE].
+        </div>
+        <div class="paragraph">
+          Table 1 below outlines the ACM that formed part of the inspection.
+          Photographs of the Asbestos Removal Area and a Site Plan are presented
+          in Appendix A and Appendix B respectively.
+        </div>
+
+        <div class="table-container">
+          <table class="clearance-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Location</th>
+                <th>Material Description</th>
+                <th>Asbestos Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              [CLEARANCE_ITEMS_TABLE]
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section-header">INSPECTION EXCLUSIONS</div>
+        <div class="paragraph">
+          This clearance certificate is specific to the scope of removal works
+          detailed above. ACM may be present beyond the inspected area. Asbestos
+          fibre cement packers remain under the windowsill. The packers were
+          sprayed with black spray. The packers should be removed prior to
+          commencing works that may disturb or damage the material.
+        </div>
+
+        <div class="section-header">CLEARANCE CERTIFICATION</div>
+        <div class="paragraph">
+          An inspection of the asbestos removal area and the surrounding areas
+          (including access and egress pathways) was undertaken on
+          [INSPECTION_DATE]. The LAA found no visible asbestos residue from
+          asbestos removal work in the asbestos removal area, or in the vicinity
+          of the area, where the asbestos removal works were carried out.
+        </div>
+        <div class="paragraph">
+          The LAA considers that the asbestos removal area does not pose a risk
+          to health and safety from exposure to asbestos and may be re-occupied.
+        </div>
+      </div>
+      <div class="footer">
+        <div class="footer-line"></div>
+        [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+      </div>
+    </div>
+  </body>
+</html>

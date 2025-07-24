@@ -23,10 +23,15 @@ const backendPerformanceMonitor = {
  */
 const generateClearanceHTMLV2 = async (clearanceData) => {
   try {
+    
     // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosClearance');
     const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
     const versionControlTemplate = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
+    const inspectionDetailsTemplate = fs.readFileSync(path.join(templateDir, 'InspectionDetails.html'), 'utf8');
+    const backgroundInformationTemplate = fs.readFileSync(path.join(templateDir, 'BackgroundInformation.html'), 'utf8');
+    const appendixACoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
+    const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
     
     // Load logo and background images
     const logoPath = path.join(__dirname, '../assets/logo.png');
@@ -52,6 +57,55 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[LAA_NAME\]/g, clearanceData.laaName || 'Unknown LAA')
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}_${clearanceData.clearanceType || 'Non-Friable'}_Clearance_${clearanceData.projectId?.name || 'Unknown'}.pdf`)
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+    // Generate clearance items table
+    const generateClearanceItemsTable = () => {
+      const items = clearanceData.items || [];
+      console.log('Clearance items for table:', items);
+      
+      if (items.length === 0) {
+        console.log('No clearance items found, showing placeholder');
+        return '<tr><td colspan="4" style="text-align: center; font-style: italic;">No clearance items found</td></tr>';
+      }
+      
+      const tableRows = items.map((item, index) => 
+        `<tr>
+          <td>${index + 1}</td>
+          <td>${item.locationDescription || 'Unknown Location'}</td>
+          <td>${item.materialDescription || 'Unknown Material'}</td>
+          <td>${item.asbestosType || 'Non-friable'}</td>
+        </tr>`
+      ).join('');
+      
+      console.log('Generated table rows:', tableRows);
+      return tableRows;
+    };
+
+    // Populate inspection details template with data
+    const populatedInspectionDetails = inspectionDetailsTemplate
+      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[CLEARANCE_ITEMS_TABLE\]/g, generateClearanceItemsTable());
+
+    // Populate background information template with data
+    const populatedBackgroundInformation = backgroundInformationTemplate
+      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+    // Populate appendix A cover template with data
+    const populatedAppendixACover = appendixACoverTemplate
+      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+    // Populate appendix B cover template with data
+    const populatedAppendixBCover = appendixBCoverTemplate
+      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
 
     // Create complete HTML document with DocRaptor-optimized CSS
@@ -98,10 +152,24 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
           ${populatedVersionControl}
         </div>
         
-        <!-- Placeholder for additional pages -->
+        <!-- Inspection Details Page -->
         <div class="page">
-          <h1>Additional Pages Coming Soon</h1>
-          <p>This is a test of the DocRaptor-optimized template system.</p>
+          ${populatedInspectionDetails}
+        </div>
+        
+        <!-- Background Information Page -->
+        <div class="page">
+          ${populatedBackgroundInformation}
+        </div>
+        
+        <!-- Appendix A Cover Page -->
+        <div class="page">
+          ${populatedAppendixACover}
+        </div>
+        
+        <!-- Appendix B Cover Page -->
+        <div class="page">
+          ${populatedAppendixBCover}
         </div>
       </body>
       </html>
