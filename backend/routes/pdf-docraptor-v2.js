@@ -23,9 +23,10 @@ const backendPerformanceMonitor = {
  */
 const generateClearanceHTMLV2 = async (clearanceData) => {
   try {
-    // Load DocRaptor-optimized template
+    // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosClearance');
     const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
+    const versionControlTemplate = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
     
     // Load logo and background images
     const logoPath = path.join(__dirname, '../assets/logo.png');
@@ -34,7 +35,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
     const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
-    // Populate template with data
+    // Populate cover template with data
     const populatedCover = coverTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
@@ -42,6 +43,16 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
+
+    // Populate version control template with data
+    const populatedVersionControl = versionControlTemplate
+      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[CLIENT_NAME\]/g, clearanceData.clientName || 'Unknown Client')
+      .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[LAA_NAME\]/g, clearanceData.laaName || 'Unknown LAA')
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}_${clearanceData.clearanceType || 'Non-Friable'}_Clearance_${clearanceData.projectId?.name || 'Unknown'}.pdf`)
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
 
     // Create complete HTML document with DocRaptor-optimized CSS
     const completeHTML = `
@@ -54,7 +65,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
           /* DocRaptor-optimized page settings */
           @page {
             size: A4;
-            margin: 0.25in;
+            margin: 0;
           }
           
           body {
@@ -80,6 +91,11 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         <!-- Cover Page -->
         <div class="page">
           ${populatedCover}
+        </div>
+        
+        <!-- Version Control Page -->
+        <div class="page">
+          ${populatedVersionControl}
         </div>
         
         <!-- Placeholder for additional pages -->
