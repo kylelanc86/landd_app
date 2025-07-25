@@ -22,6 +22,10 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   assessmentDate: { type: Date, required: true },
   status: { type: String, default: 'in-progress' },
   items: [AssessmentItemSchema],
+  analysisCertificate: { type: Boolean, default: false },
+  analysisCertificateFile: { type: String },
+  sitePlan: { type: Boolean, default: false },
+  sitePlanFile: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

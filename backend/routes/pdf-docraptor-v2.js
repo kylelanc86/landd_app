@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { getTemplateByType, replacePlaceholders } = require('../services/templateService');
 const { PDFDocument } = require('pdf-lib');
+const auth = require('../middleware/auth');
 
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
@@ -506,34 +507,35 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
  * @param {string} logoBase64 - Base64 encoded logo
  * @returns {string} - HTML for site plan content page
  */
-const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64) => {
+const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fileField = 'sitePlanFile', title = 'SITE PLAN', figureTitle = 'Asbestos Removal Site Plan') => {
   // Determine the file type and create appropriate HTML
-  const fileType = data.sitePlanFile.startsWith('/9j/') ? 'image/jpeg' : 
-                  data.sitePlanFile.startsWith('iVBORw0KGgo') ? 'image/png' : 
+  const fileData = data[fileField];
+  const fileType = fileData.startsWith('/9j/') ? 'image/jpeg' : 
+                  fileData.startsWith('iVBORw0KGgo') ? 'image/png' : 
                   'application/pdf';
   
-  let sitePlanContent = '';
+  let content = '';
   
   if (fileType.startsWith('image/')) {
     // For images, embed directly with caption
-    sitePlanContent = `
-      <div class="site-plan-container" style="width: 85vw; margin: 0; padding: 0;">
-        <img src="data:${fileType};base64,${data.sitePlanFile}" 
-             alt="Site Plan" 
+    content = `
+      <div class="file-container" style="width: 85vw; margin: 0; padding: 0;">
+        <img src="data:${fileType};base64,${fileData}" 
+             alt="${title}" 
              style="width: 100vw; height: auto; object-fit: contain; display: block;" />
         <div style="font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 10px;">
-          Figure 1: Asbestos Removal Site Plan
+          Figure 1: ${figureTitle}
         </div>
       </div>
     `;
   } else {
     // For PDFs, show a placeholder (PDFs will be merged separately)
-    sitePlanContent = `
-      <div class="site-plan-content">
+    content = `
+      <div class="file-content">
         <div class="centered-text">
           <div class="appendix-title">APPENDIX ${appendixLetter}</div>
-          <div class="photographs-text">SITE PLAN</div>
-          <div class="site-plan-note">Site plan document attached</div>
+          <div class="photographs-text">${title}</div>
+          <div class="file-note">Document attached</div>
         </div>
       </div>
     `;
@@ -646,11 +648,11 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64) => 
           </div>
           <div class="green-line"></div>
           <div class="content">
-            ${sitePlanContent}
+            ${content}
           </div>
           <div class="footer">
             <div class="footer-line"></div>
-            ${data.clearanceType || 'Non-friable'} Clearance Certificate: ${data.projectId?.name || data.project?.name || 'Unknown Site'}
+            Asbestos Assessment Report: ${data.projectId?.name || data.siteName || 'Unknown Site'}
           </div>
         </div>
       </body>
@@ -1419,5 +1421,503 @@ router.post('/test-svg-simple', async (req, res) => {
     });
   }
 });
+
+router.post('/generate-asbestos-assessment', auth, async (req, res) => {
+  const pdfId = `assessment-${Date.now()}`;
+  backendPerformanceMonitor.startStage('template-population', pdfId);
+
+  try {
+    const { assessmentData } = req.body;
+    if (!assessmentData) {
+      throw new Error('Assessment data is required');
+    }
+
+    // Generate HTML content
+    const html = await generateAssessmentHTML(assessmentData);
+    backendPerformanceMonitor.endStage('template-population', pdfId);
+
+    // Generate PDF with DocRaptor
+    backendPerformanceMonitor.startStage('docraptor-generation', pdfId);
+    console.log('Generating PDF with DocRaptor V2...');
+    const pdfBuffer = await docRaptorService.generatePDF(html);
+    backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
+
+    // Send response
+    backendPerformanceMonitor.startStage('response-sending', pdfId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+    backendPerformanceMonitor.endStage('response-sending', pdfId);
+
+    console.log(`[${pdfId}] PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+
+  } catch (error) {
+    console.error('Error generating assessment PDF:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const generateAssessmentHTML = async (assessmentData) => {
+  try {
+    // Load DocRaptor-optimized templates
+    const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosAssessment');
+    const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
+    const versionControlTemplate = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
+    const asbestosItem1Template = fs.readFileSync(path.join(templateDir, 'AsbestosItem1.html'), 'utf8');
+    const asbestosSampleItemTemplate = fs.readFileSync(path.join(templateDir, 'AsbestosSampleItem.html'), 'utf8');
+    const asbestosDiscussionConclusionsTemplate = fs.readFileSync(path.join(templateDir, 'AsbestosDiscussionConclusions.html'), 'utf8');
+    const asbestosAdditionalSectionsTemplate = fs.readFileSync(path.join(templateDir, 'AsbestosAdditionalSections.html'), 'utf8');
+    const appendixACoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
+    const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
+    
+    // Load logo and background images
+    const logoPath = path.join(__dirname, '../assets/logo.png');
+    const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+    
+    const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
+    const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
+
+    // Fetch template content from database
+    const templateContent = await getTemplateByType('asbestosAssessment');
+
+    // Populate cover template with data
+    const populatedCover = coverTemplate
+      .replace(/\[REPORT_TYPE\]/g, 'Asbestos Assessment')
+      .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+      .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
+
+    // Populate version control template with data
+    const populatedVersionControl = versionControlTemplate
+      .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+      .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[ASSESSOR_NAME\]/g, assessmentData.assessorId?.firstName ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : 'Unknown Assessor')
+      .replace(/\[FILENAME\]/g, `${assessmentData.projectId?.projectID || 'Unknown'}_${assessmentData.projectId?.name || 'Unknown'}_Assessment.pdf`)
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+    // Generate first sample register item for the main page
+    const assessmentItems = assessmentData.items || [];
+    const scopeBulletCount = assessmentItems.length;
+    const shouldMoveFirstItemToNewPage = scopeBulletCount > 5;
+    const firstSampleItem = assessmentItems.length > 0 ? assessmentItems[0] : null;
+    const firstSampleTable = firstSampleItem ? asbestosSampleItemTemplate
+      .replace(/\[PHOTO_URL\]/g, firstSampleItem.photograph || '')
+      .replace(/\[SAMPLE_REFERENCE\]/g, firstSampleItem.sampleReference || 'Sample 1')
+      .replace(/\[LOCATION_DESCRIPTION\]/g, firstSampleItem.locationDescription || 'Unknown Location')
+      .replace(/\[MATERIAL_TYPE\]/g, firstSampleItem.materialType || 'Unknown Material')
+      .replace(/\[ASBESTOS_CONTENT\]/g, firstSampleItem.asbestosContent || 'Not tested')
+      .replace(/\[ASBESTOS_TYPE\]/g, firstSampleItem.asbestosType || 'Not applicable')
+      .replace(/\[CONDITION\]/g, firstSampleItem.condition || 'Unknown')
+      .replace(/\[RISK\]/g, firstSampleItem.risk || 'Unknown')
+      .replace(/\[COMMENTS\]/g, firstSampleItem.recommendationActions || 'No comments') : '';
+
+    // Generate sample register items as separate pages
+    let sampleRegisterPages = '';
+    
+    if (shouldMoveFirstItemToNewPage) {
+      // For 6+ items: First item starts new page, then 2 items per page
+      const itemsForSeparatePages = assessmentItems;
+      const pages = [];
+      
+      for (let i = 0; i < itemsForSeparatePages.length; i += 2) {
+        const pageItems = itemsForSeparatePages.slice(i, i + 2);
+        const pageContent = pageItems.map((item, pageIndex) => {
+          const sampleTable = asbestosSampleItemTemplate
+            .replace(/\[PHOTO_URL\]/g, item.photograph || '')
+            .replace(/\[SAMPLE_REFERENCE\]/g, item.sampleReference || `Sample ${i + pageIndex + 1}`)
+            .replace(/\[LOCATION_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location')
+            .replace(/\[MATERIAL_TYPE\]/g, item.materialType || 'Unknown Material')
+            .replace(/\[ASBESTOS_CONTENT\]/g, item.asbestosContent || 'Not tested')
+            .replace(/\[ASBESTOS_TYPE\]/g, item.asbestosType || 'Not applicable')
+            .replace(/\[CONDITION\]/g, item.condition || 'Unknown')
+            .replace(/\[RISK\]/g, item.risk || 'Unknown')
+            .replace(/\[COMMENTS\]/g, item.recommendationActions || 'No comments');
+          
+          return `
+            <div class="sample-register-header">Sample Register - Item ${i + pageIndex + 1}</div>
+            ${sampleTable}
+          `;
+        }).join('');
+        
+        pages.push(`
+          <div class="assessment-page">
+            <div class="header">
+              <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Company Logo" />
+              <div class="company-details">
+                Lancaster & Dickenson Consulting Pty Ltd<br />
+                4/6 Dacre Street<br />
+                Mitchell ACT 2911<br />
+                W: <span class="website">www.landd.com.au</span>
+              </div>
+            </div>
+            <div class="green-line"></div>
+            <div class="content">
+              ${pageContent}
+            </div>
+            <div class="footer">
+              <div class="footer-line"></div>
+              Asbestos Assessment Report - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
+            </div>
+          </div>
+        `);
+      }
+      
+      sampleRegisterPages = pages.join('<div class="page-break"></div>');
+    } else {
+      // For ≤5 items: First item on main page, remaining items on separate pages (2 per page)
+      const remainingItems = assessmentItems.slice(1);
+      const pages = [];
+      
+      for (let i = 0; i < remainingItems.length; i += 2) {
+        const pageItems = remainingItems.slice(i, i + 2);
+        const pageContent = pageItems.map((item, pageIndex) => {
+          const sampleTable = asbestosSampleItemTemplate
+            .replace(/\[PHOTO_URL\]/g, item.photograph || '')
+            .replace(/\[SAMPLE_REFERENCE\]/g, item.sampleReference || `Sample ${i + pageIndex + 2}`)
+            .replace(/\[LOCATION_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location')
+            .replace(/\[MATERIAL_TYPE\]/g, item.materialType || 'Unknown Material')
+            .replace(/\[ASBESTOS_CONTENT\]/g, item.asbestosContent || 'Not tested')
+            .replace(/\[ASBESTOS_TYPE\]/g, item.asbestosType || 'Not applicable')
+            .replace(/\[CONDITION\]/g, item.condition || 'Unknown')
+            .replace(/\[RISK\]/g, item.risk || 'Unknown')
+            .replace(/\[COMMENTS\]/g, item.recommendationActions || 'No comments');
+          
+          return `
+            <div class="sample-register-header">Sample Register - Item ${i + pageIndex + 2}</div>
+            ${sampleTable}
+          `;
+        }).join('<div style="margin-bottom: 20px;"></div>');
+        
+        pages.push(`
+          <div class="assessment-page">
+            <div class="header">
+              <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Company Logo" />
+              <div class="company-details">
+                Lancaster & Dickenson Consulting Pty Ltd<br />
+                4/6 Dacre Street<br />
+                Mitchell ACT 2911<br />
+                W: <span class="website">www.landd.com.au</span>
+              </div>
+            </div>
+            <div class="green-line"></div>
+            <div class="content">
+              ${pageContent}
+            </div>
+            <div class="footer">
+              <div class="footer-line"></div>
+              Asbestos Assessment Report - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
+            </div>
+          </div>
+        `);
+      }
+      
+      sampleRegisterPages = pages.join('<div class="page-break"></div>');
+    }
+
+
+    
+    // Populate AsbestosItem1 template with dynamic content
+    const populatedAsbestosItem1 = asbestosItem1Template
+      .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.introductionTitle || 'INTRODUCTION')
+      .replace(/\[INTRODUCTION_CONTENT\]/g, (templateContent?.introductionContent || 'Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake an asbestos assessment at {SITE_NAME}. {LAA_NAME} (Licenced Asbestos Assessor - {LAA_LICENSE}) from L & D subsequently visited the above location on {ASSESSMENT_DATE} to undertake the assessment.\n\nThis report covers the inspection and assessment of the following areas/materials only:\n{ASSESSMENT_SCOPE_BULLETS}')
+        .replace(/\{CLIENT_NAME\}/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
+        .replace(/\{SITE_NAME\}/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+        .replace(/\{LAA_NAME\}/g, assessmentData.assessorId?.firstName ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : 'Unknown Assessor')
+        .replace(/\{LAA_LICENSE\}/g, 'AA00031') // Default license - will be looked up in replacePlaceholders
+        .replace(/\{ASSESSMENT_DATE\}/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+        .replace(/\{ASSESSMENT_SCOPE_BULLETS\}/g, assessmentItems.map(item => `<li>${item.locationDescription || 'Unknown Location'}</li>`).join('')))
+      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.surveyFindingsTitle || 'SURVEY FINDINGS')
+      .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, templateContent?.surveyFindingsContent || 'Table 1 below details the suspected ACM sampled as part of the assessment. Information is also included regarding materials which are presumed to contain asbestos and materials which the assessor visually assessed to be the consistent with a sampled material. Photographs of assessed materials are also presented in the sample register below.\n\nSample analysis was undertaken by L&D\'s National Association of Testing Authorities (NATA) accredited laboratory. The samples were analysed by Polarised Light Microscopy using dispersion staining techniques in accordance with AS 4964-2004.')
+      .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
+
+    // Populate Discussion and Conclusions template with dynamic content
+    const identifiedAsbestosItems = assessmentItems.filter(item => 
+      item.asbestosContent && item.asbestosContent.toLowerCase() !== 'not tested' && 
+      item.asbestosContent.toLowerCase() !== 'not applicable' && 
+      item.asbestosContent.toLowerCase() !== 'none detected'
+    );
+
+    const identifiedAsbestosList = identifiedAsbestosItems.length > 0 
+      ? identifiedAsbestosItems.map(item => `<li>${item.locationDescription || 'Unknown Location'} - ${item.materialType || 'Unknown Material'} (${item.asbestosContent || 'Unknown Content'})</li>`).join('')
+      : '<li>No asbestos-containing materials were identified during this assessment.</li>';
+
+    const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplate
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[IDENTIFIED_ASBESTOS_ITEMS\]/g, identifiedAsbestosList)
+      .replace(/\[SIGNATURE_IMAGE\]/g, '') // Placeholder for signature - can be added later if needed
+      .replace(/\[LAA_NAME\]/g, assessmentData.assessorId?.firstName ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : 'Unknown Assessor')
+      .replace(/\[LAA_LICENCE\]/g, 'AA00031') // Default license - will be looked up in replacePlaceholders
+      .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site');
+
+
+
+    // Generate two pages of additional sections with proper content distribution
+    const sections = [
+      {
+        title: templateContent?.riskAssessmentTitle || 'RISK ASSESSMENT',
+        content: templateContent?.riskAssessmentContent || 'Identified ACM was risk assessed based on the following criteria:\n• the condition of the material at the time of the assessment;\n• the accessibility of the material;\n• the likelihood of the material being disturbed resulting in a release of asbestos fibre.\nEach ACM is categorised into one of four (4) risk categories:'
+      },
+      {
+        title: templateContent?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES',
+        content: templateContent?.controlMeasuresContent || 'The Work Health and Safety (How to Manage and Control Asbestos in the Workplace Code of Practice) Approval 2022 requires that when choosing the most appropriate control measure for managing ACM or asbestos, the following hierarchy of controls must be considered:\n• eliminating the risk, for example: removing the asbestos (most preferred)\n• substituting for the risk, isolating the risk or applying engineering controls, for example: enclosing, encapsulation or sealing\n• using administrative controls, for example: labelling, safe work practices etc.\n• using PPE (least preferred)\nA combination of these controls may be required in order to adequately manage and control asbestos or ACM.'
+      },
+      {
+        title: templateContent?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM',
+        content: templateContent?.remediationRequirementsContent || 'Prior to Work Commencing\nPrior to the commencement of any works associated with asbestos, the licensed asbestos removalist is required to notify Worksafe ACT five (5) days prior to commencement of asbestos removal works. As part of the notification process the licensed removalist must supply an Asbestos Removal Control Plan (ARCP) and a Safe Work Method Statement (SWMS) outlining how the works are to be undertaken.\n\nAsbestos Removal Works\nFriable asbestos removal or remediation work must be undertaken by an ACT licensed Class A Asbestos Removalist. Air monitoring, which is mandatory during the removal or remediation of friable asbestos, must be undertaken in accordance with the Guidance Note on the Membrane Filter Method for Estimating Airborne Asbestos Fibres, 2nd Edition [NOHSC: 3003(2005)].\n\nNon-friable asbestos removal or remediation must be undertaken by a Class A or B Asbestos Removalist. Air monitoring is not mandatory for the removal of non-friable asbestos.\n\nAll asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022) and in accordance with EPA (2011) Contaminated Sites Information Sheet No. 5 \'Requirements for the Transport and Disposal of Asbestos Contaminated Wastes\' and Information Sheet No.6 \'Management of Small Scale, Low Risk Soil Asbestos Contamination\'.\n\nFollowing Completion of Asbestos Removal Works\nOn completion of asbestos removal or remediation works an independent ACT licensed Asbestos Assessor must be employed to undertake a Clearance Inspection. A satisfactory clearance certificate for the remediated areas must include no visible suspect material and where applicable, clearance monitoring must also indicate that airborne fibre levels are satisfactory.'
+      },
+      {
+        title: templateContent?.legislationTitle || 'LEGISLATION',
+        content: templateContent?.legislationContent || 'This report was written in general accordance with and with reference to:\n• ACT Work Health and Safety (WHS) Act 2011\n• ACT Work Health and Safety Regulation 2011\n• ACT Work Health and Safety (How to Safely Remove Asbestos Code of Practice) Approval 2022\n• ACT Work Health and Safety (How to Manage and Control Asbestos in the Workplace Code of Practice) Approval 2022'
+      },
+      {
+        title: templateContent?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS',
+        content: templateContent?.assessmentLimitationsContent || 'This report covers the inspection and assessment of the location and materials outlined within this document only and is specific to the date the assessment was conducted. L&D did not inspect any areas of the property that fall outside of the locations listed in this report and therefore make no comment regarding the presence or condition of further ACM that may or may not be present.\n\nWhilst every effort has been made to identify all ACM within the inspected areas, the random nature in which asbestos was often installed can mean unidentified asbestos may be uncovered/identified. Should suspect ACM be identified or disturbed, works should cease until an assessment of the materials is completed.'
+      }
+    ];
+
+    // Convert content to HTML format
+    const convertContentToHtml = (content) => {
+      const lines = content.split('\n');
+      let html = '';
+      let inBulletList = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        if (line.startsWith('•')) {
+          if (!inBulletList) {
+            html += '<ul class="bullet-list">';
+            inBulletList = true;
+          }
+          html += `<li>${line.substring(1).trim()}</li>`;
+        } else if (line === '') {
+          if (inBulletList) {
+            html += '</ul>';
+            inBulletList = false;
+          }
+          html += '<br />';
+        } else {
+          if (inBulletList) {
+            html += '</ul>';
+            inBulletList = false;
+          }
+          html += `<div class="paragraph">${line}</div>`;
+        }
+      }
+      
+      if (inBulletList) {
+        html += '</ul>';
+      }
+      
+      return html;
+    };
+
+    // Generate first page content (first 3 sections)
+    const firstPageContent = sections.slice(0, 3).map(section => 
+      `<div class="section-header">${section.title}</div>${convertContentToHtml(section.content)}`
+    ).join('');
+
+    // Generate second page content (last 2 sections)
+    const secondPageContent = sections.slice(3).map(section => 
+      `<div class="section-header">${section.title}</div>${convertContentToHtml(section.content)}`
+    ).join('');
+
+    const populatedAdditionalSectionsPage1 = asbestosAdditionalSectionsTemplate
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[ADDITIONAL_SECTIONS_CONTENT\]/g, firstPageContent)
+      .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site');
+
+    const populatedAdditionalSectionsPage2 = asbestosAdditionalSectionsTemplate
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[ADDITIONAL_SECTIONS_CONTENT\]/g, secondPageContent)
+      .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site');
+
+    // Generate dynamic appendix content
+    let appendixContent = '';
+
+    // Add Certificate of Analysis cover page if there are asbestos items
+    if (assessmentItems.length > 0) {
+      const populatedAppendixACover = appendixACoverTemplate
+        .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+      appendixContent += `
+          <!-- Appendix A Cover Page - Certificate of Analysis -->
+          ${populatedAppendixACover}
+      `;
+
+      // Add analysis certificate content if it exists
+      if (assessmentData.analysisCertificate && assessmentData.analysisCertificateFile) {
+        const isAnalysisCertificateImage = assessmentData.analysisCertificateFile && (
+          assessmentData.analysisCertificateFile.startsWith('/9j/') || 
+          assessmentData.analysisCertificateFile.startsWith('iVBORw0KGgo')
+        );
+
+        if (isAnalysisCertificateImage) {
+          const analysisCertificateContentPage = generateSitePlanContentPage(assessmentData, 'A', logoBase64, 'analysisCertificateFile', 'CERTIFICATE OF ANALYSIS', 'Analysis Certificate');
+          appendixContent += `
+              <!-- Appendix A Analysis Certificate Content Page -->
+              ${analysisCertificateContentPage}
+          `;
+        }
+      }
+    }
+
+    // Add site plan if it exists
+    if (assessmentData.sitePlan && assessmentData.sitePlanFile) {
+      const populatedAppendixBCover = appendixBCoverTemplate
+        .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+
+      appendixContent += `
+          <!-- Appendix B Cover Page -->
+          ${populatedAppendixBCover}
+      `;
+
+      // Add site plan content page if it's an image
+      const isSitePlanImage = assessmentData.sitePlanFile && (
+        assessmentData.sitePlanFile.startsWith('/9j/') || 
+        assessmentData.sitePlanFile.startsWith('iVBORw0KGgo')
+      );
+
+      if (isSitePlanImage) {
+        const sitePlanContentPage = generateSitePlanContentPage(assessmentData, 'B', logoBase64);
+        appendixContent += `
+            <!-- Appendix B Site Plan Content Page -->
+            ${sitePlanContentPage}
+        `;
+      }
+    }
+
+    // Create complete HTML document
+    const completeHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Asbestos Assessment Report</title>
+        <style>
+          /* Force page breaks between sections */
+          .page-break {
+            page-break-before: always;
+            height: 0;
+            margin: 0;
+            padding: 0;
+          }
+        </style>
+      </head>
+      <body>
+        <!-- Cover Page -->
+        ${populatedCover}
+        <div class="page-break"></div>
+        
+        <!-- Version Control Page -->
+        ${populatedVersionControl}
+        <div class="page-break"></div>
+        
+        <!-- Asbestos Assessment Content Page -->
+        ${populatedAsbestosItem1}
+        <div class="page-break"></div>
+        
+        <!-- Sample Register Pages -->
+        ${sampleRegisterPages}
+        <div class="page-break"></div>
+        
+        <!-- Discussion and Conclusions Page -->
+        ${populatedDiscussionConclusions}
+        <div class="page-break"></div>
+        
+        <!-- Additional Sections Page 1 -->
+        ${populatedAdditionalSectionsPage1}
+        <div class="page-break"></div>
+        
+        <!-- Additional Sections Page 2 -->
+        ${populatedAdditionalSectionsPage2}
+        <div class="page-break"></div>
+        
+        <!-- Appendix Section -->
+        ${appendixContent}
+      </body>
+      </html>
+    `;
+
+    return completeHTML;
+  } catch (error) {
+    console.error('Error generating assessment HTML:', error);
+    throw new Error(`Failed to generate assessment HTML: ${error.message}`);
+  }
+};
+
+const generatePhotographsContent = (items) => {
+  if (!items || items.length === 0) {
+    return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
+  }
+
+  // Filter out items that don't have photographs
+  const itemsWithPhotos = items.filter(item => 
+    item.photograph && item.photograph.trim() !== ''
+  );
+
+  if (itemsWithPhotos.length === 0) {
+    return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
+  }
+
+  // Split photos into pages of 2 photos each
+  const pages = [];
+  for (let i = 0; i < itemsWithPhotos.length; i += 2) {
+    const pageItems = itemsWithPhotos.slice(i, i + 2);
+    const pageContent = pageItems.map((item, index) => {
+      const photoNumber = i + index + 1;
+      return `
+        <div class="photo-container">
+          <div class="photo">
+            <img src="${item.photograph}" alt="Assessment Photo ${photoNumber}" style="width: 100%; height: 100%; object-fit: contain;" />
+          </div>
+          <div class="photo-details">
+            <div class="photo-number">Photo ${photoNumber}</div>
+            <div class="photo-location">${item.locationDescription || 'Unknown Location'}</div>
+            <div class="photo-materials">${item.materialDescription || 'Unknown Material'}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Create a complete page with header and footer
+    pages.push(`
+      <div class="page photos-page">
+        <div class="header">
+          <img class="logo" src="[LOGO_PATH]" alt="Company Logo" />
+          <div class="company-details">
+            Lancaster & Dickenson Consulting Pty Ltd<br />
+            4/6 Dacre Street<br />
+            Mitchell ACT 2911<br />
+            W: <span class="website">www.landd.com.au</span>
+          </div>
+        </div>
+        <div class="green-line"></div>
+        <div class="content" style="justify-content: flex-start; align-items: flex-start">
+          <div class="title" style="margin-top: 8px">
+            PHOTOGRAPHS
+          </div>
+          ${pageContent}
+        </div>
+        <div class="footer">
+          <div class="footer-content">
+            <div class="footer-line"></div>
+            Asbestos Assessment Report: [SITE_ADDRESS]
+          </div>
+        </div>
+      </div>
+      ${i + 2 < itemsWithPhotos.length ? '<div class="page-break"></div>' : ''}
+    `);
+  }
+
+  return pages.join('');
+};
 
 module.exports = router; 

@@ -216,6 +216,84 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// POST /api/assessments/:id/upload-analysis-certificate - upload analysis certificate
+router.post('/:id/upload-analysis-certificate', async (req, res) => {
+  try {
+    const { fileData } = req.body;
+    if (!fileData) {
+      return res.status(400).json({ message: 'File data is required' });
+    }
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    job.analysisCertificate = true;
+    job.analysisCertificateFile = fileData;
+    job.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Analysis certificate uploaded successfully', job });
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to upload analysis certificate', error: err.message });
+  }
+});
+
+// POST /api/assessments/:id/upload-site-plan - upload site plan
+router.post('/:id/upload-site-plan', async (req, res) => {
+  try {
+    const { fileData } = req.body;
+    if (!fileData) {
+      return res.status(400).json({ message: 'File data is required' });
+    }
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    job.sitePlan = true;
+    job.sitePlanFile = fileData;
+    job.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Site plan uploaded successfully', job });
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to upload site plan', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/analysis-certificate - delete analysis certificate
+router.delete('/:id/analysis-certificate', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    job.analysisCertificate = false;
+    job.analysisCertificateFile = null;
+    job.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Analysis certificate deleted successfully', job });
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to delete analysis certificate', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/site-plan - delete site plan
+router.delete('/:id/site-plan', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    job.sitePlan = false;
+    job.sitePlanFile = null;
+    job.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Site plan deleted successfully', job });
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to delete site plan', error: err.message });
+  }
+});
+
 // GET /api/assessments/:id/chain-of-custody - generate Chain of Custody PDF
 router.get('/:id/chain-of-custody', async (req, res) => {
   try {

@@ -25,7 +25,7 @@ export const generateAssessmentPDF = async (assessmentData) => {
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
-    const requestUrl = `${apiBaseUrl}/pdf-pdfshift/generate-asbestos-assessment?t=${Date.now()}`;
+    const requestUrl = `${apiBaseUrl}/pdf-docraptor-v2/generate-asbestos-assessment?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
@@ -137,7 +137,7 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     if (useDocRaptor) {
       endpoint = type === 'asbestos-clearance' 
         ? '/pdf-docraptor-v2/generate-asbestos-clearance-v2'  // Use V2 endpoint
-        : '/pdf-docraptor/generate-asbestos-assessment';
+        : '/pdf-docraptor-v2/generate-asbestos-assessment';  // Updated to use V2 endpoint
     } else {
       endpoint = type === 'asbestos-clearance' 
         ? '/pdf/generate-asbestos-clearance'

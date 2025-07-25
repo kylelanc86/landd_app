@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asbestos Assessment Report - Additional Sections</title>
+    <link
+      href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* DocRaptor-optimized CSS */
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Montserrat", Arial, sans-serif;
+        background: #fff;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Make additional sections page styles more specific */
+      .additional-sections-page {
+        width: 100%;
+        height: 100vh;
+        position: relative;
+        background: #fff;
+        margin: 0;
+        padding: 0;
+      }
+
+      .additional-sections-page .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 16px 48px 0 48px;
+        margin: 0;
+      }
+
+      .additional-sections-page .logo {
+        width: 243px;
+        height: auto;
+        display: block;
+        background: #fff;
+        margin: 0;
+      }
+
+      .additional-sections-page .company-details {
+        text-align: right;
+        font-size: 0.75rem;
+        color: #222;
+        line-height: 1.5;
+        margin-top: 8px;
+        margin: 0;
+      }
+
+      .additional-sections-page .company-details .website {
+        color: #16b12b;
+        font-weight: 500;
+      }
+
+      .additional-sections-page .green-line {
+        width: calc(100% - 96px);
+        height: 4px;
+        background: #16b12b;
+        margin: 8px auto 0 auto;
+        border-radius: 2px;
+      }
+
+      .additional-sections-page .content {
+        padding: 10px 48px 24px 48px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+        height: calc(100vh - 200px);
+        overflow: hidden;
+      }
+
+      .additional-sections-page .section-header {
+        font-size: 1.1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 24px 0 8px 0;
+        letter-spacing: 0.01em;
+        color: #222;
+        page-break-after: avoid;
+      }
+
+      .additional-sections-page .section-header:first-child {
+        margin-top: 0;
+      }
+
+      .additional-sections-page .paragraph {
+        font-size: 0.95rem;
+        margin-bottom: 12px;
+        color: #222;
+        line-height: 1.5;
+        text-align: justify;
+        page-break-inside: avoid;
+      }
+
+      .additional-sections-page .bullet-list {
+        margin: 0 0 16px 24px;
+        padding: 0;
+        font-size: 0.95rem;
+        color: #222;
+        page-break-inside: avoid;
+      }
+
+      .additional-sections-page .bullet-list li {
+        margin-bottom: 8px;
+        line-height: 1.4;
+      }
+
+      .additional-sections-page .footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 16px;
+        width: calc(100% - 96px);
+        margin: 0 auto;
+        text-align: justify;
+        font-size: 0.75rem;
+        color: #222;
+      }
+
+      .additional-sections-page .footer-line {
+        width: 100%;
+        height: 4px;
+        background: #16b12b;
+        margin-bottom: 6px;
+        border-radius: 2px;
+      }
+
+      /* Page break control */
+      .page-break-section {
+        page-break-before: always;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page additional-sections-page">
+      <div class="header">
+        <img class="logo" src="[LOGO_PATH]" alt="Company Logo" />
+        <div class="company-details">
+          Lancaster & Dickenson Consulting Pty Ltd<br />
+          4/6 Dacre Street<br />
+          Mitchell ACT 2911<br />
+          W: <span class="website">www.landd.com.au</span>
+        </div>
+      </div>
+      <div class="green-line"></div>
+      <div class="content">[ADDITIONAL_SECTIONS_CONTENT]</div>
+      <div class="footer">
+        <div class="footer-line"></div>
+        Asbestos Assessment Report - [SITE_NAME]
+      </div>
+    </div>
+  </body>
+</html>
