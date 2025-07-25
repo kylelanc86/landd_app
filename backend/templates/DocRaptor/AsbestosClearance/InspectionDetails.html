@@ -77,8 +77,9 @@
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
-        align-items: flex-start;
         margin: 0;
+        width: calc(100% - 96px);
+        max-width: calc(100% - 96px);
       }
 
       .section-header {
@@ -106,15 +107,24 @@
         color: #222;
         line-height: 1.5;
         text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
 
       .bullets {
-        margin: 0 0 12px 24px;
+        margin: 8px 0 12px 24px;
         padding: 0;
         font-size: 0.8rem;
         color: #222;
         line-height: 1.5;
         text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
       }
 
       .bullets li {
@@ -132,7 +142,7 @@
       }
 
       .table-container {
-        margin: 15px 0;
+        margin: 6px 0;
         page-break-inside: avoid;
         width: 100%;
         align-self: stretch;
@@ -161,6 +171,9 @@
         color: #222;
         text-align: justify;
         line-height: 1.5;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
 
       .signature-line {
@@ -185,11 +198,14 @@
         margin-top: 8px;
         max-width: 150px;
         max-height: 75px;
+        display: block;
       }
 
       .signature-image img {
         width: 100%;
         height: auto;
+        display: block;
+        border: none;
       }
 
       .clearance-table th {
@@ -213,6 +229,14 @@
         background-color: #f9f9f9;
       }
 
+      .table-title {
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin: 10px 0 10px 0;
+        letter-spacing: 0.01em;
+        color: #222;
+      }
+
       .footer {
         position: absolute;
         left: 0;
@@ -223,6 +247,13 @@
         text-align: justify;
         font-size: 0.75rem;
         color: #222;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .footer-content {
+        flex: 1;
       }
 
       .footer-line {
@@ -231,6 +262,13 @@
         background: #16b12b;
         margin-bottom: 6px;
         border-radius: 2px;
+      }
+
+      .page-number {
+        font-size: 0.75rem;
+        color: #222;
+        font-weight: 500;
+        margin-left: 20px;
       }
     </style>
   </head>
@@ -247,26 +285,13 @@
       </div>
       <div class="header-line"></div>
       <div class="content">
-        <div class="section-header first-section">INSPECTION DETAILS</div>
-        <div class="paragraph">
-          Following discussions with [CLIENT_NAME], Lancaster and Dickenson
-          Consulting (L & D) were contracted to undertake a visual clearance
-          inspection following the removal of [ASBESTOS_TYPE] asbestos from
-          [SITE_NAME] (herein referred to as 'the Site').
+        <div class="section-header first-section">
+          [INSPECTION_DETAILS_TITLE]
         </div>
-        <div class="paragraph">
-          Asbestos removal works were undertaken by [ASBESTOS_REMOVALIST].
-          [LAA_NAME] (ACT Licensed Asbestos Assessor - [LAA_LICENSE]) from L&D
-          visited the Site at [INSPECTION_TIME] on [INSPECTION_DATE].
-        </div>
-        <div class="paragraph">
-          Table 1 below outlines the ACM that formed part of the inspection.
-          Photographs of the Asbestos Removal Area and a Site Plan are presented
-          in Appendix A and Appendix B respectively.
-        </div>
+        <div class="paragraph">[INSPECTION_DETAILS_CONTENT]</div>
 
         <div class="table-container">
-          Table 1: Asbestos Removal Items
+          <div class="table-title">Table 1: Asbestos Removal Items</div>
           <table class="clearance-table">
             <thead>
               <tr>
@@ -282,45 +307,20 @@
           </table>
         </div>
 
-        <div class="section-header">INSPECTION EXCLUSIONS</div>
-        <div class="paragraph">
-          This clearance certificate is specific to the scope of removal works
-          detailed above. ACM may be present beyond the inspected area. Asbestos
-          fibre cement packers remain under the windowsill. The packers were
-          sprayed with black spray. The packers should be removed prior to
-          commencing works that may disturb or damage the material.
-        </div>
+        <div class="section-header">[INSPECTION_EXCLUSIONS_TITLE]</div>
+        <div class="paragraph">[INSPECTION_EXCLUSIONS_CONTENT]</div>
 
-        <div class="section-header">CLEARANCE CERTIFICATION</div>
-        <div class="paragraph">
-          An inspection of the asbestos removal area and the surrounding areas
-          (including access and egress pathways) was undertaken on
-          [INSPECTION_DATE]. The LAA found no visible asbestos residue from
-          asbestos removal work in the asbestos removal area, or in the vicinity
-          of the area, where the asbestos removal works were carried out.
-        </div>
-        <div class="paragraph">
-          The LAA considers that the asbestos removal area does not pose a risk
-          to health and safety from exposure to asbestos and may be re-occupied.
-        </div>
+        <div class="section-header">[CLEARANCE_CERTIFICATION_TITLE]</div>
+        <div class="paragraph">[CLEARANCE_CERTIFICATION_CONTENT]</div>
 
-        <div class="paragraph">
-          Please do not hesitate to contact the undersigned should you have any
-          queries regarding this report.
-        </div>
-        <div class="paragraph">
-          For and on behalf of Lancaster and Dickenson Consulting.<br />
-          <div class="signature-line"></div>
-          <div class="signature-name">[LAA_NAME]</div>
-          <div class="signature-licence">
-            Licensed Asbestos Assessor - [LAA_LICENSE]
-          </div>
-          <div class="signature-image">[SIGNATURE_IMAGE]</div>
-        </div>
+        <div class="paragraph">[SIGN_OFF_CONTENT]</div>
       </div>
-      <div class="footer">
-        <div class="footer-line"></div>
-        [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+      <div class="footer has-page-number">
+        <div class="footer-content">
+          <div class="footer-line"></div>
+          [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+        </div>
+        <div class="page-number">1</div>
       </div>
     </div>
   </body>

@@ -361,6 +361,20 @@ const replacePlaceholders = async (content, data) => {
         return 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
       }
     })(),
+    '[APPENDIX_REFERENCES]': (() => {
+      const hasSitePlan = data.sitePlan && data.sitePlanFile;
+      const hasAirMonitoring = data.airMonitoring;
+      
+      if (hasSitePlan && hasAirMonitoring) {
+        return 'Photographs of the Asbestos Removal Area, Site Plan, and Air Monitoring Report are presented in Appendix A, Appendix B, and Appendix C respectively.';
+      } else if (hasSitePlan) {
+        return 'Photographs of the Asbestos Removal Area and Site Plan are presented in Appendix A and Appendix B respectively.';
+      } else if (hasAirMonitoring) {
+        return 'Photographs of the Asbestos Removal Area and Air Monitoring Report are presented in Appendix A and Appendix B respectively.';
+      } else {
+        return 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
+      }
+    })(),
     '{AIR_MONITORING_REFERENCE}': data.airMonitoring ? 'and air monitoring' : '',
     '{AIR_MONITORING_RESULTS}': data.airMonitoring ? `Air monitoring was conducted and results were below the clearance indicator of 0.01 fibres per mL.` : ''
   };

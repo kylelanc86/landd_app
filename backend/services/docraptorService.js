@@ -27,18 +27,10 @@ class DocRaptorService {
         throw new Error('DOCRAPTOR_API_KEY environment variable is not set');
       }
 
-      // Clean HTML content to remove file system references
+      // Clean HTML content to remove only problematic file system references
       const cleanedHtml = htmlContent
         .replace(/file:\/\/[^\s"']+/g, '') // Remove file:// URLs
-        .replace(/src="\/frontend\/public\/[^"]*"/g, 'src=""') // Remove /frontend/public/ references
-        .replace(/src="\/[^"]*\.(jpg|jpeg|png|gif|svg|bmp)"[^>]*>/g, 'src=""') // Remove absolute path image references
-        .replace(/src="[^"]*\.(jpg|jpeg|png|gif|svg|bmp)"[^>]*>/g, (match) => {
-          // Convert local file references to base64 or remove them
-          if (match.includes('file://') || match.includes('C:\\') || match.includes('/frontend/') || match.includes('/public/')) {
-            return match.replace(/src="[^"]*"/, 'src=""');
-          }
-          return match;
-        });
+        .replace(/src="\/frontend\/public\/[^"]*"/g, 'src=""'); // Remove /frontend/public/ references only
 
       const requestBody = {
         document_content: cleanedHtml,
@@ -56,7 +48,7 @@ class DocRaptorService {
           body {
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
+            font-family: "Montserrat", Arial, sans-serif;
             width: 100%;
             height: 100%;
           }

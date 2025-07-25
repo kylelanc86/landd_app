@@ -97,7 +97,7 @@
       }
 
       .section-header:not(.first-section) {
-        margin-top: 10px;
+        margin-top: 4px;
       }
 
       .paragraph {
@@ -106,15 +106,21 @@
         color: #222;
         line-height: 1.5;
         text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
       }
 
       .bullets {
-        margin: 0 0 12px 24px;
+        margin: 8px 0 12px 24px;
         padding: 0;
         font-size: 0.8rem;
         color: #222;
         line-height: 1.5;
         text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
       }
 
       .bullets li {
@@ -141,6 +147,13 @@
         text-align: justify;
         font-size: 0.75rem;
         color: #222;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .footer-content {
+        flex: 1;
       }
 
       .footer-line {
@@ -149,6 +162,13 @@
         background: #16b12b;
         margin-bottom: 6px;
         border-radius: 2px;
+      }
+
+      .page-number {
+        font-size: 0.75rem;
+        color: #222;
+        font-weight: 500;
+        margin-left: 20px;
       }
     </style>
   </head>
@@ -166,76 +186,24 @@
       <div class="header-line"></div>
       <div class="content">
         <div class="section-header first-section">
-          BACKGROUND INFORMATION REGARDING NON-FRIABLE CLEARANCE INSPECTIONS
+          [BACKGROUND_INFORMATION_TITLE]
         </div>
-        <div class="paragraph">
-          Following completion of non-friable asbestos removal works undertaken
-          by a suitably licenced Asbestos Removal Contractor, a clearance
-          inspection must be completed by an independent LAA / a competent
-          person. The clearance inspection includes an assessment of the
-          following:
-        </div>
-        <ul class="bullets">
-          <li>
-            Visual inspection of the work area for asbestos dust or debris
-          </li>
-          <li>
-            Visual inspection of the adjacent area including the access and
-            egress pathways for visible asbestos dust and debris
-          </li>
-        </ul>
-        <div class="paragraph">
-          It is required that a Non-Friable Clearance Certificate be issued on
-          completion of a successful inspection. The issuer needs to ensure:
-        </div>
-        <ul class="bullets">
-          <li>
-            This certificate should be issued prior to the area being
-            re-occupied. This chain of events should occur regardless of whether
-            the site is a commercial or residential property.
-          </li>
-          <li>
-            The asbestos removal area and areas immediately surrounding it are
-            visibly clean from asbestos contamination
-          </li>
-          <li>
-            The removal area does not pose a risk to health safety and safety
-            from exposure to asbestos
-          </li>
-        </ul>
+        <div class="paragraph">[BACKGROUND_INFORMATION_CONTENT]</div>
 
-        <div class="section-header">LEGISLATIVE REQUIREMENTS</div>
-        <div class="paragraph">
-          Non-Friable Clearance Certificates should be written in general
-          accordance with and with reference to:
-        </div>
-        <ul class="bullets">
-          <li>ACT Work Health and Safety (WHS) Act 2011</li>
-          <li>ACT Work Health and Safety Regulation 2011</li>
-          <li>
-            ACT Work Health and Safety (How to Safely Remove Asbestos Code of
-            Practice) 2022
-          </li>
-        </ul>
+        <div class="section-header">[LEGISLATIVE_REQUIREMENTS_TITLE]</div>
+        <div class="paragraph">[LEGISLATIVE_REQUIREMENTS_CONTENT]</div>
 
         <div class="section-header">
-          NON-FRIABLE CLEARANCE CERTIFICATE LIMITATIONS
+          [CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE]
         </div>
-        <div class="paragraph">
-          The visual clearance inspection was only carried out in the locations
-          outlined within this document. L&D did not inspect any areas of the
-          property that fall outside of the locations listed in this certificate
-          and therefore make no comment regarding the presence or condition of
-          other ACM that may or may not be present. When undertaking the
-          inspection, the LAA tries to inspect as much of the asbestos removal
-          area as possible. However, no inspection is absolute. Should suspect
-          ACM be identified following the inspection, works should cease until
-          an assessment of the materials is completed.
-        </div>
+        <div class="paragraph">[CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT]</div>
       </div>
-      <div class="footer">
-        <div class="footer-line"></div>
-        [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+      <div class="footer has-page-number">
+        <div class="footer-content">
+          <div class="footer-line"></div>
+          [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+        </div>
+        <div class="page-number">2</div>
       </div>
     </div>
   </body>
