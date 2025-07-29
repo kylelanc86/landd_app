@@ -28,17 +28,7 @@ async function loadImageAsBase64(imagePath) {
 }
 
 export async function generateFibreIDReport({ job, sampleItems, openInNewTab, returnPdfData = false }) {
-  // Add debug logging
-  console.log('Job data in report generation:', job);
-  console.log('Sample items in report generation:', sampleItems);
-  console.log('Project data in report generation:', job?.projectId);
-  console.log('Client data in report generation:', job?.projectId?.client);
-  console.log('Client email specifically:', job?.projectId?.client?.contact1Email);
-  console.log('Client contact name:', job?.projectId?.client?.contact1Name);
-  console.log('Client name:', job?.projectId?.client?.name);
-  console.log('Client invoiceEmail:', job?.projectId?.client?.invoiceEmail);
-  console.log('Client contact2Email:', job?.projectId?.client?.contact2Email);
-  console.log('All client fields:', Object.keys(job?.projectId?.client || {}));
+
   
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');

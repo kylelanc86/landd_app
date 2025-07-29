@@ -20,21 +20,7 @@ router.get('/', auth, async (req, res) => {
         path: 'client',
         select: 'name'
       });
-    console.log('Raw MongoDB response:', JSON.stringify(invoices, null, 2));
-    console.log('Number of invoices found:', invoices.length);
-    
-    // Log client data specifically
-    invoices.forEach((invoice, index) => {
-      console.log(`Invoice ${index + 1}:`, {
-        invoiceID: invoice.invoiceID,
-        client: invoice.client,
-        clientName: invoice.client?.name,
-        clientId: invoice.client?._id
-      });
-    });
-    
-    // Log the response being sent
-    console.log('Sending response to client...');
+
     res.json(invoices);
   } catch (err) {
     console.error('Error fetching invoices:', err);

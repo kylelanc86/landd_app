@@ -136,24 +136,7 @@ const Invoices = () => {
           return;
         }
 
-        console.log("=== FRONTEND DATA DEBUG ===");
-        console.log("Invoices data:", invoicesRes.data);
-        console.log("Projects response:", projectsRes.data);
-        console.log("Projects data array:", projectsRes.data?.data);
-        console.log("Clients data:", clientsRes.data);
 
-        // Check if invoices have client data
-        if (Array.isArray(invoicesRes.data)) {
-          invoicesRes.data.forEach((invoice, index) => {
-            console.log(`Invoice ${index + 1}:`, {
-              invoiceID: invoice.invoiceID,
-              xeroClientName: invoice.xeroClientName,
-              client: invoice.client,
-              clientName: invoice.client?.name,
-              clientId: invoice.client?._id,
-            });
-          });
-        }
 
         setInvoices(invoicesRes.data);
         setProjects(
