@@ -1421,6 +1421,7 @@ const Invoices = () => {
               SYNC WITH XERO
             </Button>
           )}
+
           {selectedInvoices.length > 0 && (
             <Button
               variant="contained"

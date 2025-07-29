@@ -32,6 +32,7 @@ import {
   ArrowBack as ArrowBackIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
+  PictureAsPdf as PdfIcon,
 } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -39,6 +40,7 @@ import {
   sampleItemsService,
   userService,
 } from "../../services/api";
+import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 
 const ClientSuppliedSamples = () => {
   const navigate = useNavigate();
@@ -56,6 +58,7 @@ const ClientSuppliedSamples = () => {
     new Date().toISOString().split("T")[0]
   );
   const [users, setUsers] = useState([]);
+  const [generatingPDF, setGeneratingPDF] = useState(false);
 
   useEffect(() => {
     // Reset data when jobId changes
@@ -175,9 +178,21 @@ const ClientSuppliedSamples = () => {
       setSampleRows(existingRows);
       // Set analyst and analysis date from first sample if available
       if (samples[0].analyzedBy) {
-        setAnalyst(
-          samples[0].analyzedBy.firstName + " " + samples[0].analyzedBy.lastName
-        );
+        // Handle both string and object formats for analyzedBy
+        if (typeof samples[0].analyzedBy === "string") {
+          setAnalyst(samples[0].analyzedBy);
+        } else if (
+          samples[0].analyzedBy.firstName &&
+          samples[0].analyzedBy.lastName
+        ) {
+          setAnalyst(
+            samples[0].analyzedBy.firstName +
+              " " +
+              samples[0].analyzedBy.lastName
+          );
+        } else {
+          setAnalyst("");
+        }
       }
       if (samples[0].analyzedAt) {
         setAnalysisDate(
@@ -253,32 +268,65 @@ const ClientSuppliedSamples = () => {
       // Get the projectId from the job
       const projectId = job.projectId._id || job.projectId;
 
-      // First, delete all existing samples for this project
-      if (samples.length > 0) {
-        for (const sample of samples) {
-          try {
-            await sampleItemsService.delete(sample._id);
-          } catch (error) {
-            console.error("Error deleting existing sample:", error);
-          }
-        }
-      }
-
-      // Prepare sample data with analyst and analysis date
-      const sampleData = sampleRows.map((row) => ({
-        ...row,
-        analyzedBy: analyst || undefined,
-        analyzedAt: analysisDate ? new Date(analysisDate) : undefined,
-      }));
-
-      // Then create new samples
-      const response = await sampleItemsService.createBulk({
-        projectId,
-        samples: sampleData,
+      // Create a map of existing samples by labReference for quick lookup
+      const existingSamplesMap = new Map();
+      samples.forEach((sample) => {
+        existingSamplesMap.set(sample.labReference, sample);
       });
 
-      console.log("Samples created:", response.data);
-      setSamples(response.data);
+      // Prepare sample data with analyst and analysis date
+      const sampleData = sampleRows.map((row) => {
+        const existingSample = existingSamplesMap.get(row.labReference);
+
+        // If sample exists, preserve its analysis data and only update basic info
+        if (existingSample) {
+          return {
+            ...existingSample,
+            labReference: row.labReference,
+            clientReference: row.clientReference,
+            // Preserve existing analysis data
+            analysisData: existingSample.analysisData,
+            analysisResult: existingSample.analysisResult,
+            // Update analyst info only if not already set
+            analyzedBy: existingSample.analyzedBy || analyst || undefined,
+            analyzedAt:
+              existingSample.analyzedAt ||
+              (analysisDate ? new Date(analysisDate) : undefined),
+          };
+        } else {
+          // New sample - create with basic info
+          return {
+            ...row,
+            analyzedBy: analyst || undefined,
+            analyzedAt: analysisDate ? new Date(analysisDate) : undefined,
+          };
+        }
+      });
+
+      // Update existing samples and create new ones
+      const updatePromises = sampleData.map(async (sampleData) => {
+        const existingSample = existingSamplesMap.get(sampleData.labReference);
+
+        if (existingSample) {
+          // Update existing sample
+          return await sampleItemsService.update(
+            existingSample._id,
+            sampleData
+          );
+        } else {
+          // Create new sample
+          return await sampleItemsService.create({
+            projectId,
+            ...sampleData,
+          });
+        }
+      });
+
+      const results = await Promise.all(updatePromises);
+      console.log("Samples updated/created:", results);
+
+      // Refresh the samples list
+      await fetchSampleItems();
       handleCloseModal();
     } catch (error) {
       console.error("Error saving samples:", error);
@@ -305,6 +353,26 @@ const ClientSuppliedSamples = () => {
         return "success";
       default:
         return "default";
+    }
+  };
+
+  const handleGeneratePDF = async () => {
+    try {
+      setGeneratingPDF(true);
+
+      // Generate the PDF using pdfMake
+      await generateFibreIDReport({
+        job: job,
+        sampleItems: samples,
+        openInNewTab: false,
+      });
+
+      console.log("Client supplied fibre ID PDF downloaded successfully");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      // You might want to show a snackbar or alert here
+    } finally {
+      setGeneratingPDF(false);
     }
   };
 
@@ -400,6 +468,15 @@ const ClientSuppliedSamples = () => {
                 sx={{ ml: 2 }}
               >
                 Refresh
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<PdfIcon />}
+                onClick={handleGeneratePDF}
+                disabled={generatingPDF || samples.length === 0}
+                sx={{ ml: 2 }}
+              >
+                {generatingPDF ? "Generating PDF..." : "Generate PDF"}
               </Button>
               <Button
                 variant="contained"

@@ -181,6 +181,20 @@ class XeroService {
         console.log('Full sample invoice Contact object:', JSON.stringify(sampleInvoice.Contact, null, 2));
       }
       
+      // Check for invoices without Contact data
+      const invoicesWithoutContact = allInvoices.filter(invoice => !invoice.Contact);
+      const invoicesWithContact = allInvoices.filter(invoice => invoice.Contact);
+      
+      console.log(`\nInvoices WITH Contact data: ${invoicesWithContact.length}`);
+      console.log(`Invoices WITHOUT Contact data: ${invoicesWithoutContact.length}`);
+      
+      if (invoicesWithoutContact.length > 0) {
+        console.log('\nSample invoices WITHOUT Contact data:');
+        invoicesWithoutContact.slice(0, 5).forEach(invoice => {
+          console.log(`  - ${invoice.InvoiceNumber || 'NO_NUMBER'}: ${invoice.Status} (${invoice.Type})`);
+        });
+      }
+      
       const invoices = allInvoices;
       console.log(`Retrieved ${invoices.length} invoices from Xero (all pages)`);
       
@@ -191,6 +205,7 @@ class XeroService {
       });
       
       // Filter out non-invoice records and process valid invoices
+      console.log('=== STARTING FILTERING PROCESS ===');
       const validInvoices = invoices.filter(invoice => {
         console.log('Evaluating document:', {
           id: invoice.InvoiceID,
@@ -255,6 +270,7 @@ class XeroService {
       
       for (const invoice of validInvoices) {
         try {
+          console.log(`\n--- Processing invoice ${processedCount + 1}/${validInvoices.length} ---`);
           await this.processAndSaveInvoice(invoice);
           processedCount++;
           processedInvoices.push(invoice.InvoiceNumber);
@@ -269,6 +285,13 @@ class XeroService {
       
       console.log(`Invoice sync completed. Processed: ${processedCount}, Errors: ${errorCount}`);
       console.log('Successfully processed invoice numbers:', processedInvoices.sort());
+      
+      // Cleanup: Soft delete invoices that are no longer in Xero results
+      console.log('=== STARTING CLEANUP PROCESS ===');
+      console.log(`Valid invoices from Xero: ${validInvoices.length}`);
+      
+      const cleanupResult = await this.cleanupPaidInvoices(validInvoices);
+      console.log(`Cleanup completed: ${cleanupResult.softDeleted} invoices soft deleted`);
       
       return invoices;
     } catch (error) {
@@ -339,6 +362,58 @@ class XeroService {
     }
   }
 
+  // Cleanup paid invoices that are no longer in Xero results
+  static async cleanupPaidInvoices(currentXeroInvoices) {
+    try {
+      console.log('Starting cleanup of paid invoices...');
+      
+      // Get all Xero invoice IDs from current sync results
+      const currentXeroInvoiceIds = currentXeroInvoices.map(invoice => invoice.InvoiceID);
+      console.log(`Current Xero invoices: ${currentXeroInvoiceIds.length}`);
+      
+      // Find invoices in our database that have Xero IDs but are not in current results
+      // Only clean up invoices that actually have Xero IDs (i.e., were synced from Xero)
+      const invoicesToCleanup = await Invoice.find({
+        xeroInvoiceId: { $exists: true, $ne: null, $ne: '' },
+        xeroInvoiceId: { $nin: currentXeroInvoiceIds },
+        isDeleted: { $ne: true } // Don't process already deleted invoices
+      });
+      
+      console.log(`Found ${invoicesToCleanup.length} invoices to cleanup`);
+      
+      let softDeletedCount = 0;
+      
+      for (const invoice of invoicesToCleanup) {
+        try {
+          // Mark as soft deleted
+          invoice.isDeleted = true;
+          invoice.deleteReason = 'Invoice no longer in Xero unpaid results (likely marked as paid)';
+          invoice.deletedAt = new Date();
+          await invoice.save();
+          
+          softDeletedCount++;
+          console.log(`Soft deleted invoice: ${invoice.invoiceID} (Xero ID: ${invoice.xeroInvoiceId})`);
+        } catch (error) {
+          console.error(`Error soft deleting invoice ${invoice.invoiceID}:`, error.message);
+        }
+      }
+      
+      console.log(`Cleanup completed: ${softDeletedCount} invoices soft deleted`);
+      
+      return {
+        totalFound: invoicesToCleanup.length,
+        softDeleted: softDeletedCount
+      };
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      return {
+        totalFound: 0,
+        softDeleted: 0,
+        error: error.message
+      };
+    }
+  }
+
   // Get Xero contacts
   static async getContacts() {
     try {
@@ -389,9 +464,9 @@ class XeroService {
         total: xeroInvoice.Total,
         type: xeroInvoice.Type,
         reference: xeroInvoice.Reference,
-        contact: xeroInvoice.Contact,
-        contactName: xeroInvoice.Contact?.Name,
-        contactId: xeroInvoice.Contact?.ContactID
+        hasContact: !!xeroInvoice.Contact,
+        contactName: xeroInvoice.Contact?.Name || 'NO_NAME',
+        contactId: xeroInvoice.Contact?.ContactID || 'NO_ID'
       });
 
       // Get client name directly from Xero invoice contact data

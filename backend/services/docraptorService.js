@@ -4,13 +4,6 @@ class DocRaptorService {
   constructor() {
     this.apiKey = process.env.DOCRAPTOR_API_KEY;
     this.apiUrl = 'https://docraptor.com/docs';
-    
-    // Debug logging
-    console.log('DocRaptor Service initialized:');
-    console.log('- API Key exists:', !!this.apiKey);
-    console.log('- API Key length:', this.apiKey ? this.apiKey.length : 0);
-    console.log('- API Key preview:', this.apiKey ? `${this.apiKey.substring(0, 10)}...` : 'undefined');
-    console.log('- API URL:', this.apiUrl);
   }
 
   /**
@@ -21,8 +14,6 @@ class DocRaptorService {
    */
   async generatePDF(htmlContent, options = {}) {
     try {
-      console.log('Starting DocRaptor PDF generation...');
-      
       if (!this.apiKey) {
         throw new Error('DOCRAPTOR_API_KEY environment variable is not set');
       }
@@ -71,19 +62,6 @@ class DocRaptorService {
         javascript: false, // Disable JavaScript for better compatibility
         ...options
       };
-
-      console.log('DocRaptor options:', {
-        documentType: requestBody.document_type,
-        test: requestBody.test,
-        hasCustomCSS: !!options.css,
-        hasHeader: !!options.header,
-        hasFooter: !!options.footer
-      });
-
-      console.log('Making DocRaptor API request:');
-      console.log('- URL:', this.apiUrl);
-      console.log('- API Key preview:', `${this.apiKey.substring(0, 10)}...`);
-      console.log('- Request body size:', JSON.stringify(requestBody).length, 'characters');
 
       // Add timeout to prevent hanging
       const controller = new AbortController();

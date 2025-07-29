@@ -32,6 +32,7 @@ const MonthlyTimesheet = () => {
   const { currentUser, loading: authLoading } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [monthData, setMonthData] = useState([]);
+  const [timesheetEntries, setTimesheetEntries] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch timesheet data for the entire month
@@ -52,14 +53,25 @@ const MonthlyTimesheet = () => {
         userId: currentUser._id,
       });
 
-      const response = await api.get(
-        `/timesheets/status/range/${startDate}/${endDate}?userId=${currentUser._id}`
-      );
-      console.log("Month data response:", response.data);
-      setMonthData(response.data || []);
+      // Fetch both status data and timesheet entries
+      const [statusResponse, entriesResponse] = await Promise.all([
+        api.get(
+          `/timesheets/status/range/${startDate}/${endDate}?userId=${currentUser._id}`
+        ),
+        api.get(
+          `/timesheets/range/${startDate}/${endDate}?userId=${currentUser._id}`
+        ),
+      ]);
+
+      console.log("Month data response:", statusResponse.data);
+      console.log("Timesheet entries response:", entriesResponse.data);
+
+      setMonthData(statusResponse.data || []);
+      setTimesheetEntries(entriesResponse.data || []);
     } catch (error) {
       console.error("Error fetching month data:", error);
       setMonthData([]);
+      setTimesheetEntries([]);
     } finally {
       setIsLoading(false);
     }
@@ -134,6 +146,36 @@ const MonthlyTimesheet = () => {
     return dayData?.status || "incomplete";
   };
 
+  // Calculate total time for a specific date
+  const getTotalTimeForDate = (date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const dayEntries = timesheetEntries.filter((entry) => {
+      const entryDate = format(new Date(entry.date), "yyyy-MM-dd");
+      return entryDate === dateStr;
+    });
+
+    let totalMinutes = 0;
+    dayEntries.forEach((entry) => {
+      const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
+      const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+      let duration = endTotalMinutes - startTotalMinutes;
+      if (duration < 0) duration += 24 * 60;
+      totalMinutes += duration;
+    });
+
+    return totalMinutes;
+  };
+
+  // Format time as hours and minutes
+  const formatTime = (minutes) => {
+    if (minutes === 0) return "0h 0m";
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
   // Show loading state while auth is loading or no user ID
   if (authLoading || !currentUser?._id) {
     console.log("Showing loading state:", {
@@ -167,9 +209,10 @@ const MonthlyTimesheet = () => {
         alignItems="center"
         mb="20px"
       >
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
-        Timesheets
-      </Typography>      </Box>
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
+          Timesheets
+        </Typography>{" "}
+      </Box>
 
       <Paper
         elevation={3}
@@ -251,104 +294,156 @@ const MonthlyTimesheet = () => {
           ))}
 
           {/* Calendar days */}
-          {getDaysInMonth().map((day, index) => (
-            <Grid item xs={12 / 7} key={index}>
-              <Box
-                onClick={() => day && handleDayClick(day)}
-                sx={{
-                  p: 1.5,
-                  height: "120px",
-                  border: "2px solid",
-                  borderColor: day ? theme.palette.divider : "transparent",
-                  borderRadius: "0 0 12px 12px",
-                  cursor: day ? "pointer" : "default",
-                  backgroundColor: day
-                    ? day.getDay() === 0 || day.getDay() === 6
-                      ? theme.palette.primary.light
-                      : theme.palette.background.paper
-                    : "transparent",
-                  transition: "all 0.2s ease-in-out",
-                  position: "relative",
-                  overflow: "hidden",
-                  "&:hover": {
+          {getDaysInMonth().map((day, index) => {
+            const isWeekend = day && (day.getDay() === 0 || day.getDay() === 6);
+            const status = day ? getTimesheetStatus(day) : null;
+            const totalTime = day ? getTotalTimeForDate(day) : 0;
+            const isCompleted = status === "finalised";
+            const isIncomplete = status === "incomplete" && totalTime > 0;
+
+            // Debug logging
+            if (day && totalTime > 0) {
+              console.log(
+                `Day ${format(
+                  day,
+                  "yyyy-MM-dd"
+                )}: status=${status}, totalTime=${totalTime}, isIncomplete=${isIncomplete}`
+              );
+            }
+
+            // Debug logging
+            if (day && totalTime > 0) {
+              console.log(
+                `Day ${format(
+                  day,
+                  "yyyy-MM-dd"
+                )}: status=${status}, time=${totalTime}, isIncomplete=${isIncomplete}`
+              );
+            }
+
+            return (
+              <Grid item xs={12 / 7} key={index}>
+                <Box
+                  onClick={() => day && handleDayClick(day)}
+                  sx={{
+                    p: 1.5,
+                    height: "120px",
+                    border: "2px solid",
+                    borderColor: day ? theme.palette.divider : "transparent",
+                    borderRadius: "0 0 12px 12px",
+                    cursor: day ? "pointer" : "default",
                     backgroundColor: day
-                      ? theme.palette.action.hover
+                      ? isCompleted
+                        ? theme.palette.success.light // Green for completed
+                        : isIncomplete
+                        ? "rgba(25, 118, 210, 0.2)" // Semi-transparent blue for incomplete
+                        : isWeekend
+                        ? theme.palette.grey[300] // Grey for weekends
+                        : theme.palette.background.paper
                       : "transparent",
-                    transform: day ? "translateY(-2px)" : "none",
-                    boxShadow: day ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
-                  },
-                  "&::before":
-                    day && isToday(day)
-                      ? {
-                          content: '""',
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: "4px",
-                          backgroundColor: theme.palette.error.main,
-                          borderRadius: "12px 12px 0 0",
-                        }
-                      : {},
-                }}
-              >
-                {day && (
-                  <>
-                    <Typography
-                      variant="h6"
-                      sx={{
-                        fontWeight: isToday(day) ? 800 : 600,
-                        color: isToday(day)
-                          ? theme.palette.error.main
-                          : day.getDay() === 0 || day.getDay() === 6
-                          ? theme.palette.primary.contrastText
-                          : theme.palette.text.primary,
-                        fontSize: "1.1rem",
-                        textAlign: "center",
-                        mb: 1,
-                        textShadow: isToday(day)
-                          ? "0 1px 2px rgba(0,0,0,0.2)"
-                          : "none",
-                      }}
-                    >
-                      {format(day, "d")}
-                    </Typography>
-                    {getTimesheetStatus(day) && (
-                      <Box sx={{ display: "flex", justifyContent: "center" }}>
-                        <Chip
-                          size="small"
-                          label={getTimesheetStatus(day)}
-                          color={
-                            getTimesheetStatus(day) === "finalised"
-                              ? "success"
-                              : getTimesheetStatus(day) === "absent"
-                              ? "error"
-                              : "warning"
+                    transition: "all 0.2s ease-in-out",
+                    position: "relative",
+                    overflow: "hidden",
+                    "&:hover": {
+                      backgroundColor: day
+                        ? theme.palette.action.hover
+                        : "transparent",
+                      transform: day ? "translateY(-2px)" : "none",
+                      boxShadow: day ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
+                    },
+                    "&::before":
+                      day && isToday(day)
+                        ? {
+                            content: '""',
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: "4px",
+                            backgroundColor: theme.palette.error.main,
+                            borderRadius: "12px 12px 0 0",
                           }
+                        : {},
+                  }}
+                >
+                  {day && (
+                    <>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: isToday(day) ? 800 : 600,
+                          color: isToday(day)
+                            ? theme.palette.error.main
+                            : isWeekend
+                            ? theme.palette.text.secondary
+                            : theme.palette.text.primary,
+                          fontSize: "1.1rem",
+                          textAlign: "center",
+                          mb: 1,
+                          textShadow: isToday(day)
+                            ? "0 1px 2px rgba(0,0,0,0.2)"
+                            : "none",
+                        }}
+                      >
+                        {format(day, "d")}
+                      </Typography>
+                      {status && (
+                        <Box
                           sx={{
-                            fontSize: "0.7rem",
-                            fontWeight: 600,
-                            backgroundColor:
-                              day.getDay() === 0 || day.getDay() === 6
+                            display: "flex",
+                            justifyContent: "center",
+                            mb: 0.5,
+                          }}
+                        >
+                          <Chip
+                            size="small"
+                            label={status}
+                            color={
+                              status === "finalised"
+                                ? "success"
+                                : status === "absent"
+                                ? "error"
+                                : "warning"
+                            }
+                            sx={{
+                              fontSize: "0.7rem",
+                              fontWeight: 600,
+                              backgroundColor: isWeekend
                                 ? theme.palette.common.white
                                 : undefined,
-                            color:
-                              day.getDay() === 0 || day.getDay() === 6
-                                ? theme.palette.primary.main
+                              color: isWeekend
+                                ? theme.palette.text.primary
                                 : undefined,
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                            "& .MuiChip-label": {
-                              px: 1,
-                            },
+                              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                              "& .MuiChip-label": {
+                                px: 1,
+                              },
+                            }}
+                          />
+                        </Box>
+                      )}
+                      {totalTime > 0 && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: "block",
+                            textAlign: "center",
+                            fontSize: "0.65rem",
+                            color: isWeekend
+                              ? theme.palette.text.secondary
+                              : theme.palette.text.secondary,
+                            fontWeight: 500,
                           }}
-                        />
-                      </Box>
-                    )}
-                  </>
-                )}
-              </Box>
-            </Grid>
-          ))}
+                        >
+                          {formatTime(totalTime)}
+                        </Typography>
+                      )}
+                    </>
+                  )}
+                </Box>
+              </Grid>
+            );
+          })}
         </Grid>
       </Paper>
     </Box>

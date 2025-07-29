@@ -1920,4 +1920,6 @@ const generatePhotographsContent = (items) => {
   return pages.join('');
 };
 
+
+
 module.exports = router; 

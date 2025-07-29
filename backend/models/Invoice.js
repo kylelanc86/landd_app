@@ -80,18 +80,7 @@ const invoiceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Add middleware to automatically filter out deleted invoices from queries
-invoiceSchema.pre('find', function() {
-  this.where({ isDeleted: { $ne: true } });
-});
-
-invoiceSchema.pre('findOne', function() {
-  this.where({ isDeleted: { $ne: true } });
-});
-
-invoiceSchema.pre('findById', function() {
-  this.where({ isDeleted: { $ne: true } });
-});
+// Middleware removed - filtering is handled in API routes
 
 // Add a method to include deleted invoices when needed
 invoiceSchema.statics.findIncludingDeleted = function() {

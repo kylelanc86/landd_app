@@ -67,16 +67,10 @@ const initializeXeroClient = async () => {
       // Verify the token was set correctly
       const verifyToken = xero.readTokenSet();
       if (!verifyToken || !verifyToken.access_token) {
-        console.error('Failed to set token in Xero client');
         return;
       }
 
-      console.log('Initialized Xero client with token from MongoDB:', {
-        hasAccessToken: !!verifyToken.access_token,
-        tokenType: verifyToken.token_type,
-        scope: verifyToken.scope,
-        tenantId: verifyToken.tenantId
-      });
+      console.log('Xero client initialized with token from MongoDB');
     } else {
       console.log('No token found in MongoDB');
     }
@@ -87,7 +81,6 @@ const initializeXeroClient = async () => {
 
 // Initialize when MongoDB is ready
 mongoose.connection.on('connected', () => {
-  console.log('MongoDB connected, initializing Xero client...');
   initializeXeroClient();
 });
 
@@ -104,12 +97,10 @@ xero.verifyState = (state) => {
 // Add tenant management methods
 xero.setTenantId = async (tenantId) => {
   try {
-    console.log('Setting tenant ID:', tenantId);
     currentTenantId = tenantId;
     
     // If tenantId is null, we're clearing it
     if (tenantId === null) {
-      console.log('Clearing tenant ID');
       // Update the token set in the Xero client
       if (xero.tokenSet) {
         xero.tokenSet.tenantId = null;
@@ -122,14 +113,11 @@ xero.setTenantId = async (tenantId) => {
     if (token) {
       token.tenantId = tenantId;
       await token.save();
-      console.log('Tenant ID saved to token document:', tenantId);
       
       // Update the token set in the Xero client
       if (xero.tokenSet) {
         xero.tokenSet.tenantId = tenantId;
       }
-    } else {
-      console.log('No token found to save tenant ID (this is normal when disconnecting)');
     }
   } catch (error) {
     console.error('Error setting tenant ID:', error);
@@ -143,9 +131,6 @@ xero.getTenantId = async () => {
       const token = await XeroToken.getToken();
       if (token && token.tenantId) {
         currentTenantId = token.tenantId;
-        console.log('Retrieved tenant ID from token:', currentTenantId);
-      } else {
-        console.log('No tenant ID found in token');
       }
     }
     return currentTenantId;
@@ -161,9 +146,7 @@ xero.buildConsentUrl = async function() {
   try {
     const state = this.generateState();
     const url = await originalBuildConsentUrl.call(this);
-    console.log('Original Xero consent URL:', url);
     const finalUrl = `${url}&state=${state}`;
-    console.log('Final Xero consent URL:', finalUrl);
     return finalUrl;
   } catch (error) {
     console.error('Error building consent URL:', error);
@@ -174,7 +157,6 @@ xero.buildConsentUrl = async function() {
 // Add token reading method
 xero.readTokenSet = async () => {
   try {
-    console.log('Starting readTokenSet operation...');
     
     // If token is already initialized, return the current token set
     if (isTokenInitialized && xero.tokenSet) {
@@ -248,12 +230,10 @@ xero.readTokenSet = async () => {
       // Set the token in the Xero client
       await xero.setTokenSet(tokenSet);
       isTokenInitialized = true;
-      console.log('Token set in Xero client from readTokenSet');
       
       return tokenSet;
     }
     
-    console.log('No token found in MongoDB');
     return null;
   } catch (error) {
     console.error('Error in readTokenSet:', error);
@@ -264,16 +244,6 @@ xero.readTokenSet = async () => {
 // Add token setting method
 xero.setTokenSet = async (tokenSet) => {
   try {
-    console.log('Starting setTokenSet operation...');
-    console.log('Token set to save:', {
-      hasAccessToken: !!tokenSet?.access_token,
-      hasRefreshToken: !!tokenSet?.refresh_token,
-      expiresAt: tokenSet?.expires_at ? new Date(tokenSet.expires_at).toISOString() : null,
-      tokenType: tokenSet?.token_type,
-      scope: tokenSet?.scope,
-      tenantId: tokenSet?.tenantId
-    });
-    
     if (!tokenSet || !tokenSet.access_token) {
       console.error('Invalid token set provided:', tokenSet);
       throw new Error('Invalid token set provided');
@@ -282,15 +252,12 @@ xero.setTokenSet = async (tokenSet) => {
     // Add expiration timestamp if not present
     if (!tokenSet.expires_at && tokenSet.expires_in) {
       tokenSet.expires_at = Date.now() + (tokenSet.expires_in * 1000);
-      console.log('Added expiration timestamp:', new Date(tokenSet.expires_at).toISOString());
     }
 
     // Ensure we have a refresh token
     if (!tokenSet.refresh_token) {
-      console.log('No refresh token in new token set, attempting to get from existing token...');
       const existingToken = await XeroToken.getToken();
       if (existingToken && existingToken.refresh_token) {
-        console.log('Using refresh token from existing token');
         tokenSet.refresh_token = existingToken.refresh_token;
       } else {
         console.error('No refresh token available');
@@ -300,23 +267,19 @@ xero.setTokenSet = async (tokenSet) => {
 
     // If we have a tenant ID in the existing token, preserve it
     if (!tokenSet.tenantId) {
-      console.log('No tenant ID in new token set, checking existing token...');
       const existingToken = await XeroToken.getToken();
       if (existingToken && existingToken.tenantId) {
-        console.log('Using tenant ID from existing token:', existingToken.tenantId);
         tokenSet.tenantId = existingToken.tenantId;
       }
     }
     
     // Save token to MongoDB
     const savedToken = await XeroToken.setToken(tokenSet);
-    console.log('Token saved to MongoDB successfully');
     
     // Set the token directly in the Xero client
     xero.tokenSet = tokenSet;
     isTokenInitialized = true;
     
-    console.log('Token set in Xero client successfully');
     return true;
   } catch (error) {
     console.error('Error in setTokenSet:', error);
@@ -327,13 +290,11 @@ xero.setTokenSet = async (tokenSet) => {
 // Add updateTenants method
 xero.updateTenants = async () => {
   try {
-    console.log('Starting updateTenants operation...');
     const tokenSet = await xero.readTokenSet();
     if (!tokenSet || !tokenSet.access_token) {
       throw new Error('No valid token set available');
     }
     
-    console.log('Fetching tenants from Xero API...');
     const response = await fetch('https://api.xero.com/connections', {
       headers: {
         'Authorization': `Bearer ${tokenSet.access_token}`,
@@ -352,11 +313,9 @@ xero.updateTenants = async () => {
     }
 
     const tenants = await response.json();
-    console.log('Retrieved tenants:', tenants?.length || 0);
     
     if (tenants && tenants.length > 0) {
       const firstTenant = tenants[0];
-      console.log('Setting first tenant:', firstTenant);
       
       // Get the current token
       const currentToken = await XeroToken.getToken();

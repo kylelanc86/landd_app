@@ -386,4 +386,53 @@ router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
   }
 });
 
+// Cleanup paid invoices
+router.post('/cleanup-paid-invoices', auth, async (req, res) => {
+  try {
+    console.log('Starting paid invoice cleanup request...');
+    
+    // Get all paid invoices that are not already soft deleted
+    const paidInvoices = await Invoice.find({
+      status: 'paid',
+      isDeleted: { $ne: true }
+    });
+    
+    console.log(`Found ${paidInvoices.length} paid invoices to cleanup`);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (const invoice of paidInvoices) {
+      try {
+        invoice.isDeleted = true;
+        invoice.deleteReason = 'Manual cleanup: Invoice marked as paid in Xero';
+        invoice.deletedAt = new Date();
+        await invoice.save();
+        
+        successCount++;
+        console.log(`Soft deleted invoice: ${invoice.invoiceID}`);
+      } catch (error) {
+        errorCount++;
+        console.error(`Error soft deleting invoice ${invoice.invoiceID}:`, error.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Successfully soft deleted ${successCount} paid invoices`,
+      details: {
+        totalFound: paidInvoices.length,
+        successCount,
+        errorCount
+      }
+    });
+  } catch (error) {
+    console.error('Error cleaning up paid invoices:', error);
+    res.status(500).json({ 
+      error: 'Failed to cleanup paid invoices',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router; 

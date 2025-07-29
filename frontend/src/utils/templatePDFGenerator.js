@@ -135,13 +135,25 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     
     let endpoint;
     if (useDocRaptor) {
-      endpoint = type === 'asbestos-clearance' 
-        ? '/pdf-docraptor-v2/generate-asbestos-clearance-v2'  // Use V2 endpoint
-        : '/pdf-docraptor-v2/generate-asbestos-assessment';  // Updated to use V2 endpoint
+      if (type === 'asbestos-clearance') {
+        endpoint = '/pdf-docraptor-v2/generate-asbestos-clearance-v2';  // Use V2 endpoint
+      } else if (type === 'asbestos-assessment') {
+        endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment';  // Updated to use V2 endpoint
+      } else if (type === 'client-supplied-fibre-id') {
+        endpoint = '/pdf-docraptor-v2/generate-client-supplied-fibre-id';
+      } else {
+        endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment'; // Default fallback
+      }
     } else {
-      endpoint = type === 'asbestos-clearance' 
-        ? '/pdf/generate-asbestos-clearance'
-        : '/pdf/generate-asbestos-assessment';
+      if (type === 'asbestos-clearance') {
+        endpoint = '/pdf/generate-asbestos-clearance';
+      } else if (type === 'asbestos-assessment') {
+        endpoint = '/pdf/generate-asbestos-assessment';
+      } else if (type === 'client-supplied-fibre-id') {
+        endpoint = '/pdf-docraptor-v2/generate-client-supplied-fibre-id'; // Always use DocRaptor for fibre ID
+      } else {
+        endpoint = '/pdf/generate-asbestos-assessment'; // Default fallback
+      }
     }
     
     const url = `${process.env.REACT_APP_API_URL}${endpoint}?t=${Date.now()}`;
@@ -156,6 +168,7 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       body: JSON.stringify({
         clearanceData: type === 'asbestos-clearance' ? data : undefined,
         assessmentData: type === 'asbestos-assessment' ? data : undefined,
+        jobData: type === 'client-supplied-fibre-id' ? data : undefined,
       }),
     });
 

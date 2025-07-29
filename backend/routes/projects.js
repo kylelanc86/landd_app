@@ -40,13 +40,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       status
     } = req.query;
 
-    // Debug logging
-    console.log('=== PROJECTS API DEBUG ===');
-    console.log('Raw query params:', req.query);
-    console.log('Parsed limit:', limit);
-    console.log('Parsed limit type:', typeof limit);
-    console.log('Parsed limit parseInt:', parseInt(limit));
-    console.log('==========================');
+
 
     // Build query
     const query = {};
@@ -98,24 +92,12 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       const pages = Math.ceil(total / parseInt(limit));
 
       // Get projects with pagination and sorting
-      console.log('=== QUERY DEBUG ===');
-      console.log('Query:', JSON.stringify(query, null, 2));
-      console.log('Skip:', skip);
-      console.log('Limit:', parseInt(limit));
-      console.log('Sort:', { [sortBy]: sortOrder === 'desc' ? -1 : 1 });
-      console.log('==================');
-
       const projects = await Project.find(query)
         .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
         .skip(skip)
         .limit(parseInt(limit))
         .populate('client', 'name')
         .populate('users', 'firstName lastName');
-
-      console.log('=== RESULTS DEBUG ===');
-      console.log('Projects returned:', projects.length);
-      console.log('Total count:', total);
-      console.log('====================');
 
       // Transform the response
       const response = {

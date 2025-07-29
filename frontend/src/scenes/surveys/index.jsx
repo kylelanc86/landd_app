@@ -9,6 +9,7 @@ import {
   CardMedia,
   Chip,
   useTheme,
+  Button,
 } from "@mui/material";
 import {
   Home as HomeIcon,
@@ -38,6 +39,7 @@ const SurveysDashboard = () => {
       path: "/assessments", // changed from /surveys/asbestos
       requiredPermission: "asbestos.view",
       color: "#1976d2",
+      isAvailable: true, // Only this one is available
     },
     {
       id: "residential-asbestos-assessment",
@@ -46,6 +48,7 @@ const SurveysDashboard = () => {
       path: "/surveys/residential-asbestos",
       requiredPermission: "asbestos.view",
       color: "#388e3c",
+      isAvailable: false,
     },
     {
       id: "asbestos-management-plan",
@@ -54,6 +57,7 @@ const SurveysDashboard = () => {
       path: "/surveys/asbestos-management-plan",
       requiredPermission: "asbestos.view",
       color: "#7b1fa2",
+      isAvailable: false,
     },
     {
       id: "hazardous-materials-management-plan",
@@ -62,6 +66,7 @@ const SurveysDashboard = () => {
       path: "/surveys/hazardous-materials-management-plan",
       requiredPermission: "asbestos.view",
       color: "#d32f2f",
+      isAvailable: false,
     },
     {
       id: "lead-assessment",
@@ -70,6 +75,7 @@ const SurveysDashboard = () => {
       path: "/surveys/lead",
       requiredPermission: "asbestos.view",
       color: "#2e7d32",
+      isAvailable: false,
     },
     {
       id: "mould-moisture-assessment",
@@ -78,11 +84,14 @@ const SurveysDashboard = () => {
       path: "/surveys/mould-moisture",
       requiredPermission: "asbestos.view",
       color: "#ed6c02",
+      isAvailable: false,
     },
   ];
 
   const handleModuleClick = (module) => {
-    navigate(module.path);
+    if (module.isAvailable) {
+      navigate(module.path);
+    }
   };
 
   return (
@@ -99,19 +108,25 @@ const SurveysDashboard = () => {
                   sx={{
                     height: "100%",
                     transition: "all 0.3s ease-in-out",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      boxShadow: 4,
-                    },
+                    "&:hover": module.isAvailable
+                      ? {
+                          transform: "translateY(-4px)",
+                          boxShadow: 4,
+                        }
+                      : {},
+                    position: "relative",
+                    opacity: module.isAvailable ? 1 : 0.7,
                   }}
                 >
                   <CardActionArea
                     onClick={() => handleModuleClick(module)}
+                    disabled={!module.isAvailable}
                     sx={{
                       height: "100%",
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "stretch",
+                      cursor: module.isAvailable ? "pointer" : "default",
                     }}
                   >
                     <CardMedia
@@ -122,11 +137,52 @@ const SurveysDashboard = () => {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
+                        position: "relative",
                       }}
                     >
                       {React.cloneElement(module.icon, {
                         sx: { fontSize: 80, color: "white" },
                       })}
+
+                      {/* Coming Soon Overlay */}
+                      {!module.isAvailable && (
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: "rgba(0, 0, 0, 0.7)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              color: "white",
+                              fontWeight: "bold",
+                              textAlign: "center",
+                              mb: 1,
+                            }}
+                          >
+                            Coming Soon
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "white",
+                              textAlign: "center",
+                              opacity: 0.9,
+                            }}
+                          >
+                            This feature is under development
+                          </Typography>
+                        </Box>
+                      )}
                     </CardMedia>
                     <CardContent
                       sx={{
@@ -148,12 +204,18 @@ const SurveysDashboard = () => {
                       >
                         <Typography
                           variant="body2"
-                          color="primary"
+                          color={
+                            module.isAvailable ? "primary" : "text.secondary"
+                          }
                           sx={{ fontWeight: "bold" }}
                         >
-                          View {module.title}
+                          {module.isAvailable
+                            ? `View ${module.title}`
+                            : "Coming Soon"}
                         </Typography>
-                        <ArrowForwardIcon color="primary" />
+                        {module.isAvailable && (
+                          <ArrowForwardIcon color="primary" />
+                        )}
                       </Box>
                     </CardContent>
                   </CardActionArea>

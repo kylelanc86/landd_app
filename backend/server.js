@@ -35,15 +35,7 @@ const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
 // Load environment variables
 dotenv.config();
 
-// Debug environment variables
-console.log('Environment variables loaded:');
-console.log('- NODE_ENV:', process.env.NODE_ENV);
-console.log('- PDFSHIFT_API_KEY exists:', !!process.env.PDFSHIFT_API_KEY);
-console.log('- PDFSHIFT_API_KEY length:', process.env.PDFSHIFT_API_KEY ? process.env.PDFSHIFT_API_KEY.length : 0);
-console.log('- PDFSHIFT_API_KEY preview:', process.env.PDFSHIFT_API_KEY ? `${process.env.PDFSHIFT_API_KEY.substring(0, 10)}...` : 'undefined');
-console.log('- DOCRAPTOR_API_KEY exists:', !!process.env.DOCRAPTOR_API_KEY);
-console.log('- DOCRAPTOR_API_KEY length:', process.env.DOCRAPTOR_API_KEY ? process.env.DOCRAPTOR_API_KEY.length : 0);
-console.log('- DOCRAPTOR_API_KEY preview:', process.env.DOCRAPTOR_API_KEY ? `${process.env.DOCRAPTOR_API_KEY.substring(0, 10)}...` : 'undefined');
+
 
 // Create Express app
 const app = express();
@@ -146,20 +138,7 @@ app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     app.use('/api/sample-items', requireAuth, sampleItemsRoutes);
     app.use('/api/client-supplied-jobs', requireAuth, clientSuppliedJobsRoutes);
 
-    // Debug: Log all registered routes (moved after all routes are registered)
-    console.log('=== Registered Routes ===');
-    app._router.stack.forEach((middleware) => {
-      if (middleware.route) {
-        console.log(`${Object.keys(middleware.route.methods).join(',').toUpperCase()} ${middleware.route.path}`);
-      } else if (middleware.name === 'router') {
-        middleware.handle.stack.forEach((handler) => {
-          if (handler.route) {
-            console.log(`${Object.keys(handler.route.methods).join(',').toUpperCase()} ${middleware.regexp.source}${handler.route.path}`);
-          }
-        });
-      }
-    });
-    console.log('========================');
+
     
     // Error handling middleware
     app.use((err, req, res, next) => {
@@ -183,7 +162,6 @@ app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     const PORT = process.env.PORT || 5001;
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log('CORS Configuration:', corsOptions);
     });
   })
   .catch(err => {

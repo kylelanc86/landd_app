@@ -7,7 +7,14 @@ const SampleItem = require('../models/SampleItem');
 router.get('/', async (req, res) => {
   try {
     const jobs = await ClientSuppliedJob.find()
-      .populate('projectId', 'name projectID client d_Date createdAt')
+      .populate({
+        path: 'projectId',
+        select: 'name projectID d_Date createdAt',
+        populate: {
+          path: 'client',
+          select: 'name contact1Name contact1Email'
+        }
+      })
       .sort({ createdAt: -1 });
     
     res.json(jobs);
@@ -20,7 +27,14 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const job = await ClientSuppliedJob.findById(req.params.id)
-      .populate('projectId', 'name projectID client d_Date createdAt');
+      .populate({
+        path: 'projectId',
+        select: 'name projectID d_Date createdAt',
+        populate: {
+          path: 'client',
+          select: 'name contact1Name contact1Email'
+        }
+      });
     
     if (!job) {
       return res.status(404).json({ message: 'Client supplied job not found' });
@@ -55,7 +69,14 @@ router.post('/', async (req, res) => {
     await job.save();
     
     const populatedJob = await ClientSuppliedJob.findById(job._id)
-      .populate('projectId', 'name projectID client d_Date createdAt');
+      .populate({
+        path: 'projectId',
+        select: 'name projectID d_Date createdAt',
+        populate: {
+          path: 'client',
+          select: 'name contact1Name contact1Email'
+        }
+      });
     
     res.status(201).json(populatedJob);
   } catch (err) {
@@ -71,7 +92,14 @@ router.put('/:id', async (req, res) => {
       { ...req.body, updatedAt: new Date() },
       { new: true }
     )
-    .populate('projectId', 'name projectID client d_Date createdAt');
+    .populate({
+      path: 'projectId',
+      select: 'name projectID d_Date createdAt',
+      populate: {
+        path: 'client',
+        select: 'name contact1Name contact1Email'
+      }
+    });
     
     if (!job) {
       return res.status(404).json({ message: 'Client supplied job not found' });

@@ -268,7 +268,8 @@ export const xeroService = {
   },
   createInvoice: (invoiceData) => api.post('/xero/create-invoice', invoiceData),
   checkStatus: () => api.get('/xero/status'),
-  disconnect: () => api.post('/xero/disconnect')
+  disconnect: () => api.post('/xero/disconnect'),
+  cleanupPaidInvoices: () => api.post('/xero/cleanup-paid-invoices')
 };
 
 // Timesheet API calls

@@ -22,12 +22,14 @@ import {
   Search as SearchIcon,
   Visibility as ViewIcon,
   ArrowBack as ArrowBackIcon,
+  PictureAsPdf as PdfIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import {
   clientSuppliedJobsService,
   sampleItemsService,
 } from "../../services/api";
+import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
@@ -35,6 +37,7 @@ const ClientSuppliedJobs = () => {
   const [sampleCounts, setSampleCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [generatingPDF, setGeneratingPDF] = useState({});
 
   useEffect(() => {
     fetchClientSuppliedJobs();
@@ -120,6 +123,32 @@ const ClientSuppliedJobs = () => {
     }
   };
 
+  const handleGeneratePDF = async (job) => {
+    try {
+      setGeneratingPDF((prev) => ({ ...prev, [job._id]: true }));
+
+      // Fetch sample items for this job
+      const response = await sampleItemsService.getAll({
+        projectId: job.projectId._id || job.projectId,
+      });
+      const sampleItems = response.data || [];
+
+      // Generate the PDF using pdfMake
+      await generateFibreIDReport({
+        job: job,
+        sampleItems: sampleItems,
+        openInNewTab: false
+      });
+
+      console.log("Client supplied fibre ID PDF downloaded successfully");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      // You might want to show a snackbar or alert here
+    } finally {
+      setGeneratingPDF((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -168,14 +197,14 @@ const ClientSuppliedJobs = () => {
             <Table stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: "bold" }}>Project ID</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>Project ID</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Sample Date</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Client</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
-                    No. of Samples
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>Sample Date</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "150px" }}>Client</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "70px" }}>
+                    Samples
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
@@ -237,13 +266,27 @@ const ClientSuppliedJobs = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <Button
-                          onClick={() => handleViewJob(job._id)}
-                          color="primary"
-                          size="small"
-                        >
-                          Items
-                        </Button>
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                          <Button
+                            onClick={() => handleViewJob(job._id)}
+                            color="primary"
+                            size="small"
+                          >
+                            Items
+                          </Button>
+                          <Button
+                            onClick={() => handleGeneratePDF(job)}
+                            color="secondary"
+                            size="small"
+                            startIcon={<PdfIcon />}
+                            disabled={
+                              generatingPDF[job._id] ||
+                              (sampleCounts[job._id] || 0) === 0
+                            }
+                          >
+                            {generatingPDF[job._id] ? "..." : "PDF"}
+                          </Button>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))
