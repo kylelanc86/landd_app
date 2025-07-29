@@ -25,7 +25,6 @@ const asbestosRemovalJobRoutes = require('./routes/asbestosRemovalJobs');
 const asbestosClearanceTemplateRoutes = require('./routes/asbestosClearanceTemplates');
 const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates');
 const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
-const { router: pdfRoutes } = require('./routes/pdf');
 const pdfDocRaptorV2Routes = require('./routes/pdf-docraptor-v2');
 
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
@@ -34,8 +33,6 @@ const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
 
 // Load environment variables
 dotenv.config();
-
-
 
 // Create Express app
 const app = express();
@@ -129,8 +126,7 @@ connectDB()
     app.use('/api/asbestos-clearance-templates', asbestosClearanceTemplateRoutes);
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
-    app.use('/api/pdf', pdfRoutes);
-app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
+    app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     
 
     const requireAuth = require('./middleware/auth');

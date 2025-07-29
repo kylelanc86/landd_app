@@ -13,8 +13,8 @@ const clientSuppliedJobSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'],
-    default: 'Pending'
+    enum: ['In Progress', 'Completed'],
+    default: 'In Progress'
   },
   analyst: {
     type: String,

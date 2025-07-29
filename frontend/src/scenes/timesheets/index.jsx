@@ -655,9 +655,9 @@ const Timesheets = () => {
               <ArrowBackIosNewIcon />
             </IconButton>
             <Typography
-              variant="h4"
+              variant="h5"
               sx={{
-                fontWeight: 700,
+                fontWeight: 600,
                 color: theme.palette.primary.main,
                 textShadow: "0 1px 2px rgba(0,0,0,0.1)",
                 minWidth: "300px",

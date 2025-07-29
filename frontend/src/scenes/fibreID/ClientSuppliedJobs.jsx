@@ -112,14 +112,12 @@ const ClientSuppliedJobs = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "active":
+      case "In Progress":
+        return "info";
+      case "Completed":
         return "success";
-      case "completed":
-        return "default";
-      case "pending":
-        return "warning";
       default:
-        return "default";
+        return "info";
     }
   };
 
@@ -137,7 +135,7 @@ const ClientSuppliedJobs = () => {
       await generateFibreIDReport({
         job: job,
         sampleItems: sampleItems,
-        openInNewTab: false
+        openInNewTab: false,
       });
 
       console.log("Client supplied fibre ID PDF downloaded successfully");
@@ -197,12 +195,18 @@ const ClientSuppliedJobs = () => {
             <Table stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>Project ID</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                    Project ID
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>Sample Date</TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "150px" }}>Client</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                    Sample Date
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "150px" }}>
+                    Client
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "70px" }}>
                     Samples
                   </TableCell>
@@ -260,7 +264,7 @@ const ClientSuppliedJobs = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={job.status || "Unknown"}
+                          label={job.status || "In Progress"}
                           color={getStatusColor(job.status)}
                           size="small"
                         />

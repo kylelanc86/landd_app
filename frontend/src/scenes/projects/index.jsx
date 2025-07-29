@@ -2523,6 +2523,47 @@ const Projects = ({ initialFilters = {} }) => {
                     placeholder="Enter any additional notes about the project"
                   />
                 </Grid>
+
+                <Grid item xs={12}>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  >
+                    Project Contact
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Contact Name"
+                    name="projectContact.name"
+                    value={form.projectContact?.name || ""}
+                    onChange={handleChange}
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Contact Number"
+                    name="projectContact.number"
+                    value={form.projectContact?.number || ""}
+                    onChange={handleChange}
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Contact Email"
+                    name="projectContact.email"
+                    type="email"
+                    value={form.projectContact?.email || ""}
+                    onChange={handleChange}
+                  />
+                </Grid>
+
                 <Grid item xs={12}>
                   <Typography
                     variant="subtitle1"

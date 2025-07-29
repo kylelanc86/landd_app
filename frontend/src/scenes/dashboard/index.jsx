@@ -142,12 +142,19 @@ const Dashboard = () => {
       try {
         const today = new Date();
         const formattedDate = format(today, "yyyy-MM-dd");
-        const response = await api.get(
+
+        // Get timesheet entries for time calculation
+        const entriesResponse = await api.get(
           `/timesheets/range/${formattedDate}/${formattedDate}`
         );
 
-        // Calculate total time and get status
-        const totalMinutes = response.data.reduce((total, entry) => {
+        // Get daily status
+        const statusResponse = await api.get(
+          `/timesheets/status/range/${formattedDate}/${formattedDate}`
+        );
+
+        // Calculate total time from entries
+        const totalMinutes = entriesResponse.data.reduce((total, entry) => {
           const [startHours, startMinutes] = entry.startTime
             .split(":")
             .map(Number);
@@ -159,9 +166,12 @@ const Dashboard = () => {
           return total + duration;
         }, 0);
 
+        // Get status from daily status summary (not individual entries)
+        const dailyStatus = statusResponse.data[0]?.status || "incomplete";
+
         setDailyTimesheetData({
           totalTime: totalMinutes,
-          status: response.data[0]?.status || "incomplete",
+          status: dailyStatus,
         });
       } catch (error) {
         console.error("Error fetching daily timesheet:", error);

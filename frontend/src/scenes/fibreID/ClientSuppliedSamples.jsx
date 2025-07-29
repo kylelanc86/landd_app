@@ -59,6 +59,7 @@ const ClientSuppliedSamples = () => {
   );
   const [users, setUsers] = useState([]);
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [completingJob, setCompletingJob] = useState(false);
 
   useEffect(() => {
     // Reset data when jobId changes
@@ -376,6 +377,27 @@ const ClientSuppliedSamples = () => {
     }
   };
 
+  const handleCompleteJob = async () => {
+    try {
+      setCompletingJob(true);
+
+      const response = await clientSuppliedJobsService.update(jobId, {
+        status: "Completed",
+      });
+
+      // Update the local job state
+      setJob((prevJob) => ({ ...prevJob, status: "Completed" }));
+
+      console.log("Job completed successfully");
+      // You might want to show a success message here
+    } catch (error) {
+      console.error("Error completing job:", error);
+      // You might want to show an error message here
+    } finally {
+      setCompletingJob(false);
+    }
+  };
+
   if (loading) {
     return (
       <Container maxWidth="xl">
@@ -485,6 +507,17 @@ const ClientSuppliedSamples = () => {
               >
                 Add Samples
               </Button>
+              {job?.status !== "Completed" && (
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={handleCompleteJob}
+                  disabled={completingJob || samples.length === 0}
+                  sx={{ ml: 2 }}
+                >
+                  {completingJob ? "Completing..." : "Complete Job"}
+                </Button>
+              )}
             </Box>
           </Box>
         </Box>

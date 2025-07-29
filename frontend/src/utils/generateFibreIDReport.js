@@ -33,6 +33,12 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
   console.log('Sample items in report generation:', sampleItems);
   console.log('Project data in report generation:', job?.projectId);
   console.log('Client data in report generation:', job?.projectId?.client);
+  console.log('Client email specifically:', job?.projectId?.client?.contact1Email);
+  console.log('Client contact name:', job?.projectId?.client?.contact1Name);
+  console.log('Client name:', job?.projectId?.client?.name);
+  console.log('Client invoiceEmail:', job?.projectId?.client?.invoiceEmail);
+  console.log('Client contact2Email:', job?.projectId?.client?.contact2Email);
+  console.log('All client fields:', Object.keys(job?.projectId?.client || {}));
   
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
@@ -132,7 +138,7 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
                     stack: [
                       { text: [ { text: 'Client Name: ', bold: true }, { text: job?.projectId?.client?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Client Contact: ', bold: true }, { text: job?.projectId?.client?.contact1Name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || job?.projectId?.client?.invoiceEmail || job?.projectId?.client?.contact2Email || 'N/A' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Site Name: ', bold: true }, { text: job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
@@ -278,7 +284,7 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
           {
             table: {
               headerRows: 1,
-              widths: ['20%', '16%', '11%', '15%', '8%', '15%', '15%'],
+              widths: ['15%', '18%', '11%', '19%', '8%', '15%', '15%'],
               body: [
                 [
                   { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
@@ -324,7 +330,7 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
                   const fibreResults = getFibreResults(item);
                   
                   return [
-                    { text: `${job?.projectId?.projectID || job?.jobNumber || 'LDJ0xxxx'}D${formatDate(new Date()).replace(/\//g, '')}-${index + 1}`, fontSize: 8 },
+                    { text: `${job?.projectId?.projectID}-${index + 1}`, fontSize: 8 },
                     { text: item.clientReference || 'LD-', fontSize: 8 },
                     { text: analysisDate, fontSize: 8 },
                     { text: item.sampleDescription || '', fontSize: 8 },
@@ -381,7 +387,7 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
             columns: [
               {
                 stack: [
-                  { text: `Report Reference: ${job?.projectId?.projectID || job?.jobNumber || 'LDJ0xxxx'}D${formatDate(new Date()).replace(/\//g, '')}`, fontSize: 8 },
+                  { text: `Report Reference: ${job?.projectId?.projectID}`, fontSize: 8 },
                   { text: 'Revision: 0', fontSize: 8 }
                 ],
                 alignment: 'left',
@@ -403,13 +409,25 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
     }
   };
 
-  // Build filename: ProjectID: Fibre ID Report - ProjectName (JobNumber).pdf
+  // Build filename: ProjectID: Fibre ID Report - ProjectName (SampleDate).pdf
   const projectID = job?.projectId?.projectID || '';
   const projectNameRaw = job?.projectId?.name || '';
   // Sanitize project name for filename (remove/replace unsafe characters)
   const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
-  const jobNumber = job?.jobNumber || '';
-  const filename = `${projectID}: Fibre ID Report - ${projectName}${jobNumber ? ` (${jobNumber})` : ''}.pdf`;
+  
+  // Get sample date - try to use the first sample's date, or job creation date, or current date
+  let sampleDate = '';
+  if (sampleItems && sampleItems.length > 0 && sampleItems[0].analyzedAt) {
+    sampleDate = formatDate(sampleItems[0].analyzedAt);
+  } else if (job?.projectId?.d_Date) {
+    sampleDate = formatDate(job.projectId.d_Date);
+  } else if (job?.projectId?.createdAt) {
+    sampleDate = formatDate(job.projectId.createdAt);
+  } else {
+    sampleDate = formatDate(new Date());
+  }
+  
+  const filename = `${projectID}: Fibre ID Report - ${projectName} (${sampleDate}).pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
   if (returnPdfData) {
