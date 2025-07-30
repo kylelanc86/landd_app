@@ -346,13 +346,36 @@ class XeroService {
       const invoice = await Invoice.findById(invoiceId);
       if (!invoice) throw new Error('Invoice not found');
 
-      const xeroInvoice = await xero.accountingApi.getInvoice(
-        await xero.getTenantId(),
-        invoice.xeroInvoiceId
-      );
+      const tokenSet = await xero.readTokenSet();
+      const tenantId = await xero.getTenantId();
+      
+      if (!tokenSet || !tokenSet.access_token) {
+        throw new Error('No valid access token available');
+      }
+      
+      if (!tenantId) {
+        throw new Error('No tenant ID available');
+      }
+
+      // Use direct fetch approach like sync FROM Xero
+      const response = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${invoice.xeroInvoiceId}`, {
+        headers: {
+          'Authorization': `Bearer ${tokenSet.access_token}`,
+          'Xero-tenant-id': tenantId,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API call failed:', errorText);
+        throw new Error(`Xero API call failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const xeroInvoice = await response.json();
 
       // Update local invoice status based on Xero status
-      invoice.status = xeroInvoice.body.Status === 'PAID' ? 'paid' : 'unpaid';
+      invoice.status = xeroInvoice.Status === 'PAID' ? 'paid' : 'unpaid';
       await invoice.save();
 
       return invoice;
@@ -429,14 +452,29 @@ class XeroService {
         throw new Error('No Xero organization selected. Please connect to Xero first.');
       }
 
-      const response = await xero.accountingApi.getContacts(tenantId);
+      // Use direct fetch approach like sync FROM Xero
+      const response = await fetch('https://api.xero.com/api.xro/2.0/Contacts', {
+        headers: {
+          'Authorization': `Bearer ${tokenSet.access_token}`,
+          'Xero-tenant-id': tenantId,
+          'Accept': 'application/json'
+        }
+      });
       
-      if (!response || !response.body || !response.body.Contacts) {
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API call failed:', errorText);
+        throw new Error(`Xero API call failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const responseData = await response.json();
+      
+      if (!responseData || !responseData.Contacts) {
         throw new Error('Invalid response from Xero');
       }
 
       // Transform the contacts to a simpler format
-      return response.body.Contacts.map(contact => ({
+      return responseData.Contacts.map(contact => ({
         id: contact.ContactID,
         name: contact.Name,
         email: contact.EmailAddress,

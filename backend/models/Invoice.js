@@ -59,6 +59,41 @@ const invoiceSchema = new mongoose.Schema({
     enum: ['DRAFT', 'SUBMITTED', 'AUTHORISED', 'PAID', 'VOIDED', 'DELETED'],
     default: 'DRAFT'
   },
+  // Line items for the invoice
+  lineItems: [{
+    itemNo: {
+      type: String,
+      trim: true
+    },
+    description: {
+      type: String,
+      trim: true
+    },
+    quantity: {
+      type: Number,
+      default: 1
+    },
+    unitPrice: {
+      type: Number,
+      required: true
+    },
+    account: {
+      type: String,
+      default: '191 - Consulting Fees'
+    },
+    taxRate: {
+      type: String,
+      default: 'GST on Income'
+    },
+    taxAmount: {
+      type: Number,
+      default: 0
+    },
+    amount: {
+      type: Number,
+      required: true
+    }
+  }],
   lastSynced: {
     type: Date
   },

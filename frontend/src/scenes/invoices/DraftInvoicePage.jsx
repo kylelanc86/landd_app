@@ -279,12 +279,22 @@ const DraftInvoicePage = () => {
         project: selectedProject._id, // MongoDB ObjectId reference
         client: null, // We'll handle client separately since it's a string, not ObjectId
         amount: calculateInvoiceTotal(), // Total amount
-        status: "awaiting_approval", // Match backend enum
+        status: "draft", // Save as draft for Xero sync
         date: new Date(invoiceHeader.invoiceDate), // Convert to Date object
         dueDate: new Date(dueDate), // Convert to Date object
         description: `Invoice for project ${selectedProject.name}`, // Description
         xeroClientName: selectedClient?.name, // Store client name in Xero field
         xeroReference: invoiceHeader.reference || "", // Store reference in Xero field
+        lineItems: invoiceItems.map((item) => ({
+          itemNo: item.itemNo,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          account: item.account,
+          taxRate: item.taxRate,
+          taxAmount: item.taxAmount,
+          amount: item.amount,
+        })),
       };
 
       // Save draft invoice via API

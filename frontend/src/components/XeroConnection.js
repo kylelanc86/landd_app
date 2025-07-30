@@ -57,22 +57,32 @@ const XeroConnection = () => {
   const handleDisconnect = async () => {
     try {
       setStatus('disconnecting');
+      console.log('Sending disconnect request...');
       const response = await fetch('http://localhost:5000/api/xero/disconnect', {
         method: 'POST'
       });
       
+      console.log('Disconnect response status:', response.status);
+      
       if (response.ok) {
+        const data = await response.json();
+        console.log('Disconnect successful:', data);
         setStatus('disconnected');
         setError(null);
+        // Clear any cached connection data
+        sessionStorage.removeItem('xeroState');
         // Refresh the page to clear any cached Xero data
         window.location.reload();
       } else {
         const data = await response.json();
+        console.log('Disconnect failed:', data);
         setError(data.message || 'Failed to disconnect from Xero');
+        setStatus('connected'); // Keep as connected if disconnect failed
       }
     } catch (error) {
       console.error('Error disconnecting from Xero:', error);
       setError('Failed to disconnect from Xero');
+      setStatus('connected'); // Keep as connected if disconnect failed
     }
   };
 

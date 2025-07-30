@@ -7,7 +7,7 @@ const auth = require('../middleware/auth');
 router.get('/', auth, async (req, res) => {
   try {
     console.log('Fetching all invoices from MongoDB...');
-    const invoices = await Invoice.find({})
+    const invoices = await Invoice.find({ isDeleted: { $ne: true } })
       .populate({
         path: 'project',
         select: 'name projectID',

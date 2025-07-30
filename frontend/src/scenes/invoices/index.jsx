@@ -718,9 +718,12 @@ const Invoices = () => {
       console.log("Starting draft sync to Xero...");
       setXeroError(null);
 
-      // Get all draft invoices that don't have a Xero ID
+      // Get all draft invoices that don't have a Xero ID and are not deleted
       const draftInvoices = invoices.filter(
-        (invoice) => invoice.status === "draft" && !invoice.xeroInvoiceId
+        (invoice) =>
+          invoice.status === "draft" &&
+          !invoice.xeroInvoiceId &&
+          !invoice.isDeleted
       );
 
       if (draftInvoices.length === 0) {
@@ -733,15 +736,14 @@ const Invoices = () => {
       // Sync each draft invoice to Xero
       for (const invoice of draftInvoices) {
         try {
+          console.log(
+            "Sending invoice to Xero:",
+            JSON.stringify(invoice, null, 2)
+          );
           const response = await xeroService.createInvoice(invoice);
           console.log("Created Xero invoice:", response);
 
-          // Update the local invoice with Xero ID
-          await invoiceService.update(invoice._id, {
-            ...invoice,
-            xeroInvoiceId: response.InvoiceID,
-            xeroStatus: "DRAFT",
-          });
+          // Note: Backend handles updating the invoice status automatically
         } catch (error) {
           console.error(`Failed to sync invoice ${invoice.invoiceID}:`, error);
         }

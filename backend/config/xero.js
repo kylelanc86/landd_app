@@ -62,11 +62,11 @@ const initializeXeroClient = async () => {
       }
 
       // Set the token in the Xero client
-      xero.setTokenSet(tokenSet);
+      await xero.setTokenSet(tokenSet);
 
       // Verify the token was set correctly
-      const verifyToken = xero.readTokenSet();
-      if (!verifyToken || !verifyToken.access_token) {
+      if (!xero.isInitialized()) {
+        console.error('Failed to initialize Xero client after setting token');
         return;
       }
 
@@ -92,6 +92,25 @@ xero.generateState = () => {
 
 xero.verifyState = (state) => {
   return state && currentState && state === currentState;
+};
+
+// Add reset method for disconnect
+xero.reset = async () => {
+  console.log('Resetting Xero client state...');
+  currentTenantId = null;
+  currentState = null;
+  isTokenInitialized = false;
+  xero.tokenSet = null;
+  
+  // Re-initialize the client with tokens from MongoDB
+  try {
+    await initializeXeroClient();
+    console.log('Xero client re-initialized after reset');
+  } catch (error) {
+    console.log('No tokens found in MongoDB after reset (this is expected for disconnect)');
+  }
+  
+  console.log('Xero client state reset complete');
 };
 
 // Add tenant management methods
@@ -157,13 +176,7 @@ xero.buildConsentUrl = async function() {
 // Add token reading method
 xero.readTokenSet = async () => {
   try {
-    
-    // If token is already initialized, return the current token set
-    if (isTokenInitialized && xero.tokenSet) {
-      console.log('Using existing token set');
-      return xero.tokenSet;
-    }
-    
+    // Always get the token from MongoDB - never trust the Xero client's internal state
     const token = await XeroToken.getToken();
     
     if (token) {
@@ -276,9 +289,11 @@ xero.setTokenSet = async (tokenSet) => {
     // Save token to MongoDB
     const savedToken = await XeroToken.setToken(tokenSet);
     
-    // Set the token directly in the Xero client
+    // Also set the token in the Xero client for isInitialized() to work
     xero.tokenSet = tokenSet;
     isTokenInitialized = true;
+    
+    console.log('Token saved to MongoDB and set in client');
     
     return true;
   } catch (error) {
@@ -428,29 +443,7 @@ xero.clearInvalidToken = async () => {
   }
 };
 
-// Ensure token is properly set before API calls
-const originalAccountingApi = xero.accountingApi;
-xero.accountingApi = new Proxy(originalAccountingApi, {
-  get: function(target, prop) {
-    const originalMethod = target[prop];
-    if (typeof originalMethod === 'function') {
-      return async function(...args) {
-        // Ensure token is set in the Xero client before making API calls
-        if (!xero.tokenSet || !xero.tokenSet.access_token) {
-          const tokenSet = await xero.readTokenSet();
-          if (!tokenSet || !tokenSet.access_token) {
-            throw new Error('No valid token available');
-          }
-          // Set the token directly in the client
-          xero.tokenSet = tokenSet;
-          isTokenInitialized = true;
-        }
-        
-        return originalMethod.apply(target, args);
-      };
-    }
-    return originalMethod;
-  }
-});
+// Note: Removed the accountingApi proxy wrapper to prevent automatic Xero client API calls
+// All API calls should now use direct fetch approach
 
 module.exports = xero; 
