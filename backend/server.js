@@ -30,6 +30,7 @@ const pdfDocRaptorV2Routes = require('./routes/pdf-docraptor-v2');
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 const sampleItemsRoutes = require('./routes/sampleItems');
 const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
+const invoiceItemsRoutes = require('./routes/invoiceItems');
 
 // Load environment variables
 dotenv.config();
@@ -133,6 +134,7 @@ connectDB()
     app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);
     app.use('/api/sample-items', requireAuth, sampleItemsRoutes);
     app.use('/api/client-supplied-jobs', requireAuth, clientSuppliedJobsRoutes);
+    app.use('/api/invoice-items', requireAuth, invoiceItemsRoutes);
 
 
     
@@ -155,7 +157,7 @@ connectDB()
     });
 
     // Start server
-    const PORT = process.env.PORT || 5001;
+    const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });

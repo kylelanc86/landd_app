@@ -44,6 +44,9 @@ import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
+const DraftInvoicePage = lazy(() =>
+  import("./scenes/invoices/DraftInvoicePage")
+);
 const SampleList = lazy(() =>
   import("./scenes/air-monitoring/air-monitoring-sample-list")
 );
@@ -68,6 +71,7 @@ const AdminDashboard = lazy(() => import("./scenes/admin/AdminDashboard"));
 const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
 
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
+const InvoiceItems = lazy(() => import("./scenes/admin/InvoiceItems"));
 
 // New lazy loaded components for missing pages
 const LeadAssessment = lazy(() =>
@@ -175,7 +179,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["clients.view"]}
                             >
-                              <Navigate to="/databases?db=clients" replace />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Clients />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -253,7 +259,9 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["projects.view"]}
                             >
-                              <Navigate to="/databases?db=projects" replace />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Projects />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -283,7 +291,21 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["invoices.view"]}
                             >
-                              <Navigate to="/databases?db=invoices" replace />
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <Invoices />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/invoices/draft"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["invoices.create"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <DraftInvoicePage />
+                              </Suspense>
                             </PermissionRoute>
                           }
                         />
@@ -724,6 +746,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <TemplateTestPage />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/invoice-items"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["admin.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <InvoiceItems />
                               </Suspense>
                             </PermissionRoute>
                           }

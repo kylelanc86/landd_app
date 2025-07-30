@@ -24,10 +24,13 @@ import {
   ListItemText,
   Checkbox,
   Divider,
+  LinearProgress,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
+import { Breadcrumbs, Link } from "@mui/material";
+import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import Header from "../../components/Header";
 import { tokens } from "../../theme";
 import AddIcon from "@mui/icons-material/Add";
@@ -73,6 +76,7 @@ const Clients = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
   const [searchInput, setSearchInput] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [pagination, setPagination] = useState({
     page: 1,
@@ -500,20 +504,64 @@ const Clients = () => {
   if (loading) return <Typography>Loading clients...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
+  const handleBackToDatabases = () => {
+    navigate("/databases");
+  };
+
   return (
-    <Box m="20px">
-      <Box display="flex" justifyContent="space-between" alignItems="center">
+    <Box m="5px 0px 20px 20px">
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>Clients</Typography>
+      <Box sx={{ mt: 4, mb: 4 }}>
+        <Breadcrumbs sx={{ mb: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToDatabases}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Databases Home
+          </Link>
+          <Typography color="text.primary">Clients</Typography>
+        </Breadcrumbs>
+      </Box>
+      {/* Search Loading Animation - Only shows during searches */}
+      {searchLoading && (
+        <Box sx={{ width: "100%", mb: 2 }}>
+          <LinearProgress
+            sx={{
+              height: 3,
+              borderRadius: 1.5,
+              backgroundColor: "rgba(25, 118, 210, 0.1)",
+              "& .MuiLinearProgress-bar": {
+                backgroundColor: "#1976d2",
+              },
+            }}
+          />
+        </Box>
+      )}
+
+      {/* Search and Filter Section */}
+      {/* Add Client Button - Full Width */}
+
+      <Box sx={{ mb: 2 }}>
         <Button
           variant="contained"
           color="secondary"
           onClick={() => setDialogOpen(true)}
+          fullWidth
           sx={{
-            backgroundColor: theme.palette.secondary.main,
-            "&:hover": { backgroundColor: theme.palette.secondary.dark },
+            backgroundColor: theme.palette.primary.main,
+            "&:hover": { backgroundColor: theme.palette.primary.dark },
+            height: 60,
+            fontSize: "1.2rem",
+            fontWeight: "bold",
+            border: "2px solid rgb(83, 84, 85)",
+            py: 2,
           }}
         >
           <AddIcon sx={{ mr: 1 }} />
-          Add Client
+          ADD CLIENT
         </Button>
       </Box>
 

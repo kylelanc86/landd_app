@@ -35,8 +35,12 @@ import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
 import PrintIcon from "@mui/icons-material/Print";
 import DeleteIcon from "@mui/icons-material/Delete";
+import SearchIcon from "@mui/icons-material/Search";
+import ClearIcon from "@mui/icons-material/Clear";
 import autoTable from "jspdf-autotable";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Breadcrumbs, Link } from "@mui/material";
+import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import {
   invoiceService,
   projectService,
@@ -94,6 +98,7 @@ const Invoices = () => {
   const [sortDir, setSortDir] = useState("desc");
   const [dueDateManuallyChanged, setDueDateManuallyChanged] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [xeroConnected, setXeroConnected] = useState(false);
   const [xeroError, setXeroError] = useState(null);
   const [showXeroAlert, setShowXeroAlert] = useState(false);
@@ -135,8 +140,6 @@ const Invoices = () => {
           setLoading(false);
           return;
         }
-
-
 
         setInvoices(invoicesRes.data);
         setProjects(
@@ -457,8 +460,45 @@ const Invoices = () => {
   };
 
   const getFilteredInvoices = useCallback(() => {
-    // Apply sorting only
-    const sorted = [...invoices].sort((a, b) => {
+    // Apply search filtering first
+    let filtered = [...invoices];
+
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase();
+      filtered = filtered.filter((invoice) => {
+        // Search in invoice ID
+        if (invoice.invoiceID?.toLowerCase().includes(searchLower)) return true;
+
+        // Search in project name/ID
+        const project = projects.find((p) => p._id === invoice.project);
+        if (project) {
+          const projectText = `${project.projectID || ""} ${
+            project.name || ""
+          }`.toLowerCase();
+          if (projectText.includes(searchLower)) return true;
+        }
+
+        // Search in client name
+        if (invoice.xeroClientName?.toLowerCase().includes(searchLower))
+          return true;
+        if (invoice.project?.client?.name?.toLowerCase().includes(searchLower))
+          return true;
+        if (invoice.client?.name?.toLowerCase().includes(searchLower))
+          return true;
+
+        // Search in status
+        if (invoice.status?.toLowerCase().includes(searchLower)) return true;
+
+        // Search in amount
+        if (invoice.amount?.toString().includes(searchLower)) return true;
+
+        // If no match found, exclude this invoice
+        return false;
+      });
+    }
+
+    // Apply sorting
+    const sorted = filtered.sort((a, b) => {
       let valA = a[sortBy],
         valB = b[sortBy];
 
@@ -492,7 +532,7 @@ const Invoices = () => {
     });
 
     return sorted;
-  }, [invoices, sortBy, sortDir]);
+  }, [invoices, sortBy, sortDir, searchQuery, projects]);
 
   // Sum of unpaid invoice amounts
   const totalUnpaid = invoices
@@ -765,14 +805,6 @@ const Invoices = () => {
         else if (row?.client?.name) {
           clientName = row.client.name;
         }
-
-        console.log("Client column valueGetter:", {
-          invoiceID: row?.invoiceID,
-          xeroClientName: row?.xeroClientName,
-          projectClientName: row?.project?.client?.name,
-          clientObjectName: row?.client?.name,
-          finalClientName: clientName,
-        });
 
         return clientName;
       },
@@ -1322,8 +1354,29 @@ const Invoices = () => {
     );
   }
 
+  const handleBackToDatabases = () => {
+    navigate("/databases");
+  };
+
   return (
     <Box m="20px">
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Invoices
+      </Typography>
+      <Box sx={{ mt: 4, mb: 4 }}>
+        <Breadcrumbs sx={{ mb: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToDatabases}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Databases Home
+          </Link>
+          <Typography color="text.primary">Invoices</Typography>
+        </Breadcrumbs>
+      </Box>
       {/* Loading overlay for Xero sync */}
       {syncingXero && (
         <Box
@@ -1352,7 +1405,7 @@ const Invoices = () => {
         <Button
           variant="contained"
           color="secondary"
-          onClick={handleOpenDialog}
+          onClick={() => navigate("/invoices/draft")}
           fullWidth
           sx={{
             backgroundColor: theme.palette.primary.main,
@@ -1432,7 +1485,39 @@ const Invoices = () => {
         )}
       </Box>
 
-      {/* Removed all filtering UI elements */}
+      {/* Search Bar */}
+      <Box sx={{ mt: 2, mb: 2 }}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search invoices by ID, project, client, status, or amount..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={() => setSearchQuery("")}
+                  edge="end"
+                >
+                  <ClearIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 2,
+            },
+          }}
+        />
+      </Box>
 
       {/* Invoice Summary */}
       <Box

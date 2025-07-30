@@ -60,6 +60,8 @@ import {
   UserAvatar,
 } from "../../components/JobStatus";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Breadcrumbs, Link } from "@mui/material";
+import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import { useTheme } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -1953,8 +1955,26 @@ const Projects = ({ initialFilters = {} }) => {
     return <Typography>Loading columns...</Typography>;
   }
 
+  const handleBackToDatabases = () => {
+    navigate("/databases");
+  };
+
   return (
     <Box m="5px 0px 20px 20px">
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>Projects</Typography>      <Box sx={{ mt: 4, mb: 4 }}>
+        <Breadcrumbs sx={{ mb: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToDatabases}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Databases Home
+          </Link>
+          <Typography color="text.primary">Projects</Typography>
+        </Breadcrumbs>
+      </Box>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>

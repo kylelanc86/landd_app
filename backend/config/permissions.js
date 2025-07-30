@@ -34,11 +34,17 @@ const PERMISSIONS = {
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
+  
+  // Admin permissions
+  'admin.view': 'Admin view access',
+  'admin.create': 'Admin create access',
+  'admin.update': 'Admin update access',
+  'admin.delete': 'Admin delete access',
 };
 
 // Define role-based permissions
 const ROLE_PERMISSIONS = {
-  admin: Object.keys(PERMISSIONS), // Admins have all restricted permissions
+  admin: Object.keys(PERMISSIONS), // Admins have all permissions including admin.*
   manager: [
     'projects.view',
     'projects.create',

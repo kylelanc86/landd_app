@@ -13,6 +13,7 @@ import {
 import {
   PeopleOutlined as PeopleIcon,
   Assessment as AssessmentIcon,
+  ReceiptOutlined as ReceiptIcon,
   ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
@@ -47,6 +48,16 @@ const AdminDashboard = () => {
       requiredPermission: "admin.view",
       color: "#2e7d32",
       chipLabel: "Templates",
+    },
+    {
+      id: "invoice-items",
+      title: "Invoice Items",
+      description: "Manage default invoice items for draft invoices",
+      icon: <ReceiptIcon />,
+      path: "/admin/invoice-items",
+      requiredPermission: "admin.view",
+      color: "#ed6c02",
+      chipLabel: "Items",
     },
   ];
 

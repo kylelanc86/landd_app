@@ -136,6 +136,7 @@ export const clientService = {
 // Project service
 export const projectService = {
   getAll: (params = {}) => {
+    console.log("projectService.getAll called with params:", params);
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
@@ -146,7 +147,9 @@ export const projectService = {
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
-    return api.get(`/projects?${queryParams.toString()}`);
+    const url = `/projects?${queryParams.toString()}`;
+    console.log("Making API call to:", url);
+    return api.get(url);
   },
   getAssignedToMe: (params = {}) => {
     const queryParams = new URLSearchParams();

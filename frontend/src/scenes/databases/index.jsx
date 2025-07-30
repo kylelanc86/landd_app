@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   Box,
   Grid,
@@ -7,16 +7,13 @@ import {
   Typography,
   CardActionArea,
 } from "@mui/material";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import performanceMonitor from "../../utils/performanceMonitor";
 
-// Import components for inline display
-import Clients from "../clients";
-import Projects from "../projects";
-import Invoices from "../invoices";
+
 
 const DatabaseWidget = ({
   title,
@@ -79,14 +76,6 @@ const DatabaseWidget = ({
 
 const Databases = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-
-  // Get the database type from URL parameters, default to "projects"
-  const urlParams = new URLSearchParams(location.search);
-  const urlDatabase = urlParams.get("db");
-  const initialDatabase = urlDatabase || "projects";
-
-  const [selectedDatabase, setSelectedDatabase] = useState(initialDatabase);
 
   // Performance monitoring
   useEffect(() => {
@@ -97,19 +86,11 @@ const Databases = () => {
     };
   }, []);
 
-  // Monitor database switching performance
-  useEffect(() => {
-    if (selectedDatabase) {
-      performanceMonitor.startTimer(`database-switch-${selectedDatabase}`);
-    }
-  }, [selectedDatabase]);
-
-  const handleDatabaseChange = (database) => {
-    performanceMonitor.endTimer(`database-switch-${selectedDatabase}`);
-    setSelectedDatabase(database);
-    // Update URL without reloading the page
-    const newUrl = `/databases?db=${database}`;
-    navigate(newUrl, { replace: true });
+  const handleDatabaseClick = (database) => {
+    performanceMonitor.startTimer(`database-navigation-${database}`);
+    // Navigate to the individual page
+    navigate(`/${database}`);
+    performanceMonitor.endTimer(`database-navigation-${database}`);
   };
 
   const databaseWidgets = [
@@ -117,45 +98,21 @@ const Databases = () => {
       title: "PROJECTS",
       icon: <AssignmentIcon />,
       color: "primary",
-      onClick: () => handleDatabaseChange("projects"),
+      onClick: () => handleDatabaseClick("projects"),
     },
     {
       title: "CLIENTS",
       icon: <PeopleIcon />,
       color: "primary",
-      onClick: () => handleDatabaseChange("clients"),
+      onClick: () => handleDatabaseClick("clients"),
     },
     {
       title: "INVOICES",
       icon: <ReceiptOutlinedIcon />,
       color: "primary",
-      onClick: () => handleDatabaseChange("invoices"),
+      onClick: () => handleDatabaseClick("invoices"),
     },
   ];
-
-  const renderSelectedContent = () => {
-    // Get additional filters from URL parameters
-    const statusFilter = urlParams.get("status");
-    const departmentFilter = urlParams.get("department");
-    const searchFilter = urlParams.get("search");
-
-    const filters = {
-      status: statusFilter,
-      department: departmentFilter,
-      search: searchFilter,
-    };
-
-    switch (selectedDatabase) {
-      case "projects":
-        return <Projects initialFilters={filters} />;
-      case "clients":
-        return <Clients />;
-      case "invoices":
-        return <Invoices />;
-      default:
-        return null;
-    }
-  };
 
   return (
     <Box sx={{ p: 3 }}>
@@ -170,48 +127,13 @@ const Databases = () => {
         }}
       >
         <Grid container spacing={3}>
-          {databaseWidgets.map((widget, index) => {
-            // Convert widget title to match selectedDatabase format
-            let widgetKey = widget.title.toLowerCase().replace(" database", "");
-            // Handle the "project" vs "projects" mismatch
-            if (widgetKey === "project") widgetKey = "projects";
-            if (widgetKey === "client") widgetKey = "clients";
-            if (widgetKey === "invoice") widgetKey = "invoices";
-
-            const isActive = selectedDatabase === widgetKey;
-
-            console.log(
-              `Widget: ${widget.title}, Key: ${widgetKey}, Selected: ${selectedDatabase}, Active: ${isActive}`
-            );
-
-            return (
-              <Grid item xs={12} md={4} key={index}>
-                <DatabaseWidget {...widget} isActive={isActive} />
-              </Grid>
-            );
-          })}
+          {databaseWidgets.map((widget, index) => (
+            <Grid item xs={12} md={4} key={index}>
+              <DatabaseWidget {...widget} isActive={false} />
+            </Grid>
+          ))}
         </Grid>
       </Box>
-
-      {/* Table Section */}
-      {selectedDatabase && (
-        <Box
-          sx={{
-            backgroundColor: "background.paper",
-            borderRadius: "8px",
-            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
-            p: 3,
-          }}
-        >
-          <Typography
-            variant="h5"
-            component="h2"
-            gutterBottom
-            sx={{ mb: 3 }}
-          ></Typography>
-          {renderSelectedContent()}
-        </Box>
-      )}
     </Box>
   );
 };
