@@ -252,7 +252,7 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
     const Job = require('../models/Job');
     const Shift = require('../models/Shift');
     
-    const jobs = await Job.find({ project: projectId }).populate('project', 'name projectID');
+    const jobs = await Job.find({ projectId: projectId }).populate('projectId', 'name projectID');
     
     const airMonitoringReports = [];
     
@@ -277,8 +277,8 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
           reportIssueDate: shift.reportIssueDate,
           jobName: job.name,
           jobId: job._id,
-          projectName: job.project?.name,
-          projectId: job.project?._id
+          projectName: job.projectId?.name,
+          projectId: job.projectId?._id
         });
       });
     }

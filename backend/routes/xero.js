@@ -518,7 +518,7 @@ router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
     } else {
       // Fallback to basic line item using the actual description
       lineItems = [{
-        Description: invoice.description || `Invoice for ${invoice.project?.name || 'Project'}`,
+        Description: invoice.description || `Invoice for ${invoice.projectId?.name || 'Project'}`,
         Quantity: 1,
         UnitAmount: invoice.amount,
         AccountCode: '200' // Default account code for sales

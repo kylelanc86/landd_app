@@ -10,7 +10,7 @@ router.get('/', auth, async (req, res) => {
     const invoices = await Invoice.find({ isDeleted: { $ne: true } })
       .sort({ createdAt: -1 }) // Show newest invoices first
       .populate({
-        path: 'project',
+        path: 'projectId',
         select: 'name projectID',
         populate: {
           path: 'client',
@@ -33,7 +33,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
-      .populate('project', 'name')
+      .populate('projectId', 'name')
       .populate('client', 'name');
     if (!invoice) {
       return res.status(404).json({ message: 'Invoice not found' });
@@ -51,7 +51,7 @@ router.post('/', auth, async (req, res) => {
   try {
     const invoice = new Invoice({
       invoiceID: req.body.invoiceID,
-      project: req.body.project,
+      projectId: req.body.projectId,
       client: req.body.client,
       amount: req.body.amount,
       status: req.body.status,
@@ -69,7 +69,7 @@ router.post('/', auth, async (req, res) => {
     console.log('Invoice saved successfully:', JSON.stringify(newInvoice.toObject(), null, 2));
     
     const populatedInvoice = await Invoice.findById(newInvoice._id)
-      .populate('project', 'name')
+      .populate('projectId', 'name')
       .populate('client', 'name');
     res.status(201).json(populatedInvoice);
   } catch (err) {
@@ -115,7 +115,7 @@ router.put('/:id', auth, async (req, res) => {
 
     Object.assign(invoice, {
       invoiceID: req.body.invoiceID,
-      project: req.body.project,
+      projectId: req.body.projectId,
       client: req.body.client,
       amount: req.body.amount,
       status: req.body.status,
@@ -129,7 +129,7 @@ router.put('/:id', auth, async (req, res) => {
 
     const updatedInvoice = await invoice.save();
     const populatedInvoice = await Invoice.findById(updatedInvoice._id)
-      .populate('project', 'name')
+      .populate('projectId', 'name')
       .populate('client', 'name');
     res.json(populatedInvoice);
   } catch (err) {
@@ -202,7 +202,7 @@ router.post('/:id/restore', auth, async (req, res) => {
     await invoice.save();
     
     const populatedInvoice = await Invoice.findById(invoice._id)
-      .populate('project', 'name')
+      .populate('projectId', 'name')
       .populate('client', 'name');
       
     res.json({ 
@@ -218,7 +218,7 @@ router.post('/:id/restore', auth, async (req, res) => {
 router.get('/deleted/all', auth, async (req, res) => {
   try {
     const deletedInvoices = await Invoice.findIncludingDeleted({ isDeleted: true })
-      .populate('project', 'name')
+      .populate('projectId', 'name')
       .populate('client', 'name')
       .sort({ deletedAt: -1 });
     
@@ -235,7 +235,7 @@ router.get('/deleted/:id', auth, async (req, res) => {
       _id: req.params.id, 
       isDeleted: true 
     })
-    .populate('project', 'name')
+    .populate('projectId', 'name')
     .populate('client', 'name');
     
     if (!invoice) {

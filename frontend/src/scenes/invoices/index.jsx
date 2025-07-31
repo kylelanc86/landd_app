@@ -356,7 +356,9 @@ const Invoices = () => {
         // Search in client name
         if (invoice.xeroClientName?.toLowerCase().includes(searchLower))
           return true;
-        if (invoice.projectId?.client?.name?.toLowerCase().includes(searchLower))
+        if (
+          invoice.projectId?.client?.name?.toLowerCase().includes(searchLower)
+        )
           return true;
         if (invoice.client?.name?.toLowerCase().includes(searchLower))
           return true;
