@@ -64,10 +64,9 @@ const PrimaryFlowmeterPage = () => {
         <IconButton onClick={() => navigate("/calibrations")}>
           <ArrowBackIcon />
         </IconButton>
-        <Header
-          title="Primary Flowmeter Calibrations"
-          subtitle="Manage primary flowmeter calibration records"
-        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Primary Flowmeter Calibrations
+        </Typography>
       </Box>
 
       <Box display="flex" justifyContent="flex-end" mb="20px">

@@ -90,10 +90,9 @@ const MicroscopePage = () => {
         <IconButton onClick={() => navigate("/calibrations")}>
           <ArrowBackIcon />
         </IconButton>
-        <Header
-          title="Phase Contrast Microscope Records"
-          subtitle="Manage microscope servicing records"
-        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Phase Contrast Microscope Records
+        </Typography>
       </Box>
 
       <Box display="flex" justifyContent="flex-end" mb="20px">

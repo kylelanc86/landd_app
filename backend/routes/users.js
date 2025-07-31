@@ -41,7 +41,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new user
 router.post('/', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, password, role, phone, licences, signature } = req.body;
+    const { firstName, lastName, email, password, role, phone, licences, signature, workingHours, labApprovals } = req.body;
 
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -59,6 +59,19 @@ router.post('/', auth, async (req, res) => {
       phone,
       licences: licences || [],
       signature: signature || '',
+      workingHours: workingHours || {
+        monday: { enabled: false, hours: 0 },
+        tuesday: { enabled: false, hours: 0 },
+        wednesday: { enabled: false, hours: 0 },
+        thursday: { enabled: false, hours: 0 },
+        friday: { enabled: false, hours: 0 },
+        saturday: { enabled: false, hours: 0 },
+        sunday: { enabled: false, hours: 0 }
+      },
+      labApprovals: labApprovals || {
+        fibreCounting: false,
+        fibreIdentification: false
+      },
       isActive: true
     });
 
@@ -76,7 +89,7 @@ router.post('/', auth, async (req, res) => {
 // Update user
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, isActive, licences, signature } = req.body;
+    const { firstName, lastName, email, role, phone, isActive, licences, signature, workingHours, labApprovals } = req.body;
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -93,6 +106,8 @@ router.put('/:id', auth, async (req, res) => {
     if (typeof isActive === 'boolean') user.isActive = isActive;
     if (licences !== undefined) user.licences = licences;
     if (signature !== undefined) user.signature = signature;
+    if (workingHours !== undefined) user.workingHours = workingHours;
+    if (labApprovals !== undefined) user.labApprovals = labApprovals;
 
     await user.save();
 

@@ -64,10 +64,9 @@ const AcetoneVaporiserPage = () => {
         <IconButton onClick={() => navigate("/calibrations")}>
           <ArrowBackIcon />
         </IconButton>
-        <Header
-          title="Acetone Vaporiser Calibrations"
-          subtitle="Manage acetone vaporiser calibration records"
-        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Acetone Vaporiser Calibrations
+        </Typography>
       </Box>
 
       <Box display="flex" justifyContent="flex-end" mb="20px">

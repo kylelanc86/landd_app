@@ -726,11 +726,7 @@ const Shifts = () => {
         mb="20px"
       >
         <Box>
-          <Header
-            title="Manage Air Monitoring Shifts"
-            subtitle={`Project: ${projectDetails?.projectID || "Loading..."}`}
-            secondarySubtitle={projectDetails?.name || "Loading..."}
-          />
+          <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> Manage Air Monitoring Shifts </Typography>
         </Box>
         <Box display="flex" gap={2}>
           {allShiftsComplete && (

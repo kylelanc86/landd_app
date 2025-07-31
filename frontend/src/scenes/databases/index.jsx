@@ -6,76 +6,19 @@ import {
   CardContent,
   Typography,
   CardActionArea,
+  CardMedia,
+  useTheme,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import performanceMonitor from "../../utils/performanceMonitor";
-
-
-
-const DatabaseWidget = ({
-  title,
-  icon,
-  onClick,
-  color = "primary",
-  isActive = false,
-}) => (
-  <Card
-    sx={{
-      height: "100%",
-      display: "flex",
-      flexDirection: "column",
-      transition: "all 0.3s ease",
-      backgroundColor: isActive ? `${color}.light` : "background.paper",
-      border: isActive ? `3px solid ${color}.main` : "2px solid transparent",
-      boxShadow: isActive
-        ? `0 6px 20px ${color}.main`
-        : "0 2px 8px rgba(0, 0, 0, 0.1)",
-      "&:hover": {
-        transform: isActive ? "none" : "translateY(-4px)",
-        boxShadow: isActive ? `0 6px 20px ${color}.main` : 4,
-      },
-    }}
-  >
-    <CardActionArea
-      onClick={onClick}
-      sx={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "stretch",
-      }}
-    >
-      <CardContent sx={{ flexGrow: 1, textAlign: "center", p: 1 }}>
-        <Box sx={{ m: 1, display: "flex", justifyContent: "center" }}>
-          {React.cloneElement(icon, {
-            sx: {
-              fontSize: 30,
-              color: isActive ? `${color}.dark` : `${color}.main`,
-            },
-          })}
-        </Box>
-        <Typography
-          fontSize={22}
-          fontWeight={"bold"}
-          component="h2"
-          gutterBottom
-          sx={{
-            color: isActive ? `${color}.dark` : "text.primary",
-            fontWeight: isActive ? 600 : 400,
-          }}
-        >
-          {title}
-        </Typography>
-      </CardContent>
-    </CardActionArea>
-  </Card>
-);
 
 const Databases = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
 
   // Performance monitoring
   useEffect(() => {
@@ -93,43 +36,115 @@ const Databases = () => {
     performanceMonitor.endTimer(`database-navigation-${database}`);
   };
 
-  const databaseWidgets = [
+  const databaseModules = [
     {
-      title: "PROJECTS",
+      id: "projects",
+      title: "Projects",
       icon: <AssignmentIcon />,
-      color: "primary",
-      onClick: () => handleDatabaseClick("projects"),
+      path: "/projects",
+      color: "#1976d2",
+      description: "Manage and track all projects",
     },
     {
-      title: "CLIENTS",
+      id: "clients",
+      title: "Clients",
       icon: <PeopleIcon />,
-      color: "primary",
-      onClick: () => handleDatabaseClick("clients"),
+      path: "/clients",
+      color: "#388e3c",
+      description: "Manage client information and contacts",
     },
     {
-      title: "INVOICES",
+      id: "invoices",
+      title: "Invoices",
       icon: <ReceiptOutlinedIcon />,
-      color: "primary",
-      onClick: () => handleDatabaseClick("invoices"),
+      path: "/invoices",
+      color: "#7b1fa2",
+      description: "Create and manage invoices",
     },
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Widgets Section */}
-      <Box
-        sx={{
-          backgroundColor: "background.paper",
-          borderRadius: "8px",
-          boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
-          p: 3,
-          mb: 3,
-        }}
-      >
-        <Grid container spacing={3}>
-          {databaseWidgets.map((widget, index) => (
-            <Grid item xs={12} md={4} key={index}>
-              <DatabaseWidget {...widget} isActive={false} />
+    <Box m="20px">
+      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
+        Databases
+      </Typography>
+      <Box sx={{ mt: 4 }}>
+        <Grid container spacing={4}>
+          {databaseModules.map((module) => (
+            <Grid item xs={12} md={6} lg={4} key={module.id}>
+              <Card
+                sx={{
+                  height: "100%",
+                  transition: "all 0.3s ease-in-out",
+                  "&:hover": {
+                    transform: "translateY(-4px)",
+                    boxShadow: 4,
+                  },
+                  position: "relative",
+                }}
+              >
+                <CardActionArea
+                  onClick={() => handleDatabaseClick(module.id)}
+                  sx={{
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                    cursor: "pointer",
+                  }}
+                >
+                  <CardMedia
+                    component="div"
+                    sx={{
+                      height: 200,
+                      backgroundColor: module.color,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      position: "relative",
+                    }}
+                  >
+                    {React.cloneElement(module.icon, {
+                      sx: { fontSize: 80, color: "white" },
+                    })}
+                  </CardMedia>
+                  <CardContent
+                    sx={{
+                      flexGrow: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <Typography variant="h5" component="h2" gutterBottom>
+                      {module.title}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 2, flexGrow: 1 }}
+                    >
+                      {module.description}
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginTop: "auto",
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        color="primary"
+                        sx={{ fontWeight: "bold" }}
+                      >
+                        View {module.title}
+                      </Typography>
+                      <ArrowForwardIcon color="primary" />
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
             </Grid>
           ))}
         </Grid>

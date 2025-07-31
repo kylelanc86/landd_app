@@ -2,7 +2,6 @@ import React from "react";
 import { Box, Typography, Paper, Breadcrumbs, Link } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
-import Header from "../../components/Header";
 
 const Audits = () => {
   const navigate = useNavigate();
@@ -12,7 +11,7 @@ const Audits = () => {
   };
   return (
     <Box m="20px">
-      <Header title="LAB AUDITS" subtitle="Manage laboratory audit records" />
+      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> LAB AUDITS </Typography>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link

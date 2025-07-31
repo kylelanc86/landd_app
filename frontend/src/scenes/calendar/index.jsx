@@ -312,7 +312,10 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
   return (
     <Box m="20px" position="relative">
       <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Header title="CALENDAR" subtitle="Manage your project schedule" />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          {" "}
+          CALENDAR{" "}
+        </Typography>
       </Box>
       <Box
         mt="20px"

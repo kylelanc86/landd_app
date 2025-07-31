@@ -55,6 +55,8 @@ const NewSample = lazy(() => import("./scenes/air-monitoring/new-sample"));
 const EditSample = lazy(() => import("./scenes/air-monitoring/edit-sample"));
 const Analysis = lazy(() => import("./scenes/air-monitoring/analysis"));
 const Users = lazy(() => import("./scenes/users"));
+const EditUserPage = lazy(() => import("./scenes/users/EditUserPage"));
+const AddUserPage = lazy(() => import("./scenes/users/AddUserPage"));
 const Profile = lazy(() => import("./scenes/profile"));
 
 const AsbestosClearance = lazy(() =>
@@ -340,6 +342,30 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <Users />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/users/edit/:userId"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["users.edit"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <EditUserPage />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/users/add"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["users.create"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AddUserPage />
                               </Suspense>
                             </PermissionRoute>
                           }

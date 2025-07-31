@@ -64,10 +64,9 @@ const GraticulePage = () => {
         <IconButton onClick={() => navigate("/calibrations")}>
           <ArrowBackIcon />
         </IconButton>
-        <Header
-          title="Graticule Calibrations"
-          subtitle="Manage graticule calibration records"
-        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Graticule Calibrations
+        </Typography>
       </Box>
 
       <Box display="flex" justifyContent="flex-end" mb="20px">

@@ -127,6 +127,7 @@ const emptyForm = {
   users: [],
   status: ACTIVE_STATUSES[0],
   notes: "",
+  isLargeProject: false,
   projectContact: {
     name: "",
     number: "",
@@ -247,6 +248,28 @@ const generateProjectId = (projects) => {
     })
   );
   return highestId + 1;
+};
+
+const generateHazProjectId = (projects) => {
+  // Filter projects that have HAZ prefix
+  const hazProjects = projects.filter(
+    (project) => project.projectID && project.projectID.startsWith("HAZ")
+  );
+
+  if (hazProjects.length === 0) {
+    return "HAZ001";
+  }
+
+  // Find the highest HAZ project number
+  const highestHazNumber = Math.max(
+    ...hazProjects.map((project) => {
+      const numericPart = parseInt(project.projectID.replace("HAZ", ""));
+      return isNaN(numericPart) ? 0 : numericPart;
+    })
+  );
+
+  const nextNumber = highestHazNumber + 1;
+  return `HAZ${String(nextNumber).padStart(3, "0")}`;
 };
 
 const resetProjectIds = (projects) => {
@@ -1961,7 +1984,10 @@ const Projects = ({ initialFilters = {} }) => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>Projects</Typography>      <Box sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Projects
+      </Typography>{" "}
+      <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link
             component="button"
@@ -1990,10 +2016,8 @@ const Projects = ({ initialFilters = {} }) => {
           />
         </Box>
       )}
-
       {/* Search and Filter Section */}
       {/* Add Project Button - Full Width */}
-
       <Box sx={{ mb: 2 }}>
         <Button
           variant="contained"
@@ -2114,7 +2138,6 @@ const Projects = ({ initialFilters = {} }) => {
           </Stack>
         </Stack>
       </Box>
-
       {/* Column Visibility Dropdown */}
       <Popover
         open={Boolean(columnVisibilityAnchor)}
@@ -2166,7 +2189,6 @@ const Projects = ({ initialFilters = {} }) => {
           </List>
         </Box>
       </Popover>
-
       {/* Department Filter Buttons */}
       <Box
         display="flex"
@@ -2236,13 +2258,11 @@ const Projects = ({ initialFilters = {} }) => {
           </Button>
         ))}
       </Box>
-
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
-
       <Box
         m="40px 0 0 0"
         sx={{
@@ -2322,7 +2342,6 @@ const Projects = ({ initialFilters = {} }) => {
           }}
         />
       </Box>
-
       {/* Project Details Dialog */}
       <Dialog
         open={dialogOpen}
@@ -2343,15 +2362,38 @@ const Projects = ({ initialFilters = {} }) => {
                 <Grid item xs={12}>
                   <TextField
                     label="Project ID"
-                    value="Will be auto-generated"
+                    value={
+                      form.isLargeProject
+                        ? generateHazProjectId(projects)
+                        : "Will be auto-generated"
+                    }
                     disabled
                     fullWidth
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
-                        WebkitTextFillColor: "#666",
-                        fontStyle: "italic",
+                        WebkitTextFillColor: form.isLargeProject
+                          ? "#000"
+                          : "#666",
+                        fontStyle: form.isLargeProject ? "normal" : "italic",
                       },
                     }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.isLargeProject || false}
+                        onChange={(e) => {
+                          setForm((prev) => ({
+                            ...prev,
+                            isLargeProject: e.target.checked,
+                          }));
+                        }}
+                        color="primary"
+                      />
+                    }
+                    label="Large Project (HAZ prefix)"
                   />
                 </Grid>
                 <Grid item xs={12}>
@@ -2623,7 +2665,6 @@ const Projects = ({ initialFilters = {} }) => {
           </DialogActions>
         </form>
       </Dialog>
-
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
@@ -2649,7 +2690,6 @@ const Projects = ({ initialFilters = {} }) => {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* New Client Dialog */}
       <Dialog
         open={clientDialogOpen}

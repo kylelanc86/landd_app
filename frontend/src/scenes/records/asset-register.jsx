@@ -2,7 +2,6 @@ import React from "react";
 import { Box, Typography, Paper, Breadcrumbs, Link } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
-import Header from "../../components/Header";
 
 const AssetRegister = () => {
   const navigate = useNavigate();
@@ -12,10 +11,7 @@ const AssetRegister = () => {
   };
   return (
     <Box m="20px">
-      <Header
-        title="ASSET REGISTER"
-        subtitle="Manage company assets and equipment"
-      />
+      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> ASSET REGISTER </Typography>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link

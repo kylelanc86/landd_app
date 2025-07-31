@@ -67,6 +67,57 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  workingHours: {
+    type: {
+      monday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      },
+      tuesday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      },
+      wednesday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      },
+      thursday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      },
+      friday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      },
+      saturday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      },
+      sunday: {
+        enabled: { type: Boolean, default: false },
+        hours: { type: Number, default: 0, min: 0, max: 24 }
+      }
+    },
+    default: {
+      monday: { enabled: false, hours: 0 },
+      tuesday: { enabled: false, hours: 0 },
+      wednesday: { enabled: false, hours: 0 },
+      thursday: { enabled: false, hours: 0 },
+      friday: { enabled: false, hours: 0 },
+      saturday: { enabled: false, hours: 0 },
+      sunday: { enabled: false, hours: 0 }
+    }
+  },
+  labApprovals: {
+    type: {
+      fibreCounting: { type: Boolean, default: false },
+      fibreIdentification: { type: Boolean, default: false }
+    },
+    default: {
+      fibreCounting: false,
+      fibreIdentification: false
+    }
+  },
   notifications: {
     email: {
       type: Boolean,

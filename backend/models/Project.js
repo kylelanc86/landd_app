@@ -103,6 +103,10 @@ const projectSchema = new mongoose.Schema({
   reports_present: {
     type: Boolean,
     default: false
+  },
+  isLargeProject: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -134,50 +138,81 @@ projectSchema.index({
 });
 
 // Function to generate the next project ID
-async function generateNextProjectId() {
+async function generateNextProjectId(isLargeProject = false) {
   try {
     console.log('Starting projectID generation...');
+    console.log('Is large project:', isLargeProject);
     
-    // Find all projects and sort by projectID in descending order
-    const projects = await mongoose.model('Project')
-      .find({}, { projectID: 1, _id: 0 })  // Explicitly select projectID field
-      .sort({ projectID: -1 });
-    
-    console.log('Found projects with projectIDs:', projects);
-    
-    if (projects.length === 0) {
-      console.log('No existing projects, starting with LDJ00001');
-      return 'LDJ00001';
-    }
+    if (isLargeProject) {
+      // Generate HAZ project ID
+      const hazProjects = await mongoose.model('Project')
+        .find({ projectID: { $regex: '^HAZ' } }, { projectID: 1, _id: 0 })
+        .sort({ projectID: -1 });
+      
+      console.log('Found HAZ projects:', hazProjects);
+      
+      if (hazProjects.length === 0) {
+        console.log('No existing HAZ projects, starting with HAZ001');
+        return 'HAZ001';
+      }
 
-    // Get the highest project ID
-    const highestProject = projects[0];
-    if (!highestProject || !highestProject.projectID) {
-      console.log('No valid project ID found, starting with LDJ00001');
-      return 'LDJ00001';
-    }
+      const highestHazProject = hazProjects[0];
+      const lastHazId = highestHazProject.projectID;
+      console.log('Highest existing HAZ project ID:', lastHazId);
+      
+      // Extract the numeric part and increment
+      const numericPart = parseInt(lastHazId.replace('HAZ', ''));
+      if (isNaN(numericPart)) {
+        console.log('Invalid HAZ project ID format, starting with HAZ001');
+        return 'HAZ001';
+      }
 
-    const lastId = highestProject.projectID;
-    console.log('Highest existing project ID:', lastId);
-    
-    // Extract the numeric part and increment
-    const numericPart = parseInt(lastId.replace('LDJ', ''));
-    if (isNaN(numericPart)) {
-      console.log('Invalid project ID format, starting with LDJ00001');
-      return 'LDJ00001';
-    }
+      const nextNumber = numericPart + 1;
+      const newHazId = `HAZ${String(nextNumber).padStart(3, '0')}`;
+      console.log('Generated new HAZ project ID:', newHazId);
+      
+      return newHazId;
+    } else {
+      // Generate regular LDJ project ID
+      const projects = await mongoose.model('Project')
+        .find({ projectID: { $regex: '^LDJ' } }, { projectID: 1, _id: 0 })
+        .sort({ projectID: -1 });
+      
+      console.log('Found LDJ projects:', projects);
+      
+      if (projects.length === 0) {
+        console.log('No existing projects, starting with LDJ00001');
+        return 'LDJ00001';
+      }
 
-    const nextNumericPart = numericPart + 1;
-    
-    // Format with leading zeros to ensure 5 digits
-    const newId = `LDJ${String(nextNumericPart).padStart(5, '0')}`;
-    console.log('Generated new project ID:', newId);
-    
-    return newId;
+      const highestProject = projects[0];
+      if (!highestProject || !highestProject.projectID) {
+        console.log('No valid project ID found, starting with LDJ00001');
+        return 'LDJ00001';
+      }
+
+      const lastId = highestProject.projectID;
+      console.log('Highest existing project ID:', lastId);
+      
+      // Extract the numeric part and increment
+      const numericPart = parseInt(lastId.replace('LDJ', ''));
+      if (isNaN(numericPart)) {
+        console.log('Invalid project ID format, starting with LDJ00001');
+        return 'LDJ00001';
+      }
+
+      const nextNumericPart = numericPart + 1;
+      
+      // Format with leading zeros to ensure 5 digits
+      const newId = `LDJ${String(nextNumericPart).padStart(5, '0')}`;
+      console.log('Generated new project ID:', newId);
+      
+      return newId;
+    }
   } catch (error) {
     console.error('Error generating project ID:', error);
     // Return a default ID if there's an error
-    return 'LDJ00001';
+    return isLargeProject ? 'HAZ001' : 'LDJ00001';
   }
 }
 
@@ -190,7 +225,9 @@ projectSchema.pre('validate', async function(next) {
     
     if (this.isNew) {
       console.log('Generating project ID before validation');
-      const newProjectId = await generateNextProjectId();
+      // Check if this is a large project based on the isLargeProject field
+      const isLargeProject = this.isLargeProject === true;
+      const newProjectId = await generateNextProjectId(isLargeProject);
       console.log('Setting projectID to:', newProjectId);
       this.projectID = newProjectId;
       console.log('Document after setting projectID:', this.toObject());

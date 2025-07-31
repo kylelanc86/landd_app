@@ -397,14 +397,7 @@ const TimesheetReview = () => {
         alignItems="center"
         mb="20px"
       >
-        <Header
-          title="TIMESHEET REVIEW"
-          subtitle={
-            selectedUserId
-              ? `Reviewing timesheets for ${selectedUserName}`
-              : "Review and authorize timesheets"
-          }
-        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> TIMESHEET REVIEW </Typography>
         <Box display="flex" alignItems="center" gap={2}>
           <IconButton
             onClick={() => handleMonthChange("prev")}

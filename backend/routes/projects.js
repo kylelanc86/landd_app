@@ -165,6 +165,7 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       description: req.body.description,
       workOrder: req.body.workOrder,
       users: req.body.users || [],
+      isLargeProject: req.body.isLargeProject || false,
       projectContact: req.body.projectContact || {
         name: "",
         number: "",
@@ -243,6 +244,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.description = req.body.description || project.description;
     project.workOrder = req.body.workOrder || project.workOrder;
     project.users = req.body.users || project.users;
+    project.isLargeProject = req.body.isLargeProject !== undefined ? req.body.isLargeProject : project.isLargeProject;
     project.projectContact = req.body.projectContact || project.projectContact;
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
 

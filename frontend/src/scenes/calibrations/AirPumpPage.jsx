@@ -197,10 +197,9 @@ const AirPumpPage = () => {
         <IconButton onClick={() => navigate("/calibrations")}>
           <ArrowBackIcon />
         </IconButton>
-        <Header
-          title="Air Pump Calibrations"
-          subtitle="Manage air pump calibration records"
-        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Air Pump Calibrations
+        </Typography>
       </Box>
 
       <Box
