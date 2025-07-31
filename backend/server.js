@@ -134,7 +134,7 @@ connectDB()
     app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);
     app.use('/api/sample-items', requireAuth, sampleItemsRoutes);
     app.use('/api/client-supplied-jobs', requireAuth, clientSuppliedJobsRoutes);
-    app.use('/api/invoice-items', requireAuth, invoiceItemsRoutes);
+    app.use('/api/invoice-items', invoiceItemsRoutes);
 
 
     

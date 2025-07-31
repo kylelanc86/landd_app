@@ -47,6 +47,7 @@ const Projects = lazy(() => import("./scenes/projects"));
 const DraftInvoicePage = lazy(() =>
   import("./scenes/invoices/DraftInvoicePage")
 );
+const EditInvoicePage = lazy(() => import("./scenes/invoices/EditInvoicePage"));
 const SampleList = lazy(() =>
   import("./scenes/air-monitoring/air-monitoring-sample-list")
 );
@@ -305,6 +306,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <DraftInvoicePage />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/invoices/edit/:invoiceId"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["invoices.edit"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <EditInvoicePage />
                               </Suspense>
                             </PermissionRoute>
                           }

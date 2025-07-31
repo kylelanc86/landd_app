@@ -8,6 +8,7 @@ router.get('/', auth, async (req, res) => {
   try {
     console.log('Fetching all invoices from MongoDB...');
     const invoices = await Invoice.find({ isDeleted: { $ne: true } })
+      .sort({ createdAt: -1 }) // Show newest invoices first
       .populate({
         path: 'project',
         select: 'name projectID',
@@ -45,7 +46,7 @@ router.get('/:id', auth, async (req, res) => {
 
 // Create invoice
 router.post('/', auth, async (req, res) => {
-  console.log('Received invoice creation request with data:', req.body);
+  console.log('Received invoice creation request with data:', JSON.stringify(req.body, null, 2));
   
   try {
     const invoice = new Invoice({
@@ -56,13 +57,16 @@ router.post('/', auth, async (req, res) => {
       status: req.body.status,
       date: req.body.date,
       dueDate: req.body.dueDate,
-      description: req.body.description
+      description: req.body.description,
+      lineItems: req.body.lineItems || [],
+      xeroClientName: req.body.xeroClientName,
+      xeroReference: req.body.xeroReference
     });
 
-    console.log('Created invoice instance:', invoice.toObject());
+    console.log('Created invoice instance:', JSON.stringify(invoice.toObject(), null, 2));
     
     const newInvoice = await invoice.save();
-    console.log('Invoice saved successfully:', newInvoice.toObject());
+    console.log('Invoice saved successfully:', JSON.stringify(newInvoice.toObject(), null, 2));
     
     const populatedInvoice = await Invoice.findById(newInvoice._id)
       .populate('project', 'name')
@@ -70,12 +74,32 @@ router.post('/', auth, async (req, res) => {
     res.status(201).json(populatedInvoice);
   } catch (err) {
     console.error('Error saving invoice:', err);
+    // Log detailed validation errors
     if (err.errors) {
-      console.error('Validation errors:', err.errors);
+      console.error('Validation errors:', JSON.stringify(err.errors, null, 2));
     }
+    
+    // Check for specific error types
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({
+        message: 'Invoice validation failed',
+        validationErrors: err.errors,
+        details: Object.keys(err.errors).map(field => ({
+          field,
+          message: err.errors[field].message
+        }))
+      });
+    }
+    
+    if (err.code === 11000) {
+      return res.status(400).json({
+        message: 'Duplicate invoice ID',
+        details: 'An invoice with this ID already exists'
+      });
+    }
+    
     res.status(400).json({ 
       message: err.message,
-      validationErrors: err.errors,
       details: 'Invoice creation failed'
     });
   }
@@ -97,7 +121,10 @@ router.put('/:id', auth, async (req, res) => {
       status: req.body.status,
       date: req.body.date,
       dueDate: req.body.dueDate,
-      description: req.body.description
+      description: req.body.description,
+      lineItems: req.body.lineItems || invoice.lineItems,
+      xeroClientName: req.body.xeroClientName,
+      xeroReference: req.body.xeroReference
     });
 
     const updatedInvoice = await invoice.save();

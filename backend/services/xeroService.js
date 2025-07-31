@@ -325,7 +325,8 @@ class XeroService {
         }],
         Date: invoiceData.date,
         DueDate: invoiceData.dueDate,
-        Reference: invoiceData.invoiceID,
+        Reference: invoiceData.xeroReference,
+        InvoiceNumber: invoiceData.InvoiceNumber,
         Status: 'DRAFT'
       };
 
@@ -396,13 +397,15 @@ class XeroService {
       
       // Find invoices in our database that have Xero IDs but are not in current results
       // Only clean up invoices that actually have Xero IDs (i.e., were synced from Xero)
+      // EXCLUDE local draft and awaiting approval invoices to prevent accidental deletion
       const invoicesToCleanup = await Invoice.find({
         xeroInvoiceId: { $exists: true, $ne: null, $ne: '' },
         xeroInvoiceId: { $nin: currentXeroInvoiceIds },
+        status: { $nin: ['draft', 'awaiting_approval'] }, // Protect local draft and awaiting approval invoices
         isDeleted: { $ne: true } // Don't process already deleted invoices
       });
       
-      console.log(`Found ${invoicesToCleanup.length} invoices to cleanup`);
+      console.log(`Found ${invoicesToCleanup.length} invoices to cleanup (excluding local draft and awaiting approval invoices)`);
       
       let softDeletedCount = 0;
       

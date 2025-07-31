@@ -21,7 +21,7 @@ import {
   Breadcrumbs,
   Link,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -30,8 +30,9 @@ import { projectService, invoiceService } from "../../services/api";
 import invoiceItemService from "../../services/invoiceItemService";
 import { formatDateForInput } from "../../utils/dateFormat";
 
-const DraftInvoicePage = () => {
+const EditInvoicePage = () => {
   const navigate = useNavigate();
+  const { invoiceId } = useParams();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -62,21 +63,78 @@ const DraftInvoicePage = () => {
   useEffect(() => {
     fetchProjects();
     fetchAvailableInvoiceItems();
+    fetchInvoiceData();
+  }, [invoiceId]);
 
-    // Add a default invoice item row
-    const defaultItem = {
-      id: Date.now(),
-      itemNo: "",
-      description: "",
-      qty: 1,
-      unitPrice: 0,
-      account: defaultAccount,
-      taxRate: defaultTaxRate,
-      taxAmount: 0,
-      amount: 0,
-    };
-    setInvoiceItems([defaultItem]);
-  }, []);
+  const fetchInvoiceData = async () => {
+    try {
+      const response = await invoiceService.getById(invoiceId);
+      const invoice = response.data;
+
+      // Extract project ID and invoice number from invoiceID (e.g., "LDJ04694-1" -> projectID: "LDJ04694", invoiceNumber: "1")
+      const invoiceParts = invoice.invoiceID
+        ? invoice.invoiceID.split("-")
+        : [];
+      const projectID =
+        invoiceParts.length > 1
+          ? invoiceParts.slice(0, -1).join("-")
+          : invoice.projectID || "";
+
+      // Find the project
+      const project = projects.find((p) => p.projectID === projectID);
+      if (project) {
+        setSelectedProject(project);
+        setSelectedClient({
+          name: invoice.xeroClientName || project.client || "",
+          _id: project.client || "",
+        });
+      }
+
+      // Set invoice header data
+      setInvoiceHeader({
+        dueDate: invoice.dueDate ? formatDateForInput(invoice.dueDate) : "",
+        invoiceDate: invoice.date
+          ? formatDateForInput(invoice.date)
+          : new Date().toISOString().split("T")[0],
+        reference: invoice.xeroReference || "",
+        paymentTerms: 30, // Default to 30 days
+      });
+
+      // Set invoice items
+      if (invoice.lineItems && invoice.lineItems.length > 0) {
+        const items = invoice.lineItems.map((item, index) => ({
+          id: Date.now() + index,
+          itemNo: item.itemNo || "",
+          description: item.description || "",
+          qty: item.quantity || 1,
+          unitPrice: item.unitPrice || 0,
+          account: item.account || defaultAccount,
+          taxRate: item.taxRate || defaultTaxRate,
+          taxAmount: item.taxAmount || 0,
+          amount: item.amount || 0,
+        }));
+        setInvoiceItems(items);
+      } else {
+        // Add a default invoice item row if no line items
+        const defaultItem = {
+          id: Date.now(),
+          itemNo: "",
+          description: "",
+          qty: 1,
+          unitPrice: 0,
+          account: defaultAccount,
+          taxRate: defaultTaxRate,
+          taxAmount: 0,
+          amount: 0,
+        };
+        setInvoiceItems([defaultItem]);
+      }
+    } catch (error) {
+      console.error("Error fetching invoice data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -252,7 +310,7 @@ const DraftInvoicePage = () => {
     }
   };
 
-  const handleSaveDraft = async () => {
+  const handleUpdateInvoice = async () => {
     try {
       // Validate required fields first
       if (!selectedProject?._id) {
@@ -280,23 +338,12 @@ const DraftInvoicePage = () => {
         }
       }
 
-      // Create unique invoiceID with date suffix
-      const today = new Date();
-      const dateSuffix =
-        today.getFullYear().toString().slice(-2) +
-        (today.getMonth() + 1).toString().padStart(2, "0") +
-        today.getDate().toString().padStart(2, "0");
-      // Add timestamp to ensure uniqueness
-      const timestamp = Date.now().toString().slice(-6);
-      const uniqueInvoiceID = `${selectedProject.projectID}-${dateSuffix}-${timestamp}`;
-
-      // Prepare draft invoice data
-      const draftInvoiceData = {
-        invoiceID: uniqueInvoiceID, // Use projectID + date suffix for uniqueness
+      // Prepare updated invoice data
+      const updatedInvoiceData = {
         project: selectedProject._id, // MongoDB ObjectId reference
         client: null, // We'll handle client separately since it's a string, not ObjectId
         amount: calculateInvoiceTotal(), // Total amount
-        status: "draft", // Save as draft for Xero sync
+        status: "awaiting_approval", // Keep as awaiting approval
         date: new Date(invoiceHeader.invoiceDate), // Convert to Date object
         dueDate: new Date(effectiveDueDate), // Convert to Date object
         description: `Invoice for project ${selectedProject.name}`, // Description
@@ -314,17 +361,20 @@ const DraftInvoicePage = () => {
         })),
       };
 
-      // Save draft invoice via API
-      const response = await invoiceService.create(draftInvoiceData);
+      // Update invoice via API
+      const response = await invoiceService.update(
+        invoiceId,
+        updatedInvoiceData
+      );
 
-      if (response.status === 201 || response.status === 200) {
-        // Redirect to invoices page on successful save
+      if (response.status === 200) {
+        // Redirect to invoices page on successful update
         navigate("/invoices");
       } else {
-        console.error("Failed to save draft invoice");
+        console.error("Failed to update invoice");
       }
     } catch (error) {
-      console.error("Error saving draft invoice:", error);
+      console.error("Error updating invoice:", error);
       console.error("Error response data:", error.response?.data);
 
       // Validate the data being sent
@@ -369,11 +419,6 @@ const DraftInvoicePage = () => {
         );
         return;
       }
-
-      if (error.response?.data?.message === "Duplicate invoice ID") {
-        console.error("Duplicate invoice ID:", error.response.data.details);
-        return;
-      }
     }
   };
 
@@ -385,10 +430,23 @@ const DraftInvoicePage = () => {
     return invoiceItems.reduce((total, item) => total + item.taxAmount, 0);
   };
 
+  if (loading) {
+    return (
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="100vh"
+      >
+        <Typography>Loading invoice data...</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box m="20px">
       <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Create Draft Invoice
+        Edit Invoice
       </Typography>
 
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -402,7 +460,7 @@ const DraftInvoicePage = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Invoices Home
           </Link>
-          <Typography color="text.primary">Create Draft Invoice</Typography>
+          <Typography color="text.primary">Edit Invoice</Typography>
         </Breadcrumbs>
       </Box>
 
@@ -817,14 +875,14 @@ const DraftInvoicePage = () => {
         </Button>
         <Button
           variant="contained"
-          onClick={handleSaveDraft}
+          onClick={handleUpdateInvoice}
           disabled={!selectedProject || invoiceItems.length === 0}
         >
-          Save Draft
+          Update Invoice
         </Button>
       </Box>
     </Box>
   );
 };
 
-export default DraftInvoicePage;
+export default EditInvoicePage;

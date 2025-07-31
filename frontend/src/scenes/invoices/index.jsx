@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import jsPDF from "jspdf";
 import {
   Box,
   Typography,
@@ -33,11 +32,9 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
-import PrintIcon from "@mui/icons-material/Print";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
-import autoTable from "jspdf-autotable";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Breadcrumbs, Link } from "@mui/material";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
@@ -90,10 +87,7 @@ const Invoices = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [editForm, setEditForm] = useState(emptyForm);
-  const [editId, setEditId] = useState(null);
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
   const [dueDateManuallyChanged, setDueDateManuallyChanged] = useState(false);
@@ -284,10 +278,6 @@ const Invoices = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleEditChange = (e) => {
-    setEditForm({ ...editForm, [e.target.name]: e.target.value });
-  };
-
   // Get all active projects (no filtering needed since backend provides active projects)
   const allActiveProjects = useMemo(() => {
     // Ensure projects is always an array
@@ -329,124 +319,9 @@ const Invoices = () => {
     );
   }, [form.projectID, allActiveProjects]);
 
-  const selectedEditProject = useMemo(() => {
-    console.log("selectedEditProject debug:", {
-      editFormProjectID: editForm.projectID,
-      allActiveProjectsCount: allActiveProjects.length,
-      availableProjectIDs: allActiveProjects
-        .map((p) => p.projectID)
-        .slice(0, 5), // Show first 5 for debugging
-    });
-
-    if (!editForm.projectID) return null;
-
-    const foundProject = allActiveProjects.find(
-      (p) => p.projectID === editForm.projectID
-    );
-    console.log("Found project for edit:", foundProject);
-    return foundProject || null;
-  }, [editForm.projectID, allActiveProjects]);
-
   const handleEditInvoice = (invoice) => {
-    setEditId(invoice._id);
-
-    // Extract project ID and invoice number from invoiceID (e.g., "LDJ04694-1" -> projectID: "LDJ04694", invoiceNumber: "1")
-    const invoiceParts = invoice.invoiceID ? invoice.invoiceID.split("-") : [];
-    const projectID =
-      invoiceParts.length > 1
-        ? invoiceParts.slice(0, -1).join("-")
-        : invoice.projectID || "";
-    const invoiceNumber =
-      invoiceParts.length > 0 ? invoiceParts[invoiceParts.length - 1] : "";
-
-    console.log("Edit invoice debug:", {
-      originalInvoiceID: invoice.invoiceID,
-      extractedProjectID: projectID,
-      extractedInvoiceNumber: invoiceNumber,
-      storedProjectID: invoice.projectID,
-      xeroClientName: invoice.xeroClientName,
-      client: invoice.client,
-    });
-
-    // Find the client ID that matches the project's client name or xeroClientName
-    const clientName = invoice.xeroClientName || invoice.client?.name || "";
-    const clientId =
-      clients.find((client) => client.name === clientName)?._id || "";
-
-    console.log("Client lookup debug:", {
-      clientName: clientName,
-      foundClientId: clientId,
-      availableClients: clients
-        .map((c) => ({ name: c.name, id: c._id }))
-        .slice(0, 3),
-    });
-
-    // Format dates for the form and set client from project or xeroClientName
-    const formattedInvoice = {
-      ...invoice,
-      projectID: projectID, // Set the projectID so selectedEditProject can find it
-      invoiceNumber: invoiceNumber, // Add invoice number field
-      date: invoice.date ? formatDateForInput(invoice.date) : "",
-      dueDate: invoice.dueDate ? formatDateForInput(invoice.dueDate) : "",
-      client: clientId, // Set client ID for the Select dropdown
-      terms: 30, // Default terms
-    };
-    setEditForm(formattedInvoice);
-    setEditDialogOpen(true);
-  };
-
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    try {
-      // Find the project object that matches the projectID
-      const selectedProject = projects.find(
-        (p) => p.projectID === editForm.projectID
-      );
-
-      if (!selectedProject) {
-        console.error("Selected project not found");
-        return;
-      }
-
-      // Calculate due date based on invoice date and terms
-      let dueDate = null;
-      if (editForm.date) {
-        const invoiceDate = new Date(editForm.date);
-        const calculatedDueDate = new Date(invoiceDate);
-        calculatedDueDate.setDate(
-          invoiceDate.getDate() + (editForm.terms || 30)
-        );
-        dueDate = calculatedDueDate.toISOString();
-      }
-
-      // Create the combined invoice ID
-      const invoiceID = `${selectedProject.projectID}-${editForm.invoiceNumber}`;
-
-      const formattedForm = {
-        ...editForm,
-        invoiceID,
-        projectID: selectedProject.projectID,
-        date: editForm.date ? new Date(editForm.date).toISOString() : null,
-        dueDate: dueDate,
-        amount: parseFloat(editForm.amount),
-        project: selectedProject._id,
-        xeroClientName: selectedProject.client?.name || editForm.client, // Get client name from selected project
-      };
-
-      // Remove the invoiceNumber field as it's not needed in the database
-      delete formattedForm.invoiceNumber;
-
-      console.log("Sending updated invoice data:", formattedForm);
-      const response = await invoiceService.update(editId, formattedForm);
-      setInvoices(
-        invoices.map((inv) => (inv._id === editId ? response.data : inv))
-      );
-      setEditDialogOpen(false);
-      setEditId(null);
-      setEditForm(emptyForm);
-    } catch (err) {
-      console.error("Error updating invoice:", err);
-    }
+    // Navigate to the edit invoice page instead of opening dialog
+    navigate(`/invoices/edit/${invoice._id}`);
   };
 
   // Sorting
@@ -539,42 +414,6 @@ const Invoices = () => {
     .filter((inv) => inv.status === "unpaid")
     .reduce((sum, inv) => sum + parseFloat(inv.amount), 0)
     .toFixed(2);
-
-  const handleInvoicePDF = (invoice) => {
-    const doc = new jsPDF();
-
-    // Add header information
-    doc.setFontSize(18);
-    doc.text("Invoice", 14, 16);
-    doc.setFontSize(12);
-
-    // Add invoice details
-    const details = [
-      ["Invoice ID:", invoice._id],
-      ["Project:", invoice.project?.name || "N/A"],
-      ["Client:", invoice.client?.name || "N/A"],
-      ["Amount:", `$${invoice.amount}`],
-      ["Date:", formatDate(invoice.date)],
-      ["Due Date:", formatDate(invoice.dueDate)],
-      ["Status:", invoice.status],
-      ["Description:", invoice.description],
-    ];
-
-    // Add details table
-    autoTable(doc, {
-      body: details,
-      startY: 28,
-      theme: "plain",
-      styles: { fontSize: 12 },
-      columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 60 },
-      },
-    });
-
-    // Save the PDF
-    doc.save(`Invoice_${invoice._id}.pdf`);
-  };
 
   const handleDeleteInvoice = async (invoice) => {
     try {
@@ -927,8 +766,8 @@ const Invoices = () => {
       field: "dueDate",
       headerName: "Overdue",
       flex: 1,
-      minWidth: 150,
-      maxWidth: 200,
+      minWidth: 100,
+      maxWidth: 120,
       sortable: true,
       valueGetter: (params) => {
         const date = params?.row?.dueDate || params;
@@ -1000,26 +839,33 @@ const Invoices = () => {
     },
     {
       field: "actions",
-      headerName: "Actions",
+      headerName: "",
       flex: 1,
+      maxWidth: 80,
       sortable: false,
       renderCell: (params) => {
         const row = params?.row || params;
         if (!row) return null;
         return (
-          <Box>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              width: "100%",
+              height: "100%",
+            }}
+          >
             {/* Only show edit button for draft and awaiting approval invoices */}
             {(row.status === "draft" || row.status === "awaiting_approval") && (
               <IconButton
                 onClick={() => handleEditInvoice(row)}
                 title="Edit Invoice"
+                padding="3"
               >
                 <EditIcon />
               </IconButton>
             )}
-            <IconButton onClick={() => handleInvoicePDF(row)} title="Print PDF">
-              <PrintIcon />
-            </IconButton>
             {/* Show delete button for draft and awaiting approval invoices */}
             {(row.status === "draft" || row.status === "awaiting_approval") && (
               <IconButton
@@ -1531,10 +1377,10 @@ const Invoices = () => {
           alignItems: "center",
         }}
       >
-        <Typography variant="body2" color="text.secondary">
-          Showing {getFilteredInvoices().length} of {invoices.length} invoices
+        <Typography variant="body1" color="text.secondary" fontWeight="bold">
+          {invoices.length} invoices
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body1" color="red" fontWeight="bold">
           Total Unpaid: ${totalUnpaid}
         </Typography>
       </Box>
@@ -1783,157 +1629,6 @@ const Invoices = () => {
               color="primary"
             >
               Finalise Draft
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-
-      {/* Edit Invoice Dialog */}
-      <Dialog
-        open={editDialogOpen}
-        onClose={() => setEditDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Edit Invoice</DialogTitle>
-        <form onSubmit={handleSaveEdit}>
-          <DialogContent>
-            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-              <Autocomplete
-                options={filteredProjects || []}
-                getOptionLabel={(option) => {
-                  return `${option.projectID || ""} - ${option.name || ""}`;
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Project ID"
-                    required
-                    placeholder="Select an active project"
-                    sx={{ flex: 1 }}
-                  />
-                )}
-                value={selectedEditProject}
-                onChange={(event, newValue) => {
-                  if (newValue && newValue.projectID) {
-                    // Find the client ID that matches the project's client name
-                    const clientId =
-                      clients.find((client) => client.name === newValue.client)
-                        ?._id || "";
-
-                    setEditForm((prev) => ({
-                      ...prev,
-                      projectID: newValue.projectID,
-                      client: clientId, // Auto-populate client field
-                    }));
-                  } else {
-                    setEditForm((prev) => ({
-                      ...prev,
-                      projectID: "",
-                      client: "", // Clear client field
-                    }));
-                  }
-                }}
-                onInputChange={(event, newInputValue) => {
-                  setProjectSearch(newInputValue);
-                }}
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Invoice Number"
-                name="invoiceNumber"
-                value={editForm.invoiceNumber}
-                onChange={handleEditChange}
-                type="number"
-                required
-                sx={{ flex: 1 }}
-                InputProps={{
-                  inputProps: { min: 1 },
-                }}
-                helperText="Enter a number (e.g., 1, 2, 3)"
-              />
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Client</InputLabel>
-                <Select
-                  label="Client"
-                  name="client"
-                  value={editForm.client}
-                  onChange={handleEditChange}
-                  required
-                >
-                  {Array.isArray(clients)
-                    ? clients.map((client) => (
-                        <MenuItem key={client._id} value={client._id}>
-                          {client.name}
-                        </MenuItem>
-                      ))
-                    : []}
-                </Select>
-              </FormControl>
-            </Stack>
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Amount"
-                name="amount"
-                value={editForm.amount}
-                onChange={handleEditChange}
-                type="number"
-                required
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Date"
-                name="date"
-                value={editForm.date}
-                onChange={handleEditChange}
-                type="date"
-                InputLabelProps={{ shrink: true }}
-                required
-                sx={{ flex: 1 }}
-              />
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Terms</InputLabel>
-                <Select
-                  label="Terms"
-                  name="terms"
-                  value={editForm.terms}
-                  onChange={handleEditChange}
-                >
-                  {TERMS_OPTIONS.map((term) => (
-                    <MenuItem key={term.days} value={term.days}>
-                      {term.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                label="Due Date"
-                name="dueDate"
-                value={editForm.dueDate}
-                onChange={handleEditChange}
-                type="date"
-                InputLabelProps={{ shrink: true }}
-                required
-                sx={{ flex: 1 }}
-              />
-            </Stack>
-            <TextField
-              label="Description"
-              name="description"
-              value={editForm.description}
-              onChange={handleEditChange}
-              multiline
-              rows={4}
-              fullWidth
-              sx={{ mt: 2 }}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setEditDialogOpen(false)} color="secondary">
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary">
-              Save Changes
             </Button>
           </DialogActions>
         </form>

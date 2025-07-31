@@ -494,14 +494,26 @@ router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
     
     if (invoice.lineItems && invoice.lineItems.length > 0) {
       // Convert our line items to Xero format
-      lineItems = invoice.lineItems.map(item => ({
-        Description: item.description || 'Invoice item',
-        Quantity: item.quantity || 1,
-        UnitAmount: item.unitPrice || item.amount || 0,
-        AccountCode: item.account || '200', // Default account code for sales
-        TaxType: 'OUTPUT', // GST on income
-        LineAmount: item.amount || (item.quantity * item.unitPrice) || 0
-      }));
+      lineItems = invoice.lineItems.map(item => {
+        // Extract just the account number from the account field
+        let accountCode = '200'; // Default account code for sales
+        if (item.account) {
+          // If account contains a number, extract it (e.g., "191 - Consulting Fees" -> "191")
+          const accountMatch = item.account.match(/^(\d+)/);
+          if (accountMatch) {
+            accountCode = accountMatch[1];
+          }
+        }
+        
+        return {
+          Description: item.description || 'Invoice item',
+          Quantity: item.quantity || 1,
+          UnitAmount: item.unitPrice || item.amount || 0,
+          AccountCode: accountCode,
+          TaxType: 'OUTPUT', // GST on income
+          LineAmount: item.amount || (item.quantity * item.unitPrice) || 0
+        };
+      });
       console.log('Converted line items:', lineItems);
     } else {
       // Fallback to basic line item using the actual description
@@ -521,15 +533,20 @@ router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
     console.log('Invoice ID type:', typeof invoice.invoiceID);
     console.log('Invoice ID truthy:', !!invoice.invoiceID);
     
+    // Debug the xeroReference value
+    console.log('invoice.xeroReference value:', invoice.xeroReference);
+    console.log('invoice.xeroReference type:', typeof invoice.xeroReference);
+    console.log('invoice.xeroReference truthy:', !!invoice.xeroReference);
+    
     const invoiceData = {
       Type: 'ACCREC',
       Contact: contactId ? { ContactID: contactId } : undefined,
       LineItems: lineItems,
       Date: invoiceDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
       DueDate: dueDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-      InvoiceNumber: invoice.invoiceID, // Try setting invoice number
-      Reference: invoice.xeroReference || '', // App reference → Xero reference
-      Status: 'DRAFT'
+      InvoiceNumber: invoice.invoiceID, // Use InvoiceNumber for custom invoice number
+      Reference: invoice.xeroReference || '', // Use Reference for user's reference input
+      Status: 'SUBMITTED' // Create directly as awaiting approval
     };
     
     // Remove undefined fields to prevent them from being included in JSON
@@ -602,57 +619,33 @@ router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
     const createdInvoice = responseData.Invoices[0];
     console.log('Successfully created Xero invoice:', createdInvoice.InvoiceID);
 
-    // Automatically submit the invoice for approval
+    // Invoice created directly as SUBMITTED (awaiting approval) in Xero
+    console.log('Invoice created as SUBMITTED in Xero with correct invoice number.');
+    
+    // Update the local invoice status in our database
     try {
-      console.log('Auto-submitting invoice for approval...');
-      const updateResponse = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${createdInvoice.InvoiceID}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${tokenSet.access_token}`,
-          'Xero-tenant-id': tenantId,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          Status: 'SUBMITTED'
-        })
+      console.log('Attempting to update local invoice with ID:', invoice._id);
+      console.log('Invoice object structure:', {
+        hasId: !!invoice._id,
+        idType: typeof invoice._id,
+        idValue: invoice._id
       });
-
-      if (updateResponse.ok) {
-        console.log('Successfully submitted invoice for approval');
-        // Update the response to reflect the new status
-        createdInvoice.Status = 'SUBMITTED';
-        
-        // Update the local invoice status in our database
-        try {
-          console.log('Attempting to update local invoice with ID:', invoice._id);
-          console.log('Invoice object structure:', {
-            hasId: !!invoice._id,
-            idType: typeof invoice._id,
-            idValue: invoice._id
-          });
-          
-          const localInvoice = await Invoice.findById(invoice._id);
-          console.log('Found local invoice:', !!localInvoice);
-          
-          if (localInvoice) {
-            console.log('Current status:', localInvoice.status);
-            localInvoice.status = 'awaiting_approval';
-            localInvoice.xeroStatus = 'SUBMITTED';
-            localInvoice.xeroInvoiceId = createdInvoice.InvoiceID; // Add the Xero invoice ID
-            await localInvoice.save();
-            console.log('Updated local invoice status to awaiting_approval and added Xero ID');
-          } else {
-            console.log('Local invoice not found with ID:', invoice._id);
-          }
-        } catch (dbError) {
-          console.error('Error updating local invoice status:', dbError);
-        }
+      
+      const localInvoice = await Invoice.findById(invoice._id);
+      console.log('Found local invoice:', !!localInvoice);
+      
+      if (localInvoice) {
+        console.log('Current status:', localInvoice.status);
+        localInvoice.status = 'awaiting_approval';
+        localInvoice.xeroStatus = 'SUBMITTED';
+        localInvoice.xeroInvoiceId = createdInvoice.InvoiceID; // Add the Xero invoice ID
+        await localInvoice.save();
+        console.log('Updated local invoice status to awaiting_approval and added Xero ID');
       } else {
-        console.log('Failed to auto-submit invoice, leaving as draft');
+        console.log('Local invoice not found with ID:', invoice._id);
       }
-    } catch (submitError) {
-      console.error('Error auto-submitting invoice:', submitError);
+    } catch (dbError) {
+      console.error('Error updating local invoice status:', dbError);
     }
 
     res.json(createdInvoice);
