@@ -1705,7 +1705,7 @@ const Projects = ({ initialFilters = {} }) => {
         maxWidth: 105,
         renderCell: (params) => (
           <Box
-            onClick={() => navigate(`/projects/${params.row._id}`)}
+            onClick={() => navigate(`/reports/project/${params.row._id}`)}
             sx={{ cursor: "pointer" }}
           >
             {params.value}
@@ -1721,7 +1721,7 @@ const Projects = ({ initialFilters = {} }) => {
 
         renderCell: ({ row }) => (
           <Box
-            onClick={() => navigate(`/projects/${row._id}`)}
+            onClick={() => navigate(`/reports/project/${row._id}`)}
             sx={{
               cursor: "pointer",
               "&:hover": { color: theme.palette.primary.main },
