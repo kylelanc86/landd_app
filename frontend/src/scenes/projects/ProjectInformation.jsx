@@ -38,6 +38,7 @@ import {
 } from "../../components/JobStatus";
 import debounce from "lodash/debounce";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
+import { testGoogleMapsApi } from "../../utils/testGoogleMapsApi";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -106,6 +107,7 @@ const ProjectInformation = () => {
   const [autocompleteService, setAutocompleteService] = useState(null);
   const [placesService, setPlacesService] = useState(null);
   const [googleMaps, setGoogleMaps] = useState(null);
+  const [googleMapsError, setGoogleMapsError] = useState(null);
 
   const [timeLogsOpen, setTimeLogsOpen] = useState(false);
   const [timeLogs, setTimeLogs] = useState([]);
@@ -210,30 +212,49 @@ const ProjectInformation = () => {
   }, [id, navigate]);
 
   useEffect(() => {
-    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+    const initializeGoogleMaps = async () => {
+      const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
-    if (!apiKey) {
-      console.error(
-        "Google Maps API key is missing. Please check your environment configuration."
-      );
-      return;
-    }
+      if (!apiKey) {
+        console.error(
+          "Google Maps API key is missing. Please check your environment configuration."
+        );
+        return;
+      }
 
-    loadGoogleMapsApi(apiKey)
-      .then((google) => {
+      // Test the API key first
+      const isApiWorking = await testGoogleMapsApi();
+      if (!isApiWorking) {
+        console.error(
+          "Google Maps API key is not working. Please check your API key configuration."
+        );
+        setGoogleMapsError(
+          "Google Maps API is not working. Please check your API key configuration."
+        );
+        return;
+      }
+
+      try {
+        const google = await loadGoogleMapsApi(apiKey);
         setGoogleMaps(google);
+
         // Initialize the autocomplete service
         const autocompleteService =
           new google.maps.places.AutocompleteService();
         const placesService = new google.maps.places.PlacesService(
           document.createElement("div")
         );
+
         setAutocompleteService(autocompleteService);
         setPlacesService(placesService);
-      })
-      .catch((error) => {
+
+        console.log("Google Maps services initialized successfully");
+      } catch (error) {
         console.error("Error loading Google Maps script:", error);
-      });
+      }
+    };
+
+    initializeGoogleMaps();
   }, []);
 
   const handleAddressInputChange = async (value) => {
@@ -269,6 +290,7 @@ const ProjectInformation = () => {
             status,
             statusText: googleMaps.maps.places.PlacesServiceStatus[status],
           });
+
           if (
             status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             predictions
@@ -277,6 +299,33 @@ const ProjectInformation = () => {
             setAddressOptions(predictions);
           } else {
             console.log("No predictions found or error:", status);
+
+            // Enhanced error handling with specific status messages
+            switch (status) {
+              case googleMaps.maps.places.PlacesServiceStatus.ZERO_RESULTS:
+                console.log("No address predictions found for the input");
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
+                console.error(
+                  "REQUEST_DENIED: API key may be invalid or have restrictions"
+                );
+                console.error("Check Google Cloud Console API key settings");
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT:
+                console.error("OVER_QUERY_LIMIT: API quota exceeded");
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.INVALID_REQUEST:
+                console.error(
+                  "INVALID_REQUEST: Request parameters are invalid"
+                );
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.UNKNOWN_ERROR:
+                console.error("UNKNOWN_ERROR: An unknown error occurred");
+                break;
+              default:
+                console.error("Unknown status:", status);
+            }
+
             setAddressOptions([]);
           }
           setIsAddressLoading(false);
@@ -639,6 +688,11 @@ const ProjectInformation = () => {
               </Grid>
 
               <Grid item xs={12}>
+                {googleMapsError && (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    {googleMapsError}
+                  </Alert>
+                )}
                 <Autocomplete
                   freeSolo
                   options={addressOptions}
@@ -657,12 +711,24 @@ const ProjectInformation = () => {
                     }
                   }}
                   loading={isAddressLoading}
+                  disabled={!!googleMapsError}
+                  ListboxProps={{
+                    style: {
+                      zIndex: 9999,
+                      maxHeight: "200px",
+                    },
+                  }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
                       fullWidth
                       label="Address (Optional)"
                       name="address"
+                      helperText={
+                        googleMapsError
+                          ? "Address search is disabled due to API issues"
+                          : ""
+                      }
                       InputProps={{
                         ...params.InputProps,
                         endAdornment: (

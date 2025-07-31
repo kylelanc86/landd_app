@@ -85,6 +85,7 @@ import { debounce } from "lodash";
 import DownloadIcon from "@mui/icons-material/Download";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
+import { testGoogleMapsApi } from "../../utils/testGoogleMapsApi";
 
 const PROJECTS_KEY = "ldc_projects";
 const USERS_KEY = "ldc_users";
@@ -620,8 +621,26 @@ const Projects = ({ initialFilters = {} }) => {
       });
   }, []);
 
+  // Re-initialize Google Maps services when dialog opens
+  useEffect(() => {
+    if (dialogOpen && googleMaps) {
+      // Re-initialize services when modal opens to ensure proper DOM context
+      const autocompleteService =
+        new googleMaps.maps.places.AutocompleteService();
+      const placesService = new googleMaps.maps.places.PlacesService(
+        document.createElement("div")
+      );
+      setAutocompleteService(autocompleteService);
+      setPlacesService(placesService);
+    }
+  }, [dialogOpen, googleMaps]);
+
   // Google Places Autocomplete handlers
   const handleAddressInputChange = async (value) => {
+    console.log("handleAddressInputChange called with:", value);
+    console.log("autocompleteService:", autocompleteService);
+    console.log("googleMaps:", googleMaps);
+
     setAddressInput(value);
 
     if (!value || value.length < 3 || !autocompleteService || !googleMaps) {
@@ -644,6 +663,8 @@ const Projects = ({ initialFilters = {} }) => {
             "Status:",
             status
           );
+
+          // Enhanced error handling with specific status messages
           if (
             status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             predictions
@@ -651,6 +672,33 @@ const Projects = ({ initialFilters = {} }) => {
             setAddressOptions(predictions);
           } else {
             console.log("Projects - No predictions found or error:", status);
+
+            // Log specific error details
+            switch (status) {
+              case googleMaps.maps.places.PlacesServiceStatus.ZERO_RESULTS:
+                console.log("No address predictions found for the input");
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
+                console.error(
+                  "REQUEST_DENIED: API key may be invalid or have restrictions"
+                );
+                console.error("Check Google Cloud Console API key settings");
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT:
+                console.error("OVER_QUERY_LIMIT: API quota exceeded");
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.INVALID_REQUEST:
+                console.error(
+                  "INVALID_REQUEST: Request parameters are invalid"
+                );
+                break;
+              case googleMaps.maps.places.PlacesServiceStatus.UNKNOWN_ERROR:
+                console.error("UNKNOWN_ERROR: An unknown error occurred");
+                break;
+              default:
+                console.error("Unknown status:", status);
+            }
+
             setAddressOptions([]);
           }
           setIsAddressLoading(false);
@@ -2351,6 +2399,14 @@ const Projects = ({ initialFilters = {} }) => {
         }}
         maxWidth="md"
         fullWidth
+        sx={{
+          "& .MuiAutocomplete-popper": {
+            zIndex: 9999,
+          },
+          "& .MuiAutocomplete-listbox": {
+            zIndex: 9999,
+          },
+        }}
       >
         <DialogTitle>
           {selectedProject ? "Edit Project" : "Add New Project"}
@@ -2522,6 +2578,12 @@ const Projects = ({ initialFilters = {} }) => {
                       }
                     }}
                     loading={isAddressLoading}
+                    ListboxProps={{
+                      style: {
+                        zIndex: 9999,
+                        maxHeight: "200px",
+                      },
+                    }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
