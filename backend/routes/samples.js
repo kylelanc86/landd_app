@@ -53,7 +53,7 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
       .sort({ createdAt: -1 });
 
     // Filter samples where the populated project matches
-    const projectSamples = samples.filter(sample => sample.job?.project);
+    const projectSamples = samples.filter(sample => sample.job?.projectId);
     res.json(projectSamples);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -67,7 +67,7 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
       .populate({
         path: 'job',
         populate: {
-          path: 'project'
+          path: 'projectId'
         }
       })
       .populate('collectedBy')

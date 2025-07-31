@@ -147,16 +147,16 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
             .populate({
               path: 'job',
               populate: {
-                path: 'project',
+                path: 'projectId',
                 select: '_id'
               }
             });
-          if (populatedShift.job && populatedShift.job.project) {
+          if (populatedShift.job && populatedShift.job.projectId) {
             await Project.findByIdAndUpdate(
-              populatedShift.job.project._id,
+              populatedShift.job.projectId._id,
               { reports_present: true }
             );
-            console.log(`Updated project ${populatedShift.job.project._id} reports_present to true due to completed shift`);
+            console.log(`Updated project ${populatedShift.job.projectId._id} reports_present to true due to completed shift`);
           }
         } catch (error) {
           console.error("Error updating project reports_present field:", error);

@@ -124,7 +124,7 @@ const ProjectReports = () => {
           const projectJobs =
             jobsResponse.data?.filter(
               (job) =>
-                job.project === projectId || job.project?._id === projectId
+                job.projectId === projectId || job.projectId?._id === projectId
             ) || [];
           console.log("Project jobs found:", projectJobs.length);
 
@@ -228,7 +228,7 @@ const ProjectReports = () => {
         );
 
         // Ensure project and client are fully populated
-        let project = jobResponse.data.project;
+        let project = jobResponse.data.projectId;
         if (project && typeof project === "string") {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;
@@ -303,7 +303,7 @@ const ProjectReports = () => {
         );
 
         // Ensure project and client are fully populated
-        let project = jobResponse.data.project;
+        let project = jobResponse.data.projectId;
         if (project && typeof project === "string") {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;

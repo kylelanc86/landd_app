@@ -123,13 +123,13 @@ const EditSample = () => {
         const sampleNumber = sampleData.fullSampleID.split("-")[1];
 
         // Get project ID from the job's project
-        if (sampleData.job && sampleData.job.project) {
-          setProjectID(sampleData.job.project.projectID);
+        if (sampleData.job && sampleData.job.projectId) {
+          setProjectID(sampleData.job.projectId.projectID);
         } else {
           // If project is not populated, fetch the job to get project details
           const jobResponse = await jobService.getById(sampleData.job);
-          if (jobResponse.data && jobResponse.data.project) {
-            setProjectID(jobResponse.data.project.projectID);
+          if (jobResponse.data && jobResponse.data.projectId) {
+            setProjectID(jobResponse.data.projectId.projectID);
           }
         }
 

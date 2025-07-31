@@ -144,7 +144,7 @@ const NewSample = () => {
 
         if (nextNumber) {
           // Get the project ID from the shift's job
-          const projectID = response.data.job?.project?.projectID;
+          const projectID = response.data.job?.projectId?.projectID;
           if (projectID) {
             // Set just the number part as the sample number
             setForm((prev) => ({
@@ -284,9 +284,9 @@ const NewSample = () => {
         const shift = response.data;
 
         // Get project ID from the job's project
-        if (shift.job && shift.job.project) {
-          setProjectID(shift.job.project.projectID);
-          console.log("Project ID set to:", shift.job.project.projectID);
+        if (shift.job && shift.job.projectId) {
+          setProjectID(shift.job.projectId.projectID);
+          console.log("Project ID set to:", shift.job.projectId.projectID);
         } else {
           console.error("No project data found in job");
           setError("No project data found for this job");

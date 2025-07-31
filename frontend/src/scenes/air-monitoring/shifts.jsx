@@ -145,8 +145,8 @@ const Shifts = () => {
       try {
         setLoading(true);
         const jobResponse = await jobService.getById(jobId);
-        if (jobResponse.data && jobResponse.data.project) {
-          setProjectDetails(jobResponse.data.project);
+        if (jobResponse.data && jobResponse.data.projectId) {
+          setProjectDetails(jobResponse.data.projectId);
         }
         await fetchShiftsWithSamples();
         setError(null);
@@ -391,7 +391,7 @@ const Shifts = () => {
             );
 
             // Ensure project and client are fully populated
-            let project = jobResponse.data.project;
+            let project = jobResponse.data.projectId;
             if (project && typeof project === "string") {
               const projectResponse = await projectService.getById(project);
               project = projectResponse.data;
@@ -475,7 +475,7 @@ const Shifts = () => {
               );
 
               // Ensure project and client are fully populated
-              let project = jobResponse.data.project;
+              let project = jobResponse.data.projectId;
               if (project && typeof project === "string") {
                 const projectResponse = await projectService.getById(project);
                 project = projectResponse.data;

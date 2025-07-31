@@ -89,7 +89,7 @@ const SampleList = () => {
         setSamples(samplesResponse.data || []);
 
         // Get project ID from shift data
-        const projectId = shiftResponse.data?.job?.project?.projectID;
+        const projectId = shiftResponse.data?.job?.projectId?.projectID;
         if (projectId) {
           // Fetch all samples for the project to determine next sample number
           const projectSamplesResponse = await sampleService.getByProject(

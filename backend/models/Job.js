@@ -11,7 +11,7 @@ const jobSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  project: {
+  projectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
     required: true

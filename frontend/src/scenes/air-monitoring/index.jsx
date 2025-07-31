@@ -170,11 +170,11 @@ const AirMonitoring = () => {
             return {
               id: job._id,
               _id: job._id,
-              projectID: job.project?.projectID || "Unknown",
-              projectName: job.project?.name || "Unknown Project",
+              projectID: job.projectId?.projectID || "Unknown",
+              projectName: job.projectId?.name || "Unknown Project",
               status: job.status,
               asbestosRemovalist: job.asbestosRemovalist,
-              department: job.project?.department || "Unknown",
+              department: job.projectId?.department || "Unknown",
               shiftStatus,
               shiftCount: shifts.length,
             };

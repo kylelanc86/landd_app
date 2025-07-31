@@ -417,13 +417,13 @@ router.post('/create-invoice', auth, checkXeroConnection, async (req, res) => {
     console.log('Invoice structure:', {
       hasXeroClientName: !!invoice.xeroClientName,
       xeroClientName: invoice.xeroClientName,
-      hasProject: !!invoice.project,
-      projectName: invoice.project?.name,
-      hasClient: !!invoice.project?.client,
-      clientName: invoice.project?.client?.name
+      hasProject: !!invoice.projectId,
+      projectName: invoice.projectId?.name,
+      hasClient: !!invoice.projectId?.client,
+      clientName: invoice.projectId?.client?.name
     });
     
-    const clientName = invoice.xeroClientName || (invoice.project?.client?.name);
+    const clientName = invoice.xeroClientName || (invoice.projectId?.client?.name);
     console.log('Client name for contact creation:', clientName);
     
     if (clientName) {

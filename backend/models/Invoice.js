@@ -7,10 +7,10 @@ const invoiceSchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
-  project: {
+  projectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
-    required: false // Make project optional for all invoices
+    required: false // Make projectId optional for all invoices
   },
   client: {
     type: mongoose.Schema.Types.ObjectId,

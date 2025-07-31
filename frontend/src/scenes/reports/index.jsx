@@ -232,7 +232,7 @@ const Reports = () => {
           const projectJobs =
             jobsResponse.data?.filter(
               (job) =>
-                job.project === project._id || job.project?._id === project._id
+                job.projectId === project._id || job.projectId?._id === project._id
             ) || [];
 
           // Get shifts for each job
@@ -313,7 +313,7 @@ const Reports = () => {
         );
 
         // Ensure project and client are fully populated
-        let project = jobResponse.data.project;
+        let project = jobResponse.data.projectId;
         if (project && typeof project === "string") {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;
@@ -388,7 +388,7 @@ const Reports = () => {
         );
 
         // Ensure project and client are fully populated
-        let project = jobResponse.data.project;
+        let project = jobResponse.data.projectId;
         if (project && typeof project === "string") {
           const projectResponse = await projectService.getById(project);
           project = projectResponse.data;

@@ -383,7 +383,7 @@ const ClearanceItems = () => {
       const samples = samplesResponse.data || [];
 
       // Get project data
-      let project = job.project;
+              let project = job.projectId;
       if (project && typeof project === "string") {
         const projectResponse = await projectService.getById(project);
         project = projectResponse.data;

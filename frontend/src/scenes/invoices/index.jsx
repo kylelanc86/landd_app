@@ -345,7 +345,7 @@ const Invoices = () => {
         if (invoice.invoiceID?.toLowerCase().includes(searchLower)) return true;
 
         // Search in project name/ID
-        const project = projects.find((p) => p._id === invoice.project);
+        const project = projects.find((p) => p._id === invoice.projectId);
         if (project) {
           const projectText = `${project.projectID || ""} ${
             project.name || ""
@@ -356,7 +356,7 @@ const Invoices = () => {
         // Search in client name
         if (invoice.xeroClientName?.toLowerCase().includes(searchLower))
           return true;
-        if (invoice.project?.client?.name?.toLowerCase().includes(searchLower))
+        if (invoice.projectId?.client?.name?.toLowerCase().includes(searchLower))
           return true;
         if (invoice.client?.name?.toLowerCase().includes(searchLower))
           return true;
@@ -639,8 +639,8 @@ const Invoices = () => {
           clientName = row.xeroClientName;
         }
         // For app-created invoices, try to get client name from project
-        else if (row?.project?.client?.name) {
-          clientName = row.project.client.name;
+        else if (row?.projectId?.client?.name) {
+          clientName = row.projectId.client.name;
         }
         // Fallback to client object name
         else if (row?.client?.name) {

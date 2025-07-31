@@ -96,7 +96,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
 
     // Update project status to "In progress" if it's currently "Assigned"
     try {
-      const project = await Project.findById(req.body.project);
+      const project = await Project.findById(req.body.projectId);
       if (project && project.status === 'Assigned') {
         project.status = 'In progress';
         await project.save();
@@ -110,7 +110,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     // Populate the project and assignedTo fields before sending response
     const populatedJob = await AirMonitoringJob.findById(newJob._id)
       .populate({
-        path: 'project',
+        path: 'projectId',
         populate: {
           path: 'client'
         }
@@ -143,12 +143,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
     const updatedJob = await job.save();
     
     // If job status is being updated to 'completed', update the project status
-    if (req.body.status === 'completed' && job.project) {
+    if (req.body.status === 'completed' && job.projectId) {
       try {
-        await Project.findByIdAndUpdate(job.project, {
+        await Project.findByIdAndUpdate(job.projectId, {
           status: 'Ready for invoicing'
         });
-        console.log(`Updated project ${job.project} status to Ready for invoicing`);
+        console.log(`Updated project ${job.projectId} status to Ready for invoicing`);
       } catch (projectError) {
         console.error('Error updating project status:', projectError);
         // Don't fail the job update if project update fails
@@ -158,7 +158,7 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
     // Populate the project and assignedTo fields before sending response
     const populatedJob = await AirMonitoringJob.findById(updatedJob._id)
       .populate({
-        path: 'project',
+        path: 'projectId',
         populate: {
           path: 'client'
         }
