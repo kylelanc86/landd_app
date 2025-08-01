@@ -5,7 +5,6 @@ import {
   Typography,
   TextField,
   Paper,
-  Grid,
   CircularProgress,
   Alert,
   IconButton,
@@ -23,16 +22,12 @@ import {
   Search as SearchIcon,
   Clear as ClearIcon,
   Assessment as AssessmentIcon,
-  Folder as FolderIcon,
 } from "@mui/icons-material";
-import { useTheme } from "@mui/material/styles";
-import { tokens } from "../../theme";
-import projectService from "../../services/projectService";
+
+import { projectService } from "../../services/api";
 import ProjectDetailsModal from "./ProjectDetailsModal";
 
 const Reports = () => {
-  const theme = useTheme();
-  const colors = tokens;
   const navigate = useNavigate();
 
   const [searchTerm, setSearchTerm] = useState("");
