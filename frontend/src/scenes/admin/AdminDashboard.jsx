@@ -7,7 +7,7 @@ import {
   CardContent,
   CardActionArea,
   CardMedia,
-  Chip,
+  
   useTheme,
 } from "@mui/material";
 import {
@@ -37,7 +37,6 @@ const AdminDashboard = () => {
       path: "/users",
       requiredPermission: "users.view",
       color: "#1976d2",
-      chipLabel: "Users",
     },
     {
       id: "report-templates",
@@ -47,7 +46,6 @@ const AdminDashboard = () => {
       path: "/admin/report-templates",
       requiredPermission: "admin.view",
       color: "#2e7d32",
-      chipLabel: "Templates",
     },
     {
       id: "invoice-items",
@@ -57,7 +55,6 @@ const AdminDashboard = () => {
       path: "/admin/invoice-items",
       requiredPermission: "admin.view",
       color: "#ed6c02",
-      chipLabel: "Items",
     },
   ];
 
@@ -108,16 +105,6 @@ const AdminDashboard = () => {
                       {React.cloneElement(module.icon, {
                         sx: { fontSize: 80, color: "white" },
                       })}
-                      <Chip
-                        label={module.chipLabel}
-                        sx={{
-                          position: "absolute",
-                          top: 16,
-                          right: 16,
-                          backgroundColor: "rgba(255,255,255,0.9)",
-                          fontWeight: "bold",
-                        }}
-                      />
                     </CardMedia>
                     <CardContent
                       sx={{

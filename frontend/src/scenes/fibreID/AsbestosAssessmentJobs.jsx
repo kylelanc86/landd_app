@@ -33,6 +33,7 @@ const AsbestosAssessmentJobs = () => {
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [updatingAssessment, setUpdatingAssessment] = useState(null);
 
   useEffect(() => {
     fetchAsbestosAssessments();
@@ -44,12 +45,12 @@ const AsbestosAssessmentJobs = () => {
       // Fetch all asbestos assessments
       const response = await asbestosAssessmentService.getAsbestosAssessments();
 
-      // Filter to only show jobs that are ready for analysis
-      const jobsReadyForAnalysis = (response.data || []).filter(
-        (assessment) => assessment.status === "ready-for-analysis"
+      // Show all assessments that aren't complete
+      const activeAssessments = (response.data || []).filter(
+        (assessment) => assessment.status !== "complete"
       );
 
-      setAssessments(jobsReadyForAnalysis);
+      setAssessments(activeAssessments);
     } catch (error) {
       console.error("Error fetching asbestos assessments:", error);
     } finally {
@@ -78,6 +79,23 @@ const AsbestosAssessmentJobs = () => {
 
   const handleViewAssessment = (assessmentId) => {
     navigate(`/fibre-id/ldjobs/${assessmentId}/samples`);
+  };
+
+  const handleCompleteAssessment = async (assessment) => {
+    if (updatingAssessment) return;
+
+    setUpdatingAssessment(assessment._id);
+    try {
+      await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
+        ...assessment,
+        status: "complete",
+      });
+      await fetchAsbestosAssessments();
+    } catch (error) {
+      console.error("Error completing assessment:", error);
+    } finally {
+      setUpdatingAssessment(null);
+    }
   };
 
   const handleBackToHome = () => {
@@ -116,7 +134,7 @@ const AsbestosAssessmentJobs = () => {
           Asbestos Assessment Jobs
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-          View asbestos assessment jobs ready for fibre identification analysis
+          View and manage active asbestos assessment jobs
         </Typography>
 
         {/* Search Bar */}
@@ -166,7 +184,7 @@ const AsbestosAssessmentJobs = () => {
                 ) : filteredAssessments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center">
-                      No asbestos assessment jobs ready for analysis found
+                      No active asbestos assessment jobs found
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -219,14 +237,31 @@ const AsbestosAssessmentJobs = () => {
                           />
                         </TableCell>
                         <TableCell>
-                          <IconButton
-                            onClick={() => handleViewAssessment(assessment._id)}
-                            color="primary"
-                            size="small"
-                            title="View Assessment Details"
-                          >
-                            <ViewIcon />
-                          </IconButton>
+                          <Box sx={{ display: "flex", gap: 1 }}>
+                            <IconButton
+                              onClick={() =>
+                                handleViewAssessment(assessment._id)
+                              }
+                              color="primary"
+                              size="small"
+                              title="View Assessment Details"
+                            >
+                              <ViewIcon />
+                            </IconButton>
+                            {assessment.status !== "complete" && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="success"
+                                onClick={() =>
+                                  handleCompleteAssessment(assessment)
+                                }
+                                disabled={updatingAssessment === assessment._id}
+                              >
+                                Complete
+                              </Button>
+                            )}
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );

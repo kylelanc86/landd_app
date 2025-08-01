@@ -383,7 +383,7 @@ const ClearanceItems = () => {
       const samples = samplesResponse.data || [];
 
       // Get project data
-              let project = job.projectId;
+      let project = job.projectId;
       if (project && typeof project === "string") {
         const projectResponse = await projectService.getById(project);
         project = projectResponse.data;
@@ -398,7 +398,7 @@ const ClearanceItems = () => {
         shift: shift,
         job: job,
         samples: samples,
-        project: project,
+        projectId: project,
         returnPdfData: true, // This will return the PDF data URL instead of downloading
       });
 

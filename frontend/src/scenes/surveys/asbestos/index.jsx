@@ -56,6 +56,7 @@ const AssessmentJobsPage = () => {
   const [selectedEditProject, setSelectedEditProject] = useState(null);
   const [editingJob, setEditingJob] = useState(null);
   const [generatingCOC, setGeneratingCOC] = useState(null);
+  const [completingJob, setCompletingJob] = useState(null);
 
   const fetchJobs = () => {
     setLoading(true);
@@ -88,6 +89,36 @@ const AssessmentJobsPage = () => {
 
   const handleViewItems = (jobId) => {
     navigate(`/assessments/${jobId}/items`);
+  };
+
+  const handleToggleComplete = async (job) => {
+    if (completingJob) return;
+
+    setCompletingJob(job._id);
+    try {
+      const newStatus = job.status === "complete" ? "in-progress" : "complete";
+      // Only send necessary fields for the update
+      await assessmentService.updateJob(job._id, {
+        projectId: job.projectId._id || job.projectId,
+        assessmentDate: job.assessmentDate,
+        status: newStatus,
+      });
+      // Update the job locally instead of fetching all jobs again
+      setJobs((prevJobs) =>
+        prevJobs.map((j) =>
+          j._id === job._id ? { ...j, status: newStatus } : j
+        )
+      );
+    } catch (err) {
+      alert(
+        err.message ||
+          `Failed to ${
+            job.status === "complete" ? "uncomplete" : "complete"
+          } assessment job`
+      );
+    } finally {
+      setCompletingJob(null);
+    }
   };
 
   const handleDeleteAssessment = async (jobId) => {
@@ -335,6 +366,25 @@ const AssessmentJobsPage = () => {
                         >
                           <DeleteIcon />
                         </IconButton>
+                        <Button
+                          variant={
+                            job.status === "complete" ? "contained" : "outlined"
+                          }
+                          color={
+                            job.status === "complete" ? "error" : "success"
+                          }
+                          onClick={() => handleToggleComplete(job)}
+                          disabled={completingJob === job._id}
+                          sx={{ mr: 1 }}
+                        >
+                          {completingJob === job._id
+                            ? job.status === "complete"
+                              ? "Uncompleting..."
+                              : "Completing..."
+                            : job.status === "complete"
+                            ? "Uncomplete"
+                            : "Complete"}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

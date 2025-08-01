@@ -340,7 +340,7 @@ const EditInvoicePage = () => {
 
       // Prepare updated invoice data
       const updatedInvoiceData = {
-        project: selectedProject._id, // MongoDB ObjectId reference
+        projectId: selectedProject._id, // MongoDB ObjectId reference
         client: null, // We'll handle client separately since it's a string, not ObjectId
         amount: calculateInvoiceTotal(), // Total amount
         status: "awaiting_approval", // Keep as awaiting approval

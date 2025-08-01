@@ -387,11 +387,11 @@ const Sidebar = () => {
             icon={<StorageIcon />}
           />
 
-          <CollapsibleSection
+          {/* <CollapsibleSection
             title="REPORTS"
             to="/reports"
             icon={<DescriptionIcon />}
-          />
+          /> */}
 
           <CollapsibleSection
             title="RECORDS"

@@ -293,7 +293,7 @@ const DraftInvoicePage = () => {
       // Prepare draft invoice data
       const draftInvoiceData = {
         invoiceID: uniqueInvoiceID, // Use projectID + date suffix for uniqueness
-        project: selectedProject._id, // MongoDB ObjectId reference
+        projectId: selectedProject._id, // MongoDB ObjectId reference
         client: null, // We'll handle client separately since it's a string, not ObjectId
         amount: calculateInvoiceTotal(), // Total amount
         status: "draft", // Save as draft for Xero sync

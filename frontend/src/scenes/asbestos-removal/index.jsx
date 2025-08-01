@@ -8,8 +8,7 @@ import {
   Typography,
   CardActionArea,
   CardMedia,
-  Chip,
-} from "@mui/material";
+  } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -21,7 +20,6 @@ const AsbestosRemovalWidget = ({
   title,
   icon,
   color = "#1976d2",
-  chipLabel,
   onClick,
 }) => (
   <Card
@@ -57,16 +55,6 @@ const AsbestosRemovalWidget = ({
         {React.cloneElement(icon, {
           sx: { fontSize: 80, color: "white" },
         })}
-        <Chip
-          label={chipLabel}
-          sx={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            backgroundColor: "rgba(255,255,255,0.9)",
-            fontWeight: "bold",
-          }}
-        />
       </CardMedia>
       <CardContent
         sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
@@ -106,14 +94,12 @@ const AsbestosRemoval = () => {
       title: "Air Monitoring",
       icon: <MonitorIcon />,
       color: "#1976d2",
-      chipLabel: "Monitoring",
       onClick: () => navigate("/air-monitoring"),
     },
     {
       title: "Clearances",
       icon: <AssessmentIcon />,
       color: "#2e7d32",
-      chipLabel: "Clearance",
       onClick: () => navigate("/clearances"),
     },
   ];

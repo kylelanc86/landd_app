@@ -18,7 +18,7 @@ export const navigateToProjects = (navigate, filters = {}) => {
   if (filters.department) params.set('department', filters.department);
   if (filters.search) params.set('search', filters.search);
   
-  const url = `/databases?${params.toString()}`;
+  const url = `/projects?${params.toString()}`;
   navigate(url);
 };
 
