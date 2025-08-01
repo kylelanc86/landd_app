@@ -21,6 +21,7 @@ const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
 const asbestosRemovalJobRoutes = require('./routes/asbestosRemovalJobs');
+const reportsRoutes = require('./routes/reports');
 
 const asbestosClearanceTemplateRoutes = require('./routes/asbestosClearanceTemplates');
 const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates');
@@ -123,11 +124,12 @@ connectDB()
     app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
     app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
     app.use('/api/asbestos-removal-jobs', asbestosRemovalJobRoutes);
+    app.use('/api/reports', reportsRoutes);
 
     app.use('/api/asbestos-clearance-templates', asbestosClearanceTemplateRoutes);
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
-    app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
+    app.use('/api/pdf', pdfDocRaptorV2Routes);
     
 
     const requireAuth = require('./middleware/auth');

@@ -248,4 +248,50 @@ router.get('/deleted/:id', auth, async (req, res) => {
   }
 });
 
+// Get overdue invoice days for a project
+router.get('/overdue/:projectId', auth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    
+    // Find unpaid invoices for the project
+    const invoices = await Invoice.find({
+      projectId,
+      status: 'unpaid',
+      isDeleted: { $ne: true }
+    });
+
+    if (!invoices || invoices.length === 0) {
+      return res.json({ overdueInvoice: false, overdueDays: 0 });
+    }
+
+    // Calculate overdue days for each invoice
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let maxOverdueDays = 0;
+    let hasOverdueInvoice = false;
+
+    invoices.forEach(invoice => {
+      const dueDate = new Date(invoice.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = today - dueDate;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 0) {
+        hasOverdueInvoice = true;
+        maxOverdueDays = Math.max(maxOverdueDays, diffDays);
+      }
+    });
+
+    res.json({
+      overdueInvoice: hasOverdueInvoice,
+      overdueDays: maxOverdueDays
+    });
+  } catch (err) {
+    console.error('Error checking overdue invoices:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router; 

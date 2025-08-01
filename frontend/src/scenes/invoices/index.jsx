@@ -35,6 +35,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Breadcrumbs, Link } from "@mui/material";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
@@ -322,6 +323,218 @@ const Invoices = () => {
   const handleEditInvoice = (invoice) => {
     // Navigate to the edit invoice page instead of opening dialog
     navigate(`/invoices/edit/${invoice._id}`);
+  };
+
+  const handleViewInvoice = async (invoice) => {
+    try {
+      // Create a PDF document
+      const doc = {
+        content: [
+          { text: "INVOICE", style: "header" },
+          { text: "\n" },
+          {
+            columns: [
+              {
+                width: "*",
+                text: [
+                  { text: "Invoice ID: ", bold: true },
+                  invoice.invoiceID,
+                  "\n",
+                  { text: "Date: ", bold: true },
+                  formatDate(invoice.date),
+                  "\n",
+                  { text: "Due Date: ", bold: true },
+                  formatDate(invoice.dueDate),
+                ],
+              },
+              {
+                width: "*",
+                text: [
+                  { text: "Status: ", bold: true },
+                  invoice.status.toUpperCase(),
+                  "\n",
+                  { text: "Amount: ", bold: true },
+                  `$${Number(invoice.amount).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`,
+                ],
+              },
+            ],
+          },
+          { text: "\n\n" },
+          { text: "Client Information", style: "subheader" },
+          {
+            text: [
+              { text: "Client: ", bold: true },
+              invoice.xeroClientName || invoice.client?.name || "N/A",
+            ],
+          },
+          { text: "\n\n" },
+          { text: "Project Information", style: "subheader" },
+          {
+            text: [
+              { text: "Project ID: ", bold: true },
+              invoice.projectId?.projectID || "N/A",
+              "\n",
+              { text: "Project Name: ", bold: true },
+              invoice.projectId?.name || "N/A",
+            ],
+          },
+          { text: "\n\n" },
+          { text: "Description", style: "subheader" },
+          { text: invoice.description || "No description provided" },
+          { text: "\n\n" },
+          { text: "Line Items", style: "subheader" },
+          {
+            table: {
+              headerRows: 1,
+              widths: ["auto", "*", "auto", "auto", "auto", "auto"],
+              body: [
+                [
+                  { text: "Item No", style: "tableHeader" },
+                  { text: "Description", style: "tableHeader" },
+                  { text: "Quantity", style: "tableHeader" },
+                  { text: "Unit Price", style: "tableHeader" },
+                  { text: "Tax", style: "tableHeader" },
+                  { text: "Amount", style: "tableHeader" },
+                ],
+                ...(invoice.lineItems || []).map((item) => [
+                  item.itemNo || "",
+                  item.description || "",
+                  item.quantity?.toString() || "1",
+                  `$${Number(item.unitPrice).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`,
+                  `$${Number(item.taxAmount).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`,
+                  `$${Number(item.amount).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`,
+                ]),
+              ],
+            },
+          },
+          { text: "\n" },
+          {
+            columns: [
+              { width: "*", text: "" },
+              {
+                width: "auto",
+                table: {
+                  widths: ["*", "auto"],
+                  body: [
+                    [
+                      { text: "Subtotal:", bold: true },
+                      {
+                        text: `$${Number(
+                          invoice.lineItems?.reduce(
+                            (sum, item) =>
+                              sum + (item.amount - (item.taxAmount || 0)),
+                            0
+                          ) || 0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`,
+                        alignment: "right",
+                      },
+                    ],
+                    [
+                      { text: "Tax:", bold: true },
+                      {
+                        text: `$${Number(
+                          invoice.lineItems?.reduce(
+                            (sum, item) => sum + (item.taxAmount || 0),
+                            0
+                          ) || 0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`,
+                        alignment: "right",
+                      },
+                    ],
+                    [
+                      { text: "Total:", bold: true },
+                      {
+                        text: `$${Number(invoice.amount).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }
+                        )}`,
+                        alignment: "right",
+                      },
+                    ],
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+        styles: {
+          header: {
+            fontSize: 22,
+            bold: true,
+            alignment: "center",
+          },
+          subheader: {
+            fontSize: 16,
+            bold: true,
+            margin: [0, 10, 0, 5],
+          },
+          tableHeader: {
+            fontSize: 12,
+            bold: true,
+            fillColor: "#f5f5f5",
+            alignment: "center",
+          },
+        },
+        defaultStyle: {
+          fontSize: 12,
+        },
+      };
+
+      // Generate PDF using the backend service
+      const response = await fetch(
+        `${
+          process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+        }/pdf/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify(doc),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate PDF");
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob();
+
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+
+      // Open in a new tab
+      window.open(url, "_blank");
+
+      // Clean up
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error generating invoice PDF:", error);
+      alert("Failed to generate invoice PDF");
+    }
   };
 
   // Sorting
@@ -616,9 +829,9 @@ const Invoices = () => {
     {
       field: "invoiceID",
       headerName: "Invoice ID",
-      flex: 1,
-      minWidth: 100,
-      maxWidth: 100,
+      flex: 0.5,
+      minWidth: 180,
+      maxWidth: 240,
       sortable: true,
       valueGetter: (params) => {
         const invoiceID = params?.row?.invoiceID || params;
@@ -655,9 +868,9 @@ const Invoices = () => {
     {
       field: "amount",
       headerName: "Amount",
-      flex: 1,
+      flex: 0.5,
       minWidth: 150,
-      maxWidth: 200,
+      maxWidth: 180,
       sortable: true,
       valueGetter: (params) => {
         const amount = params?.row?.amount || params;
@@ -687,7 +900,7 @@ const Invoices = () => {
       headerName: "Status",
       flex: 1,
       minWidth: 120,
-      maxWidth: 180,
+      maxWidth: 220,
       sortable: true,
       valueGetter: (params) => {
         const status = params?.row?.status || params || "unpaid";
@@ -843,7 +1056,8 @@ const Invoices = () => {
       field: "actions",
       headerName: "",
       flex: 1,
-      maxWidth: 80,
+      minWidth: 120,
+      maxWidth: 120,
       sortable: false,
       renderCell: (params) => {
         const row = params?.row || params;
@@ -858,7 +1072,16 @@ const Invoices = () => {
               height: "100%",
             }}
           >
-            {/* Only show edit button for draft and awaiting approval invoices */}
+            {/* View button for all invoices */}
+            <IconButton
+              onClick={() => handleViewInvoice(row)}
+              title="View Invoice"
+              sx={{ mr: 1 }}
+            >
+              <VisibilityIcon />
+            </IconButton>
+
+            {/* Edit button for draft and awaiting approval invoices */}
             {(row.status === "draft" || row.status === "awaiting_approval") && (
               <IconButton
                 onClick={() => handleEditInvoice(row)}
@@ -868,7 +1091,8 @@ const Invoices = () => {
                 <EditIcon />
               </IconButton>
             )}
-            {/* Show delete button for draft and awaiting approval invoices */}
+
+            {/* Delete button for draft and awaiting approval invoices */}
             {(row.status === "draft" || row.status === "awaiting_approval") && (
               <IconButton
                 onClick={() => handleDeleteInvoice(row)}
@@ -967,7 +1191,7 @@ const Invoices = () => {
         date: form.date ? new Date(form.date).toISOString() : null,
         dueDate: dueDate,
         amount: parseFloat(form.amount),
-        project: selectedProject._id,
+        projectId: selectedProject._id,
         xeroClientName: clientName, // Save the actual client name
         status: "draft", // Always save as draft
       };
@@ -1024,7 +1248,7 @@ const Invoices = () => {
         date: form.date ? new Date(form.date).toISOString() : null,
         dueDate: dueDate,
         amount: parseFloat(form.amount),
-        project: selectedProject._id,
+        projectId: selectedProject._id,
         xeroClientName: clientName, // Save the actual client name
         status: "awaiting_approval", // Set to awaiting approval
       };

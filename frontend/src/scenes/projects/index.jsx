@@ -1703,14 +1703,7 @@ const Projects = ({ initialFilters = {} }) => {
         width: 105,
         minWidth: 105,
         maxWidth: 105,
-        renderCell: (params) => (
-          <Box
-            onClick={() => navigate(`/reports/project/${params.row._id}`)}
-            sx={{ cursor: "pointer" }}
-          >
-            {params.value}
-          </Box>
-        ),
+        renderCell: (params) => <Box>{params.value}</Box>,
       },
       {
         field: "name",
@@ -1721,10 +1714,7 @@ const Projects = ({ initialFilters = {} }) => {
 
         renderCell: ({ row }) => (
           <Box
-            onClick={() => navigate(`/reports/project/${row._id}`)}
             sx={{
-              cursor: "pointer",
-              "&:hover": { color: theme.palette.primary.main },
               whiteSpace: "normal",
               wordWrap: "break-word",
               lineHeight: 1.2,
@@ -2378,6 +2368,7 @@ const Projects = ({ initialFilters = {} }) => {
             },
           }}
           sx={{
+            cursor: "pointer",
             "& .MuiDataGrid-row:nth-of-type(even)": {
               backgroundColor: "#f8f9fa",
             },
@@ -2388,6 +2379,9 @@ const Projects = ({ initialFilters = {} }) => {
               backgroundColor: "#e3f2fd",
             },
           }}
+          onRowClick={(params) =>
+            navigate(`/reports/project/${params.row._id}`)
+          }
         />
       </Box>
       {/* Project Details Dialog */}

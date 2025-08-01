@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Box, Typography, useTheme, CircularProgress } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
-import { projectService } from "../../services/api";
+import { projectService, invoiceService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { StatusChip, ACTIVE_STATUSES } from "../../components/JobStatus";
 
 const AllocatedJobsTable = () => {
   const { currentUser, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [overdueInvoices, setOverdueInvoices] = useState({});
   const [paginationModel, setPaginationModel] = useState({
     pageSize: 25,
     page: 0,
@@ -17,46 +20,67 @@ const AllocatedJobsTable = () => {
   const [rowCount, setRowCount] = useState(0);
   const theme = useTheme();
 
-  const fetchAllocatedJobs = async (page = 0, pageSize = 25) => {
-    if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
-      return;
-    }
+  const fetchAllocatedJobs = useCallback(
+    async (page = 0, pageSize = 25) => {
+      if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
+        return;
+      }
 
-    setLoading(true);
-    try {
-      // Use the new optimized endpoint with active statuses
-      const response = await projectService.getAssignedToMe({
-        page: page + 1, // Backend uses 1-based pagination
-        limit: pageSize,
-        status: ACTIVE_STATUSES.join(","),
-        sortBy: "projectID",
-        sortOrder: "desc",
-      });
+      setLoading(true);
+      try {
+        // Use the new optimized endpoint with active statuses
+        const response = await projectService.getAssignedToMe({
+          page: page + 1, // Backend uses 1-based pagination
+          limit: pageSize,
+          status: ACTIVE_STATUSES.join(","),
+          sortBy: "projectID",
+          sortOrder: "desc",
+        });
 
-      const projectsData = response.data.data || [];
+        const projectsData = response.data.data || [];
 
-      const formattedJobs = projectsData.map((job) => ({
-        id: job._id,
-        projectID: job.projectID,
-        name: job.name,
-        department: job.department || "N/A",
-        status: job.status,
-        d_Date: job.d_Date,
-      }));
+        const formattedJobs = projectsData.map((job) => ({
+          id: job._id,
+          projectID: job.projectID,
+          name: job.name,
+          department: job.department || "N/A",
+          status: job.status,
+          d_Date: job.d_Date,
+        }));
 
-      setJobs(formattedJobs);
-      setRowCount(response.data.pagination?.total || 0);
-    } catch (err) {
-      console.error("Error fetching allocated jobs:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+        // Fetch overdue invoice info for each project
+        const overduePromises = formattedJobs.map((job) =>
+          invoiceService
+            .getOverdueByProject(job.id)
+            .then((response) => [job.id, response.data])
+            .catch((error) => {
+              console.error(
+                `Error fetching overdue info for project ${job.id}:`,
+                error
+              );
+              return [job.id, { overdueInvoice: false, overdueDays: 0 }];
+            })
+        );
+
+        const overdueResults = await Promise.all(overduePromises);
+        const overdueMap = Object.fromEntries(overdueResults);
+
+        setJobs(formattedJobs);
+        setOverdueInvoices(overdueMap);
+        setRowCount(response.data.pagination?.total || 0);
+      } catch (err) {
+        console.error("Error fetching allocated jobs:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authLoading, currentUser]
+  );
 
   useEffect(() => {
     fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
-  }, [authLoading, currentUser, paginationModel]);
+  }, [authLoading, currentUser, paginationModel, fetchAllocatedJobs]);
 
   const handlePaginationModelChange = (newModel) => {
     setPaginationModel(newModel);
@@ -123,6 +147,18 @@ const AllocatedJobsTable = () => {
       headerName: "Status",
       flex: 1,
       renderCell: (params) => <StatusChip status={params.value} />,
+    },
+    {
+      field: "overdue",
+      headerName: "Overdue Invoice",
+      flex: 1,
+      renderCell: (params) => {
+        const overdue = overdueInvoices[params.row.id];
+        if (!overdue?.overdueInvoice) return "None Overdue";
+        return `${overdue.overdueDays} day${
+          overdue.overdueDays === 1 ? "" : "s"
+        }`;
+      },
     },
   ];
 
@@ -195,6 +231,8 @@ const AllocatedJobsTable = () => {
         disableSelectionOnClick
         autoHeight
         components={{ Toolbar: GridToolbar }}
+        onRowClick={(params) => navigate(`/reports/project/${params.row.id}`)}
+        sx={{ cursor: "pointer" }}
       />
     </Box>
   );

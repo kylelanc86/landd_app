@@ -1922,4 +1922,165 @@ const generatePhotographsContent = (items) => {
 
 
 
+/**
+ * Generate PDF from document definition
+ */
+router.post('/generate', auth, async (req, res) => {
+  try {
+    const doc = req.body;
+    if (!doc) {
+      return res.status(400).json({ error: 'Document definition is required' });
+    }
+
+    // Generate HTML content
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Generated PDF</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+          }
+          .header {
+            font-size: 22px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          .subheader {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px 0 5px 0;
+          }
+          .columns {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+          }
+          .column {
+            flex: 1;
+          }
+          .bold {
+            font-weight: bold;
+          }
+          .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .table-header {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            text-align: center;
+            padding: 8px;
+            border: 1px solid #ddd;
+          }
+          .table-cell {
+            padding: 8px;
+            border: 1px solid #ddd;
+          }
+        </style>
+      </head>
+      <body>
+        ${doc.content.map(item => {
+          if (item.text === '\\n') return '<br/>';
+          if (item.style === 'header') return `<div class="header">${item.text}</div>`;
+          if (item.style === 'subheader') return `<div class="subheader">${item.text}</div>`;
+          if (item.table) {
+            return `
+              <table class="table">
+                <thead>
+                  <tr>
+                    ${item.table.body[0].map(cell => `
+                      <th class="table-header">
+                        ${typeof cell === 'string' ? cell : cell.text}
+                      </th>
+                    `).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${item.table.body.slice(1).map(row => `
+                    <tr>
+                      ${row.map(cell => `
+                        <td class="table-cell">
+                          ${typeof cell === 'string' ? cell : cell.text}
+                        </td>
+                      `).join('')}
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            `;
+          }
+          if (item.columns) {
+            return `
+              <div class="columns">
+                ${item.columns.map(col => {
+                  if (col.table) {
+                    return `
+                      <div class="column" style="width: ${col.width === '*' ? '100%' : 'auto'}">
+                        <table class="table">
+                          <tbody>
+                            ${col.table.body.map(row => `
+                              <tr>
+                                ${row.map(cell => `
+                                  <td class="table-cell" style="text-align: ${cell.alignment || 'left'}">
+                                    ${typeof cell === 'string' ? cell : (cell.bold ? `<strong>${cell.text}</strong>` : cell.text)}
+                                  </td>
+                                `).join('')}
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    `;
+                  }
+                  return `
+                    <div class="column" style="width: ${col.width === '*' ? '100%' : 'auto'}">
+                      ${Array.isArray(col.text) ? col.text.map(t => 
+                        typeof t === 'string' ? t : 
+                        t.bold ? `<span class="bold">${t.text}</span>` : t.text
+                      ).join('') : col.text}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          }
+          if (Array.isArray(item.text)) {
+            return item.text.map(t => 
+              typeof t === 'string' ? t : 
+              t.bold ? `<span class="bold">${t.text}</span>` : t.text
+            ).join('');
+          }
+          return item.text;
+        }).join('')}
+      </body>
+      </html>
+    `;
+
+    // Generate PDF using DocRaptor
+    const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
+      page_size: 'A4',
+      prince_options: {
+        media: 'print',
+        html_mode: 'quirks'
+      }
+    });
+
+    // Send response
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    res.status(500).json({ error: 'Failed to generate PDF' });
+  }
+});
+
 module.exports = router; 

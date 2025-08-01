@@ -230,7 +230,8 @@ export const invoiceService = {
   hardDelete: (id) => api.delete(`/invoices/${id}/hard`), // Hard delete (only for non-Xero invoices)
   restore: (id) => api.post(`/invoices/${id}/restore`), // Restore soft-deleted invoice
   getDeleted: () => api.get('/invoices/deleted/all'), // Get all deleted invoices
-  getDeletedById: (id) => api.get(`/invoices/deleted/${id}`) // Get specific deleted invoice
+  getDeletedById: (id) => api.get(`/invoices/deleted/${id}`), // Get specific deleted invoice
+  getOverdueByProject: (projectId) => api.get(`/invoices/overdue/${projectId}`) // Get overdue invoice info for a project
 };
 
 // User service
@@ -284,6 +285,12 @@ export const timesheetService = {
     }
     const response = await api.get(`/timesheets/range/${startDate}/${endDate}?${params.toString()}`);
     return response.data;
+  },
+  getByProject: async (projectId, params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+    return api.get(`/timesheets/project/${projectId}?${queryParams.toString()}`);
   },
   createTimesheet: async (timesheetData) => {
     const response = await api.post("/timesheets", timesheetData);
