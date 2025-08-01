@@ -13,6 +13,7 @@ import {
   CheckCircleOutline as ClearanceIcon,
   Science as FibreIcon,
   Receipt as InvoiceIcon,
+  ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import { tokens } from "../../theme";
 
@@ -67,10 +68,15 @@ const ReportCategories = ({ onCategorySelect, selectedProjectId }) => {
             sx={{
               cursor: "pointer",
               height: "100%",
+              position: "relative",
               transition: "transform 0.2s, box-shadow 0.2s",
               "&:hover": {
                 transform: "translateY(-4px)",
                 boxShadow: theme.shadows[4],
+                "& .category-arrow": {
+                  opacity: 1,
+                  transform: "translateX(0)",
+                },
               },
             }}
           >
@@ -105,6 +111,28 @@ const ReportCategories = ({ onCategorySelect, selectedProjectId }) => {
                 {category.description}
               </Typography>
             </CardContent>
+            <Box
+              className="category-arrow"
+              sx={{
+                position: "absolute",
+                right: -20,
+                top: "50%",
+                transform: "translateX(-20px)",
+                opacity: 0,
+                transition: "all 0.3s ease",
+                display: { xs: "none", md: "flex" },
+                alignItems: "center",
+                zIndex: 1,
+              }}
+            >
+              <ArrowForwardIcon
+                sx={{
+                  fontSize: 30,
+                  color: category.color,
+                  filter: "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))",
+                }}
+              />
+            </Box>
           </Card>
         </Grid>
       ))}

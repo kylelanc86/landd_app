@@ -135,18 +135,18 @@ const Reports = () => {
           Search Projects
         </Typography>
 
-        <Stack 
-          direction={{ xs: 'column', sm: 'row' }} 
-          spacing={2} 
-          sx={{ 
-            width: '100%',
-            mb: 2 
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          sx={{
+            width: "100%",
+            mb: 2,
           }}
         >
           <TextField
-            sx={{ 
+            sx={{
               flexGrow: 1,
-              minWidth: { xs: '100%', sm: '60%' }
+              minWidth: { xs: "100%", sm: "60%" },
             }}
             label="Search for a project"
             placeholder="Enter project ID, name, or client"
@@ -179,8 +179,8 @@ const Reports = () => {
             variant="contained"
             onClick={() => handleSearch(searchTerm)}
             disabled={!searchTerm.trim() || searching}
-            sx={{ 
-              minWidth: { xs: '100%', sm: 140 }
+            sx={{
+              minWidth: { xs: "100%", sm: 140 },
             }}
           >
             {searching ? (
