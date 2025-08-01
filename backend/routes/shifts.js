@@ -31,10 +31,10 @@ router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res)
     const shifts = await Shift.find({ job: req.params.jobId })
       .populate({
         path: 'job',
-        select: 'jobID name project status asbestosRemovalist description',
+        select: 'jobID name projectId status asbestosRemovalist description',
         populate: {
-          path: 'project',
-          select: 'projectID name'
+                  path: 'projectId',
+        select: 'projectID name'
         }
       })
       .populate('samples');
@@ -67,10 +67,10 @@ router.get('/:id', auth, async (req, res) => {
     const shift = await Shift.findById(req.params.id)
       .populate({
         path: 'job',
-        select: 'jobID name project status asbestosRemovalist description',
+        select: 'jobID name projectId status asbestosRemovalist description',
         populate: {
-          path: 'project',
-          select: 'projectID name'
+                  path: 'projectId',
+        select: 'projectID name'
         }
       })
       .populate('supervisor', 'firstName lastName');

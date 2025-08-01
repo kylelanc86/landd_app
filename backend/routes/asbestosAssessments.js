@@ -78,7 +78,7 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
-    const { projectId, assessmentDate } = req.body;
+    const { projectId, assessmentDate, status } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
@@ -88,6 +88,7 @@ router.put('/:id', async (req, res) => {
       {
         projectId,
         assessmentDate,
+        status: status || 'in-progress',
         updatedAt: new Date()
       },
       { new: true }

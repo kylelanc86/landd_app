@@ -27,7 +27,7 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
       .populate({
         path: 'job',
         populate: {
-          path: 'project'
+          path: 'projectId'
         }
       })
       .sort({ createdAt: -1 });
@@ -44,7 +44,7 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
       .populate({
         path: 'job',
         populate: {
-          path: 'project',
+          path: 'projectId',
           match: { projectID: req.params.projectId }
         }
       })

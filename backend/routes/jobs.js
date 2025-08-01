@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const AirMonitoringJob = require('../models/Job');
 const Project = require('../models/Project');
 const auth = require('../middleware/auth');
@@ -8,17 +9,51 @@ const checkPermission = require('../middleware/checkPermission');
 // Get all air monitoring jobs
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const jobs = await AirMonitoringJob.find()
+    console.log('Fetching all air monitoring jobs...');
+    
+    // First, let's check what's in the database
+    const jobs = await AirMonitoringJob.find().lean();
+    console.log('Raw jobs from database:', JSON.stringify(jobs, null, 2));
+
+    // Now let's check if the projectId references exist
+    const projectIds = jobs.map(job => job.projectId).filter(id => id);
+    console.log('Project IDs to look up:', projectIds);
+
+    if (projectIds.length > 0) {
+      const projects = await mongoose.model('Project').find({ _id: { $in: projectIds } }).lean();
+      console.log('Found projects:', JSON.stringify(projects, null, 2));
+    } else {
+      console.log('No project IDs to look up');
+    }
+
+    // Now try to populate
+    const populatedJobs = await AirMonitoringJob.find()
       .populate({
-        path: 'project',
+        path: 'projectId',
         populate: {
           path: 'client'
         }
       })
       .populate('assignedTo', 'firstName lastName');
-    res.json(jobs);
+    
+    console.log('Jobs after populate:', JSON.stringify(populatedJobs.map(job => ({
+      _id: job._id,
+      projectId: job.projectId,
+      projectIdRef: job.projectId?._id,
+      projectName: job.projectId?.name,
+      projectProjectID: job.projectId?.projectID,
+      status: job.status,
+      asbestosRemovalist: job.asbestosRemovalist
+    })), null, 2));
+
+    res.json(populatedJobs);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Error in GET /air-monitoring-jobs:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -27,7 +62,7 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const job = await AirMonitoringJob.findById(req.params.id)
       .populate({
-        path: 'project',
+        path: 'projectId',
         populate: {
           path: 'client'
         }
@@ -46,9 +81,10 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
 router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
   try {
     console.log('Creating new air monitoring job with data:', req.body);
+    console.log('projectId from request:', req.body.projectId);
 
     // Validate required fields
-    const requiredFields = ['project', 'asbestosRemovalist', 'startDate'];
+    const requiredFields = ['projectId', 'asbestosRemovalist', 'startDate'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -59,9 +95,17 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       });
     }
 
+    // Verify that projectId exists in the database
+    const project = await Project.findById(req.body.projectId);
+    if (!project) {
+      console.log('Project not found:', req.body.projectId);
+      return res.status(400).json({ message: 'Project not found' });
+    }
+    console.log('Found project:', { _id: project._id, name: project.name, projectID: project.projectID });
+
     // Check for existing active jobs for this project
     const existingActiveJob = await AirMonitoringJob.findOne({
-      project: req.body.project,
+      projectId: req.body.projectId,
       status: { $in: ['pending', 'in_progress'] }
     });
 
@@ -76,10 +120,17 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     const jobID = `AMJ-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substr(2, 4)}`;
     console.log('Generated jobID:', jobID);
 
-    const job = new AirMonitoringJob({
+    // Ensure projectId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.body.projectId)) {
+      console.error('Invalid projectId:', req.body.projectId);
+      return res.status(400).json({ message: 'Invalid projectId format' });
+    }
+
+    // Create the job object
+    const jobData = {
       jobID: jobID,
       name: req.body.name || 'Air Monitoring Job',
-      project: req.body.project,
+      projectId: new mongoose.Types.ObjectId(req.body.projectId),  // Convert to ObjectId
       status: req.body.status || 'pending',
       startDate: req.body.startDate,
       endDate: req.body.endDate,
@@ -87,7 +138,10 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       description: req.body.description,
       location: req.body.location,
       assignedTo: req.body.assignedTo
-    });
+    };
+
+    console.log('Creating job with data:', JSON.stringify(jobData, null, 2));
+    const job = new AirMonitoringJob(jobData);
 
     console.log('Created job object:', job);
 
