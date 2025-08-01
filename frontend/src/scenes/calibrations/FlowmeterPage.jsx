@@ -12,15 +12,17 @@ import {
   IconButton,
   Button,
   useTheme,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../components/Header";
-import { DataGrid } from "@mui/x-data-grid";
-import { tokens } from "../../theme";
 
 const FlowmeterPage = () => {
   const theme = useTheme();
@@ -46,6 +48,9 @@ const FlowmeterPage = () => {
     },
   ]);
 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [calibrationToDelete, setCalibrationToDelete] = useState(null);
+
   const handleAdd = () => {
     console.log("Add new calibration");
   };
@@ -55,7 +60,24 @@ const FlowmeterPage = () => {
   };
 
   const handleDelete = (id) => {
-    console.log("Delete calibration:", id);
+    const calibration = calibrations.find((c) => c.id === id);
+    setCalibrationToDelete(calibration);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (calibrationToDelete) {
+      setCalibrations((prev) =>
+        prev.filter((calibration) => calibration.id !== calibrationToDelete.id)
+      );
+      setDeleteDialogOpen(false);
+      setCalibrationToDelete(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setCalibrationToDelete(null);
   };
 
   return (
@@ -131,6 +153,37 @@ const FlowmeterPage = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleCancelDelete}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Delete Flowmeter Calibration
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete the calibration record for flowmeter{" "}
+            {calibrationToDelete?.flowmeterId}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} color="primary">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            autoFocus
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
