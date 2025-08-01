@@ -25,7 +25,7 @@ import {
 } from "@mui/icons-material";
 
 import { projectService } from "../../services/api";
-import ProjectDetailsModal from "./ProjectDetailsModal";
+import ProjectDetailsModal from "./ProjectDetailsModal.jsx";
 
 const Reports = () => {
   const navigate = useNavigate();
