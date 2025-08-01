@@ -135,9 +135,19 @@ const Reports = () => {
           Search Projects
         </Typography>
 
-        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", mb: 2 }}>
+        <Stack 
+          direction={{ xs: 'column', sm: 'row' }} 
+          spacing={2} 
+          sx={{ 
+            width: '100%',
+            mb: 2 
+          }}
+        >
           <TextField
-            fullWidth
+            sx={{ 
+              flexGrow: 1,
+              minWidth: { xs: '100%', sm: '60%' }
+            }}
             label="Search for a project"
             placeholder="Enter project ID, name, or client"
             value={searchTerm}
@@ -169,7 +179,9 @@ const Reports = () => {
             variant="contained"
             onClick={() => handleSearch(searchTerm)}
             disabled={!searchTerm.trim() || searching}
-            sx={{ minWidth: 140 }}
+            sx={{ 
+              minWidth: { xs: '100%', sm: 140 }
+            }}
           >
             {searching ? (
               <CircularProgress size={20} color="inherit" />
@@ -177,7 +189,7 @@ const Reports = () => {
               "Search"
             )}
           </Button>
-        </Box>
+        </Stack>
 
         {/* Recent Projects */}
         {recentSearches.length > 0 && (

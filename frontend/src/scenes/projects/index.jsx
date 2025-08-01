@@ -2098,6 +2098,7 @@ const Projects = ({ initialFilters = {} }) => {
               label="Search Projects"
               variant="outlined"
               size="small"
+              fullWidth
               placeholder="Enter search term"
               value={filters.searchTerm}
               onChange={handleSearchChange}
@@ -2108,7 +2109,6 @@ const Projects = ({ initialFilters = {} }) => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ minWidth: 300 }}
               ref={searchInputRef}
               onFocus={() => {
                 setSearchFocused(true);
