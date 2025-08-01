@@ -32,6 +32,7 @@ const ClearancesDashboard = () => {
       requiredPermission: "asbestos.view",
       color: "#1976d2",
       chipLabel: "Asbestos",
+      isAvailable: true,
     },
     {
       id: "lead-clearance",
@@ -42,6 +43,7 @@ const ClearancesDashboard = () => {
       requiredPermission: "asbestos.view",
       color: "#2e7d32",
       chipLabel: "Lead",
+      isAvailable: false,
     },
     {
       id: "mould-validation",
@@ -52,11 +54,14 @@ const ClearancesDashboard = () => {
       requiredPermission: "asbestos.view",
       color: "#ed6c02",
       chipLabel: "Mould",
+      isAvailable: false,
     },
   ];
 
   const handleModuleClick = (module) => {
-    navigate(module.path);
+    if (module.isAvailable) {
+      navigate(module.path);
+    }
   };
 
   return (
@@ -74,19 +79,25 @@ const ClearancesDashboard = () => {
                   sx={{
                     height: "100%",
                     transition: "all 0.3s ease-in-out",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      boxShadow: 4,
-                    },
+                    "&:hover": module.isAvailable
+                      ? {
+                          transform: "translateY(-4px)",
+                          boxShadow: 4,
+                        }
+                      : {},
+                    position: "relative",
+                    opacity: module.isAvailable ? 1 : 0.7,
                   }}
                 >
                   <CardActionArea
                     onClick={() => handleModuleClick(module)}
+                    disabled={!module.isAvailable}
                     sx={{
                       height: "100%",
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "stretch",
+                      cursor: module.isAvailable ? "pointer" : "default",
                     }}
                   >
                     <CardMedia
@@ -102,6 +113,45 @@ const ClearancesDashboard = () => {
                     >
                       {module.icon}
 
+                      {/* Coming Soon Overlay */}
+                      {!module.isAvailable && (
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: "rgba(0, 0, 0, 0.7)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              color: "white",
+                              fontWeight: "bold",
+                              textAlign: "center",
+                              mb: 1,
+                            }}
+                          >
+                            Coming Soon
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "white",
+                              textAlign: "center",
+                              opacity: 0.9,
+                            }}
+                          >
+                            This feature is under development
+                          </Typography>
+                        </Box>
+                      )}
                     </CardMedia>
                     <CardContent
                       sx={{
@@ -125,16 +175,23 @@ const ClearancesDashboard = () => {
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
+                          marginTop: "auto",
                         }}
                       >
                         <Typography
                           variant="body2"
-                          color="primary"
+                          color={
+                            module.isAvailable ? "primary" : "text.secondary"
+                          }
                           sx={{ fontWeight: "bold" }}
                         >
-                          View {module.title}
+                          {module.isAvailable
+                            ? `View ${module.title}`
+                            : "Coming Soon"}
                         </Typography>
-                        <ArrowForwardIcon color="primary" />
+                        {module.isAvailable && (
+                          <ArrowForwardIcon color="primary" />
+                        )}
                       </Box>
                     </CardContent>
                   </CardActionArea>

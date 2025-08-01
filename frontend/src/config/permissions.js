@@ -16,6 +16,12 @@ export const PERMISSIONS = {
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
   'xero.sync': 'Sync with Xero',
+
+  // Admin permissions
+  'admin.view': 'Access admin features',
+  'admin.create': 'Create admin resources',
+  'admin.update': 'Update admin resources',
+  'admin.delete': 'Delete admin resources',
 };
 
 // Define role-based permissions

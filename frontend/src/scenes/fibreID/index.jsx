@@ -8,8 +8,7 @@ import {
   CardContent,
   CardActionArea,
   CardMedia,
-  Chip,
-} from "@mui/material";
+  } from "@mui/material";
 import {
   Science as ScienceIcon,
   Assignment as AssignmentIcon,
@@ -33,10 +32,6 @@ const FibreIdIndex = () => {
       <Box sx={{ mt: 4, mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Fibre Identification
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-          Select the type of samples you want to analyze for fibre
-          identification
         </Typography>
 
         <Grid container spacing={4}>
@@ -73,16 +68,7 @@ const FibreIdIndex = () => {
                   }}
                 >
                   <ScienceIcon sx={{ fontSize: 80, color: "white" }} />
-                  <Chip
-                    label="Client Supplied"
-                    sx={{
-                      position: "absolute",
-                      top: 16,
-                      right: 16,
-                      backgroundColor: "rgba(255,255,255,0.9)",
-                      fontWeight: "bold",
-                    }}
-                  />
+
                 </CardMedia>
                 <CardContent
                   sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
@@ -145,16 +131,7 @@ const FibreIdIndex = () => {
                   }}
                 >
                   <AssignmentIcon sx={{ fontSize: 80, color: "white" }} />
-                  <Chip
-                    label="Assessment Jobs"
-                    sx={{
-                      position: "absolute",
-                      top: 16,
-                      right: 16,
-                      backgroundColor: "rgba(255,255,255,0.9)",
-                      fontWeight: "bold",
-                    }}
-                  />
+ 
                 </CardMedia>
                 <CardContent
                   sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}

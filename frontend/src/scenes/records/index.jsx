@@ -11,6 +11,7 @@ import {
   useTheme,
   Paper,
 } from "@mui/material";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { useNavigate } from "react-router-dom";
 import SchoolIcon from "@mui/icons-material/School";
 import GroupIcon from "@mui/icons-material/Group";
@@ -119,6 +120,19 @@ const RecordWidget = ({
       </Box>
     )}
   </Card>
+);
+
+// Tab panel component
+const TabPanel = ({ children, value, index, ...other }) => (
+  <div
+    role="tabpanel"
+    hidden={value !== index}
+    id={`records-tabpanel-${index}`}
+    aria-labelledby={`records-tab-${index}`}
+    {...other}
+  >
+    {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+  </div>
 );
 
 const Records = () => {
@@ -272,18 +286,7 @@ const Records = () => {
     setActiveTab(newValue);
   };
 
-  // Tab panel component
-  const TabPanel = ({ children, value, index, ...other }) => (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`records-tabpanel-${index}`}
-      aria-labelledby={`records-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-    </div>
-  );
+  // Handle tab change
 
   return (
     <Box sx={{ p: 3 }}>
@@ -296,8 +299,9 @@ const Records = () => {
         elevation={0}
         sx={{
           mb: 3,
-          border: `1px solid ${theme.palette.divider}`,
           borderRadius: 2,
+          position: "relative",
+          overflow: "visible",
         }}
       >
         <Tabs
@@ -305,12 +309,14 @@ const Records = () => {
           onChange={handleTabChange}
           variant="fullWidth"
           sx={{
+            position: "relative",
             "& .MuiTab-root": {
               textTransform: "none",
               fontSize: "1rem",
               fontWeight: 600,
               py: 2,
               color: theme.palette.text.secondary,
+              transition: "all 0.3s",
               "&.Mui-selected": {
                 backgroundColor: "#4caf50",
                 color: "white !important",
@@ -323,12 +329,72 @@ const Records = () => {
           }}
         >
           <Tab
-            label="General Records"
+            label={
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <span>General Records</span>
+                {activeTab === 0 && (
+                  <ArrowForwardIcon
+                    sx={{
+                      display: { xs: "none", sm: "block" },
+                      position: "absolute",
+                      right: 16,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "white",
+                      fontSize: "30px",
+                      fontWeight: "bold",
+                      animation: "arrowBounce 1.5s infinite",
+                      "@keyframes arrowBounce": {
+                        "0%, 100%": {
+                          transform: "translateY(-50%) translateX(0)",
+                        },
+                        "50%": {
+                          transform: "translateY(-50%) translateX(5px)",
+                        },
+                      },
+                    }}
+                  />
+                )}
+              </Box>
+            }
             id="records-tab-0"
             aria-controls="records-tabpanel-0"
           />
           <Tab
-            label="Laboratory Records"
+            label={
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {activeTab === 1 && (
+                  <Box
+                    component="span"
+                    sx={{
+                      display: { xs: "none", sm: "block" },
+                      position: "absolute",
+                      left: 16,
+                      top: "50%",
+                      transform: "translateY(-50%) scaleX(-1)",
+                      color: "white",
+                    }}
+                  >
+                    <ArrowForwardIcon
+                      sx={{
+                        fontSize: "30px",
+                        fontWeight: "bold",
+                        animation: "arrowBounceLeft 1.5s infinite",
+                        "@keyframes arrowBounceLeft": {
+                          "0%, 100%": {
+                            transform: "translateX(0)",
+                          },
+                          "50%": {
+                            transform: "translateX(-5px)",
+                          },
+                        },
+                      }}
+                    />
+                  </Box>
+                )}
+                <span>Laboratory Records</span>
+              </Box>
+            }
             id="records-tab-1"
             aria-controls="records-tabpanel-1"
           />
@@ -395,8 +461,7 @@ const Records = () => {
           color: theme.palette.text.secondary,
           fontSize: "0.875rem",
         }}
-      >
-      </Box>
+      ></Box>
     </Box>
   );
 };

@@ -18,8 +18,8 @@ import StorageIcon from "@mui/icons-material/Storage";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ConstructionIcon from "@mui/icons-material/Construction";
-import SearchIcon from '@mui/icons-material/Search';
-import FolderCopyIcon from '@mui/icons-material/FolderCopy';
+import SearchIcon from "@mui/icons-material/Search";
+import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import { tokens } from "../../theme";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
@@ -273,13 +273,23 @@ const Sidebar = () => {
       }
       
       /* Reduce spacing between menu items */
-      .pro-menu-item {
+      .pro-menu-item:not(:first-child) {
         margin: 2px 0 !important;
         padding: 2px 8px !important;
       }
 
-      /* Remove padding from logo container */
-      .pro-inner-item {
+      /* Special handling for logo container */
+      .pro-menu-item:first-child {
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .pro-menu-item:first-child .pro-inner-item {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      /* Regular menu items padding */
+      .pro-menu-item:not(:first-child) .pro-inner-item {
         padding: 5px 15px !important;
       }
     `;
@@ -315,7 +325,9 @@ const Sidebar = () => {
       >
         <MenuItem
           style={{
-            margin: "10px 0 20px 0",
+            margin: 0,
+            padding: 0,
+            marginBottom: "20px",
             color: tokens.grey[700],
           }}
         >
@@ -323,38 +335,44 @@ const Sidebar = () => {
             display="flex"
             justifyContent="flex-start"
             alignItems="center"
-            ml="5px"
-            mr="5px"
             sx={{
               width: "100%",
               overflow: "visible",
               cursor: "default",
+              margin: 0,
+              padding: 0,
             }}
           >
-            <img
-              src="/logo.png"
-              alt="Lancaster and Dickenson Consulting"
-              style={{
-                maxHeight: "75px",
-                maxWidth: "190px",
-                width: "auto",
-                height: "auto",
-                display: "block",
-                margin: "0",
-                objectFit: "contain",
-              }}
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.style.display = "none";
-                const parent = e.target.parentNode;
-                const text = document.createElement("span");
-                text.textContent = "L&D";
-                text.style.fontSize = "28px";
-                text.style.fontWeight = "bold";
-                text.style.color = "#000000";
-                parent.appendChild(text);
-              }}
-            />
+            <picture>
+              <source srcSet="/logo.png 1x, /logo.png 2x" type="image/png" />
+              <img
+                src="/logo.png"
+                alt="Lancaster and Dickenson Consulting"
+                style={{
+                  maxHeight: "100px",
+                  maxWidth: "242px",
+                  width: "auto",
+                  height: "auto",
+                  display: "block",
+                  marginBottom: "10px",
+                  objectFit: "contain",
+                  imageRendering: "-webkit-optimize-contrast",
+                  transform: "translateZ(0)",
+                  backfaceVisibility: "hidden",
+                }}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.style.display = "none";
+                  const parent = e.target.parentNode;
+                  const text = document.createElement("span");
+                  text.textContent = "L&D";
+                  text.style.fontSize = "28px";
+                  text.style.fontWeight = "bold";
+                  text.style.color = "#000000";
+                  parent.appendChild(text);
+                }}
+              />
+            </picture>
           </Box>
         </MenuItem>
 
@@ -424,7 +442,7 @@ const Sidebar = () => {
           sx={{
             p: 2,
             backgroundColor: "#ffffff",
-                       marginTop: "auto",
+            marginTop: "auto",
           }}
         >
           <SectionDivider />

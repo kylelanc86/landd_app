@@ -327,7 +327,7 @@ const MonthlyTimesheet = () => {
                   onClick={() => day && handleDayClick(day)}
                   sx={{
                     p: 1.5,
-                    height: "120px",
+                    height: "100px",
                     border: "2px solid",
                     borderColor: day ? theme.palette.divider : "transparent",
                     borderRadius: "0 0 12px 12px",
@@ -371,7 +371,7 @@ const MonthlyTimesheet = () => {
                       <Typography
                         variant="h6"
                         sx={{
-                          fontWeight: isToday(day) ? 800 : 600,
+                          fontWeight: isToday(day) ? 800 : 500,
                           color: isToday(day)
                             ? theme.palette.error.main
                             : isWeekend
