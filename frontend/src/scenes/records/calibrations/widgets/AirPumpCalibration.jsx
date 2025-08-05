@@ -6,7 +6,7 @@ const AirPumpCalibration = ({ nextCalibrationDue, viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Air Pump Calibration"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath="/calibrations/air-pump"
+      viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/airpump.png"}
     />
   );

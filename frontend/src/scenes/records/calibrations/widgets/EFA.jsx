@@ -6,7 +6,7 @@ const EFA = ({ nextCalibrationDue, viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Effective Filter Area"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath="/calibrations/efa"
+      viewCalibrationsPath="/records/laboratory/calibrations/efa"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/effective filter area.png"}
     />
   );

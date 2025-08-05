@@ -41,7 +41,7 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import TodayIcon from "@mui/icons-material/Today";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { projectService, userService } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import PermissionGate from "../../components/PermissionGate";

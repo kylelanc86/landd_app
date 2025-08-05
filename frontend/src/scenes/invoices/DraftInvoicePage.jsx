@@ -25,10 +25,9 @@ import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
+
 import { projectService, invoiceService } from "../../services/api";
 import invoiceItemService from "../../services/invoiceItemService";
-import { formatDateForInput } from "../../utils/dateFormat";
 
 const DraftInvoicePage = () => {
   const navigate = useNavigate();
@@ -37,12 +36,17 @@ const DraftInvoicePage = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectInputValue, setProjectInputValue] = useState("");
 
-  // Invoice header state
-  const [invoiceHeader, setInvoiceHeader] = useState({
-    dueDate: "",
-    invoiceDate: new Date().toISOString().split("T")[0],
-    reference: "",
-    paymentTerms: 30, // Default to 30 days
+  // Invoice header state with initial due date calculation
+  const [invoiceHeader, setInvoiceHeader] = useState(() => {
+    const today = new Date();
+    const dueDate = new Date(today);
+    dueDate.setDate(today.getDate() + 30); // Default to 30 days
+    return {
+      dueDate: dueDate.toISOString().split("T")[0],
+      invoiceDate: today.toISOString().split("T")[0],
+      reference: "",
+      paymentTerms: 30, // Default to 30 days
+    };
   });
 
   // Client state (auto-populated from project)
@@ -50,7 +54,6 @@ const DraftInvoicePage = () => {
 
   // Invoice items state
   const [invoiceItems, setInvoiceItems] = useState([]);
-  const [editingItem, setEditingItem] = useState(null);
 
   // Available invoice items for dropdown
   const [availableInvoiceItems, setAvailableInvoiceItems] = useState([]);
@@ -184,11 +187,6 @@ const DraftInvoicePage = () => {
       amount: 0,
     };
     setInvoiceItems((prev) => [...prev, newItem]);
-    setEditingItem(newItem.id);
-  };
-
-  const handleEditItem = (itemId) => {
-    setEditingItem(itemId);
   };
 
   const handleDeleteItem = (itemId) => {
@@ -283,11 +281,10 @@ const DraftInvoicePage = () => {
       // Create unique invoiceID with date suffix
       const today = new Date();
       const dateSuffix =
-        today.getFullYear().toString().slice(-2) +
-        (today.getMonth() + 1).toString().padStart(2, "0") +
-        today.getDate().toString().padStart(2, "0");
+      today.getDate().toString().padStart(2, "0") + (today.getMonth() + 1).toString().padStart(2, "0") + today.getFullYear().toString().slice(-2)
+        ;
       // Add timestamp to ensure uniqueness
-      const timestamp = Date.now().toString().slice(-6);
+      const timestamp = Date.now().toString().slice(-2);
       const uniqueInvoiceID = `${selectedProject.projectID}-${dateSuffix}-${timestamp}`;
 
       // Prepare draft invoice data
@@ -301,7 +298,7 @@ const DraftInvoicePage = () => {
         dueDate: new Date(effectiveDueDate), // Convert to Date object
         description: `Invoice for project ${selectedProject.name}`, // Description
         xeroClientName: selectedClient?.name, // Store client name in Xero field
-        xeroReference: invoiceHeader.reference || "", // Store reference in Xero field
+        xeroReference: invoiceHeader.reference || selectedProject.name, // Store reference in Xero field
         lineItems: invoiceItems.map((item) => ({
           itemNo: item.itemNo,
           description: item.description,

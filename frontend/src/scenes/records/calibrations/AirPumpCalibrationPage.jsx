@@ -39,8 +39,8 @@ import {
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { useNavigate, useParams } from "react-router-dom";
-import { airPumpCalibrationService } from "../../services/airPumpCalibrationService";
-import airPumpService from "../../services/airPumpService";
+import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
+import airPumpService from "../../../services/airPumpService";
 
 const AirPumpCalibrationPage = () => {
   const theme = useTheme();
@@ -244,7 +244,7 @@ const AirPumpCalibrationPage = () => {
       {/* Header */}
       <Box display="flex" alignItems="center" mb={3}>
         <IconButton
-          onClick={() => navigate("/calibrations/air-pump")}
+          onClick={() => navigate("/records/laboratory/calibrations/air-pump")}
           sx={{ mr: 2 }}
         >
           <ArrowBackIcon />

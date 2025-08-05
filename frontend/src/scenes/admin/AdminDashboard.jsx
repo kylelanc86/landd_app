@@ -7,7 +7,6 @@ import {
   CardContent,
   CardActionArea,
   CardMedia,
-  
   useTheme,
 } from "@mui/material";
 import {
@@ -17,7 +16,7 @@ import {
   ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
 import Header from "../../components/Header";

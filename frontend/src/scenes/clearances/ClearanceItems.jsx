@@ -40,7 +40,7 @@ import {
 } from "@mui/icons-material";
 
 import { useNavigate, useParams } from "react-router-dom";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import PermissionGate from "../../components/PermissionGate";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import { compressImage, needsCompression } from "../../utils/imageCompression";

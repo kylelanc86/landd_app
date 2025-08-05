@@ -6,10 +6,9 @@ const RiLiquid = () => {
     <BaseCalibrationWidget
       title="RI Liquid Calibration"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/RiLiquid.png"}
-      viewCalibrationsPath="/calibrations/ri-liquid"
+      viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
     />
   );
 };
 
 export default RiLiquid;
- 

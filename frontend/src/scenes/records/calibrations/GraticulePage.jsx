@@ -18,28 +18,28 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../components/Header";
+import Header from "../../../components/Header";
 import { DataGrid } from "@mui/x-data-grid";
-import { tokens } from "../../theme";
+import { tokens } from "../../../theme/tokens";
 
-const EFAPage = () => {
+const GraticulePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
-      filterId: "F-001",
+      graticuleId: "G-001",
       date: "2024-02-15",
-      area: "100 cm²",
+      scale: "100 µm",
       status: "Pass",
       technician: "John Doe",
       nextCalibration: "2024-08-15",
     },
     {
       id: 2,
-      filterId: "F-002",
+      graticuleId: "G-002",
       date: "2024-02-10",
-      area: "95 cm²",
+      scale: "100 µm",
       status: "Pass",
       technician: "Jane Smith",
       nextCalibration: "2024-08-10",
@@ -61,11 +61,13 @@ const EFAPage = () => {
   return (
     <Box m="20px">
       <Box display="flex" alignItems="center" mb="20px">
-        <IconButton onClick={() => navigate("/calibrations")}>
+        <IconButton
+          onClick={() => navigate("/records/laboratory/calibrations/list")}
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          EFA Calibrations
+          Graticule Calibrations
         </Typography>
       </Box>
 
@@ -79,9 +81,9 @@ const EFAPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Filter ID</TableCell>
+              <TableCell>Graticule ID</TableCell>
               <TableCell>Calibration Date</TableCell>
-              <TableCell>Area</TableCell>
+              <TableCell>Scale</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Technician</TableCell>
               <TableCell>Next Calibration</TableCell>
@@ -91,9 +93,9 @@ const EFAPage = () => {
           <TableBody>
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
-                <TableCell>{calibration.filterId}</TableCell>
+                <TableCell>{calibration.graticuleId}</TableCell>
                 <TableCell>{calibration.date}</TableCell>
-                <TableCell>{calibration.area}</TableCell>
+                <TableCell>{calibration.scale}</TableCell>
                 <TableCell>
                   <Box
                     sx={{
@@ -135,4 +137,4 @@ const EFAPage = () => {
   );
 };
 
-export default EFAPage;
+export default GraticulePage;

@@ -6,7 +6,7 @@ const PrimaryFlowmeter = ({ nextCalibrationDue, viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Primary Flowmeter"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath="/calibrations/primary-flowmeter"
+      viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/primary flowmeter.png"}
     />
   );

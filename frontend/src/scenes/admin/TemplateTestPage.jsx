@@ -11,7 +11,7 @@ import {
   useTheme,
   Alert,
 } from "@mui/material";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
 import {

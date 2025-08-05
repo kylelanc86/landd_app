@@ -40,7 +40,7 @@ import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { USER_LEVELS } from "../../data/userData";
 import { DataGrid } from "@mui/x-data-grid";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 import { userService } from "../../services/api";
 import TruncatedCell from "../../components/TruncatedCell";

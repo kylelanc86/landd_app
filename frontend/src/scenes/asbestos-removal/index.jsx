@@ -8,20 +8,15 @@ import {
   Typography,
   CardActionArea,
   CardMedia,
-  } from "@mui/material";
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 
-const AsbestosRemovalWidget = ({
-  title,
-  icon,
-  color = "#1976d2",
-  onClick,
-}) => (
+const AsbestosRemovalWidget = ({ title, icon, color = "#1976d2", onClick }) => (
   <Card
     sx={{
       height: "100%",
@@ -114,9 +109,7 @@ const AsbestosRemoval = () => {
       <Grid container spacing={4}>
         {asbestosRemovalWidgets.map((widget, index) => (
           <Grid item xs={12} md={6} key={index}>
-            <AsbestosRemovalWidget
-              {...widget}
-            />
+            <AsbestosRemovalWidget {...widget} />
           </Grid>
         ))}
       </Grid>

@@ -6,7 +6,7 @@ const AcetoneVaporiser = ({ nextCalibrationDue, viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Acetone Vaporiser"
       nextCalibrationDue={nextCalibrationDue}
-      viewCalibrationsPath="/calibrations/acetone-vaporiser"
+      viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/vaporiser.png"}
     />
   );

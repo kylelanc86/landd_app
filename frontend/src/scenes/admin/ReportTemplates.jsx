@@ -31,7 +31,7 @@ import {
   Preview as PreviewIcon,
   Download as DownloadIcon,
 } from "@mui/icons-material";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
 import reportTemplateService from "../../services/reportTemplateService";

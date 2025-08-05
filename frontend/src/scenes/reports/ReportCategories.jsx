@@ -15,7 +15,7 @@ import {
   Receipt as InvoiceIcon,
   ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 
 const categories = [
   {

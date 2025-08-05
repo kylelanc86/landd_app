@@ -46,14 +46,13 @@ import {
   xeroService,
 } from "../../services/api";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { formatDate, formatDateForInput } from "../../utils/dateFormat";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import { useAuth } from "../../context/AuthContext";
 import SyncIcon from "@mui/icons-material/Sync";
 import { hasPermission } from "../../config/permissions";
 import AddIcon from "@mui/icons-material/Add";
-import performanceMonitor from "../../utils/performanceMonitor";
 
 const TERMS_OPTIONS = [
   { label: "Due on receipt", days: 0 },
@@ -103,22 +102,12 @@ const Invoices = () => {
   // Add permission check for Xero sync
   const canSyncXero = hasPermission(currentUser, "xero.sync");
 
-  // Performance monitoring
-  useEffect(() => {
-    performanceMonitor.startPageLoad("invoices-page");
-
-    return () => {
-      performanceMonitor.endPageLoad("invoices-page");
-    };
-  }, []);
-
   useEffect(() => {
     if (authLoading || !currentUser) {
       return;
     }
 
     const fetchData = async () => {
-      performanceMonitor.startTimer("fetch-invoices-data");
       try {
         const [invoicesRes, projectsRes, clientsRes] = await Promise.all([
           invoiceService.getAll(),
@@ -153,7 +142,6 @@ const Invoices = () => {
         setError("Failed to fetch data");
         setLoading(false);
       } finally {
-        performanceMonitor.endTimer("fetch-invoices-data");
       }
     };
 
@@ -166,7 +154,6 @@ const Invoices = () => {
     if (authLoading || !currentUser) return;
 
     const checkXeroConnection = async () => {
-      performanceMonitor.startTimer("check-xero-connection");
       try {
         // Check Xero connection status
         const response = await xeroService.checkStatus();
@@ -204,7 +191,6 @@ const Invoices = () => {
         console.error("Error checking Xero connection:", error);
         setXeroError("Failed to check Xero connection");
       } finally {
-        performanceMonitor.endTimer("check-xero-connection");
       }
     };
 
@@ -221,6 +207,14 @@ const Invoices = () => {
     const searchParams = new URLSearchParams(location.search);
     const xeroStatus = searchParams.get("xero_connected");
     const xeroError = searchParams.get("xero_error");
+    const clientFilter = searchParams.get("client");
+
+    // Handle client filter from URL
+    if (clientFilter) {
+      // Set the search query to the client name from URL
+      const clientName = decodeURIComponent(clientFilter);
+      setSearchQuery(clientName);
+    }
 
     if (xeroStatus === "true") {
       // Clear the URL parameters
@@ -258,10 +252,6 @@ const Invoices = () => {
       window.history.replaceState({}, "", newUrl);
     }
   }, [location.search]);
-
-  {
-    /* Removed client filter from URL handling */
-  }
 
   // When invoice date changes, auto-set due date if not manually changed
   useEffect(() => {
@@ -1082,7 +1072,7 @@ const Invoices = () => {
             </IconButton>
 
             {/* Edit button for draft and awaiting approval invoices */}
-            {(row.status === "draft" || row.status === "awaiting_approval") && (
+            {row.status === "draft" && (
               <IconButton
                 onClick={() => handleEditInvoice(row)}
                 title="Edit Invoice"

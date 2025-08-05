@@ -14,26 +14,14 @@ import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import performanceMonitor from "../../utils/performanceMonitor";
 
 const Databases = () => {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  // Performance monitoring
-  useEffect(() => {
-    performanceMonitor.startPageLoad("databases-page");
-
-    return () => {
-      performanceMonitor.endPageLoad("databases-page");
-    };
-  }, []);
-
   const handleDatabaseClick = (database) => {
-    performanceMonitor.startTimer(`database-navigation-${database}`);
     // Navigate to the individual page
     navigate(`/${database}`);
-    performanceMonitor.endTimer(`database-navigation-${database}`);
   };
 
   const databaseModules = [

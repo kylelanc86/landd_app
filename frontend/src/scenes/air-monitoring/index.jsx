@@ -50,8 +50,7 @@ import {
 } from "../../services/api";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
-import performanceMonitor from "../../utils/performanceMonitor";
+import { tokens } from "../../theme/tokens";
 
 const JOBS_KEY = "ldc_jobs";
 
@@ -112,12 +111,10 @@ const AirMonitoring = () => {
       if (isFetching || isDataFetched) return;
 
       isFetching = true;
-      performanceMonitor.startPageLoad("Air Monitoring");
       setLoading(true);
       setError(null);
 
       try {
-        performanceMonitor.startTimer("Fetch Jobs");
         const jobsResponse = await jobService.getAll();
 
         if (!isMounted) return;
@@ -184,7 +181,6 @@ const AirMonitoring = () => {
         console.log("Final processed jobs:", processedJobs);
         setJobs(processedJobs);
         setIsDataFetched(true);
-        performanceMonitor.endTimer("Fetch Jobs");
       } catch (err) {
         if (!isMounted) return;
         console.error("Error fetching data:", err);
@@ -192,7 +188,6 @@ const AirMonitoring = () => {
       } finally {
         if (isMounted) {
           setLoading(false);
-          performanceMonitor.endPageLoad("Air Monitoring");
         }
         isFetching = false;
       }
@@ -595,12 +590,12 @@ const AirMonitoring = () => {
   return (
     <Box m="20px">
       <Typography
-            variant="h4"
-            color={colors.grey[500]}
-            fontWeight="bold"
-            sx={{ mb: "5px" }}
+        variant="h4"
+        color={colors.grey[500]}
+        fontWeight="bold"
+        sx={{ mb: "5px" }}
       >
-            Active Air Monitoring Jobs
+        Active Air Monitoring Jobs
       </Typography>
       <Box
         display="flex"

@@ -71,7 +71,7 @@ import {
   userPreferencesService,
 } from "../../services/api";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
 import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
@@ -80,7 +80,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import TruncatedCell from "../../components/TruncatedCell";
 import { Visibility, MoreVert } from "@mui/icons-material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import performanceMonitor from "../../utils/performanceMonitor";
+
 import { debounce } from "lodash";
 import DownloadIcon from "@mui/icons-material/Download";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
@@ -584,15 +584,6 @@ const Projects = ({ initialFilters = {} }) => {
 
   const [clientInputValue, setClientInputValue] = useState("");
 
-  // Start page load monitoring only on initial load
-  useEffect(() => {
-    if (isInitialLoadRef.current) {
-      pageLoadTimerRef.current =
-        performanceMonitor.startPageLoad("projects-page");
-      isInitialLoadRef.current = false;
-    }
-  }, []);
-
   // Initialize Google Places Autocomplete
   useEffect(() => {
     const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
@@ -740,21 +731,6 @@ const Projects = ({ initialFilters = {} }) => {
       console.error("Projects - Error getting place details:", error);
     }
   };
-
-  // Monitor data rendering
-  useEffect(() => {
-    if (!loading && projects.length > 0) {
-      renderStartTimeRef.current = performance.now();
-      performanceMonitor.startTimer("data-render");
-    }
-  }, [loading, projects]);
-
-  const handleRenderComplete = useCallback(() => {
-    if (renderStartTimeRef.current) {
-      performanceMonitor.endTimer("data-render");
-      renderStartTimeRef.current = null;
-    }
-  }, []);
 
   // Combine all filters into a single state object to prevent multiple useEffect triggers
   const [filters, setFilters] = useState(() => {
@@ -988,7 +964,6 @@ const Projects = ({ initialFilters = {} }) => {
       // Create a new function to fetch with updated filter values
       const fetchWithUpdatedFilters = async () => {
         try {
-          performanceMonitor.startTimer("fetch-projects");
           setSearchLoading(true);
 
           // Create updated filters object with the new value
@@ -1044,7 +1019,6 @@ const Projects = ({ initialFilters = {} }) => {
           setProjects([]);
         } finally {
           setSearchLoading(false);
-          performanceMonitor.endTimer("fetch-projects");
         }
       };
 
@@ -1604,7 +1578,6 @@ const Projects = ({ initialFilters = {} }) => {
     // Create a temporary fetch function that uses the updated department
     const fetchWithUpdatedDepartment = async () => {
       try {
-        performanceMonitor.startTimer("fetch-projects");
         setSearchLoading(true);
 
         const params = {
@@ -1647,7 +1620,6 @@ const Projects = ({ initialFilters = {} }) => {
         setProjects([]);
       } finally {
         setSearchLoading(false);
-        performanceMonitor.endTimer("fetch-projects");
       }
     };
 
@@ -1906,13 +1878,19 @@ const Projects = ({ initialFilters = {} }) => {
               variant="contained"
               size="small"
               startIcon={<VisibilityIcon />}
-              onClick={() => navigate(`/projects/${params.row._id}`)}
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/projects/${params.row._id}`);
+              }}
               sx={{ mr: 1 }}
             >
               Details
             </Button>
             <IconButton
-              onClick={() => handleDeleteClick(params.row)}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteClick(params.row);
+              }}
               size="small"
               color="error"
             >

@@ -52,6 +52,7 @@ const EditInvoicePage = () => {
   // Invoice items state
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [editingItem, setEditingItem] = useState(null);
+  const [currentInvoice, setCurrentInvoice] = useState(null);
 
   // Available invoice items for dropdown
   const [availableInvoiceItems, setAvailableInvoiceItems] = useState([]);
@@ -63,31 +64,46 @@ const EditInvoicePage = () => {
   useEffect(() => {
     fetchProjects();
     fetchAvailableInvoiceItems();
-    fetchInvoiceData();
   }, [invoiceId]);
+
+  // Fetch invoice data after projects are loaded
+  useEffect(() => {
+    if (projects.length > 0) {
+      fetchInvoiceData();
+    }
+  }, [projects, invoiceId]);
 
   const fetchInvoiceData = async () => {
     try {
       const response = await invoiceService.getById(invoiceId);
       const invoice = response.data;
+      setCurrentInvoice(invoice); // Store the invoice data
 
-      // Extract project ID and invoice number from invoiceID (e.g., "LDJ04694-1" -> projectID: "LDJ04694", invoiceNumber: "1")
-      const invoiceParts = invoice.invoiceID
-        ? invoice.invoiceID.split("-")
-        : [];
-      const projectID =
-        invoiceParts.length > 1
-          ? invoiceParts.slice(0, -1).join("-")
-          : invoice.projectID || "";
+      console.log("Invoice data:", invoice);
+      console.log("Available projects:", projects);
+      console.log("Looking for projectId:", invoice.projectId);
 
-      // Find the project
-      const project = projects.find((p) => p.projectID === projectID);
+      // Extract the actual project ID from the projectId object
+      const actualProjectId = invoice.projectId?._id || invoice.projectId;
+      console.log("Actual project ID to search for:", actualProjectId);
+
+      // Find the project using the stored projectId
+      const project = projects.find((p) => p._id === actualProjectId);
+      console.log("Found project:", project);
+
       if (project) {
         setSelectedProject(project);
         setSelectedClient({
           name: invoice.xeroClientName || project.client || "",
           _id: project.client || "",
         });
+        console.log("Set selected project:", project);
+        console.log(
+          "Set selected client:",
+          invoice.xeroClientName || project.client || ""
+        );
+      } else {
+        console.log("Project not found for projectId:", invoice.projectId);
       }
 
       // Set invoice header data
@@ -340,10 +356,11 @@ const EditInvoicePage = () => {
 
       // Prepare updated invoice data
       const updatedInvoiceData = {
+        invoiceID: currentInvoice.invoiceID, // Include the existing invoiceID
         projectId: selectedProject._id, // MongoDB ObjectId reference
         client: null, // We'll handle client separately since it's a string, not ObjectId
         amount: calculateInvoiceTotal(), // Total amount
-        status: "awaiting_approval", // Keep as awaiting approval
+        status: "draft", // Keep or reset to draft
         date: new Date(invoiceHeader.invoiceDate), // Convert to Date object
         dueDate: new Date(effectiveDueDate), // Convert to Date object
         description: `Invoice for project ${selectedProject.name}`, // Description

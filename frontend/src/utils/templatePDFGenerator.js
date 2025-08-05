@@ -1,5 +1,3 @@
-import pdfPerformanceMonitor from "./pdfPerformanceMonitor";
-
 /**
  * Generate PDF from HTML templates using server-side Puppeteer
  * @param {string} templateType - Type of template (e.g., 'asbestos-clearance')
@@ -12,15 +10,11 @@ export const generateHTMLPDF = async (templateType, data) => {
 
 export const generateAssessmentPDF = async (assessmentData) => {
   const pdfId = `assessment-${assessmentData._id || Date.now()}`;
-  const generationId = pdfPerformanceMonitor.trackCommonStages(pdfId, 'asbestos-assessment', assessmentData);
   
   try {
     console.log('Starting assessment PDF generation with data:', assessmentData);
     console.log('Environment:', process.env.NODE_ENV);
     console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-    
-    pdfPerformanceMonitor.endStage('data-preparation', generationId);
-    pdfPerformanceMonitor.startStage('api-request', generationId);
     
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
@@ -49,9 +43,6 @@ export const generateAssessmentPDF = async (assessmentData) => {
 
       clearTimeout(timeoutId); // Clear timeout if request completes
 
-      pdfPerformanceMonitor.endStage('api-request', generationId);
-      pdfPerformanceMonitor.startStage('response-processing', generationId);
-
       console.log('Response status:', response.status);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       
@@ -71,9 +62,6 @@ export const generateAssessmentPDF = async (assessmentData) => {
       const pdfBlob = await response.blob();
       console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
 
-      pdfPerformanceMonitor.endStage('response-processing', generationId);
-      pdfPerformanceMonitor.startStage('download-preparation', generationId);
-
       // Create a download link
       const url = window.URL.createObjectURL(pdfBlob);
       const link = document.createElement('a');
@@ -91,9 +79,6 @@ export const generateAssessmentPDF = async (assessmentData) => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      pdfPerformanceMonitor.endStage('download-preparation', generationId);
-      pdfPerformanceMonitor.endPDFGeneration(generationId);
-
       return fileName;
     } catch (fetchError) {
       clearTimeout(timeoutId);
@@ -104,7 +89,6 @@ export const generateAssessmentPDF = async (assessmentData) => {
     }
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
-    pdfPerformanceMonitor.endPDFGeneration(generationId);
     throw error;
   }
 };
@@ -116,19 +100,10 @@ export const generateAssessmentPDF = async (assessmentData) => {
  * @returns {Promise<string>} - Generated PDF filename
  */
 export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
-  const startTime = Date.now();
-  const pdfId = `${type}-${data._id || Date.now()}`;
-  
   try {
-    // Performance monitoring
-    pdfPerformanceMonitor.startStage('data-preparation', pdfId);
-    
     console.log(`Starting ${type} PDF generation with data:`, data);
     console.log('Environment:', process.env.NODE_ENV);
     console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-    
-    pdfPerformanceMonitor.endStage('data-preparation', pdfId);
-    pdfPerformanceMonitor.startStage('api-request', pdfId);
     
     // Determine which endpoint to use
     const useDocRaptor = true; // Use DocRaptor for better complex document support
@@ -172,9 +147,6 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       }),
     });
 
-    pdfPerformanceMonitor.endStage('api-request', pdfId);
-    pdfPerformanceMonitor.startStage('response-processing', pdfId);
-
     console.log('Response status:', response.status);
     console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
@@ -185,8 +157,6 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     }
 
     const pdfBlob = await response.blob();
-    
-    pdfPerformanceMonitor.endStage('response-processing', pdfId);
 
     // Generate filename
     const timestamp = new Date().toISOString().slice(0, 10);
@@ -202,13 +172,10 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url2);
 
-    const totalTime = Date.now() - startTime;
-    pdfPerformanceMonitor.logPerformanceSummary(pdfId, type, totalTime, Object.keys(data).length);
-
     return { success: true, filename };
 
   } catch (error) {
     console.error(`Error generating ${type} PDF:`, error);
     throw error;
   }
-}; 
+};

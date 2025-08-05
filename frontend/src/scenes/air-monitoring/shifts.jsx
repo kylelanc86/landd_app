@@ -12,7 +12,7 @@ import {
   TextField,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import Header from "../../components/Header";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -726,7 +726,10 @@ const Shifts = () => {
         mb="20px"
       >
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> Manage Air Monitoring Shifts </Typography>
+          <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+            {" "}
+            Manage Air Monitoring Shifts{" "}
+          </Typography>
         </Box>
         <Box display="flex" gap={2}>
           {allShiftsComplete && (

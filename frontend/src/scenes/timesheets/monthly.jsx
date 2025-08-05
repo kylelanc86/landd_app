@@ -10,7 +10,7 @@ import {
   Chip,
 } from "@mui/material";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../services/api";
 import {

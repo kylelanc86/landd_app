@@ -225,7 +225,7 @@ const Records = () => {
       icon: <TrendingUpIcon />,
       color: "secondary",
       onClick: () => navigate("/records/laboratory/calibrations"),
-      showComingSoon: false,
+      showComingSoon: true,
     },
     {
       title: "Quality Control",

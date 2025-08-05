@@ -35,7 +35,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { projectService, invoiceService } from "../../services/api";
 import { ACTIVE_STATUSES } from "../../components/JobStatus";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import AllocatedJobsTable from "./AllocatedJobsTable";
 import ScienceIcon from "@mui/icons-material/Science";
 import SendIcon from "@mui/icons-material/Send";

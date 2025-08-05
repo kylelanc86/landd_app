@@ -6,10 +6,9 @@ const PureAsbestos = () => {
     <BaseCalibrationWidget
       title="Pure Asbestos Calibration"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/PureAsbestos.png"}
-      viewCalibrationsPath="/calibrations/pure-asbestos"
+      viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
     />
   );
 };
 
 export default PureAsbestos;
- 

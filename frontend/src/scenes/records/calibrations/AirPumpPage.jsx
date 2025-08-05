@@ -22,9 +22,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import Header from "../../components/Header";
-import { tokens } from "../../theme";
-import airPumpService from "../../services/airPumpService";
+import Header from "../../../components/Header";
+import { tokens } from "../../../theme/tokens";
+import airPumpService from "../../../services/airPumpService";
 
 const AirPumpPage = () => {
   const theme = useTheme();
@@ -194,7 +194,9 @@ const AirPumpPage = () => {
   return (
     <Box m="20px">
       <Box display="flex" alignItems="center" mb="20px">
-        <IconButton onClick={() => navigate("/calibrations")}>
+        <IconButton
+          onClick={() => navigate("/records/laboratory/calibrations/list")}
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>

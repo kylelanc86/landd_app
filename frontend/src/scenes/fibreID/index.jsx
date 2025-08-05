@@ -8,7 +8,7 @@ import {
   CardContent,
   CardActionArea,
   CardMedia,
-  } from "@mui/material";
+} from "@mui/material";
 import {
   Science as ScienceIcon,
   Assignment as AssignmentIcon,
@@ -19,12 +19,31 @@ import { useNavigate } from "react-router-dom";
 const FibreIdIndex = () => {
   const navigate = useNavigate();
 
-  const handleClientSuppliedClick = () => {
-    navigate("/fibre-id/client-supplied");
-  };
+  const fibreIdModules = [
+    {
+      id: "client-supplied",
+      title: "Client Supplied Samples",
+      description: "View Client Supplied Jobs",
+      icon: <ScienceIcon />,
+      path: "/fibre-id/client-supplied",
+      color: "#1976d2",
+      isAvailable: true,
+    },
+    {
+      id: "asbestos-assessment",
+      title: "Asbestos Assessment Jobs",
+      description: "View Assessment Jobs",
+      icon: <AssignmentIcon />,
+      path: "/fibre-id/ldjobs",
+      color: "#2e7d32",
+      isAvailable: false,
+    },
+  ];
 
-  const handleAsbestosAssessmentClick = () => {
-    navigate("/fibre-id/ldjobs");
+  const handleModuleClick = (module) => {
+    if (module.isAvailable) {
+      navigate(module.path);
+    }
   };
 
   return (
@@ -35,130 +54,126 @@ const FibreIdIndex = () => {
         </Typography>
 
         <Grid container spacing={4}>
-          {/* Client Supplied Jobs Widget */}
-          <Grid item xs={12} md={6}>
-            <Card
-              sx={{
-                height: "100%",
-                transition: "all 0.3s ease-in-out",
-                "&:hover": {
-                  transform: "translateY(-4px)",
-                  boxShadow: 4,
-                },
-              }}
-            >
-              <CardActionArea
-                onClick={handleClientSuppliedClick}
+          {fibreIdModules.map((module) => (
+            <Grid item xs={12} md={6} key={module.id}>
+              <Card
                 sx={{
                   height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "stretch",
+                  transition: "all 0.3s ease-in-out",
+                  "&:hover": module.isAvailable
+                    ? {
+                        transform: "translateY(-4px)",
+                        boxShadow: 4,
+                      }
+                    : {},
+                  position: "relative",
+                  opacity: module.isAvailable ? 1 : 0.7,
                 }}
               >
-                <CardMedia
-                  component="div"
+                <CardActionArea
+                  onClick={() => handleModuleClick(module)}
+                  disabled={!module.isAvailable}
                   sx={{
-                    height: 200,
-                    backgroundColor: "#1976d2",
+                    height: "100%",
                     display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    position: "relative",
+                    flexDirection: "column",
+                    alignItems: "stretch",
+                    cursor: module.isAvailable ? "pointer" : "default",
                   }}
                 >
-                  <ScienceIcon sx={{ fontSize: 80, color: "white" }} />
-
-                </CardMedia>
-                <CardContent
-                  sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
-                >
-                  <Typography variant="h5" component="h2" gutterBottom>
-                    Client Supplied Samples
-                  </Typography>
-
-                  <Box
+                  <CardMedia
+                    component="div"
                     sx={{
+                      height: 200,
+                      backgroundColor: module.color,
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
+                      justifyContent: "center",
+                      position: "relative",
                     }}
                   >
-                    <Typography
-                      variant="body2"
-                      color="primary"
-                      sx={{ fontWeight: "bold" }}
-                    >
-                      View Client Supplied Jobs
-                    </Typography>
-                    <ArrowForwardIcon color="primary" />
-                  </Box>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
+                    {React.cloneElement(module.icon, {
+                      sx: { fontSize: 80, color: "white" },
+                    })}
 
-          {/* Asbestos Assessment Jobs Widget */}
-          <Grid item xs={12} md={6}>
-            <Card
-              sx={{
-                height: "100%",
-                transition: "all 0.3s ease-in-out",
-                "&:hover": {
-                  transform: "translateY(-4px)",
-                  boxShadow: 4,
-                },
-              }}
-            >
-              <CardActionArea
-                onClick={handleAsbestosAssessmentClick}
-                sx={{
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "stretch",
-                }}
-              >
-                <CardMedia
-                  component="div"
-                  sx={{
-                    height: 200,
-                    backgroundColor: "#2e7d32",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    position: "relative",
-                  }}
-                >
-                  <AssignmentIcon sx={{ fontSize: 80, color: "white" }} />
- 
-                </CardMedia>
-                <CardContent
-                  sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
-                >
-                  <Typography variant="h5" component="h2" gutterBottom>
-                    Asbestos Assessment Jobs
-                  </Typography>
-                  <Box
+                    {/* Coming Soon Overlay */}
+                    {!module.isAvailable && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: "rgba(0, 0, 0, 0.7)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexDirection: "column",
+                        }}
+                      >
+                        <Typography
+                          variant="h6"
+                          sx={{
+                            color: "white",
+                            fontWeight: "bold",
+                            textAlign: "center",
+                            mb: 1,
+                          }}
+                        >
+                          Coming Soon
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "white",
+                            textAlign: "center",
+                            opacity: 0.9,
+                          }}
+                        >
+                          This feature is under development
+                        </Typography>
+                      </Box>
+                    )}
+                  </CardMedia>
+                  <CardContent
                     sx={{
+                      flexGrow: 1,
                       display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
+                      flexDirection: "column",
                     }}
                   >
-                    <Typography
-                      variant="body2"
-                      color="primary"
-                      sx={{ fontWeight: "bold" }}
-                    >
-                      View Assessment Jobs
+                    <Typography variant="h5" component="h2" gutterBottom>
+                      {module.title}
                     </Typography>
-                    <ArrowForwardIcon color="primary" />
-                  </Box>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginTop: "auto",
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        color={
+                          module.isAvailable ? "primary" : "text.secondary"
+                        }
+                        sx={{ fontWeight: "bold" }}
+                      >
+                        {module.isAvailable
+                          ? module.description
+                          : "Coming Soon"}
+                      </Typography>
+                      {module.isAvailable && (
+                        <ArrowForwardIcon color="primary" />
+                      )}
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          ))}
         </Grid>
       </Box>
     </Container>

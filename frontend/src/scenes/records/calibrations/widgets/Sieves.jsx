@@ -6,10 +6,9 @@ const Sieves = () => {
     <BaseCalibrationWidget
       title="Sieves Calibration"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/Sieves.png"}
-      viewCalibrationsPath="/calibrations/sieves"
+      viewCalibrationsPath="/records/laboratory/calibrations/sieves"
     />
   );
 };
 
 export default Sieves;
- 

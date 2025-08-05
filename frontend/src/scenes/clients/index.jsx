@@ -32,7 +32,7 @@ import { useNavigate } from "react-router-dom";
 import { Breadcrumbs, Link } from "@mui/material";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import Header from "../../components/Header";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -45,7 +45,6 @@ import {
   isValidAustralianMobile,
 } from "../../utils/formatters";
 import { debounce } from "lodash";
-import performanceMonitor from "../../utils/performanceMonitor";
 
 const emptyForm = {
   name: "",
@@ -98,19 +97,9 @@ const Clients = () => {
   });
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
 
-  // Performance monitoring
-  useEffect(() => {
-    performanceMonitor.startPageLoad("clients-page");
-
-    return () => {
-      performanceMonitor.endPageLoad("clients-page");
-    };
-  }, []);
-
   // Load user preferences from database
   useEffect(() => {
     const loadUserPreferences = async () => {
-      performanceMonitor.startTimer("load-user-preferences");
       try {
         const response = await userPreferencesService.getPreferences();
         if (response.data?.columnVisibility?.clients) {
@@ -131,7 +120,6 @@ const Clients = () => {
           }
         }
       } finally {
-        performanceMonitor.endTimer("load-user-preferences");
       }
     };
 
@@ -157,10 +145,8 @@ const Clients = () => {
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value) => {
-      performanceMonitor.startTimer("debounced-search");
       setSearch(value);
       setPagination((prev) => ({ ...prev, page: 1 }));
-      performanceMonitor.endTimer("debounced-search");
     }, 300),
     []
   );
@@ -478,7 +464,11 @@ const Clients = () => {
       renderCell: (params) => (
         <Box>
           <IconButton
-            onClick={() => navigate(`/invoices?client=${params.row._id}`)}
+            onClick={() =>
+              navigate(
+                `/invoices?client=${encodeURIComponent(params.row.name)}`
+              )
+            }
             title="View Invoices"
           >
             <AttachMoneyIcon />
@@ -510,7 +500,9 @@ const Clients = () => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>Clients</Typography>
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Clients
+      </Typography>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link

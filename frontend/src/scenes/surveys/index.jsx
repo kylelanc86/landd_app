@@ -22,7 +22,7 @@ import {
   WaterDrop as WaterDropIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { tokens } from "../../theme";
+import { tokens } from "../../theme/tokens";
 import PermissionGate from "../../components/PermissionGate";
 import Header from "../../components/Header";
 
@@ -39,7 +39,7 @@ const SurveysDashboard = () => {
       path: "/assessments", // changed from /surveys/asbestos
       requiredPermission: "asbestos.view",
       color: "#1976d2",
-      isAvailable: true, // Only this one is available
+      isAvailable: false,
     },
     {
       id: "residential-asbestos-assessment",

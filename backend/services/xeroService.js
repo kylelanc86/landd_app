@@ -521,10 +521,28 @@ class XeroService {
       // Check if invoice already exists in our database
       const existingInvoice = await Invoice.findOne({ xeroInvoiceId: xeroInvoice.InvoiceID });
       
+
+      
       if (existingInvoice) {
-        console.log('Updating existing invoice:', existingInvoice.invoiceID);
-        // Helper function to parse Xero dates with fallback
-        const parseXeroDate = (dateValue, fallbackDate = new Date()) => {
+        console.log('Found existing invoice:', existingInvoice.invoiceID);
+        
+        // Check if the invoice number has changed in Xero
+        if (existingInvoice.invoiceID !== xeroInvoice.InvoiceNumber) {
+          console.log('Invoice number changed in Xero:', {
+            oldNumber: existingInvoice.invoiceID,
+            newNumber: xeroInvoice.InvoiceNumber
+          });
+          
+          // Hard delete the old invoice since the invoice number changed
+          await Invoice.findByIdAndDelete(existingInvoice._id);
+          console.log('Hard deleted old invoice with number:', existingInvoice.invoiceID);
+          
+          // Continue to create new invoice below (normal sync process will handle this)
+        } else {
+          console.log('Updating existing invoice:', existingInvoice.invoiceID);
+          
+          // Helper function to parse Xero dates with fallback
+          const parseXeroDate = (dateValue, fallbackDate = new Date()) => {
           if (!dateValue) {
             console.log('No date value provided, using fallback');
             return fallbackDate;
@@ -627,15 +645,54 @@ class XeroService {
           }
         };
         
-        // Update existing invoice - overwrite with Xero data
-        existingInvoice.amount = xeroInvoice.Total || 0;
-        existingInvoice.status = mapXeroStatus(xeroInvoice.Status);
+        // Check for changes and update accordingly
+        let hasChanges = false;
+        
+        // Check if invoice number changed
+        if (existingInvoice.invoiceID !== xeroInvoice.InvoiceNumber) {
+          console.log('Invoice number changed:', {
+            old: existingInvoice.invoiceID,
+            new: xeroInvoice.InvoiceNumber
+          });
+          existingInvoice.invoiceID = xeroInvoice.InvoiceNumber;
+          hasChanges = true;
+        }
+        
+        // Check if amount changed
+        const newAmount = xeroInvoice.Total || 0;
+        if (existingInvoice.amount !== newAmount) {
+          console.log('Amount changed:', {
+            old: existingInvoice.amount,
+            new: newAmount
+          });
+          existingInvoice.amount = newAmount;
+          hasChanges = true;
+        }
+        
+        // Check if status changed
+        const newStatus = mapXeroStatus(xeroInvoice.Status);
+        if (existingInvoice.status !== newStatus) {
+          console.log('Status changed:', {
+            old: existingInvoice.status,
+            new: newStatus
+          });
+          existingInvoice.status = newStatus;
+          hasChanges = true;
+        }
+        
+        // Always update other fields from Xero
         existingInvoice.date = xeroInvoice.Date ? parseXeroDate(xeroInvoice.Date) : existingInvoice.date;
         existingInvoice.dueDate = xeroInvoice.DueDate ? parseXeroDate(xeroInvoice.DueDate) : existingInvoice.dueDate;
         existingInvoice.description = xeroInvoice.LineItems?.[0]?.Description || existingInvoice.description;
         existingInvoice.xeroStatus = xeroInvoice.Status;
         existingInvoice.xeroReference = xeroInvoice.Reference || existingInvoice.xeroReference;
         existingInvoice.lastSynced = new Date();
+        
+        if (hasChanges) {
+          console.log('Invoice updated with changes from Xero');
+        } else {
+          console.log('Invoice synced (no changes detected)');
+        }
         
         // Update client name if we have contact data
         if (xeroClientName) {
@@ -646,6 +703,7 @@ class XeroService {
         await existingInvoice.save();
         return existingInvoice;
       }
+    }
 
       // For new invoices, we need to handle required fields
       if (!xeroInvoice.Date || !xeroInvoice.DueDate) {

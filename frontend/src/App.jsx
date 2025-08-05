@@ -7,7 +7,6 @@ import LoadingSpinner from "./components/LoadingSpinner";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PermissionRoute from "./components/PermissionRoute";
-import PerformanceMonitor from "./components/PerformanceMonitor";
 
 // Regular imports
 import Topbar from "./scenes/global/Topbar";
@@ -23,15 +22,15 @@ import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
 import MonthlyTimesheet from "./scenes/timesheets/monthly";
-import Calibrations from "./scenes/calibrations";
-import AirPumpPage from "./scenes/calibrations/AirPumpPage.jsx";
-import AirPumpCalibrationPage from "./scenes/calibrations/AirPumpCalibrationPage.jsx";
-import FlowmeterPage from "./scenes/calibrations/FlowmeterPage.jsx";
-import EFAPage from "./scenes/calibrations/EFAPage.jsx";
-import MicroscopePage from "./scenes/calibrations/MicroscopePage.jsx";
-import AcetoneVaporiserPage from "./scenes/calibrations/AcetoneVaporiserPage.jsx";
-import GraticulePage from "./scenes/calibrations/GraticulePage.jsx";
-import PrimaryFlowmeterPage from "./scenes/calibrations/PrimaryFlowmeterPage.jsx";
+import Calibrations from "./scenes/records/calibrations";
+import AirPumpPage from "./scenes/records/calibrations/AirPumpPage.jsx";
+import AirPumpCalibrationPage from "./scenes/records/calibrations/AirPumpCalibrationPage.jsx";
+import FlowmeterPage from "./scenes/records/calibrations/FlowmeterPage.jsx";
+import EFAPage from "./scenes/records/calibrations/EFAPage.jsx";
+import MicroscopePage from "./scenes/records/calibrations/MicroscopePage.jsx";
+import AcetoneVaporiserPage from "./scenes/records/calibrations/AcetoneVaporiserPage.jsx";
+import GraticulePage from "./scenes/records/calibrations/GraticulePage.jsx";
+import PrimaryFlowmeterPage from "./scenes/records/calibrations/PrimaryFlowmeterPage.jsx";
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
 import FibreIdIndex from "./scenes/fibreID/index.jsx";
 import AnalysisPage from "./scenes/fibreID/AnalysisPage.jsx";
@@ -141,19 +140,6 @@ const ProjectReports = lazy(() =>
 
 function App() {
   const [theme, colorMode] = useMode();
-  const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(false);
-
-  // Enable performance monitor in development or when SHIFT+P is pressed
-  useEffect(() => {
-    const handleKeyPress = (event) => {
-      if (event.shiftKey && event.key === "P") {
-        setShowPerformanceMonitor((prev) => !prev);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyPress);
-    return () => document.removeEventListener("keydown", handleKeyPress);
-  }, []);
 
   return (
     <ColorModeContext.Provider value={colorMode}>
@@ -567,7 +553,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations"
+                          path="/records/laboratory/calibrations/list"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -577,7 +563,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/air-pump"
+                          path="/records/laboratory/calibrations/air-pump"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -587,7 +573,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/pump/:pumpId"
+                          path="/records/laboratory/calibrations/pump/:pumpId"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -597,7 +583,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/flowmeter"
+                          path="/records/laboratory/calibrations/flowmeter"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -607,7 +593,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/efa"
+                          path="/records/laboratory/calibrations/efa"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -617,7 +603,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/microscope"
+                          path="/records/laboratory/calibrations/microscope"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -627,7 +613,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/acetone-vaporiser"
+                          path="/records/laboratory/calibrations/acetone-vaporiser"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -637,7 +623,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/graticule"
+                          path="/records/laboratory/calibrations/graticule"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -647,7 +633,7 @@ function App() {
                           }
                         />
                         <Route
-                          path="/calibrations/primary-flowmeter"
+                          path="/records/laboratory/calibrations/primary-flowmeter"
                           element={
                             <ProtectedRoute
                               requiredPermissions={["calibrations.view"]}
@@ -1056,7 +1042,6 @@ function App() {
               />
             </Routes>
           </BrowserRouter>
-          <PerformanceMonitor show={showPerformanceMonitor} />
         </AuthProvider>
       </ThemeProvider>
     </ColorModeContext.Provider>

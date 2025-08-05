@@ -11,10 +11,10 @@ import {
 } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { DataGrid } from "@mui/x-data-grid";
-import { tokens } from "../../theme";
+import { tokens } from "../../../theme/tokens";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import Header from "../../components/Header";
+import Header from "../../../components/Header";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ListAltIcon from "@mui/icons-material/ListAlt";
@@ -83,61 +83,61 @@ const Calibrations = () => {
         <Grid item xs={12} md={6} lg={4}>
           <AirPumpCalibration
             nextCalibrationDue="2024-03-15"
-            viewCalibrationsPath="/calibrations/air-pump"
+            viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <FlowmeterCalibration
             nextCalibrationDue="2024-03-20"
-            viewCalibrationsPath="/calibrations/flowmeter"
+            viewCalibrationsPath="/records/laboratory/calibrations/flowmeter"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <EFA
             nextCalibrationDue="2024-03-25"
-            viewCalibrationsPath="/calibrations/efa"
+            viewCalibrationsPath="/records/laboratory/calibrations/efa"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <MicroscopeCalibration
             nextCalibrationDue="2024-03-30"
-            viewCalibrationsPath="/calibrations/air-mon-microscope"
+            viewCalibrationsPath="/records/laboratory/calibrations/microscope"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <AcetoneVaporiser
             nextCalibrationDue="2024-04-05"
-            viewCalibrationsPath="/calibrations/acetone-vaporiser"
+            viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <GraticuleCalibration
             nextCalibrationDue="2024-04-10"
-            viewCalibrationsPath="/calibrations/graticule"
+            viewCalibrationsPath="/records/laboratory/calibrations/graticule"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <PrimaryFlowmeter
             nextCalibrationDue="2024-04-15"
-            viewCalibrationsPath="/calibrations/primary-flowmeter"
+            viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <PureAsbestos
             nextCalibrationDue="2024-04-20"
-            viewCalibrationsPath="/calibrations/pure-asbestos"
+            viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <RiLiquid
             nextCalibrationDue="2024-04-25"
-            viewCalibrationsPath="/calibrations/ri-liquid"
+            viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <Sieves
             nextCalibrationDue="2024-04-30"
-            viewCalibrationsPath="/calibrations/sieves"
+            viewCalibrationsPath="/records/laboratory/calibrations/sieves"
           />
         </Grid>
       </Grid>

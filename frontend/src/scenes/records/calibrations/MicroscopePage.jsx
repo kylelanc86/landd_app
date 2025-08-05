@@ -26,7 +26,7 @@ import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import Header from "../../components/Header";
+import Header from "../../../components/Header";
 
 const MicroscopePage = () => {
   const theme = useTheme();
@@ -87,7 +87,9 @@ const MicroscopePage = () => {
   return (
     <Box m="20px">
       <Box display="flex" alignItems="center" mb="20px">
-        <IconButton onClick={() => navigate("/calibrations")}>
+        <IconButton
+          onClick={() => navigate("/records/laboratory/calibrations/list")}
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
