@@ -30,6 +30,7 @@ import {
   Radio,
   RadioGroup,
   FormControlLabel,
+  Chip,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -42,8 +43,8 @@ import AutoSizer from "react-virtualized-auto-sizer";
 const SAMPLES_KEY = "ldc_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_analysis_progress";
 
-// Memoized Sample Form Component
-const SampleForm = React.memo(
+// Simplified Sample Summary Component
+const SampleSummary = React.memo(
   ({
     sample,
     analysis,
@@ -52,214 +53,125 @@ const SampleForm = React.memo(
     onKeyDown,
     onClearTable,
     isFilterUncountable,
+    isSampleAnalyzed,
     calculateConcentration,
     getReportedConcentration,
     inputRefs,
     isReadOnly,
+    onOpenFibreCountModal,
   }) => {
     const theme = useTheme();
-
-    // Memoize the fibre counts table to prevent unnecessary re-renders
-    const fibreCountsTable = useMemo(
-      () => (
-        <TableContainer>
-          <Table size="small" sx={{ tableLayout: "fixed" }}>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: "80px" }}>Range</TableCell>
-                {Array.from({ length: 20 }, (_, i) => (
-                  <TableCell
-                    key={i}
-                    align="center"
-                    sx={{ width: "40px", p: 0.5 }}
-                  >
-                    {i + 1}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {analysis.fibreCounts.map((row, rowIndex) => (
-                <TableRow key={rowIndex}>
-                  <TableCell sx={{ p: 0.5 }}>
-                    {`${rowIndex * 20 + 1}-${(rowIndex + 1) * 20}`}
-                  </TableCell>
-                  {row.map((cell, colIndex) => (
-                    <TableCell key={colIndex} align="center" sx={{ p: 0.5 }}>
-                      <TextField
-                        type="text"
-                        value={cell}
-                        onChange={(e) =>
-                          onFibreCountChange(
-                            sample._id,
-                            rowIndex,
-                            colIndex,
-                            e.target.value
-                          )
-                        }
-                        onKeyDown={(e) =>
-                          onKeyDown(e, sample._id, rowIndex, colIndex)
-                        }
-                        size="small"
-                        disabled={isFilterUncountable(sample._id) || isReadOnly}
-                        inputRef={(el) => {
-                          inputRefs.current[
-                            `${sample._id}-${rowIndex}-${colIndex}`
-                          ] = el;
-                        }}
-                        sx={{
-                          width: "40px",
-                          "& .MuiInputBase-input": {
-                            p: 0.5,
-                            textAlign: "center",
-                          },
-                          "& .MuiInputBase-input.Mui-disabled": {
-                            WebkitTextFillColor: "rgba(0, 0, 0, 0.6)",
-                          },
-                        }}
-                      />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-              <TableRow>
-                <TableCell colSpan={21}>
-                  <Stack direction="row" spacing={4} justifyContent="center">
-                    <Typography>
-                      Fibres Counted: {analysis.fibresCounted || 0}
-                    </Typography>
-                    <Typography>
-                      Fields Counted: {analysis.fieldsCounted || 0}
-                    </Typography>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell colSpan={21}>
-                  <Stack
-                    direction="row"
-                    spacing={4}
-                    justifyContent="center"
-                    sx={{ mt: 2 }}
-                  >
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Calculated Concentration
-                      </Typography>
-                      <Typography variant="h4">
-                        {calculateConcentration(sample._id) || "N/A"} fibres/mL
-                      </Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Reported Concentration
-                      </Typography>
-                      <Typography variant="h4">
-                        {getReportedConcentration(sample._id)} fibres/mL
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ),
-      [
-        analysis,
-        sample._id,
-        onFibreCountChange,
-        onKeyDown,
-        isFilterUncountable,
-        calculateConcentration,
-        getReportedConcentration,
-      ]
-    );
 
     return (
       <Paper sx={{ p: 3 }}>
         <Stack spacing={3}>
-          <Typography variant="h3">
-            {sample.fullSampleID} : Cowl {sample.cowlNo}
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+            }}
+          >
+            <Box>
+              <Typography variant="h5">{sample.fullSampleID}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Cowl {sample.cowlNo}
+              </Typography>
+            </Box>
+            <Chip
+              label={
+                isFilterUncountable(sample._id)
+                  ? "Uncountable"
+                  : isSampleAnalyzed(sample._id)
+                  ? "Sample Analysed"
+                  : "To be counted"
+              }
+              color={
+                isFilterUncountable(sample._id)
+                  ? "error"
+                  : isSampleAnalyzed(sample._id)
+                  ? "success"
+                  : "default"
+              }
+              size="small"
+              sx={{
+                backgroundColor: isFilterUncountable(sample._id)
+                  ? "error.main"
+                  : isSampleAnalyzed(sample._id)
+                  ? "success.main"
+                  : "grey.400",
+                color: "white",
+                fontWeight: "bold",
+              }}
+            />
+          </Box>
+
           <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-              {/* Edges/Distribution and Background Dust only */}
-              <FormControl component="fieldset">
-                <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                  Edges/Distribution
-                </Typography>
-                <RadioGroup
-                  row
-                  value={analysis.edgesDistribution || ""}
-                  onChange={(e) =>
-                    onAnalysisChange(
-                      sample._id,
-                      "edgesDistribution",
-                      e.target.value
-                    )
-                  }
-                >
-                  <FormControlLabel
-                    value="pass"
-                    control={<Radio />}
-                    label="Pass"
-                    disabled={isReadOnly}
-                  />
-                  <FormControlLabel
-                    value="fail"
-                    control={<Radio />}
-                    label={<span style={{ color: "red" }}>Fail</span>}
-                    disabled={isReadOnly}
-                  />
-                </RadioGroup>
-              </FormControl>
-              <Box sx={{ width: 24 }} />
-              <FormControl component="fieldset">
-                <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                  Background Dust
-                </Typography>
-                <RadioGroup
-                  row
-                  value={analysis.backgroundDust || ""}
-                  onChange={(e) =>
-                    onAnalysisChange(
-                      sample._id,
-                      "backgroundDust",
-                      e.target.value
-                    )
-                  }
-                >
-                  <FormControlLabel
-                    value="low"
-                    control={<Radio />}
-                    label="Low"
-                    disabled={isReadOnly}
-                  />
-                  <FormControlLabel
-                    value="medium"
-                    control={<Radio />}
-                    label="Medium"
-                    disabled={isReadOnly}
-                  />
-                  <FormControlLabel
-                    value="high"
-                    control={<Radio />}
-                    label="High"
-                    disabled={isReadOnly}
-                  />
-                  <FormControlLabel
-                    value="fail"
-                    control={<Radio />}
-                    label={<span style={{ color: "red" }}>Fail</span>}
-                    disabled={isReadOnly}
-                  />
-                </RadioGroup>
-              </FormControl>
-            </Stack>
+            <FormControl component="fieldset">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Edges/Distribution
+              </Typography>
+              <RadioGroup
+                row
+                value={analysis.edgesDistribution || ""}
+                onChange={(e) =>
+                  onAnalysisChange(
+                    sample._id,
+                    "edgesDistribution",
+                    e.target.value
+                  )
+                }
+                disabled={isReadOnly}
+              >
+                <FormControlLabel
+                  value="pass"
+                  control={<Radio size="small" />}
+                  label="Pass"
+                />
+                <FormControlLabel
+                  value="fail"
+                  control={<Radio size="small" />}
+                  label={<span style={{ color: "red" }}>Fail</span>}
+                />
+              </RadioGroup>
+            </FormControl>
+            <FormControl component="fieldset">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Background Dust
+              </Typography>
+              <RadioGroup
+                row
+                value={analysis.backgroundDust || ""}
+                onChange={(e) =>
+                  onAnalysisChange(sample._id, "backgroundDust", e.target.value)
+                }
+                disabled={isReadOnly}
+              >
+                <FormControlLabel
+                  value="low"
+                  control={<Radio size="small" />}
+                  label="Low"
+                />
+                <FormControlLabel
+                  value="medium"
+                  control={<Radio size="small" />}
+                  label="Medium"
+                />
+                <FormControlLabel
+                  value="high"
+                  control={<Radio size="small" />}
+                  label="High"
+                />
+                <FormControlLabel
+                  value="fail"
+                  control={<Radio size="small" />}
+                  label={<span style={{ color: "red" }}>Fail</span>}
+                />
+              </RadioGroup>
+            </FormControl>
           </Stack>
 
-          <Box sx={{ position: "relative" }}>
+          <Box>
             <Box
               sx={{
                 display: "flex",
@@ -269,45 +181,42 @@ const SampleForm = React.memo(
               }}
             >
               <Typography variant="subtitle1">Fibre Counts</Typography>
-              <Typography variant="subtitle2">"Spacebar" = 10 zeros, "/" = half fibre</Typography>
-
-              
-              {!isReadOnly && (
-                <Button
-                  startIcon={<ClearIcon />}
-                  onClick={() => onClearTable(sample._id)}
-                  disabled={isFilterUncountable(sample._id)}
-                  size="small"
-                  color="error"
-                >
-                  Clear
-                </Button>
-              )}
-            </Box>
-            {isFilterUncountable(sample._id) && (
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  zIndex: 1,
-                  pointerEvents: "none",
-                }}
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => onOpenFibreCountModal(sample._id)}
+                disabled={isReadOnly || isFilterUncountable(sample._id)}
               >
-                <Typography
-                  variant="h4"
-                  sx={{
-                    color: "error.main",
-                    fontWeight: "bold",
-                    textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
-                  }}
-                >
-                  Filter Uncountable
+                Enter Fibre Counts
+              </Button>
+            </Box>
+
+            <Stack direction="row" spacing={4} justifyContent="center">
+              <Box sx={{ textAlign: "center" }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Fibres Counted
+                </Typography>
+                <Typography variant="h6">
+                  {analysis.fibresCounted || 0}
                 </Typography>
               </Box>
-            )}
-            {fibreCountsTable}
+              <Box sx={{ textAlign: "center" }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Fields Counted
+                </Typography>
+                <Typography variant="h6">
+                  {analysis.fieldsCounted || 0}
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: "center" }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Concentration
+                </Typography>
+                <Typography variant="h6">
+                  {calculateConcentration(sample._id) || "N/A"} fibres/mL
+                </Typography>
+              </Box>
+            </Stack>
           </Box>
         </Stack>
       </Paper>
@@ -337,6 +246,8 @@ const Analysis = () => {
   const [users, setUsers] = useState([]);
   const [analysedBy, setAnalysedBy] = useState("");
   const [shiftStatus, setShiftStatus] = useState("");
+  const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
+  const [activeSampleId, setActiveSampleId] = useState(null);
 
   // Monitor initial render time
   useEffect(() => {
@@ -696,6 +607,18 @@ const Analysis = () => {
     );
   };
 
+  const isSampleAnalyzed = (sampleId) => {
+    const analysis = sampleAnalyses[sampleId];
+    if (!analysis || isFilterUncountable(sampleId)) {
+      return false;
+    }
+
+    // Check if all 100 fibre count fields are filled (not empty strings)
+    return analysis.fibreCounts.every((row) =>
+      row.every((cell) => cell !== "" && cell !== null && cell !== undefined)
+    );
+  };
+
   const calculateDuration = (startTime, endTime) => {
     if (!startTime || !endTime) return 0;
 
@@ -901,6 +824,16 @@ const Analysis = () => {
     }
   };
 
+  const handleOpenFibreCountModal = (sampleId) => {
+    setActiveSampleId(sampleId);
+    setFibreCountModalOpen(true);
+  };
+
+  const handleCloseFibreCountModal = () => {
+    setFibreCountModalOpen(false);
+    setActiveSampleId(null);
+  };
+
   // Helper to check if all required fields are filled
   const isAllAnalysisComplete = () => {
     console.log("Checking analysis completion...");
@@ -993,7 +926,7 @@ const Analysis = () => {
       const sample = samples[index];
       return (
         <div style={style}>
-          <SampleForm
+          <SampleSummary
             key={sample._id}
             sample={sample}
             analysis={sampleAnalyses[sample._id]}
@@ -1002,10 +935,12 @@ const Analysis = () => {
             onKeyDown={handleKeyDown}
             onClearTable={handleClearTable}
             isFilterUncountable={isFilterUncountable}
+            isSampleAnalyzed={isSampleAnalyzed}
             calculateConcentration={calculateConcentration}
             getReportedConcentration={getReportedConcentration}
             inputRefs={inputRefs}
             isReadOnly={shiftStatus === "analysis_complete"}
+            onOpenFibreCountModal={handleOpenFibreCountModal}
           />
         </div>
       );
@@ -1021,6 +956,7 @@ const Analysis = () => {
       calculateConcentration,
       getReportedConcentration,
       shiftStatus,
+      handleOpenFibreCountModal,
     ]
   );
 
@@ -1029,7 +965,7 @@ const Analysis = () => {
     if (samples.length <= 5) {
       // For small sample counts, render directly without virtualization
       return samples.map((sample) => (
-        <SampleForm
+        <SampleSummary
           key={sample._id}
           sample={sample}
           analysis={sampleAnalyses[sample._id]}
@@ -1038,10 +974,12 @@ const Analysis = () => {
           onKeyDown={handleKeyDown}
           onClearTable={handleClearTable}
           isFilterUncountable={isFilterUncountable}
+          isSampleAnalyzed={isSampleAnalyzed}
           calculateConcentration={calculateConcentration}
           getReportedConcentration={getReportedConcentration}
           inputRefs={inputRefs}
           isReadOnly={shiftStatus === "analysis_complete"}
+          onOpenFibreCountModal={handleOpenFibreCountModal}
         />
       ));
     }
@@ -1055,7 +993,7 @@ const Analysis = () => {
               height={height}
               width={width}
               itemCount={samples.length}
-              itemSize={400}
+              itemSize={300}
               overscanCount={2}
             >
               {renderSampleForm}
@@ -1270,6 +1208,207 @@ const Analysis = () => {
               </>
             )}
           </Box>
+
+          {/* Fibre Count Modal */}
+          <Dialog
+            open={fibreCountModalOpen}
+            onClose={handleCloseFibreCountModal}
+            maxWidth="lg"
+            fullWidth
+          >
+            <DialogTitle>
+              Fibre Counts -{" "}
+              {activeSampleId &&
+                samples.find((s) => s._id === activeSampleId)?.fullSampleID}
+            </DialogTitle>
+            <DialogContent>
+              {activeSampleId && sampleAnalyses[activeSampleId] && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                    "Spacebar" = 10 zeros, "/" = half fibre
+                  </Typography>
+
+                  {shiftStatus !== "analysis_complete" && (
+                    <Button
+                      startIcon={<ClearIcon />}
+                      onClick={() => {
+                        handleClearTable(activeSampleId);
+                        handleCloseFibreCountModal();
+                      }}
+                      disabled={isFilterUncountable(activeSampleId)}
+                      size="small"
+                      color="error"
+                      sx={{ mb: 2 }}
+                    >
+                      Clear Table
+                    </Button>
+                  )}
+
+                  {isFilterUncountable(activeSampleId) && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        zIndex: 1,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <Typography
+                        variant="h4"
+                        sx={{
+                          color: "error.main",
+                          fontWeight: "bold",
+                          textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
+                        }}
+                      >
+                        Filter Uncountable
+                      </Typography>
+                    </Box>
+                  )}
+
+                  <TableContainer>
+                    <Table size="small" sx={{ tableLayout: "fixed" }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ width: "80px" }}>Range</TableCell>
+                          {Array.from({ length: 20 }, (_, i) => (
+                            <TableCell
+                              key={i}
+                              align="center"
+                              sx={{ width: "40px", p: 0.5 }}
+                            >
+                              {i + 1}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {sampleAnalyses[activeSampleId].fibreCounts.map(
+                          (row, rowIndex) => (
+                            <TableRow key={rowIndex}>
+                              <TableCell sx={{ p: 0.5 }}>
+                                {`${rowIndex * 20 + 1}-${(rowIndex + 1) * 20}`}
+                              </TableCell>
+                              {row.map((cell, colIndex) => (
+                                <TableCell
+                                  key={colIndex}
+                                  align="center"
+                                  sx={{ p: 0.5 }}
+                                >
+                                  <TextField
+                                    type="text"
+                                    value={cell}
+                                    onChange={(e) =>
+                                      handleFibreCountChange(
+                                        activeSampleId,
+                                        rowIndex,
+                                        colIndex,
+                                        e.target.value
+                                      )
+                                    }
+                                    onKeyDown={(e) =>
+                                      handleKeyDown(
+                                        e,
+                                        activeSampleId,
+                                        rowIndex,
+                                        colIndex
+                                      )
+                                    }
+                                    size="small"
+                                    disabled={
+                                      isFilterUncountable(activeSampleId) ||
+                                      shiftStatus === "analysis_complete"
+                                    }
+                                    inputRef={(el) => {
+                                      inputRefs.current[
+                                        `${activeSampleId}-${rowIndex}-${colIndex}`
+                                      ] = el;
+                                    }}
+                                    sx={{
+                                      width: "40px",
+                                      "& .MuiInputBase-input": {
+                                        p: 0.5,
+                                        textAlign: "center",
+                                      },
+                                      "& .MuiInputBase-input.Mui-disabled": {
+                                        WebkitTextFillColor:
+                                          "rgba(0, 0, 0, 0.6)",
+                                      },
+                                    }}
+                                  />
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          )
+                        )}
+                        <TableRow>
+                          <TableCell colSpan={21}>
+                            <Stack
+                              direction="row"
+                              spacing={4}
+                              justifyContent="center"
+                            >
+                              <Typography>
+                                Fibres Counted:{" "}
+                                {sampleAnalyses[activeSampleId].fibresCounted ||
+                                  0}
+                              </Typography>
+                              <Typography>
+                                Fields Counted:{" "}
+                                {sampleAnalyses[activeSampleId].fieldsCounted ||
+                                  0}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell colSpan={21}>
+                            <Stack
+                              direction="row"
+                              spacing={4}
+                              justifyContent="center"
+                              sx={{ mt: 2 }}
+                            >
+                              <Box>
+                                <Typography
+                                  variant="subtitle2"
+                                  color="text.secondary"
+                                >
+                                  Calculated Concentration
+                                </Typography>
+                                <Typography variant="h4">
+                                  {calculateConcentration(activeSampleId) ||
+                                    "N/A"}{" "}
+                                  fibres/mL
+                                </Typography>
+                              </Box>
+                              <Box>
+                                <Typography
+                                  variant="subtitle2"
+                                  color="text.secondary"
+                                >
+                                  Reported Concentration
+                                </Typography>
+                                <Typography variant="h4">
+                                  {getReportedConcentration(activeSampleId)}{" "}
+                                  fibres/mL
+                                </Typography>
+                              </Box>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseFibreCountModal}>Close</Button>
+            </DialogActions>
+          </Dialog>
 
           {/* Cancel Confirmation Dialog */}
           <Dialog

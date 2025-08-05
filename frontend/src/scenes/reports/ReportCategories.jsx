@@ -13,7 +13,6 @@ import {
   CheckCircleOutline as ClearanceIcon,
   Science as FibreIcon,
   Receipt as InvoiceIcon,
-  ArrowForward as ArrowForwardIcon,
 } from "@mui/icons-material";
 import { tokens } from "../../theme/tokens";
 
@@ -125,13 +124,6 @@ const ReportCategories = ({ onCategorySelect, selectedProjectId }) => {
                 zIndex: 1,
               }}
             >
-              <ArrowForwardIcon
-                sx={{
-                  fontSize: 30,
-                  color: category.color,
-                  filter: "drop-shadow(2px 2px 2px rgba(0,0,0,0.2))",
-                }}
-              />
             </Box>
           </Card>
         </Grid>

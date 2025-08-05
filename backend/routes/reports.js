@@ -69,8 +69,30 @@ router.get('/air-monitoring/:projectId', auth, checkPermission(['projects.view']
 // Get Clearance Reports
 router.get('/clearance/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    // TODO: Implement clearance reports retrieval
-    res.json([]);
+    const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+    
+    const clearances = await AsbestosClearance.find({ 
+      projectId: req.params.projectId,
+      status: { $in: ['complete', 'Site Work Complete'] }
+    })
+      .populate('projectId', 'name projectID')
+      .populate('createdBy', 'firstName lastName')
+      .sort({ clearanceDate: -1 });
+
+    const reports = clearances.map(clearance => ({
+      id: clearance._id,
+      date: clearance.clearanceDate,
+      type: 'clearance',
+      reference: clearance.projectId?.projectID || 'Unknown',
+      description: `${clearance.clearanceType} Asbestos Clearance Report`,
+      status: clearance.status,
+      clearanceType: clearance.clearanceType,
+      LAA: clearance.LAA,
+      asbestosRemovalist: clearance.asbestosRemovalist,
+      additionalInfo: `${clearance.clearanceType} • ${clearance.LAA} • ${clearance.asbestosRemovalist}`
+    }));
+
+    res.json(reports);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -79,8 +101,25 @@ router.get('/clearance/:projectId', auth, checkPermission(['projects.view']), as
 // Get Fibre ID Reports
 router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    // TODO: Implement fibre ID reports retrieval
-    res.json([]);
+    const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+    
+    const jobs = await ClientSuppliedJob.find({ 
+      projectId: req.params.projectId,
+      status: 'Completed'
+    }).populate('projectId');
+
+    const reports = jobs.map(job => ({
+      id: job._id,
+      date: job.analysisDate || job.updatedAt,
+      type: 'fibre_id',
+      reference: job.jobNumber,
+      description: 'Fibre ID Analysis Report',
+      status: job.status,
+      analyst: job.analyst || 'Unknown',
+      sampleCount: job.sampleCount
+    }));
+
+    res.json(reports);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -89,18 +128,26 @@ router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), asy
 // Get Project Invoices
 router.get('/invoices/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const invoices = await Invoice.find({ project: req.params.projectId })
-      .populate('project')
+    const invoices = await Invoice.find({ 
+      projectId: req.params.projectId,
+      isDeleted: { $ne: true }
+    })
+      .populate('projectId', 'name projectID')
+      .populate('client', 'name')
       .sort({ createdAt: -1 });
 
     const reports = invoices.map(invoice => ({
       id: invoice._id,
-      date: invoice.createdAt,
+      date: invoice.date,
       type: 'invoice',
-      reference: invoice.invoiceNumber,
-      description: `Invoice for ${invoice.project?.name || 'Unknown Project'}`,
+      reference: invoice.invoiceID,
+      description: `Invoice for ${invoice.projectId?.name || 'Unknown Project'}`,
       status: invoice.status,
-      amount: invoice.totalAmount
+      amount: invoice.amount,
+      additionalInfo: `$${Number(invoice.amount).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} • ${invoice.xeroClientName || invoice.client?.name || 'Unknown Client'}`
     }));
 
     res.json(reports);
@@ -116,26 +163,50 @@ router.get('/download/:type/:id', auth, checkPermission(['projects.view']), asyn
 
     switch (type) {
       case 'air_monitoring':
-        // TODO: Implement air monitoring report download
-        break;
+        // Get shift data and generate air monitoring report
+        const shift = await Shift.findById(id).populate('job');
+        if (!shift) {
+          return res.status(404).json({ message: 'Shift not found' });
+        }
+        
+        // Redirect to the existing air monitoring report generation endpoint
+        return res.redirect(`/api/pdf-docraptor-v2/generate-air-monitoring-report?shiftId=${id}`);
 
       case 'clearance':
-        // TODO: Implement clearance report download
-        break;
+        // Get clearance data and generate clearance report
+        const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+        const clearance = await AsbestosClearance.findById(id);
+        if (!clearance) {
+          return res.status(404).json({ message: 'Clearance not found' });
+        }
+        
+        // Redirect to the existing clearance report generation endpoint
+        return res.redirect(`/api/pdf-docraptor-v2/generate-asbestos-clearance-v2`);
 
       case 'fibre_id':
-        // TODO: Implement fibre ID report download
-        break;
+        // Get fibre ID job data and generate report
+        const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+        const fibreJob = await ClientSuppliedJob.findById(id);
+        if (!fibreJob) {
+          return res.status(404).json({ message: 'Fibre ID job not found' });
+        }
+        
+        // Redirect to the existing fibre ID report generation endpoint
+        return res.redirect(`/api/pdf-docraptor-v2/generate-client-supplied-fibre-id`);
 
       case 'invoice':
-        // TODO: Implement invoice download
-        break;
+        // Get invoice data and generate invoice PDF
+        const invoice = await Invoice.findById(id);
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+        
+        // Redirect to the existing invoice generation endpoint
+        return res.redirect(`/api/pdf-docraptor-v2/generate-invoice`);
 
       default:
         return res.status(400).json({ message: 'Invalid report type' });
     }
-
-    res.status(501).json({ message: 'Report download not implemented yet' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -148,26 +219,70 @@ router.get('/view/:type/:id', auth, checkPermission(['projects.view']), async (r
 
     switch (type) {
       case 'air_monitoring':
-        // TODO: Implement air monitoring report view
+        // Get shift data for viewing
+        const shift = await Shift.findById(id).populate('job');
+        if (!shift) {
+          return res.status(404).json({ message: 'Shift not found' });
+        }
+        
+        // Return shift data for frontend viewing
+        res.json({
+          type: 'air_monitoring',
+          data: shift,
+          viewUrl: `/air-monitoring/analysis?shiftId=${id}`
+        });
         break;
 
       case 'clearance':
-        // TODO: Implement clearance report view
+        // Get clearance data for viewing
+        const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+        const clearance = await AsbestosClearance.findById(id).populate('projectId');
+        if (!clearance) {
+          return res.status(404).json({ message: 'Clearance not found' });
+        }
+        
+        // Return clearance data for frontend viewing
+        res.json({
+          type: 'clearance',
+          data: clearance,
+          viewUrl: `/clearances/${id}`
+        });
         break;
 
       case 'fibre_id':
-        // TODO: Implement fibre ID report view
+        // Get fibre ID job data for viewing
+        const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+        const fibreJob = await ClientSuppliedJob.findById(id).populate('projectId');
+        if (!fibreJob) {
+          return res.status(404).json({ message: 'Fibre ID job not found' });
+        }
+        
+        // Return fibre ID job data for frontend viewing
+        res.json({
+          type: 'fibre_id',
+          data: fibreJob,
+          viewUrl: `/fibre-id/client-supplied/${id}/samples`
+        });
         break;
 
       case 'invoice':
-        // TODO: Implement invoice view
+        // Get invoice data for viewing
+        const invoice = await Invoice.findById(id).populate('projectId').populate('client');
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+        
+        // Return invoice data for frontend viewing
+        res.json({
+          type: 'invoice',
+          data: invoice,
+          viewUrl: `/invoices/edit/${id}`
+        });
         break;
 
       default:
         return res.status(400).json({ message: 'Invalid report type' });
     }
-
-    res.status(501).json({ message: 'Report view not implemented yet' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -180,26 +295,50 @@ router.get('/print/:type/:id', auth, checkPermission(['projects.view']), async (
 
     switch (type) {
       case 'air_monitoring':
-        // TODO: Implement air monitoring report print
-        break;
+        // Get shift data and generate air monitoring report for printing
+        const shift = await Shift.findById(id).populate('job');
+        if (!shift) {
+          return res.status(404).json({ message: 'Shift not found' });
+        }
+        
+        // Redirect to the existing air monitoring report generation endpoint with print flag
+        return res.redirect(`/api/pdf-docraptor-v2/generate-air-monitoring-report?shiftId=${id}&print=true`);
 
       case 'clearance':
-        // TODO: Implement clearance report print
-        break;
+        // Get clearance data and generate clearance report for printing
+        const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+        const clearance = await AsbestosClearance.findById(id);
+        if (!clearance) {
+          return res.status(404).json({ message: 'Clearance not found' });
+        }
+        
+        // Redirect to the existing clearance report generation endpoint with print flag
+        return res.redirect(`/api/pdf-docraptor-v2/generate-asbestos-clearance-v2?print=true`);
 
       case 'fibre_id':
-        // TODO: Implement fibre ID report print
-        break;
+        // Get fibre ID job data and generate report for printing
+        const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+        const fibreJob = await ClientSuppliedJob.findById(id);
+        if (!fibreJob) {
+          return res.status(404).json({ message: 'Fibre ID job not found' });
+        }
+        
+        // Redirect to the existing fibre ID report generation endpoint with print flag
+        return res.redirect(`/api/pdf-docraptor-v2/generate-client-supplied-fibre-id?print=true`);
 
       case 'invoice':
-        // TODO: Implement invoice print
-        break;
+        // Get invoice data and generate invoice PDF for printing
+        const invoice = await Invoice.findById(id);
+        if (!invoice) {
+          return res.status(404).json({ message: 'Invoice not found' });
+        }
+        
+        // Redirect to the existing invoice generation endpoint with print flag
+        return res.redirect(`/api/pdf-docraptor-v2/generate-invoice?print=true`);
 
       default:
         return res.status(400).json({ message: 'Invalid report type' });
     }
-
-    res.status(501).json({ message: 'Report print not implemented yet' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

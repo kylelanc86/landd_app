@@ -398,8 +398,12 @@ const NewSample = () => {
       errors.sampleNumber = "Sample number is required";
     }
 
-    if (!form.flowmeter) {
+    if (!form.isFieldBlank && !form.flowmeter) {
       errors.flowmeter = "Flowmeter is required";
+    }
+
+    if (!form.cowlNo) {
+      errors.cowlNo = "Cowl No. is required";
     }
 
     if (!form.isFieldBlank) {
@@ -650,14 +654,6 @@ const NewSample = () => {
                   ))}
                 </Select>
               </FormControl>
-              <TextField
-                name="cowlNo"
-                label="Cowl No."
-                value={form.cowlNo}
-                onChange={handleChange}
-                required
-                fullWidth
-              />
               <FormControl fullWidth>
                 <InputLabel>Filter Size</InputLabel>
                 <Select
@@ -672,41 +668,53 @@ const NewSample = () => {
               </FormControl>
             </>
           )}
-          <FormControl fullWidth required error={!!fieldErrors.flowmeter}>
-            <InputLabel>Flowmeter</InputLabel>
-            <Select
-              name="flowmeter"
-              value={form.flowmeter}
-              onChange={handleChange}
-              label="Flowmeter"
-              required
-            >
-              <MenuItem value="">
-                <em>Select a flowmeter</em>
-              </MenuItem>
-              {flowmeters.map((flowmeter) => (
-                <MenuItem
-                  key={flowmeter._id}
-                  value={flowmeter.equipmentReference}
-                >
-                  {flowmeter.equipmentReference} - {flowmeter.brandModel} (
-                  {flowmeter.equipmentType})
+          <TextField
+            name="cowlNo"
+            label="Cowl No."
+            value={form.cowlNo}
+            onChange={handleChange}
+            required
+            fullWidth
+            error={!!fieldErrors.cowlNo}
+            helperText={fieldErrors.cowlNo}
+          />
+          {!form.isFieldBlank && (
+            <FormControl fullWidth required error={!!fieldErrors.flowmeter}>
+              <InputLabel>Flowmeter</InputLabel>
+              <Select
+                name="flowmeter"
+                value={form.flowmeter}
+                onChange={handleChange}
+                label="Flowmeter"
+                required
+              >
+                <MenuItem value="">
+                  <em>Select a flowmeter</em>
                 </MenuItem>
-              ))}
-            </Select>
-            {fieldErrors.flowmeter && (
-              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                {fieldErrors.flowmeter}
+                {flowmeters.map((flowmeter) => (
+                  <MenuItem
+                    key={flowmeter._id}
+                    value={flowmeter.equipmentReference}
+                  >
+                    {flowmeter.equipmentReference} - {flowmeter.brandModel} (
+                    {flowmeter.equipmentType})
+                  </MenuItem>
+                ))}
+              </Select>
+              {fieldErrors.flowmeter && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  {fieldErrors.flowmeter}
+                </Typography>
+              )}
+              <Typography
+                variant="caption"
+                sx={{ mt: 0.5, color: "text.secondary" }}
+              >
+                Current value: {form.flowmeter || "None"} | Available options:{" "}
+                {flowmeters.map((f) => f.equipmentReference).join(", ")}
               </Typography>
-            )}
-            <Typography
-              variant="caption"
-              sx={{ mt: 0.5, color: "text.secondary" }}
-            >
-              Current value: {form.flowmeter || "None"} | Available options:{" "}
-              {flowmeters.map((f) => f.equipmentReference).join(", ")}
-            </Typography>
-          </FormControl>
+            </FormControl>
+          )}
           {!form.isFieldBlank && (
             <>
               <Box sx={{ display: "flex", gap: 1 }}>

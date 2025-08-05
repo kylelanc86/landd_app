@@ -55,7 +55,7 @@ const AllocatedJobsTable = () => {
             .then((response) => [job.id, response.data])
             .catch((error) => {
               console.error(
-                `Error fetching overdue info for project ${job.id}:`,
+                `Error fetching overdue info for project ${job.projectID}:`,
                 error
               );
               return [job.id, { overdueInvoice: false, overdueDays: 0 }];

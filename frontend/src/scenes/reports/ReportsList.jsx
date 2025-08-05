@@ -19,6 +19,7 @@ import {
   Download as DownloadIcon,
   Print as PrintIcon,
 } from "@mui/icons-material";
+import { format } from "date-fns";
 
 const ReportsList = ({
   reports,
@@ -49,16 +50,62 @@ const ReportsList = ({
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "complete":
+      case "completed":
       case "approved":
+      case "final":
         return "success";
       case "in progress":
+      case "in_progress":
       case "pending approval":
+      case "pending_approval":
+      case "awaiting approval":
+      case "awaiting_approval":
+      case "pending review":
+      case "pending_review":
+      case "under review":
+      case "under_review":
         return "warning";
       case "draft":
+      case "preliminary":
         return "info";
+      case "rejected":
+      case "cancelled":
+        return "error";
       default:
         return "default";
     }
+  };
+
+  const formatStatus = (status) => {
+    if (!status) return "";
+
+    // Handle common status formats
+    const statusMap = {
+      in_progress: "In Progress",
+      pending_approval: "Pending Approval",
+      awaiting_approval: "Awaiting Approval",
+      completed: "Completed",
+      approved: "Approved",
+      draft: "Draft",
+      submitted: "Submitted",
+      rejected: "Rejected",
+      cancelled: "Cancelled",
+      in_progress: "In Progress",
+      pending_review: "Pending Review",
+      under_review: "Under Review",
+      final: "Final",
+      preliminary: "Preliminary",
+    };
+
+    // Check if we have a direct mapping
+    if (statusMap[status.toLowerCase()]) {
+      return statusMap[status.toLowerCase()];
+    }
+
+    // Generic formatting: replace underscores with spaces and capitalize
+    return status
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   if (loading) {
@@ -101,7 +148,9 @@ const ReportsList = ({
           <TableHead>
             <TableRow>
               <TableCell>Date</TableCell>
-              <TableCell>Reference</TableCell>
+              {category !== "fibre-id" && category !== "air-monitoring" && (
+                <TableCell>Reference</TableCell>
+              )}
               <TableCell>Description</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="center">Actions</TableCell>
@@ -111,9 +160,11 @@ const ReportsList = ({
             {reports.map((report) => (
               <TableRow key={report.id}>
                 <TableCell>
-                  {new Date(report.date).toLocaleDateString()}
+                  {format(new Date(report.date), "dd/MM/yyyy")}
                 </TableCell>
-                <TableCell>{report.reference}</TableCell>
+                {category !== "fibre-id" && category !== "air-monitoring" && (
+                  <TableCell>{report.reference}</TableCell>
+                )}
                 <TableCell>
                   <Typography variant="body2">{report.description}</Typography>
                   {report.additionalInfo && (
@@ -128,7 +179,7 @@ const ReportsList = ({
                 </TableCell>
                 <TableCell>
                   <Chip
-                    label={report.status}
+                    label={formatStatus(report.status)}
                     color={getStatusColor(report.status)}
                     size="small"
                   />

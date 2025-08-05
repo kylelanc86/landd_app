@@ -18,8 +18,10 @@ import {
   shiftService,
   sampleService,
   clientService,
+  invoiceService,
 } from "../../services/api";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
+import reportService from "../../services/reportService";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 
 const ProjectReports = () => {
@@ -125,11 +127,46 @@ const ProjectReports = () => {
             break;
 
           case "fibre-id":
-            // TODO: Implement fibre ID reports loading
+            const fibreIdReports = await reportService.getFibreIdReports(
+              projectId
+            );
+            reportsData = fibreIdReports.map((report) => ({
+              id: report.id,
+              date: report.date,
+              reference: report.reference,
+              description: report.description,
+              status: report.status,
+              type: "fibre_id",
+              data: report,
+            }));
             break;
 
           case "invoices":
-            // TODO: Implement invoices loading
+            // Get invoices for this project
+            const invoicesResponse = await fetch(
+              `${
+                process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+              }/reports/invoices/${projectId}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+              }
+            );
+            if (!invoicesResponse.ok) {
+              throw new Error("Failed to fetch invoices");
+            }
+            const invoicesData = await invoicesResponse.json();
+            reportsData = invoicesData.map((invoice) => ({
+              id: invoice.id,
+              date: invoice.date,
+              reference: invoice.reference,
+              description: invoice.description,
+              additionalInfo: invoice.additionalInfo,
+              status: invoice.status,
+              type: "invoice",
+              data: invoice,
+            }));
             break;
 
           default:
@@ -208,6 +245,12 @@ const ProjectReports = () => {
         const blob = new Blob([response.data], { type: "application/pdf" });
         const url = window.URL.createObjectURL(blob);
         window.open(url, "_blank");
+      } else if (report.type === "fibre_id") {
+        // Navigate to the fibre ID job details page
+        navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
+      } else if (report.type === "invoice") {
+        // Navigate to the invoice edit page
+        navigate(`/invoices/edit/${report.data.id}`);
       }
     } catch (err) {
       console.error("Error viewing report:", err);
@@ -265,6 +308,9 @@ const ProjectReports = () => {
           generateHTMLTemplatePDF,
         } = require("../../utils/templatePDFGenerator");
         await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
+      } else if (report.type === "invoice") {
+        // For invoices, we'll navigate to the invoice edit page where download is available
+        navigate(`/invoices/edit/${report.data.id}`);
       }
     } catch (err) {
       console.error("Error downloading report:", err);
