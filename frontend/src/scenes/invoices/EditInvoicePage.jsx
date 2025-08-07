@@ -25,7 +25,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
+
 import { projectService, invoiceService } from "../../services/api";
 import invoiceItemService from "../../services/invoiceItemService";
 import { formatDateForInput } from "../../utils/dateFormat";
@@ -51,7 +51,6 @@ const EditInvoicePage = () => {
 
   // Invoice items state
   const [invoiceItems, setInvoiceItems] = useState([]);
-  const [editingItem, setEditingItem] = useState(null);
   const [currentInvoice, setCurrentInvoice] = useState(null);
 
   // Available invoice items for dropdown
@@ -71,7 +70,7 @@ const EditInvoicePage = () => {
     if (projects.length > 0) {
       fetchInvoiceData();
     }
-  }, [projects, invoiceId]);
+  }, [projects, invoiceId, fetchInvoiceData]);
 
   const fetchInvoiceData = async () => {
     try {
@@ -258,11 +257,6 @@ const EditInvoicePage = () => {
       amount: 0,
     };
     setInvoiceItems((prev) => [...prev, newItem]);
-    setEditingItem(newItem.id);
-  };
-
-  const handleEditItem = (itemId) => {
-    setEditingItem(itemId);
   };
 
   const handleDeleteItem = (itemId) => {

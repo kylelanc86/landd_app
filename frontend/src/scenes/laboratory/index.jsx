@@ -15,7 +15,7 @@ import {
   Visibility as VisibilityIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { tokens } from "../../theme/tokens";
+
 import PermissionGate from "../../components/PermissionGate";
 
 const LaboratoryDashboard = () => {

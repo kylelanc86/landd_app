@@ -3,67 +3,29 @@ import {
   Box,
   Typography,
   Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   DialogContentText,
-  TextField,
-  MenuItem,
-  Select,
-  InputLabel,
-  FormControl,
-  Stack,
-  TableSortLabel,
   Chip,
-  alpha,
   Switch,
   FormControlLabel,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import AddIcon from "@mui/icons-material/Add";
-import RemoveIcon from "@mui/icons-material/Remove";
-import { USER_LEVELS } from "../../data/userData";
+
 import { DataGrid } from "@mui/x-data-grid";
-import { tokens } from "../../theme/tokens";
+
 import { useTheme } from "@mui/material/styles";
 import { userService } from "../../services/api";
 import TruncatedCell from "../../components/TruncatedCell";
 import { useNavigate } from "react-router-dom";
 import { hasPermission } from "../../config/permissions";
 import { useAuth } from "../../context/AuthContext";
-import {
-  validateSignatureFile,
-  compressSignatureImage,
-} from "../../utils/signatureUtils";
-
-const USERS_KEY = "ldc_users";
-
-const emptyForm = {
-  firstName: "",
-  lastName: "",
-  email: "",
-  phone: "",
-  role: "employee",
-  isActive: true,
-  licences: [],
-  signature: "",
-};
 
 const Users = () => {
   const navigate = useNavigate();
@@ -76,10 +38,6 @@ const Users = () => {
   const [sortDir, setSortDir] = useState("asc");
   const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
-
-  // Delete user state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState(null);
 
   // Fetch users from the API on mount
   useEffect(() => {
@@ -153,24 +111,6 @@ const Users = () => {
       console.error("Error updating user status:", error);
     }
   };
-
-  // Sorting
-  const handleSort = (col) => {
-    if (sortBy === col) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(col);
-      setSortDir("asc");
-    }
-  };
-
-  const sortedUsers = [...users].sort((a, b) => {
-    let valA = a[sortBy],
-      valB = b[sortBy];
-    if (valA < valB) return sortDir === "asc" ? -1 : 1;
-    if (valA > valB) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
 
   const handleViewTimesheets = (userId) => {
     navigate(`/timesheets/review?userId=${userId}`);

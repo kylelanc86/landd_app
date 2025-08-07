@@ -287,10 +287,40 @@ export const timesheetService = {
     return response.data;
   },
   getByProject: async (projectId, params = {}) => {
-    const queryParams = new URLSearchParams();
-    if (params.startDate) queryParams.append('startDate', params.startDate);
-    if (params.endDate) queryParams.append('endDate', params.endDate);
-    return api.get(`/timesheets/project/${projectId}?${queryParams.toString()}`);
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.startDate) queryParams.append('startDate', params.startDate);
+      if (params.endDate) queryParams.append('endDate', params.endDate);
+      
+      // Use the correct endpoint for project timesheets
+      const url = `/timesheets/by-project/${projectId}?${queryParams.toString()}`;
+      console.log("Timesheet API request URL:", url);
+      console.log("Timesheet API request params:", { projectId, params });
+      
+      const response = await api.get(url);
+      console.log("Raw timesheet API response:", response);
+      
+      // Check response structure
+      if (!response.data) {
+        console.warn("No data in timesheet response");
+        return { data: [] };
+      }
+      
+      // Handle the response structure we see in the logs
+      if (response.data.entries) {
+        // If we get the {count, entries} structure from the logs
+        return { data: response.data.entries };
+      }
+      
+      return response;
+    } catch (error) {
+      console.error("Error in timesheetService.getByProject:", error);
+      if (error.response) {
+        console.error("Error response:", error.response.data);
+        console.error("Error status:", error.response.status);
+      }
+      throw error;
+    }
   },
   createTimesheet: async (timesheetData) => {
     const response = await api.post("/timesheets", timesheetData);

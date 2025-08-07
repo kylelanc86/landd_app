@@ -9,7 +9,6 @@ export const generateHTMLPDF = async (templateType, data) => {
 };
 
 export const generateAssessmentPDF = async (assessmentData) => {
-  const pdfId = `assessment-${assessmentData._id || Date.now()}`;
   
   try {
     console.log('Starting assessment PDF generation with data:', assessmentData);

@@ -104,7 +104,6 @@ const ClearancesDashboard = lazy(() => import("./scenes/clearances"));
 const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
 
 // New landing page components
-const Databases = lazy(() => import("./scenes/databases"));
 const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
@@ -799,18 +798,7 @@ function App() {
                             </PermissionRoute>
                           }
                         />
-                        <Route
-                          path="/databases"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["projects.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <Databases />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
+
                         <Route
                           path="/reports"
                           element={

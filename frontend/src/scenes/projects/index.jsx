@@ -9,13 +9,6 @@ import {
   Box,
   Typography,
   Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Select,
   MenuItem,
@@ -49,19 +42,13 @@ import {
   ListItemButton,
   ListItemIcon,
 } from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import TableSortLabel from "@mui/material/TableSortLabel";
 import {
-  JOB_STATUS,
   ACTIVE_STATUSES,
   INACTIVE_STATUSES,
   StatusChip,
-  UserAvatar,
 } from "../../components/JobStatus";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Breadcrumbs, Link } from "@mui/material";
-import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import { useTheme } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -70,32 +57,14 @@ import {
   userService,
   userPreferencesService,
 } from "../../services/api";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
-import AddIcon from "@mui/icons-material/Add";
 import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
-import PersonIcon from "@mui/icons-material/Person";
 import { usePermissions } from "../../hooks/usePermissions";
-import TruncatedCell from "../../components/TruncatedCell";
-import { Visibility, MoreVert } from "@mui/icons-material";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-
-import { debounce } from "lodash";
-import DownloadIcon from "@mui/icons-material/Download";
+import { Visibility, Visibility as VisibilityIcon } from "@mui/icons-material";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
+import AddIcon from "@mui/icons-material/Add";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
-import { testGoogleMapsApi } from "../../utils/testGoogleMapsApi";
-
-const PROJECTS_KEY = "ldc_projects";
-const USERS_KEY = "ldc_users";
-
-const PROJECT_TYPES = [
-  "air_quality",
-  "water_quality",
-  "soil_analysis",
-  "other",
-];
+import { debounce } from "lodash";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -134,232 +103,6 @@ const emptyForm = {
     number: "",
     email: "",
   },
-};
-
-const EditableStatusCell = ({ project, onStatusChange }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null);
-
-  const handleClick = (event) => {
-    setAnchorEl(event.currentTarget);
-    setIsEditing(true);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-    setIsEditing(false);
-  };
-
-  const handleStatusSelect = (newStatus) => {
-    onStatusChange(project.id, newStatus);
-    handleClose();
-  };
-
-  return (
-    <TableCell>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Box
-          onClick={handleClick}
-          sx={{
-            cursor: "pointer",
-            "&:hover": {
-              opacity: 0.8,
-            },
-          }}
-        >
-          <StatusChip status={project.status} />
-        </Box>
-        <Menu
-          anchorEl={anchorEl}
-          open={isEditing}
-          onClose={handleClose}
-          PaperProps={{
-            sx: {
-              maxHeight: 300,
-              width: 250,
-            },
-          }}
-        >
-          <MenuItem disabled>
-            <Typography variant="subtitle2" color="text.secondary">
-              Active Jobs
-            </Typography>
-          </MenuItem>
-          {ACTIVE_STATUSES.map((status) => (
-            <MenuItem
-              key={status}
-              onClick={() => handleStatusSelect(status)}
-              selected={project.status === status}
-            >
-              <StatusChip status={status} />
-            </MenuItem>
-          ))}
-          <Divider />
-          <MenuItem disabled>
-            <Typography variant="subtitle2" color="text.secondary">
-              Inactive Jobs
-            </Typography>
-          </MenuItem>
-          {INACTIVE_STATUSES.map((status) => (
-            <MenuItem
-              key={status}
-              onClick={() => handleStatusSelect(status)}
-              selected={project.status === status}
-            >
-              <StatusChip status={status} />
-            </MenuItem>
-          ))}
-        </Menu>
-      </Box>
-    </TableCell>
-  );
-};
-
-// Update the ProjectIdDisplay component to ensure proper formatting
-const ProjectIdDisplay = ({ projectId }) => {
-  // Ensure projectId is a number and format it
-  const formattedId =
-    typeof projectId === "number" ? projectId : parseInt(projectId);
-  return (
-    <Typography
-      variant="body1"
-      sx={{
-        color: "text.secondary",
-        mb: 2,
-        fontFamily: "monospace",
-        fontSize: "1.1rem",
-      }}
-    >
-      Project ID: {`LDJ${String(formattedId).padStart(5, "0")}`}
-    </Typography>
-  );
-};
-
-// Helper functions outside the component
-const generateProjectId = (projects) => {
-  if (projects.length === 0) return 1;
-
-  // Find the highest existing project ID
-  const highestId = Math.max(
-    ...projects.map((project) => {
-      // Convert any existing IDs to numbers and get the numeric part
-      const idStr = String(project.id);
-      const numericPart = parseInt(idStr.replace(/\D/g, ""));
-      return isNaN(numericPart) ? 0 : numericPart;
-    })
-  );
-  return highestId + 1;
-};
-
-const generateHazProjectId = (projects) => {
-  // Filter projects that have HAZ prefix
-  const hazProjects = projects.filter(
-    (project) => project.projectID && project.projectID.startsWith("HAZ")
-  );
-
-  if (hazProjects.length === 0) {
-    return "HAZ001";
-  }
-
-  // Find the highest HAZ project number
-  const highestHazNumber = Math.max(
-    ...hazProjects.map((project) => {
-      const numericPart = parseInt(project.projectID.replace("HAZ", ""));
-      return isNaN(numericPart) ? 0 : numericPart;
-    })
-  );
-
-  const nextNumber = highestHazNumber + 1;
-  return `HAZ${String(nextNumber).padStart(3, "0")}`;
-};
-
-const resetProjectIds = (projects) => {
-  return projects.map((project, index) => ({
-    ...project,
-    id: index + 1, // Start fresh from 1
-  }));
-};
-
-const StatusCell = ({ params, onStatusChange }) => {
-  const [anchorEl, setAnchorEl] = useState(null);
-  const { can } = usePermissions();
-
-  const handleClick = (event) => {
-    if (!can("projects.change_status")) {
-      return;
-    }
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleStatusSelect = async (newStatus) => {
-    if (!can("projects.change_status")) {
-      return;
-    }
-    await onStatusChange(params.row.id, newStatus);
-    handleClose();
-  };
-
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <Box
-        onClick={handleClick}
-        sx={{
-          cursor: can("projects.change_status") ? "pointer" : "default",
-          opacity: can("projects.change_status") ? 1 : 0.7,
-          "&:hover": {
-            opacity: can("projects.change_status") ? 0.8 : 0.7,
-          },
-        }}
-      >
-        <StatusChip status={params.row.status} />
-      </Box>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleClose}
-        PaperProps={{
-          sx: {
-            maxHeight: 300,
-            width: 250,
-          },
-        }}
-      >
-        <MenuItem disabled>
-          <Typography variant="subtitle2" color="text.secondary">
-            Active Jobs
-          </Typography>
-        </MenuItem>
-        {ACTIVE_STATUSES.map((status) => (
-          <MenuItem
-            key={status}
-            onClick={() => handleStatusSelect(status)}
-            selected={params.row.status === status}
-          >
-            <StatusChip status={status} />
-          </MenuItem>
-        ))}
-        <Divider />
-        <MenuItem disabled>
-          <Typography variant="subtitle2" color="text.secondary">
-            Inactive Jobs
-          </Typography>
-        </MenuItem>
-        {INACTIVE_STATUSES.map((status) => (
-          <MenuItem
-            key={status}
-            onClick={() => handleStatusSelect(status)}
-            selected={params.row.status === status}
-          >
-            <StatusChip status={status} />
-          </MenuItem>
-        ))}
-      </Menu>
-    </Box>
-  );
 };
 
 // Update the getInitials function
@@ -500,12 +243,7 @@ const Projects = ({ initialFilters = {} }) => {
     total: 0,
     pages: 0,
   });
-  const [searchTerm, setSearchTerm] = useState("");
-  const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [sortModel, setSortModel] = useState([
-    { field: "projectID", sort: "desc" },
-  ]);
+
   const [newClient, setNewClient] = useState({
     name: "",
     email: "",
@@ -520,7 +258,6 @@ const Projects = ({ initialFilters = {} }) => {
     contact2Email: "",
   });
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState(null);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState({
     projectID: true,
     name: true,
@@ -533,7 +270,6 @@ const Projects = ({ initialFilters = {} }) => {
     createdAt: false, // Hide by default
     updatedAt: false,
   });
-  const [showInactive, setShowInactive] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
     // Load selected department from filters
     const savedFilters = localStorage.getItem("projects-filters");
@@ -557,18 +293,77 @@ const Projects = ({ initialFilters = {} }) => {
     page: 0,
   });
 
+  // Combine all filters into a single state object to prevent multiple useEffect triggers
+  const [filters, setFilters] = useState(() => {
+    // Load filters from localStorage and URL parameters
+    const savedFilters = localStorage.getItem("projects-filters");
+    const urlParams = new URLSearchParams(window.location.search);
+
+    const defaultFilters = {
+      searchTerm: "",
+      departmentFilter: "all",
+      statusFilter: "all",
+      sortModel: [{ field: "projectID", sort: "desc" }],
+    };
+
+    // Read status and active from URL
+    const urlStatus = urlParams.get("status");
+    const urlActive = urlParams.get("active");
+
+    // Apply initial filters from props
+    const appliedFilters = {
+      ...defaultFilters,
+      searchTerm: initialFilters.search || "",
+      departmentFilter: initialFilters.department || "all",
+      statusFilter: initialFilters.status || "all",
+    };
+
+    if (savedFilters) {
+      try {
+        const parsedFilters = JSON.parse(savedFilters);
+        return {
+          ...appliedFilters,
+          ...parsedFilters,
+          // Override with URL parameters if they exist
+          searchTerm:
+            urlParams.get("search") ||
+            initialFilters.search ||
+            parsedFilters.searchTerm ||
+            "",
+          departmentFilter:
+            urlParams.get("department") ||
+            initialFilters.department ||
+            parsedFilters.departmentFilter ||
+            "all",
+          statusFilter:
+            urlStatus ||
+            urlParams.get("status") ||
+            initialFilters.status ||
+            parsedFilters.statusFilter ||
+            "all",
+        };
+      } catch (error) {
+        console.error("Error parsing saved filters:", error);
+        return {
+          ...appliedFilters,
+          statusFilter:
+            urlStatus || initialFilters.status || defaultFilters.statusFilter,
+        };
+      }
+    }
+    return {
+      ...appliedFilters,
+      statusFilter:
+        urlStatus || initialFilters.status || defaultFilters.statusFilter,
+    };
+  });
+
   // Add state for column visibility dropdown
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
 
-  // Use refs to track component state
-  const isInitialLoadRef = useRef(true);
-  const hasFetchedRef = useRef(false);
-  const pageLoadTimerRef = useRef(null);
-  const renderStartTimeRef = useRef(null);
-
   // Add ref to track current search term to prevent unnecessary API calls
-  const searchTermRef = useRef(searchTerm);
-  searchTermRef.current = searchTerm;
+  const searchTermRef = useRef(filters.searchTerm);
+  searchTermRef.current = filters.searchTerm;
 
   // Add ref to track search input focus
   const searchInputRef = useRef(null);
@@ -731,71 +526,6 @@ const Projects = ({ initialFilters = {} }) => {
       console.error("Projects - Error getting place details:", error);
     }
   };
-
-  // Combine all filters into a single state object to prevent multiple useEffect triggers
-  const [filters, setFilters] = useState(() => {
-    // Load filters from localStorage and URL parameters
-    const savedFilters = localStorage.getItem("projects-filters");
-    const urlParams = new URLSearchParams(window.location.search);
-
-    const defaultFilters = {
-      searchTerm: "",
-      departmentFilter: "all",
-      statusFilter: "all",
-      sortModel: [{ field: "projectID", sort: "desc" }],
-    };
-
-    // Read status and active from URL
-    const urlStatus = urlParams.get("status");
-    const urlActive = urlParams.get("active");
-
-    // Apply initial filters from props (from databases page)
-    const appliedFilters = {
-      ...defaultFilters,
-      searchTerm: initialFilters.search || "",
-      departmentFilter: initialFilters.department || "all",
-      statusFilter: initialFilters.status || "all",
-    };
-
-    if (savedFilters) {
-      try {
-        const parsedFilters = JSON.parse(savedFilters);
-        return {
-          ...appliedFilters,
-          ...parsedFilters,
-          // Override with URL parameters if they exist
-          searchTerm:
-            urlParams.get("search") ||
-            initialFilters.search ||
-            parsedFilters.searchTerm ||
-            "",
-          departmentFilter:
-            urlParams.get("department") ||
-            initialFilters.department ||
-            parsedFilters.departmentFilter ||
-            "all",
-          statusFilter:
-            urlStatus ||
-            urlParams.get("status") ||
-            initialFilters.status ||
-            parsedFilters.statusFilter ||
-            "all",
-        };
-      } catch (error) {
-        console.error("Error parsing saved filters:", error);
-        return {
-          ...appliedFilters,
-          statusFilter:
-            urlStatus || initialFilters.status || defaultFilters.statusFilter,
-        };
-      }
-    }
-    return {
-      ...appliedFilters,
-      statusFilter:
-        urlStatus || initialFilters.status || defaultFilters.statusFilter,
-    };
-  });
 
   // Add ref to track current filters state to avoid stale closures
   const filtersRef = useRef(filters);
@@ -1042,47 +772,6 @@ const Projects = ({ initialFilters = {} }) => {
     [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
   );
 
-  // Function to clear all filters
-  const clearFilters = useCallback(() => {
-    const defaultFilters = {
-      searchTerm: "",
-      departmentFilter: "all",
-      statusFilter: "all",
-      sortModel: [{ field: "projectID", sort: "desc" }],
-    };
-
-    setFilters(defaultFilters);
-    setSelectedDepartment("All");
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
-
-    // Clear localStorage and URL parameters
-    localStorage.removeItem("projects-filters");
-    localStorage.removeItem("projects-column-visibility");
-    window.history.replaceState({}, "", window.location.pathname);
-
-    // Reset column visibility to default
-    const defaultColumnVisibility = {
-      projectID: true,
-      name: true,
-      client: true,
-      d_Date: true,
-      status: true,
-      department: true,
-      users: true,
-      createdAt: false, // Hide by default
-      updatedAt: false,
-    };
-    setColumnVisibilityModel(defaultColumnVisibility);
-
-    // Trigger fetch with cleared filters
-    fetchProjectsWithPagination(
-      { page: 0, pageSize: paginationModel.pageSize },
-      "",
-      false,
-      defaultFilters
-    );
-  }, [fetchProjectsWithPagination, paginationModel.pageSize]);
-
   // Handle search input change
   const handleSearchChange = useCallback(
     (event) => {
@@ -1165,20 +854,6 @@ const Projects = ({ initialFilters = {} }) => {
     }
   }, [searchLoading, searchFocused]);
 
-  // Handle page change
-  const handlePageChange = useCallback((newPage) => {
-    setPagination((prev) => ({ ...prev, page: newPage }));
-  }, []);
-
-  // Handle page size change
-  const handlePageSizeChange = useCallback((newPageSize) => {
-    setPagination((prev) => ({
-      ...prev,
-      limit: newPageSize,
-      page: 1, // Reset to first page when changing page size
-    }));
-  }, []);
-
   // Handle sort change
   const handleSortModelChange = useCallback(
     (newSortModel) => {
@@ -1244,29 +919,6 @@ const Projects = ({ initialFilters = {} }) => {
     fetchProjects(false);
   }, []); // Empty dependency array for initial load only
 
-  const handleEditSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const projectId = selectedProject?._id || selectedProject?.id;
-      if (!projectId) {
-        console.error("No project ID found for update");
-        setError("Cannot update project: No project ID found");
-        return;
-      }
-
-      const response = await projectService.update(projectId, form);
-      setProjects(
-        projects.map((p) => ((p._id || p.id) === projectId ? response.data : p))
-      );
-      setDialogOpen(false);
-      setSelectedProject(null);
-      setForm(emptyForm);
-    } catch (error) {
-      console.error("Error updating project:", error);
-      setError("Failed to update project");
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -1321,48 +973,6 @@ const Projects = ({ initialFilters = {} }) => {
       ...prev,
       client: newValue ? newValue._id : "",
     }));
-  };
-
-  const handleStatusChange = async (projectId, newStatus) => {
-    try {
-      const project = projects.find((p) => (p._id || p.id) === projectId);
-      if (!project) return;
-
-      const response = await projectService.update(projectId, {
-        ...project,
-        status: newStatus,
-      });
-
-      setProjects(
-        projects.map((p) => ((p._id || p.id) === projectId ? response.data : p))
-      );
-    } catch (error) {
-      console.error("Error updating project status:", error);
-      setError("Failed to update project status");
-    }
-  };
-
-  const handleRemoveUser = async (projectId, userId) => {
-    try {
-      const project = projects.find((p) => (p._id || p.id) === projectId);
-      if (!project) {
-        console.error("Project not found:", projectId);
-        return;
-      }
-
-      const updatedUsers = project.users.filter((id) => id !== userId);
-      const response = await projectService.update(projectId, {
-        ...project,
-        users: updatedUsers,
-      });
-
-      setProjects(
-        projects.map((p) => ((p._id || p.id) === projectId ? response.data : p))
-      );
-    } catch (error) {
-      console.error("Error removing user:", error);
-      setError("Failed to remove user from project");
-    }
   };
 
   const handleDeleteProject = async () => {
@@ -1423,52 +1033,6 @@ const Projects = ({ initialFilters = {} }) => {
   };
 
   // Update the renderUsersSelect function
-  const renderUsersSelect = (value, onChange, name) => {
-    // console.log("Rendering users select with:", { value, users });
-
-    // Ensure value is always an array of user IDs
-    const selectedUserIds = Array.isArray(value) ? value : [];
-
-    // Filter out any inactive users from the selected values
-    const activeSelectedIds = selectedUserIds.filter((userId) =>
-      users.some((user) => user._id === userId && user.isActive === true)
-    );
-
-    return (
-      <FormControl fullWidth>
-        <InputLabel>Assigned Users</InputLabel>
-        <Select
-          multiple
-          name={name}
-          value={activeSelectedIds}
-          onChange={onChange}
-          label="Assigned Users"
-          disabled={loadingUsers}
-          renderValue={(selected) => (
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-              {selected.map((userId) => {
-                const user = users.find((u) => u._id === userId);
-                if (!user) return null;
-                const displayName =
-                  user.name || `${user.firstName} ${user.lastName}`.trim();
-                return <Chip key={userId} label={displayName} size="small" />;
-              })}
-            </Box>
-          )}
-        >
-          {users.map((user) => {
-            const displayName =
-              user.name || `${user.firstName} ${user.lastName}`.trim();
-            return (
-              <MenuItem key={user._id} value={user._id}>
-                {displayName}
-              </MenuItem>
-            );
-          })}
-        </Select>
-      </FormControl>
-    );
-  };
 
   // Add function to handle new client creation
   const handleNewClientSubmit = async (e) => {
@@ -1500,17 +1064,6 @@ const Projects = ({ initialFilters = {} }) => {
         );
       }
     }
-  };
-
-  const handleMenuOpen = (event, data) => {
-    setMenuAnchor(event.currentTarget);
-    setSelectedProject(data);
-  };
-
-  // Handler for edit action
-  const handleEditClick = (project) => {
-    setSelectedProject(project);
-    setDialogOpen(true);
   };
 
   // Handler for delete action
@@ -1935,57 +1488,6 @@ const Projects = ({ initialFilters = {} }) => {
       </FormControl>
     ));
 
-  // Fallback renderStatusCell function
-  const safeRenderStatusCell =
-    renderStatusCell ||
-    ((params) => (
-      <Box
-        sx={{
-          backgroundColor: getStatusColor(params.value),
-          color: "white",
-          padding: "4px 8px",
-          borderRadius: "4px",
-          fontSize: "0.75rem",
-        }}
-      >
-        {params.value}
-      </Box>
-    ));
-
-  // Fallback renderEditStatusCell function
-  const safeRenderEditStatusCell =
-    renderEditStatusCell ||
-    ((params) => (
-      <Box sx={{ width: "100%" }}>
-        <Select
-          value={params.value}
-          onChange={(e) => {
-            params.api.setEditCellValue(
-              {
-                id: params.id,
-                field: params.field,
-                value: e.target.value,
-              },
-              true
-            );
-          }}
-          sx={{ width: "100%" }}
-          size="small"
-        >
-          {ACTIVE_STATUSES.map((status) => (
-            <MenuItem key={status} value={status}>
-              {status}
-            </MenuItem>
-          ))}
-          {INACTIVE_STATUSES.map((status) => (
-            <MenuItem key={status} value={status}>
-              {status}
-            </MenuItem>
-          ))}
-        </Select>
-      </Box>
-    ));
-
   if (loading) return <Typography>Loading projects...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -1994,29 +1496,11 @@ const Projects = ({ initialFilters = {} }) => {
     return <Typography>Loading columns...</Typography>;
   }
 
-  const handleBackToDatabases = () => {
-    navigate("/databases");
-  };
-
   return (
     <Box m="5px 0px 20px 20px">
       <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
         Projects
-      </Typography>{" "}
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Breadcrumbs sx={{ mb: 3 }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToDatabases}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Databases Home
-          </Link>
-          <Typography color="text.primary">Projects</Typography>
-        </Breadcrumbs>
-      </Box>
+      </Typography>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>
@@ -2391,9 +1875,7 @@ const Projects = ({ initialFilters = {} }) => {
                   <TextField
                     label="Project ID"
                     value={
-                      form.isLargeProject
-                        ? generateHazProjectId(projects)
-                        : "Will be auto-generated"
+                      form.isLargeProject ? "HAZ001" : "Will be auto-generated"
                     }
                     disabled
                     fullWidth

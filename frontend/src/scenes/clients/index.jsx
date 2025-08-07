@@ -29,8 +29,6 @@ import {
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
-import { Breadcrumbs, Link } from "@mui/material";
-import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
@@ -494,29 +492,11 @@ const Clients = () => {
   if (loading) return <Typography>Loading clients...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
-  const handleBackToDatabases = () => {
-    navigate("/databases");
-  };
-
   return (
     <Box m="5px 0px 20px 20px">
       <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
         Clients
       </Typography>
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Breadcrumbs sx={{ mb: 3 }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToDatabases}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Databases Home
-          </Link>
-          <Typography color="text.primary">Clients</Typography>
-        </Breadcrumbs>
-      </Box>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>

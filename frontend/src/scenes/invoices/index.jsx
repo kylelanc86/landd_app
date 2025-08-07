@@ -3,13 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Dialog,
   DialogTitle,
@@ -21,14 +14,11 @@ import {
   InputLabel,
   FormControl,
   Stack,
-  TableSortLabel,
-  Chip,
   useTheme,
   Autocomplete,
   InputAdornment,
-  Alert,
-  Snackbar,
   CircularProgress,
+  Chip,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
@@ -37,17 +27,13 @@ import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Breadcrumbs, Link } from "@mui/material";
-import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import {
   invoiceService,
   projectService,
   clientService,
   xeroService,
 } from "../../services/api";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
-import { formatDate, formatDateForInput } from "../../utils/dateFormat";
+import { formatDate } from "../../utils/dateFormat";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import { useAuth } from "../../context/AuthContext";
 import SyncIcon from "@mui/icons-material/Sync";
@@ -77,7 +63,6 @@ const emptyForm = {
 
 const Invoices = () => {
   const theme = useTheme();
-  const colors = tokens;
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, loading: authLoading } = useAuth();
@@ -712,51 +697,6 @@ const Invoices = () => {
     setSelectedInvoices(newSelection);
   };
 
-  const handleClearAll = async () => {
-    try {
-      const confirmClear = window.confirm(
-        `Are you sure you want to delete ALL ${invoices.length} invoices? This action cannot be undone and will clear all current data.`
-      );
-
-      if (!confirmClear) {
-        return; // User cancelled
-      }
-
-      // Delete all invoices with better error handling
-      const deleteResults = await Promise.allSettled(
-        invoices.map((invoice) => invoiceService.hardDelete(invoice._id))
-      );
-
-      // Count successful and failed deletions
-      const successful = deleteResults.filter(
-        (result) => result.status === "fulfilled"
-      ).length;
-      const failed = deleteResults.filter(
-        (result) => result.status === "rejected"
-      ).length;
-
-      // Clear local state regardless of individual failures
-      setInvoices([]);
-      setSelectedInvoices([]);
-
-      if (failed === 0) {
-        alert(
-          `Successfully deleted all ${invoices.length} invoices. You can now resync with Xero for clean data.`
-        );
-      } else {
-        alert(
-          `Deleted ${successful} invoices successfully. ${failed} invoices were already deleted or not found. You can now resync with Xero for clean data.`
-        );
-      }
-    } catch (error) {
-      console.error("Error clearing all invoices:", error);
-      alert(
-        "Failed to clear all invoices: " +
-          (error.response?.data?.message || error.message)
-      );
-    }
-  };
-
   const handleSyncDraftsToXero = async () => {
     try {
       console.log("Starting draft sync to Xero...");
@@ -1257,11 +1197,6 @@ const Invoices = () => {
   };
 
   // When opening the dialog, reset manual change flag
-  const handleOpenDialog = () => {
-    setForm(emptyForm);
-    setDueDateManuallyChanged(false);
-    setDialogOpen(true);
-  };
 
   const handleConnectXero = async () => {
     console.log("handleConnectXero called");
@@ -1418,29 +1353,11 @@ const Invoices = () => {
     );
   }
 
-  const handleBackToDatabases = () => {
-    navigate("/databases");
-  };
-
   return (
     <Box m="20px">
       <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
         Invoices
       </Typography>
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Breadcrumbs sx={{ mb: 3 }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToDatabases}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Databases Home
-          </Link>
-          <Typography color="text.primary">Invoices</Typography>
-        </Breadcrumbs>
-      </Box>
       {/* Loading overlay for Xero sync */}
       {syncingXero && (
         <Box
@@ -1661,7 +1578,7 @@ const Invoices = () => {
             sortingMode="server"
             onSortModelChange={(model) => {
               if (model.length > 0) {
-                const { field, sort } = model[0];
+                const { field } = model[0];
                 handleSort(field);
               }
             }}

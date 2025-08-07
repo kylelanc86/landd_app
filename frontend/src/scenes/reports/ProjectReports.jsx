@@ -9,6 +9,7 @@ import {
   Link,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import ReportCategories from "./ReportCategories";
 import ReportsList from "./ReportsList";
 import { useNavigate } from "react-router-dom";
@@ -18,11 +19,11 @@ import {
   shiftService,
   sampleService,
   clientService,
-  invoiceService,
 } from "../../services/api";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import reportService from "../../services/reportService";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import ProjectLogModalWrapper from "./ProjectLogModalWrapper";
 
 const ProjectReports = () => {
   const { projectId } = useParams();
@@ -32,6 +33,7 @@ const ProjectReports = () => {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [logModalOpen, setLogModalOpen] = useState(false);
 
   // Load project details
   useEffect(() => {
@@ -354,12 +356,30 @@ const ProjectReports = () => {
           </Typography>
         </Breadcrumbs>
 
-        <Typography variant="h4" gutterBottom>
-          Reports for {project?.name || "Loading..."}
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          Project ID: {project?.projectID}
-        </Typography>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
+          <Box>
+            <Typography variant="h4" gutterBottom>
+              Reports for {project?.name || "Loading..."}
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              Project ID: {project?.projectID}
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            startIcon={<AssessmentIcon />}
+            onClick={() => setLogModalOpen(true)}
+            sx={{ ml: 2 }}
+          >
+            View Project Log
+          </Button>
+        </Box>
       </Box>
 
       {/* Error Display */}
@@ -390,6 +410,15 @@ const ProjectReports = () => {
             onPrint={handlePrintReport}
           />
         </>
+      )}
+
+      {/* Project Log Modal */}
+      {logModalOpen && (
+        <ProjectLogModalWrapper
+          open={logModalOpen}
+          onClose={() => setLogModalOpen(false)}
+          project={project}
+        />
       )}
     </Box>
   );

@@ -102,7 +102,7 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     }
     return s.collectedBy || '';
   }).filter(Boolean)));
-  const uniqueSampleDates = Array.from(new Set(samples.map(s => s.date ? formatDate(s.date) : '').filter(Boolean)));
+
 
   // Build the document definition
   const docDefinition = {

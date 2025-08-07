@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
   TextField,
   Button,
-  Stack,
   FormControl,
   InputLabel,
   Select,
@@ -36,7 +35,6 @@ import {
   INACTIVE_STATUSES,
   StatusChip,
 } from "../../components/JobStatus";
-import debounce from "lodash/debounce";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 import { testGoogleMapsApi } from "../../utils/testGoogleMapsApi";
 
@@ -71,7 +69,6 @@ const ProjectInformation = () => {
   const [error, setError] = useState(null);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
   const [newClientDialogOpen, setNewClientDialogOpen] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
@@ -439,13 +436,6 @@ const ProjectInformation = () => {
     } finally {
       setCreatingClient(false);
     }
-  };
-
-  const handleStatusChange = (e) => {
-    setForm((prev) => ({
-      ...prev,
-      status: e.target.value,
-    }));
   };
 
   const renderStatusMenuItem = (status) => (

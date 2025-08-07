@@ -13,6 +13,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScienceIcon from "@mui/icons-material/Science";
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import HomeIcon from "@mui/icons-material/Home";
 import StorageIcon from "@mui/icons-material/Storage";
 import MonitorIcon from "@mui/icons-material/Monitor";
@@ -400,9 +401,20 @@ const Sidebar = () => {
 
           {/* Collapsible Sections */}
           <CollapsibleSection
-            title="DATABASES"
-            to="/databases"
+            title="PROJECTS"
+            to="/projects"
             icon={<StorageIcon />}
+          />
+
+          <CollapsibleSection
+            title="CLIENTS"
+            to="/clients"
+            icon={<PeopleOutlinedIcon />}
+          />
+          <CollapsibleSection
+            title="INVOICES"
+            to="/invoices"
+            icon={<AttachMoneyIcon />}
           />
 
           {/* <CollapsibleSection
