@@ -456,7 +456,7 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
             },
             layout: {
               hLineWidth: function(i, node) {
-                return (i === 0 || i === node.table.widths.length) ? 1 : 0;
+                return 1;
               },
               vLineWidth: function(i, node) {
                 return (i === 0 || i === node.table.widths.length) ? 1 : 0.5;
