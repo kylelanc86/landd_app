@@ -1,8 +1,6 @@
 import pdfMake from "pdfmake/build/pdfmake";
-import * as pdfFonts from "pdfmake/build/vfs_fonts";
 
-pdfMake.vfs = pdfFonts.vfs || (pdfFonts.default && pdfFonts.default.vfs);
-
+// Helper functions (formatDate, formatTime, getSampleNumber, loadImageAsBase64, formatReportedConcentration) remain unchanged
 // Helper to format date as DD/MM/YYYY
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -27,16 +25,32 @@ function getSampleNumber(sampleID) {
 // Helper to load image as base64
 async function loadImageAsBase64(imagePath) {
   try {
+    console.log(`Attempting to load image: ${imagePath}`);
     const response = await fetch(imagePath);
+    console.log(`Response status for ${imagePath}:`, response.status);
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch ${imagePath}:`, response.status, response.statusText);
+      return null;
+    }
+    
     const blob = await response.blob();
+    console.log(`Blob size for ${imagePath}:`, blob.size);
+    
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
+      reader.onloadend = () => {
+        console.log(`Successfully loaded ${imagePath} as base64`);
+        resolve(reader.result);
+      };
+      reader.onerror = (error) => {
+        console.error(`FileReader error for ${imagePath}:`, error);
+        reject(error);
+      };
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error('Error loading image:', error);
+    console.error(`Error loading image ${imagePath}:`, error);
     return null;
   }
 }
@@ -64,38 +78,49 @@ const formatReportedConcentration = (sample) => {
     return reportedConc;
   }
   
-  // If it's a number, format it to 2 decimal places
-  const numValue = parseFloat(reportedConc);
-  if (numValue < 0.0149 && sample.analysis.fibresCounted < 10) {
-    return '<0.01';
+  // If it's a number, format it
+  if (typeof reportedConc === 'number') {
+    return reportedConc.toFixed(2);
   }
-  return numValue.toFixed(2);
+  
+  return reportedConc;
 };
 
 export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false }) {
-  // Add debug logging
-  console.log('Shift data in report generation:', shift);
-  console.log('Samples received date:', shift?.samplesReceivedDate);
-  console.log('Project data in report generation:', project);
-  console.log('Client data in report generation:', project?.client);
+  // Debug logging
+  console.log('generateShiftReport called with:', { shift, job, samples, project, openInNewTab, returnPdfData });
+  console.log('job type:', typeof job, 'job value:', job);
+  
+  // Ensure job is an object
+  if (typeof job !== 'object' || job === null) {
+    console.warn('job is not an object, using empty object:', job);
+    job = {};
+  }
+  
+  // Set up fonts globally as per documentation
+  console.log('Setting up Gothic fonts via URL...');
+  pdfMake.fonts = {
+    Gothic: {
+      normal: 'http://localhost:3000/fonts/static/Gothic-Regular.ttf',
+      bold: 'http://localhost:3000/fonts/static/Gothic-Bold.ttf',
+      italics: 'http://localhost:3000/fonts/static/Gothic-Italic.ttf',
+      bolditalics: 'http://localhost:3000/fonts/static/Gothic-BoldItalic.ttf'
+    }
+  };
+  console.log('Font setup complete');
   
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
   const nataLogo = await loadImageAsBase64('/NATA_logo.png');
 
-  if (!companyLogo || !nataLogo) {
-    console.error('Failed to load one or more logos');
-    return;
-  }
-
-  // Sort samples by number (lowest to highest)
+  // Sort samples
   const sortedSamples = [...samples].sort((a, b) => {
     const aNum = getSampleNumber(a.fullSampleID);
     const bNum = getSampleNumber(b.fullSampleID);
     return aNum - bNum;
   });
 
-  // Before docDefinition, extract unique samplers and sample dates from samples
+  // Unique samplers
   const uniqueSamplers = Array.from(new Set(samples.map(s => {
     if (s.collectedBy && typeof s.collectedBy === 'object') {
       return (s.collectedBy.firstName || '') + (s.collectedBy.lastName ? ' ' + s.collectedBy.lastName : '');
@@ -103,214 +128,401 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     return s.collectedBy || '';
   }).filter(Boolean)));
 
-
-  // Build the document definition
+  // Document definition
   const docDefinition = {
     pageSize: "A4",
-    pageMargins: [40, 60, 40, 60],
+    pageMargins: [40, 30, 40, 90],
     defaultStyle: {
-      font: "Roboto",
-      fontSize: 10,
+      font: 'Gothic'
     },
+    images: nataLogo ? { nataLogo: nataLogo } : {},
     styles: {
       header: {
-        fontSize: 18,
+        fontSize: 12,
         bold: true,
-        margin: [0, 0, 0, 10],
+        margin: [0, 0, 0, 4],
       },
       subheader: {
-        fontSize: 14,
-        bold: true,
-        margin: [0, 10, 0, 5],
+        fontSize: 9,
+        bold: false,
+        margin: [0, 1, 0, 1],
+        color: "black",
+        lineHeight: 1.5,
       },
       tableHeader: {
         bold: true,
         fontSize: 9,
         color: "black",
       },
-    },
-    content: [
-      // Header
-      {
-        columns: [
-          { image: companyLogo, width: 150 },
-          {
-            stack: [
-              { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
-              { text: 'Unit 4, 6 Dacre St, Mitchell ACT 2911' },
-              { text: 'Tel: (02) 6241 2779' },
-              { text: 'www.landd.com.au', color: 'blue', link: 'http://www.landd.com.au' },
-            ],
-            alignment: 'right',
-          },
-        ],
-        margin: [0, 0, 0, 20],
-      },
-      { text: 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'title', margin: [0, 0, 0, 10] },
-      // Client and Lab details
-      {
-        columns: [
-          {
-            width: '50%',
-            stack: [
-              { text: 'CLIENT DETAILS', style: 'tableHeader' },
-              { text: [ { text: 'Client Name: ', bold: true }, { text: project?.client?.name || '' } ], margin: [0, 0, 0, 2] },
-              { text: [ { text: 'Client Contact: ', bold: true }, { text: project?.client?.contact1Name || '' } ], margin: [0, 0, 0, 2] },
-              { text: [ { text: 'Email: ', bold: true }, { text: project?.client?.contact1Email || '' } ], margin: [0, 0, 0, 2] },
-            ],
-          },
-          {
-            width: '50%',
-            stack: [
-              { text: 'LABORATORY DETAILS', style: 'tableHeader' },
-              { text: [
-                { text: 'Address: ', bold: true },
-                { text: '4/6 Dacre Street, Mitchell ACT 2911' }
-              ], margin: [0, 0, 0, 2] },
-              { text: [
-                { text: 'Email: ', bold: true },
-                { text: 'laboratory@landd.com.au' }
-              ], margin: [0, 0, 0, 2] },
-              { text: [
-                { text: 'Lab Manager: ', bold: true },
-                { text: 'Jordan Smith' }
-              ], margin: [0, 0, 0, 2] },
-            ],
-          },
-        ],
-        margin: [0, 0, 0, 10],
-      },
-      // Add JOB DETAILS header
-      { text: 'JOB DETAILS', style: 'tableHeader', margin: [0, 10, 0, 2] },
-      {
-        stack: [
-          { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '' } ], margin: [0, 0, 0, 2] },
-          { text: [ { text: 'Site Name: ', bold: true }, { text: project?.name || '' } ], margin: [0, 0, 0, 2] },
-          { text: [ { text: 'Description of works: ', bold: true }, { text: shift?.descriptionOfWorks || '' } ], margin: [0, 0, 0, 2] },
-          { text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || '' } ], margin: [0, 0, 0, 2] },
-        ],
-        margin: [0, 0, 0, 10],
-      },
-      // Replace summary section with two-column layout for sampling and analysis details
-      {
-        columns: [
-          {
-            width: '50%',
-            stack: [
-              { text: 'SAMPLING DETAILS', style: 'tableHeader', margin: [0, 10, 0, 2] },
-              { text: [ { text: 'Sampled by: ', bold: true }, { text: uniqueSamplers.join(', ') } ], margin: [0, 0, 0, 2] },
-              { text: [ { text: 'Sampling Date: ', bold: true }, { text: formatDate(shift?.date) } ], margin: [0, 0, 0, 2] },
-              { text: [ { text: 'Samples Received: ', bold: true }, { text: formatDate(shift?.samplesReceivedDate) } ], margin: [0, 0, 0, 2] },
-            ]
-          },
-          {
-            width: '50%',
-            stack: [
-              { text: 'ANALYSIS DETAILS', style: 'tableHeader', margin: [0, 10, 0, 2] },
-              { text: [ { text: 'Analysis Date: ', bold: true }, { text: formatDate(shift?.analysisDate) } ], margin: [0, 0, 0, 2] },
-              { text: [ { text: 'Analysed by: ', bold: true }, { text: shift?.analysedBy || '' } ], margin: [0, 0, 0, 2] },
-            ]
-          }
-        ],
-        margin: [0, 0, 0, 10],
-      },
-      // Results table
-      {
-        table: {
-          headerRows: 1,
-          widths: ['12%', '6%', '23%', '7%', '7%', '12%', '10%', '10%', '13%'],
-          heights: 24,
-          body: [
-            [
-              { text: 'Sample Ref.', style: 'tableHeader' },
-              { text: 'Type', style: 'tableHeader' },
-              { text: 'Sample Location', style: 'tableHeader' },
-              { text: 'Time on', style: 'tableHeader' },
-              { text: 'Time off', style: 'tableHeader' },
-              { text: 'Ave. flow rate (mL/min)', style: 'tableHeader' },
-              { text: 'Fields Counted', style: 'tableHeader' },
-              { text: 'Fibres Counted', style: 'tableHeader' },
-              { text: 'Reported AFC (fibres/mL)', style: 'tableHeader' },
-            ],
-            ...sortedSamples.map((s) => {
-              const isFieldBlank = s.location === 'Field blank';
-              const isUncountable = s.analysis?.edgesDistribution === 'fail' || s.analysis?.backgroundDust === 'fail';
-              const dash = '-';
-              // Type initial
-              const typeInitial = s.type ? s.type[0].toUpperCase() : dash;
-              // Calculate flow rate (multiply by 1000)
-              const flowRate = s.averageFlowrate ? (s.averageFlowrate * 1000).toFixed(0) : null;
-              return [
-                s.fullSampleID || s.sampleNumber || dash,
-                typeInitial,
-                s.location || dash,
-                isFieldBlank ? dash : formatTime(s.startTime) || dash,
-                isFieldBlank ? dash : formatTime(s.endTime) || dash,
-                isFieldBlank ? dash : (flowRate ?? dash),
-                isUncountable ? 'N/A' : (s.analysis?.fieldsCounted ?? dash),
-                isUncountable ? 'N/A' : (typeof s.analysis?.fibresCounted === 'number' ? s.analysis.fibresCounted : dash),
-                formatReportedConcentration(s),
-              ];
-            }),
-          ],
-        },
-        layout: {
-          hLineWidth: function(i, node) { return 1; },
-          vLineWidth: function(i, node) { return 1; },
-          hLineColor: function(i, node) { return '#aaa'; },
-          vLineColor: function(i, node) { return '#aaa'; },
-          paddingLeft: function(i, node) { return 4; },
-          paddingRight: function(i, node) { return 4; },
-          paddingTop: function(i, node) { return 2; },
-          paddingBottom: function(i, node) { return 2; },
-        },
-        margin: [0, 0, 0, 10],
+      tableContent: {
         fontSize: 8,
       },
-      // Notes and footer
-      { text: 'Notes', style: 'tableHeader', margin: [0, 10, 0, 2] },
-      {
-        ul: [
-          'Monitoring types: B = Background, C = Clearance, E = Exposure.',
-          'Samples taken from the direct flow of negative air units are reported as a fibre count only.',
-          'The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL.',
-          'Safe Work Australias recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL.',
-          'AFC = air fibre concentration',
-          'Field blank samples are used to verify the cleanliness of the sampling equipment and laboratory procedures.',
-        ],
+      notes: {
+        fontSize: 8,
+        margin: [0, 5, 0, 2],
       },
-      { text: ' ', margin: [0, 0, 0, 16] },
+    },
+    content: [
+      // Page 1 Content
       {
         stack: [
-          { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(shift?.reportIssueDate) } ], margin: [0, 2, 0, 0] },
-          { text: [ { text: 'Report approved by: ', bold: true }, { text: shift?.reportApprovedBy || '' } ], margin: [0, 0, 0, 0] },
-        ],
-        margin: [0, 0, 0, 10],
+          // Header
+          {
+            columns: [
+              { image: companyLogo, width: 165 },
+              {
+                stack: [
+                  { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
+                  { text: '4/6 Dacre Street, Mitchell ACT 2911', style: 'subheader' },
+                  { text: 'W: www.landd.com.au', style: 'subheader' },
+                ],
+                alignment: 'right',
+              },
+            ],
+            margin: [0, 0, 0, 4],
+          },
+          
+          // Green border beneath header
+          {
+            canvas: [
+              {
+                type: 'line',
+                x1: 0, y1: 0, x2: 520, y2: 0,
+                lineWidth: 2,
+                lineColor: '#16b12b'
+              }
+            ],
+            margin: [0, 0, 0, 20]
+          },
+          
+          { text: 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
+          
+          // Client and Lab details in single table
+          {
+            table: {
+              headerRows: 1,
+              widths: ['50%', '50%'],
+              body: [
+                [
+                  { text: 'CLIENT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' },
+                  { text: 'LABORATORY DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' }
+                ],
+                [
+                  {
+                    stack: [
+                      { text: [ { text: 'Client Name: ', bold: true }, { text: job?.projectId?.client?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Client Contact: ', bold: true }, { text: job?.projectId?.client?.contact1Name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || job?.projectId?.client?.invoiceEmail || job?.projectId?.client?.contact2Email || 'N/A' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Site Name: ', bold: true }, { text: job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                    ]
+                  },
+                  {
+                    stack: [
+                      { text: [ { text: 'Address: ', bold: true }, { text: '4/6 Dacre Street, Mitchell ACT 2911' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: 'laboratory@landd.com.au' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Lab Manager: ', bold: true }, { text: 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                    ]
+                  }
+                ]
+              ]
+            },
+            layout: {
+              hLineWidth: function(i, node) {
+                return (i === 0 || i === node.table.body.length) ? 1 : 0.5;
+              },
+              vLineWidth: function(i, node) {
+                return (i === 0 || i === node.table.widths.length) ? 1 : 0.5;
+              },
+              hLineColor: function(i, node) {
+                return 'gray';
+              },
+              vLineColor: function(i, node) {
+                return 'gray';
+              },
+              paddingLeft: function(i, node) { return 4; },
+              paddingRight: function(i, node) { return 4; },
+              paddingTop: function(i, node) { return 2; },
+              paddingBottom: function(i, node) { return 2; },
+            },
+            margin: [0, 0, 0, 10],
+          },
+          
+          // Report Details in table
+          {
+            table: {
+              headerRows: 1,
+              widths: ['100%'],
+              body: [
+                [
+                  { text: 'REPORT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' }
+                ],
+                [
+                  {
+                    columns: [
+                      {
+                        text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectID } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      },
+                      {
+                        text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: formatDate(new Date()) } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    text: [ { text: 'Description of Works: ', bold: true }, { text: job?.projectId?.descriptionOfWorks || '' } ],
+                    style: 'tableContent',
+                    margin: [0, 0, 0, 2]
+                  }
+                ],
+                [
+                  {
+                    columns: [
+                      {
+                        text: [ { text: 'Sampled by: ', bold: true }, { text: job?.sampler } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      },
+                      {
+                        text: [ { text: 'Sample Date: ', bold: true }, { text: uniqueSamplers.join(', ') || 'Client Supplied' } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    columns: [
+                      {
+                        text: [ { text: 'Analysis Date: ', bold: true }, { text: job?.analysisDate } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      },
+                      {
+                        text: [ { text: 'Samples Received: ', bold: true }, { text: uniqueSamplers.join(', ') || 'Client Supplied' } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    columns: [
+                      {
+                        text: [ { text: 'Analysed by: ', bold: true }, { text: job?.analyst || 'Jordan Smith' } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      },
+                      {
+                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: shift?.date ? formatDate(shift.date) : formatDate(new Date()) } ],
+                        style: 'tableContent',
+                        margin: [0, 0, 0, 2],
+                        width: '50%'
+                      }
+                    ]
+                  }
+                ]
+              ]
+            },
+            layout: {
+              hLineWidth: function(i, node) {
+                return (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0;
+              },
+              vLineWidth: function(i, node) {
+                return (i === 0 || i === node.table.widths.length) ? 1 : 0.5;
+              },
+              hLineColor: function(i, node) {
+                return 'gray';
+              },
+              vLineColor: function(i, node) {
+                return 'gray';
+              },
+              paddingLeft: function(i, node) { return 4; },
+              paddingRight: function(i, node) { return 4; },
+              paddingTop: function(i, node) { return 2; },
+              paddingBottom: function(i, node) { return 2; },
+            },
+            margin: [0, 0, 0, 10],
+          },
+          
+          // Test Specifications and Notes in bordered table
+          {
+            table: {
+              headerRows: 0,
+              widths: ['100%'],
+              body: [
+                [
+                  {
+                    stack: [
+                      {
+                        text: 'Test Specifications',
+                        style: 'header',
+                        margin: [0, 0, 0, 3],
+                        fontSize: 9
+                      },
+                      {
+                        text: 'NOHSC: Guidance Note on the Membrane Filter Method for Estimating Airborne Asbestos Fibres [NOHSC: 3003 (2005)] and methods identified in Section B of the L & D Laboratory Manual',
+                        margin: [0, 0, 0, 5],
+                        fontSize: 8,
+                      },
+                      {
+                        text: 'Notes',
+                        style: 'header',
+                        margin: [0, 10, 0, 3],
+                        fontSize: 9,
+                      },
+                      {
+                        stack: [
+                          { text: '1. Samples taken from the direct flow of negative air units are reported as a fibre count only', style: 'notes' },
+                          { text: '2. The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL', style: 'notes' },
+                          { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
+                          { text: '4. AFC = air fibre concentration (fibres/ml)', style: 'notes' },
+                          { text: '5. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
+                          { text: '6. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                        ],
+                        margin: [0, 0, 0, 3],
+                      }
+                    ]
+                  }
+                ]
+              ]
+            },
+            layout: {
+              hLineWidth: function(i, node) {
+                return 1;
+              },
+              vLineWidth: function(i, node) {
+                return 1;
+              },
+              hLineColor: function(i, node) {
+                return 'gray';
+              },
+              vLineColor: function(i, node) {
+                return 'gray';
+              },
+              paddingLeft: function(i, node) { return 8; },
+              paddingRight: function(i, node) { return 8; },
+              paddingTop: function(i, node) { return 8; },
+              paddingBottom: function(i, node) { return 8; },
+            },
+            margin: [0, 0, 0, 10],
+          },
+          
+          // Sample Results Table
+
+          {
+            table: {
+              headerRows: 1,
+              widths: ['12%', '33%', '7%', '7%', '10%', '10%', '10%', '11%'],
+              body: [
+                                  [
+                    { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Time On', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Time Off', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Ave flow (mL/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Fibres Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'AFC (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
+                  ],
+                                  ...sortedSamples.map(sample => [
+                    { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
+                    { text: sample.location || 'N/A', style: 'tableContent' },
+                    { text: sample.startTime ? formatTime(sample.startTime) : 'N/A', style: 'tableContent' },
+                    { text: sample.endTime ? formatTime(sample.endTime) : 'N/A', style: 'tableContent' },
+                    { text: sample.flowRate || sample.averageFlow || 'N/A', style: 'tableContent' },
+                    { text: sample.fieldsCounted || sample.analysis?.fieldsCounted || 'N/A', style: 'tableContent' },
+                    { text: sample.fibresCounted || sample.analysis?.fibresCounted || 'N/A', style: 'tableContent' },
+                  { 
+                    text: formatReportedConcentration(sample),
+                    style: 'tableContent',
+                    ...(typeof formatReportedConcentration(sample) === 'object' && formatReportedConcentration(sample).color ? { color: formatReportedConcentration(sample).color } : {})
+                  }
+                ])
+              ]
+            },
+            layout: {
+              hLineWidth: function(i, node) {
+                return (i === 0 || i === node.table.widths.length) ? 1 : 0;
+              },
+              vLineWidth: function(i, node) {
+                return (i === 0 || i === node.table.widths.length) ? 1 : 0.5;
+              },
+              hLineColor: function(i, node) {
+                return 'gray';
+              },
+              vLineColor: function(i, node) {
+                return 'gray';
+              },
+              paddingLeft: function(i, node) { return 4; },
+              paddingRight: function(i, node) { return 4; },
+              paddingTop: function(i, node) { return 4; },
+              paddingBottom: function(i, node) { return 4; },
+            },
+            margin: [0, 0, 0, 20]
+          },
+        ]
       },
     ],
-    footer: function(currentPage, pageCount) {
-      return {
-        columns: [
-          { width: '*', text: '' },
-          {
-            stack: [
-              { image: nataLogo, width: 50, alignment: 'center', margin: [0, 0, 0, 2] },
-              { text: 'Accredited for compliance with ISO/IEC 17025 – Testing', italics: true, fontSize: 7, alignment: 'center', margin: [0, 2, 0, 0] },
-              { text: 'Accreditation no: 19512', italics: true, fontSize: 7, alignment: 'center' }
-            ],
-            alignment: 'center',
-          },
-          { width: '*', text: '' }
-        ],
-        margin: [0, 0, 0, 0]
+    footer: (function(nataLogo, job, sortedSamples, companyLogo) {
+      return function(currentPage, pageCount) {
+        console.log('Footer function called - NATA logo available:', !!nataLogo);
+        const footerBlocks = [];
+        footerBlocks.push({
+            canvas: [
+            { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#16b12b' }
+          ],
+          margin: [0, 0, 0, 8]
+        });
+        footerBlocks.push({
+            columns: [
+              {
+                stack: [
+                  { text: `Report Reference: ${job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || ''}`, fontSize: 8 },
+                  { text: 'Revision: 0', fontSize: 8 }
+                ],
+                alignment: 'left',
+              width: '30%',
+              },
+              {
+              stack: nataLogo ? [ { image: nataLogo, fit: [180, 54], alignment: 'center' } ] : [],
+                alignment: 'center',
+              width: '40%'
+              },
+              {
+                stack: [
+                  { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', fontSize: 8 }
+                ],
+                alignment: 'right',
+              width: '30%',
+            }
+          ]
+        });
+
+        return {
+          stack: footerBlocks,
+        margin: [40, 10, 40, 0]
       };
-    }
+      };
+    })(nataLogo, job || {}, sortedSamples, companyLogo)
   };
 
-  // Build filename: ProjectID: Air Monitoring Report - ProjectName (Date).pdf
+  // Build filename (unchanged)
   const projectID = job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
   const projectNameRaw = project?.name || '';
-  // Sanitize project name for filename (remove/replace unsafe characters)
   const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
   const samplingDate = shift?.date ? formatDate(shift.date) : '';
   const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;

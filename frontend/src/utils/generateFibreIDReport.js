@@ -1,7 +1,4 @@
 import pdfMake from "pdfmake/build/pdfmake";
-import * as pdfFonts from "pdfmake/build/vfs_fonts";
-
-pdfMake.vfs = pdfFonts.vfs || (pdfFonts.default && pdfFonts.default.vfs);
 
 // Helper to format date as DD/MM/YYYY
 function formatDate(dateStr) {
@@ -13,30 +10,64 @@ function formatDate(dateStr) {
 // Helper to load image as base64
 async function loadImageAsBase64(imagePath) {
   try {
+    console.log(`Attempting to load image: ${imagePath}`);
     const response = await fetch(imagePath);
+    console.log(`Response status for ${imagePath}:`, response.status);
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch ${imagePath}:`, response.status, response.statusText);
+      return null;
+    }
+    
     const blob = await response.blob();
+    console.log(`Blob size for ${imagePath}:`, blob.size);
+    
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
+      reader.onloadend = () => {
+        console.log(`Successfully loaded ${imagePath} as base64`);
+        resolve(reader.result);
+      };
+      reader.onerror = (error) => {
+        console.error(`FileReader error for ${imagePath}:`, error);
+        reject(error);
+      };
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error('Error loading image:', error);
+    console.error(`Error loading image ${imagePath}:`, error);
     return null;
   }
 }
 
 export async function generateFibreIDReport({ job, sampleItems, openInNewTab, returnPdfData = false }) {
+  // Set up fonts using URL approach
+  console.log('Fibre ID - Setting up Montserrat fonts via URL...');
+  pdfMake.fonts = {
+    Montserrat: {
+      normal: 'http://localhost:3000/static/Montserrat-Regular.ttf',
+      bold: 'http://localhost:3000/static/Montserrat-Bold.ttf',
+      italics: 'http://localhost:3000/static/Montserrat-Italic.ttf',
+      bolditalics: 'http://localhost:3000/static/Montserrat-BoldItalic.ttf'
+    }
+  };
+  console.log('Fibre ID - Font setup complete');
 
-  
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
   const nataLogo = await loadImageAsBase64('/NATA_logo.png');
 
-  if (!companyLogo || !nataLogo) {
-    console.error('Failed to load one or more logos');
+  console.log('Logo loading results:');
+  console.log('Company logo loaded:', !!companyLogo);
+  console.log('NATA logo loaded:', !!nataLogo);
+
+  if (!companyLogo) {
+    console.error('Failed to load company logo');
     return;
+  }
+
+  if (!nataLogo) {
+    console.warn('Failed to load NATA logo, proceeding without it');
   }
 
   // Sort sample items by lab reference
@@ -47,32 +78,32 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
   // Build the document definition
   const docDefinition = {
     pageSize: "A4",
-    pageMargins: [40, 30, 40, 60],
+    pageMargins: [40, 30, 40, 90],
     defaultStyle: {
-      font: "Roboto",
-      fontSize: 10,
+      font: 'Montserrat'
     },
+    images: nataLogo ? { nataLogo: nataLogo } : {},
     styles: {
       header: {
         fontSize: 12,
         bold: true,
         margin: [0, 0, 0, 4],
       },
-        subheader: {
-          fontSize: 9,
-          bold: false,
-          margin: [0, 1, 0, 1],
-          color: "black",
-          lineHeight: 1.5,
-        },
-        tableHeader: {
-          bold: true,
-          fontSize: 9,
-          color: "black",
-        },
-        tableContent: {
-          fontSize: 8,
-        },
+      subheader: {
+        fontSize: 9,
+        bold: false,
+        margin: [0, 1, 0, 1],
+        color: "black",
+        lineHeight: 1.5,
+      },
+      tableHeader: {
+        bold: true,
+        fontSize: 9,
+        color: "black",
+      },
+      tableContent: {
+        fontSize: 8,
+      },
       notes: {
         fontSize: 8,
         margin: [0, 5, 0, 2],
@@ -358,45 +389,46 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
       }
     ],
     
-    footer: function(currentPage, pageCount) {
-      return {
-        stack: [
-          // Green border above footer
-          {
-            canvas: [
-              {
-                type: 'line',
-                x1: 0, y1: 0, x2: 515, y2: 0,
-                lineWidth: 2,
-                lineColor: '#16b12b'
-              }
-            ],
-            margin: [0, 0, 0, 10]
-          },
-          {
-            columns: [
-              {
-                stack: [
-                  { text: `Report Reference: ${job?.projectId?.projectID}`, fontSize: 8 },
-                  { text: 'Revision: 0', fontSize: 8 }
-                ],
-                alignment: 'left',
-              },
-              {
-                stack: [
-                  { image: nataLogo, width: 50, alignment: 'center', margin: [0, 0, 0, 2] },
-                  { text: 'Accredited for compliance with ISO/IEC 17025 – Testing', italics: true, fontSize: 7, alignment: 'center', margin: [0, 2, 0, 0] },
-                  { text: 'Accreditation no: 19512', italics: true, fontSize: 7, alignment: 'center' }
-                ],
-                alignment: 'center',
-              },
-              { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', fontSize: 8 }
-            ],
-          }
-        ],
-        margin: [40, 10, 40, 0]
+    footer: (function(nataLogo) {
+      return function(currentPage, pageCount) {
+        return {
+          stack: [
+            // Green border above footer
+            {
+              canvas: [
+                { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#16b12b' }
+              ],
+              margin: [0, 0, 0, 8]
+            },
+            {
+              columns: [
+                {
+                  stack: [
+                    { text: `Report Reference: ${job?.projectId?.projectID}`, fontSize: 8 },
+                    { text: 'Revision: 0', fontSize: 8 }
+                  ],
+                  alignment: 'left',
+                  width: '30%'
+                },
+                {
+                  stack: nataLogo ? [ { image: 'nataLogo', fit: [180, 54], alignment: 'center' } ] : [],
+                  alignment: 'center',
+                  width: '40%'
+                },
+                {
+                  stack: [
+                    { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', fontSize: 8 }
+                  ],
+                  alignment: 'right',
+                  width: '30%'
+                }
+              ]
+            }
+          ],
+          margin: [40, 10, 40, 0]
+        };
       };
-    }
+    })(nataLogo)
   };
 
   // Build filename: ProjectID: Fibre ID Report - ProjectName (SampleDate).pdf
