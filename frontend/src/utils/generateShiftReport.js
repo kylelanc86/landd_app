@@ -97,9 +97,10 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     job = {};
   }
   
-const baseUrl = process.env.NODE_ENV === 'production' 
-  ? 'https://app.landd.com.au' 
-  : 'http://localhost:3000';
+// Determine base URL for fonts - use window.location for reliable detection
+const baseUrl = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3000' 
+  : 'https://app.landd.com.au';
 
 pdfMake.fonts = {
   Gothic: {
