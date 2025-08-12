@@ -41,17 +41,20 @@ async function loadImageAsBase64(imagePath) {
 }
 
 export async function generateFibreIDReport({ job, sampleItems, openInNewTab, returnPdfData = false }) {
-  // Set up fonts using URL approach
-  console.log('Fibre ID - Setting up Montserrat fonts via URL...');
-  pdfMake.fonts = {
-    Montserrat: {
-      normal: 'http://localhost:3000/static/Montserrat-Regular.ttf',
-      bold: 'http://localhost:3000/static/Montserrat-Bold.ttf',
-      italics: 'http://localhost:3000/static/Montserrat-Italic.ttf',
-      bolditalics: 'http://localhost:3000/static/Montserrat-BoldItalic.ttf'
-    }
-  };
-  console.log('Fibre ID - Font setup complete');
+
+  const baseUrl = process.env.NODE_ENV === 'production' 
+  ? 'https://app.landd.com.au' 
+  : 'http://localhost:3000';
+
+pdfMake.fonts = {
+  Gothic: {
+    normal: `${baseUrl}/fonts/static/Gothic-Regular.ttf`,
+    bold: `${baseUrl}/fonts/static/Gothic-Bold.ttf`,
+    italics: `${baseUrl}/fonts/static/Gothic-Italic.ttf`,
+    bolditalics: `${baseUrl}/fonts/static/Gothic-BoldItalic.ttf`
+  }
+};
+  
 
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
@@ -80,7 +83,7 @@ export async function generateFibreIDReport({ job, sampleItems, openInNewTab, re
     pageSize: "A4",
     pageMargins: [40, 30, 40, 90],
     defaultStyle: {
-      font: 'Montserrat'
+      font: 'Gothic'
     },
     images: nataLogo ? { nataLogo: nataLogo } : {},
     styles: {
