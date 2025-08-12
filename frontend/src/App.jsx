@@ -16,6 +16,7 @@ import Invoices from "./scenes/invoices";
 import Calendar from "./scenes/calendar";
 import Login from "./scenes/login";
 import ResetPassword from "./scenes/login/ResetPassword";
+import SetupPassword from "./scenes/auth/SetupPassword";
 import AirMonitoring from "./scenes/air-monitoring";
 import Shifts from "./scenes/air-monitoring/shifts";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
@@ -152,6 +153,7 @@ function App() {
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/setup-password" element={<SetupPassword />} />
 
               {/* Protected routes */}
               <Route

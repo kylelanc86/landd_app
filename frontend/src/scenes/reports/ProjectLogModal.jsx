@@ -29,11 +29,7 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { format } from "date-fns";
-import {
-  timesheetService,
-  jobService,
-  clientSuppliedJobsService,
-} from "../../services/api";
+import { timesheetService } from "../../services/api";
 import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import reportService from "../../services/reportService";
 
@@ -49,7 +45,6 @@ const calculateHours = (startTime, endTime) => {
 
 const ProjectLogModal = ({ open, onClose, project }) => {
   const [timesheets, setTimesheets] = useState([]);
-  const [jobs, setJobs] = useState([]);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState(null);
@@ -79,52 +74,77 @@ const ProjectLogModal = ({ open, onClose, project }) => {
         console.log("Timesheet response in modal:", timesheetResponse);
 
         // Handle different response structures
-        if (timesheetResponse?.data?.data) {
-          // Response has nested data property
-          timesheetData = timesheetResponse.data.data;
-        } else if (Array.isArray(timesheetResponse?.data)) {
-          // Response data is directly an array
+        console.log("Timesheet response structure:", {
+          hasData: !!timesheetResponse?.data,
+          dataType: typeof timesheetResponse?.data,
+          isArray: Array.isArray(timesheetResponse?.data),
+          keys: timesheetResponse?.data
+            ? Object.keys(timesheetResponse.data)
+            : [],
+          dataValue: timesheetResponse?.data,
+        });
+
+        if (Array.isArray(timesheetResponse?.data)) {
+          // Response data is directly an array (this is what we're getting)
           timesheetData = timesheetResponse.data;
-        } else if (typeof timesheetResponse?.data === "object") {
-          // Response data might be in a different property
-          const possibleArrays = Object.values(timesheetResponse.data).filter(
-            Array.isArray
-          );
-          if (possibleArrays.length > 0) {
-            timesheetData = possibleArrays[0];
+          console.log("Using direct array data:", timesheetData);
+        } else if (
+          timesheetResponse?.data?.entries &&
+          Array.isArray(timesheetResponse.data.entries)
+        ) {
+          // Response has entries property (backend format) - but only if it's actually an array
+          timesheetData = timesheetResponse.data.entries;
+          console.log("Using entries property:", timesheetData);
+        } else if (
+          timesheetResponse?.data?.data &&
+          Array.isArray(timesheetResponse.data.data)
+        ) {
+          // Response has nested data property - but only if it's actually an array
+          timesheetData = timesheetResponse.data.data;
+          console.log("Using nested data property:", timesheetData);
+        } else {
+          // Fallback: try to find any array in the response
+          console.log("No standard structure found, searching for arrays...");
+          if (
+            timesheetResponse?.data &&
+            typeof timesheetResponse.data === "object"
+          ) {
+            const possibleArrays = Object.values(timesheetResponse.data).filter(
+              Array.isArray
+            );
+            if (possibleArrays.length > 0) {
+              timesheetData = possibleArrays[0];
+              console.log("Found array in response:", timesheetData);
+            }
           }
+        }
+
+        // Safety check: ensure timesheetData is an array
+        if (typeof timesheetData === "function") {
+          console.error(
+            "CRITICAL ERROR: timesheetData is a function, not an array!"
+          );
+          console.error("Function:", timesheetData);
+          timesheetData = [];
+        }
+
+        if (!Array.isArray(timesheetData)) {
+          console.error("CRITICAL ERROR: timesheetData is not an array!");
+          console.error("Type:", typeof timesheetData);
+          console.error("Value:", timesheetData);
+          timesheetData = [];
         }
 
         console.log("Processed timesheet data:", {
           originalResponse: timesheetResponse?.data,
           processedData: timesheetData,
           length: timesheetData.length,
+          isArray: Array.isArray(timesheetData),
+          type: typeof timesheetData,
         });
       } catch (error) {
         console.error("Error fetching timesheets:", error);
       }
-
-      // Load jobs - get all types of jobs for this project
-      console.log("Loading jobs for project:", project._id);
-      const [airMonitoringJobs, clientSuppliedJobs] = await Promise.all([
-        jobService.getAll(),
-        clientSuppliedJobsService.getByProject(project._id),
-      ]);
-      console.log("Air monitoring jobs response:", airMonitoringJobs);
-      console.log("Client supplied jobs response:", clientSuppliedJobs);
-
-      // Filter air monitoring jobs for this project
-      const airMonitoringProjectJobs =
-        airMonitoringJobs.data?.filter(
-          (job) =>
-            job.projectId === project._id || job.projectId?._id === project._id
-        ) || [];
-
-      // Combine all job types
-      const projectJobs = [
-        ...airMonitoringProjectJobs,
-        ...(clientSuppliedJobs.data || []),
-      ];
 
       // Load reports for this project
       const allReports = [];
@@ -222,10 +242,22 @@ const ProjectLogModal = ({ open, onClose, project }) => {
         console.error("Error loading invoices:", error);
       }
 
-      // Set the processed timesheet data
-      console.log("Setting final timesheet data:", timesheetData);
+      // Final safety check before setting state
+      if (typeof timesheetData === "function") {
+        console.error(
+          "FINAL CHECK: timesheetData is still a function! Resetting to empty array."
+        );
+        timesheetData = [];
+      }
+
+      if (!Array.isArray(timesheetData)) {
+        console.error(
+          "FINAL CHECK: timesheetData is still not an array! Resetting to empty array."
+        );
+        timesheetData = [];
+      }
+
       setTimesheets(timesheetData);
-      setJobs(projectJobs || []);
       setReports(allReports || []);
     } catch (error) {
       console.error("Error loading project log data:", error);
@@ -253,16 +285,6 @@ const ProjectLogModal = ({ open, onClose, project }) => {
       Category: "Timesheet",
     }));
 
-    // Prepare jobs data
-    const jobRows = jobs.map((job) => ({
-      Date: format(new Date(job.createdAt), "dd/MM/yyyy"),
-      "Job ID": job.jobID,
-      Name: job.name,
-      Status: job.status,
-      Type: "Job",
-      Category: "Job",
-    }));
-
     // Prepare reports data
     const reportRows = reports.map((report) => ({
       Date: format(new Date(report.date || report.createdAt), "dd/MM/yyyy"),
@@ -275,7 +297,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
     }));
 
     // Combine all rows
-    const allRows = [...timesheetRows, ...jobRows, ...reportRows];
+    const allRows = [...timesheetRows, ...reportRows];
 
     // Get all unique headers
     const headers = Array.from(
@@ -357,9 +379,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
             variant="contained"
             startIcon={<DownloadIcon />}
             onClick={handleExportCSV}
-            disabled={
-              loading || (!timesheets.length && !jobs.length && !reports.length)
-            }
+            disabled={loading || (!timesheets.length && !reports.length)}
           >
             Export to CSV
           </Button>
@@ -373,7 +393,6 @@ const ProjectLogModal = ({ open, onClose, project }) => {
           <>
             <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 2 }}>
               <Tab label={`Timesheets (${timesheets.length})`} />
-              <Tab label={`Jobs (${jobs.length})`} />
               <Tab label={`Reports (${reports.length})`} />
             </Tabs>
 
@@ -382,6 +401,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
                 <Typography variant="h6" gutterBottom>
                   Timesheet Entries
                 </Typography>
+                {console.log("Rendering timesheets tab with data:", timesheets)}
                 <TableContainer component={Paper} sx={{ mb: 4 }}>
                   <Table>
                     <TableHead>
@@ -432,45 +452,6 @@ const ProjectLogModal = ({ open, onClose, project }) => {
             )}
 
             {activeTab === 1 && (
-              <>
-                <Typography variant="h6" gutterBottom>
-                  Jobs
-                </Typography>
-                <TableContainer component={Paper}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Job ID</TableCell>
-                        <TableCell>Name</TableCell>
-                        <TableCell>Created Date</TableCell>
-                        <TableCell>Status</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {jobs.map((job) => (
-                        <TableRow key={job._id}>
-                          <TableCell>{job.jobID}</TableCell>
-                          <TableCell>{job.name}</TableCell>
-                          <TableCell>
-                            {format(new Date(job.createdAt), "dd/MM/yyyy")}
-                          </TableCell>
-                          <TableCell>{job.status}</TableCell>
-                        </TableRow>
-                      ))}
-                      {!jobs.length && (
-                        <TableRow>
-                          <TableCell colSpan={4} align="center">
-                            No jobs found
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </>
-            )}
-
-            {activeTab === 2 && (
               <>
                 <Typography variant="h6" gutterBottom>
                   Reports

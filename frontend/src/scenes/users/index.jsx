@@ -43,7 +43,7 @@ const Users = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await userService.getAll();
+        const response = await userService.getAll(showInactive);
         console.log("Users data from API:", response.data);
         // Transform the data to ensure role is properly set
         const transformedUsers = response.data.map((user) => ({
@@ -56,7 +56,7 @@ const Users = () => {
       }
     };
     fetchUsers();
-  }, []);
+  }, [showInactive]);
 
   const handleEditUser = (user) => {
     navigate(`/users/edit/${user._id}`);
@@ -181,7 +181,10 @@ const Users = () => {
         <Chip
           label={params.value ? "Active" : "Inactive"}
           color={params.value ? "success" : "error"}
-          sx={{ color: "white" }}
+          sx={{
+            backgroundColor: params.value ? "green" : "red",
+            color: "white",
+          }}
         />
       ),
     },
@@ -219,8 +222,8 @@ const Users = () => {
     },
   ];
 
-  // Filter users based on active/inactive status
-  const filteredUsers = users.filter((user) => showInactive || user.isActive);
+  // Users are filtered by the backend API based on showInactive state
+  const filteredUsers = users;
 
   return (
     <Box m="20px">

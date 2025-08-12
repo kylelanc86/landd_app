@@ -144,6 +144,18 @@ const userSchema = new mongoose.Schema({
     type: Date,
     required: false,
   },
+  setupPasswordToken: {
+    type: String,
+    required: false,
+  },
+  setupPasswordExpires: {
+    type: Date,
+    required: false,
+  },
+  passwordSet: {
+    type: Boolean,
+    default: false,
+  },
   userPreferences: {
     columnVisibility: {
       projects: {

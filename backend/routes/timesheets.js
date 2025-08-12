@@ -717,6 +717,58 @@ router.get("/review/:startDate/:endDate", auth, async (req, res) => {
   }
 });
 
+// Get timesheets by project ID
+router.get("/by-project/:projectId", auth, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { startDate, endDate } = req.query;
+    
+    console.log('Fetching timesheets by project:', {
+      projectId,
+      startDate,
+      endDate,
+      user: req.user._id
+    });
+
+    // Build query
+    const query = { projectId: new mongoose.Types.ObjectId(projectId) };
+    
+    // Add date range filter if provided
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      start.setUTCHours(0, 0, 0, 0);
+      end.setUTCHours(23, 59, 59, 999);
+      
+      query.date = {
+        $gte: start,
+        $lte: end
+      };
+    }
+
+    console.log('Timesheet query:', JSON.stringify(query, null, 2));
+
+    // Find timesheets for this project
+    const timesheets = await Timesheet.find(query)
+      .populate('userId', 'firstName lastName')
+      .populate('projectId', 'name projectID')
+      .sort({ date: -1, startTime: -1 });
+
+    console.log(`Found ${timesheets.length} timesheets for project ${projectId}`);
+
+    res.json({
+      count: timesheets.length,
+      entries: timesheets
+    });
+  } catch (error) {
+    console.error("Error fetching timesheets by project:", error);
+    res.status(500).json({ 
+      message: "Error fetching timesheets by project",
+      details: error.message 
+    });
+  }
+});
+
 // Authorize a timesheet for a specific user and date
 router.put("/:userId/:date/approve", auth, async (req, res) => {
   try {

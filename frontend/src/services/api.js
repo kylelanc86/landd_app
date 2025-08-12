@@ -85,7 +85,8 @@ export const authService = {
     return api.patch('/auth/update-profile', userData);
   },
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
-  resetPassword: (token, password, email) => api.post('/auth/reset-password', { token, password, email })
+  resetPassword: (token, password, email) => api.post('/auth/reset-password', { token, password, email }),
+  setupPassword: (token, password, email) => api.post('/auth/setup-password', { token, password, email })
 };
 
 // Client service
@@ -236,11 +237,18 @@ export const invoiceService = {
 
 // User service
 export const userService = {
-  getAll: () => api.get('/users?isActive=true'),
+  getAll: (showInactive = false) => {
+    if (showInactive) {
+      return api.get('/users'); // Fetch all users (both active and inactive)
+    } else {
+      return api.get('/users?isActive=true'); // Fetch only active users
+    }
+  },
   getById: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
-  delete: (id) => api.delete(`/users/${id}`)
+  delete: (id) => api.delete(`/users/${id}`),
+  sendPasswordResetEmail: (email) => api.post('/auth/admin-reset-password', { email })
 };
 
 // User preferences service
@@ -368,7 +376,7 @@ export const clientSuppliedJobsService = {
   create: (data) => api.post('/client-supplied-jobs', data),
   update: (id, data) => api.put(`/client-supplied-jobs/${id}`, data),
   delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
-  getByProject: (projectId) => api.get(`/client-supplied-jobs/project/${projectId}`)
+  getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`)
 };
 
 export default api; 

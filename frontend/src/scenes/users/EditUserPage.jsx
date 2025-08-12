@@ -67,6 +67,7 @@ const EditUserPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
 
   // Fetch user data on mount
   useEffect(() => {
@@ -226,6 +227,22 @@ const EditUserPage = () => {
     navigate("/users");
   };
 
+  const handleSendPasswordReset = async () => {
+    try {
+      setSendingReset(true);
+      await userService.sendPasswordResetEmail(form.email);
+      alert("Password reset email sent successfully!");
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+      alert(
+        "Failed to send password reset email: " +
+          (error.response?.data?.message || error.message)
+      );
+    } finally {
+      setSendingReset(false);
+    }
+  };
+
   // Check permissions
   if (!hasPermission(currentUser, "users.edit")) {
     return (
@@ -284,6 +301,19 @@ const EditUserPage = () => {
             Back to Users
           </Link>
         </Breadcrumbs>
+
+        {/* Password Reset Button */}
+        <Box sx={{ mb: 2 }}>
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={handleSendPasswordReset}
+            disabled={sendingReset}
+            sx={{ mb: 2 }}
+          >
+            {sendingReset ? "Sending..." : "Send Password Reset Email"}
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ p: 3, maxWidth: "100%" }}>

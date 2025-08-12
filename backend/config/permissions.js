@@ -10,7 +10,9 @@ const PERMISSIONS = {
   // User permissions
   'users.view': 'View users',
   'users.create': 'Create new users',
+  'users.edit': 'Edit users',
   'users.delete': 'Delete users',
+  'users.manage': 'Manage user accounts (password resets, etc.)',
   
   // Job permissions
   'jobs.view': 'View jobs',
@@ -51,6 +53,10 @@ const ROLE_PERMISSIONS = {
     'projects.edit',
     'projects.change_status',
     'users.view',
+    'users.create',
+    'users.edit',
+    'users.delete',
+    'users.manage',
     'jobs.view',
     'jobs.create',
     'jobs.edit',

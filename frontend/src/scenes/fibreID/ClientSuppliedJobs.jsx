@@ -93,11 +93,15 @@ const ClientSuppliedJobs = () => {
 
   const filteredJobs = (Array.isArray(jobs) ? jobs : []).filter(
     (job) =>
-      job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.projectId?.client?.name
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      job.projectId?.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
+      // Exclude completed jobs from the table
+      job.status !== "Completed" &&
+      (job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.projectId?.client?.name
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        job.projectId?.projectID
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()))
   );
 
   const handleViewJob = (jobId) => {

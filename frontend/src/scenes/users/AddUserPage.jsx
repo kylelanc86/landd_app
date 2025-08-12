@@ -152,7 +152,6 @@ const AddUserPage = () => {
       setSaving(true);
       const userData = {
         ...form,
-        password: "defaultPassword123", // You might want to implement a proper password setup
         phone: form.phone.trim() || "", // Ensure phone is included and trimmed
         licences: form.licences.filter(
           (licence) =>
@@ -165,7 +164,10 @@ const AddUserPage = () => {
       console.log("Creating user with data:", userData);
       await userService.create(userData);
 
-      // Navigate back to users list
+      // Show success message and navigate back to users list
+      alert(
+        "User created successfully! A welcome email with password setup instructions has been sent to the user's email address."
+      );
       navigate("/users");
     } catch (error) {
       console.error("Error creating user:", error);

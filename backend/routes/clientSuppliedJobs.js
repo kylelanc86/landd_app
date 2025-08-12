@@ -23,6 +23,40 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/client-supplied-jobs/by-project/:projectId - get jobs by project
+router.get('/by-project/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    console.log('Fetching client supplied jobs by project:', projectId);
+    
+    const jobs = await ClientSuppliedJob.find({ projectId })
+      .populate({
+        path: 'projectId',
+        select: 'name projectID d_Date createdAt',
+        populate: {
+          path: 'client',
+          select: 'name contact1Name contact1Email'
+        }
+      })
+      .sort({ createdAt: -1 });
+    
+    console.log(`Found ${jobs.length} client supplied jobs for project ${projectId}`);
+    
+    res.json({
+      data: jobs,
+      count: jobs.length,
+      projectId
+    });
+  } catch (err) {
+    console.error('Error fetching client supplied jobs by project:', err);
+    res.status(500).json({ 
+      message: 'Failed to fetch client supplied jobs by project', 
+      error: err.message 
+    });
+  }
+});
+
 // GET /api/client-supplied-jobs/:id - get single job
 router.get('/:id', async (req, res) => {
   try {

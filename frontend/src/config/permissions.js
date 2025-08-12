@@ -10,7 +10,9 @@ export const PERMISSIONS = {
   // User permissions
   'users.view': 'View users',
   'users.create': 'Create new users',
+  'users.edit': 'Edit users',
   'users.delete': 'Delete users',
+  'users.manage': 'Manage user accounts (password resets, etc.)',
   
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
@@ -33,6 +35,8 @@ export const ROLE_PERMISSIONS = {
     'projects.edit',
     'projects.change_status',
     'users.view',
+    'users.edit',
+    'users.manage',
     'invoices.approve',
     'timesheets.approve',
     'xero.sync',
