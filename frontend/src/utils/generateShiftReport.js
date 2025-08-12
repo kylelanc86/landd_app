@@ -97,10 +97,18 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     job = {};
   }
   
-// Determine base URL for fonts - use window.location for reliable detection
-const baseUrl = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3000' 
-  : 'https://app.landd.com.au';
+  // Determine base URL for fonts - use window.location for reliable detection
+  console.log('Window location:', {
+    hostname: window.location.hostname,
+    href: window.location.href,
+    origin: window.location.origin
+  });
+  
+  const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000' 
+    : 'https://app.landd.com.au';
+  
+  console.log('Font base URL:', baseUrl);
 
 pdfMake.fonts = {
   Gothic: {

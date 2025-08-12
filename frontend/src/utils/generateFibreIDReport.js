@@ -43,9 +43,17 @@ async function loadImageAsBase64(imagePath) {
 export async function generateFibreIDReport({ job, sampleItems, openInNewTab, returnPdfData = false }) {
 
   // Determine base URL for fonts - use window.location for reliable detection
-  const baseUrl = window.location.hostname === 'localhost' 
+  console.log('Fibre ID - Window location:', {
+    hostname: window.location.hostname,
+    href: window.location.href,
+    origin: window.location.origin
+  });
+  
+  const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000' 
     : 'https://app.landd.com.au';
+  
+  console.log('Fibre ID - Font base URL:', baseUrl);
 
 pdfMake.fonts = {
   Gothic: {
