@@ -260,13 +260,13 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                   {
                     columns: [
                       {
-                        text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectID } ],
+                        text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectId?.projectID || 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: formatDate(new Date()) } ],
+                        text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -276,7 +276,7 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                 ],
                 [
                   {
-                    text: [ { text: 'Description of Works: ', bold: true }, { text: job?.projectId?.descriptionOfWorks || '' } ],
+                    text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
                     style: 'tableContent',
                     margin: [0, 0, 0, 2]
                   }
@@ -285,13 +285,13 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                   {
                     columns: [
                       {
-                        text: [ { text: 'Sampled by: ', bold: true }, { text: job?.sampler } ],
+                        text: [ { text: 'Sampled by: ', bold: true }, { text: shift?.supervisor ? `${shift.supervisor.firstName} ${shift.supervisor.lastName}` : shift?.defaultSampler ? `${shift.defaultSampler.firstName} ${shift.defaultSampler.lastName}` : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Sample Date: ', bold: true }, { text: uniqueSamplers.join(', ') || 'Client Supplied' } ],
+                        text: [ { text: 'Sample Date: ', bold: true }, { text: shift?.date ? formatDate(shift.date) : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -303,13 +303,13 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                   {
                     columns: [
                       {
-                        text: [ { text: 'Analysis Date: ', bold: true }, { text: job?.analysisDate } ],
+                        text: [ { text: 'Analysis Date: ', bold: true }, { text: shift?.analysisDate ? formatDate(shift.analysisDate) : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Samples Received: ', bold: true }, { text: uniqueSamplers.join(', ') || 'Client Supplied' } ],
+                        text: [ { text: 'Samples Received: ', bold: true }, { text: shift?.samplesReceivedDate ? formatDate(shift.samplesReceivedDate) : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -321,13 +321,13 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                   {
                     columns: [
                       {
-                        text: [ { text: 'Analysed by: ', bold: true }, { text: job?.analyst || 'Jordan Smith' } ],
+                        text: [ { text: 'Analysed by: ', bold: true }, { text: shift?.analysedBy || 'Jordan Smith' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: shift?.date ? formatDate(shift.date) : formatDate(new Date()) } ],
+                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: shift?.reportIssueDate ? formatDate(shift.reportIssueDate) : formatDate(new Date()) } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -444,8 +444,8 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                     { text: sample.startTime ? formatTime(sample.startTime) : 'N/A', style: 'tableContent' },
                     { text: sample.endTime ? formatTime(sample.endTime) : 'N/A', style: 'tableContent' },
                     { text: sample.flowRate || sample.averageFlow || 'N/A', style: 'tableContent' },
-                    { text: sample.fieldsCounted || sample.analysis?.fieldsCounted || 'N/A', style: 'tableContent' },
-                    { text: sample.fibresCounted || sample.analysis?.fibresCounted || 'N/A', style: 'tableContent' },
+                    { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
+                    { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' },
                   { 
                     text: formatReportedConcentration(sample),
                     style: 'tableContent',
