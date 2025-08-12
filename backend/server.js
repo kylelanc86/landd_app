@@ -129,7 +129,7 @@ connectDB()
     app.use('/api/asbestos-clearance-templates', asbestosClearanceTemplateRoutes);
     app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
     app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
-    app.use('/api/pdf', pdfDocRaptorV2Routes);
+    app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     
 
     const requireAuth = require('./middleware/auth');
