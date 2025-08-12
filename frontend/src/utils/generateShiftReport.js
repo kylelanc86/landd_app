@@ -61,7 +61,7 @@ const formatReportedConcentration = (sample) => {
   
   // If sample is uncountable
   if (sample.analysis.edgesDistribution === 'fail' || sample.analysis.backgroundDust === 'fail') {
-    return { text: 'Sample uncountable', color: 'red' };
+    return { text: 'Uncountable', color: 'red' };
   }
   
   // If it's a field blank
@@ -97,17 +97,18 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     job = {};
   }
   
-  // Set up fonts globally as per documentation
-  console.log('Setting up Gothic fonts via URL...');
-  pdfMake.fonts = {
-    Gothic: {
-      normal: 'http://localhost:3000/fonts/static/Gothic-Regular.ttf',
-      bold: 'http://localhost:3000/fonts/static/Gothic-Bold.ttf',
-      italics: 'http://localhost:3000/fonts/static/Gothic-Italic.ttf',
-      bolditalics: 'http://localhost:3000/fonts/static/Gothic-BoldItalic.ttf'
-    }
-  };
-  console.log('Font setup complete');
+const baseUrl = process.env.NODE_ENV === 'production' 
+  ? 'https://app.landd.com.au' 
+  : 'http://localhost:3000';
+
+pdfMake.fonts = {
+  Gothic: {
+    normal: `${baseUrl}/fonts/static/Gothic-Regular.ttf`,
+    bold: `${baseUrl}/fonts/static/Gothic-Bold.ttf`,
+    italics: `${baseUrl}/fonts/static/Gothic-Italic.ttf`,
+    bolditalics: `${baseUrl}/fonts/static/Gothic-BoldItalic.ttf`
+  }
+};
   
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
@@ -426,7 +427,7 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
           {
             table: {
               headerRows: 1,
-              widths: ['12%', '33%', '7%', '7%', '10%', '10%', '10%', '11%'],
+              widths: ['12%', '33%', '7%', '7%', '10%', '9%', '9%', '13%'],
               body: [
                                   [
                     { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
@@ -441,9 +442,9 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
                                   ...sortedSamples.map(sample => [
                     { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                     { text: sample.location || 'N/A', style: 'tableContent' },
-                    { text: sample.startTime ? formatTime(sample.startTime) : 'N/A', style: 'tableContent' },
-                    { text: sample.endTime ? formatTime(sample.endTime) : 'N/A', style: 'tableContent' },
-                    { text: sample.flowRate || sample.averageFlow || 'N/A', style: 'tableContent' },
+                    { text: sample.startTime ? formatTime(sample.startTime) : '-', style: 'tableContent' },
+                    { text: sample.endTime ? formatTime(sample.endTime) : '-', style: 'tableContent' },
+                    { text: (sample.averageFlowrate)*1000 || '-', style: 'tableContent' },
                     { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
                     { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' },
                   { 
