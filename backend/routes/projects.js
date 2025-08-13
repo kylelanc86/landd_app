@@ -354,6 +354,9 @@ router.get('/:id/timelogs', auth, checkPermission(['projects.view']), async (req
 // Get projects assigned to current user
 router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
+    const startTime = Date.now();
+    console.log(`[${req.user.id}] Starting getAssignedToMe request`);
+    
     const {
       page = 1,
       limit = 50,
@@ -383,6 +386,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     try {
+      const dbStartTime = Date.now();
       const total = await Project.countDocuments(query);
       const pages = Math.ceil(total / parseInt(limit));
 
@@ -393,8 +397,61 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         .limit(parseInt(limit))
         .populate('client', 'name')
         .select('projectID name department status client users createdAt d_Date');
+      
+      const dbTime = Date.now() - dbStartTime;
+      console.log(`[${userId}] Database query completed in ${dbTime}ms`);
 
-      // Transform the response
+      // Get overdue invoice data for all projects in a single aggregation
+      const invoiceStartTime = Date.now();
+      const projectIds = projects.map(p => p._id);
+      
+      // Aggregate overdue invoice data for all projects
+      const overdueData = await require('../models/Invoice').aggregate([
+        {
+          $match: {
+            projectId: { $in: projectIds },
+            status: 'unpaid',
+            isDeleted: { $ne: true }
+          }
+        },
+        {
+          $group: {
+            _id: '$projectId',
+            overdueDays: {
+              $max: {
+                $ceil: {
+                  $divide: [
+                    { $subtract: [new Date(), '$dueDate'] },
+                    1000 * 60 * 60 * 24
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            overdueDays: { $max: ['$overdueDays', 0] }
+          }
+        }
+      ]);
+      
+      const invoiceTime = Date.now() - invoiceStartTime;
+      console.log(`[${userId}] Invoice aggregation completed in ${invoiceTime}ms`);
+
+      // Create a map for quick lookup
+      const overdueMap = {};
+      overdueData.forEach(item => {
+        if (item.overdueDays > 0) {
+          overdueMap[item._id.toString()] = {
+            overdueInvoice: true,
+            overdueDays: item.overdueDays
+          };
+        }
+      });
+
+      // Transform the response with overdue data
       const response = {
         data: projects.map(project => ({
           _id: project._id,
@@ -405,7 +462,8 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           client: project.client?.name || '',
           users: project.users,
           createdAt: project.createdAt,
-          d_Date: project.d_Date
+          d_Date: project.d_Date,
+          overdueInvoice: overdueMap[project._id.toString()] || { overdueInvoice: false, overdueDays: 0 }
         })),
         pagination: {
           total,
@@ -414,6 +472,9 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           limit: parseInt(limit),
         }
       };
+
+      const totalTime = Date.now() - startTime;
+      console.log(`[${userId}] getAssignedToMe completed in ${totalTime}ms (DB: ${dbTime}ms, Invoice: ${invoiceTime}ms)`);
 
       res.json(response);
     } catch (error) {

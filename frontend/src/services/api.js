@@ -51,6 +51,22 @@ api.interceptors.response.use(
 
     // Handle other 401 errors (not token expiration)
     if (error.response?.status === 401) {
+      const errorCode = error.response?.data?.code;
+      
+      // Handle token blacklisted specifically
+      if (errorCode === 'TOKEN_BLACKLISTED') {
+        console.log('Token has been blacklisted, clearing authentication data');
+        localStorage.removeItem("token");
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("userRole");
+        localStorage.removeItem("userPermissions");
+        
+        // Redirect to login with message
+        window.location.href = "/login?message=session_invalidated";
+        return Promise.reject(error);
+      }
+      
+      // Handle other 401 errors
       const token = localStorage.getItem("token");
       const currentUser = localStorage.getItem("currentUser");
       

@@ -224,12 +224,7 @@ const MonthlyTimesheet = () => {
           border: `1px solid ${theme.palette.divider}`,
         }}
       >
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={3}
-        >
+        <Box display="flex" justifyContent="center" alignItems="center" mb={3}>
           <Box display="flex" alignItems="center" gap={2}>
             <IconButton
               onClick={() => handleMonthChange("prev")}
@@ -250,6 +245,8 @@ const MonthlyTimesheet = () => {
                 fontWeight: 700,
                 color: theme.palette.primary.main,
                 textShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                minWidth: "200px",
+                textAlign: "center",
               }}
             >
               {format(selectedDate, "MMMM yyyy")}

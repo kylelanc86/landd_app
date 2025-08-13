@@ -351,8 +351,8 @@ const Dashboard = () => {
           startIcon={<WidgetsIcon />}
           onClick={() => setWidgetDialogOpen(true)}
           sx={{
-            backgroundColor: theme.palette.secondary.main,
-            "&:hover": { backgroundColor: theme.palette.secondary.dark },
+            backgroundColor: theme.palette.primary.main,
+            "&:hover": { backgroundColor: theme.palette.primary.dark },
           }}
         >
           Widgets

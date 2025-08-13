@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const crypto = require('crypto');
 const { sendMail } = require('../services/mailer');
+const TokenBlacklist = require('../models/TokenBlacklist');
 
 // Use global fetch if available (Node.js 18+), otherwise use node-fetch
 let fetch;
@@ -420,6 +421,15 @@ router.post('/reset-password', async (req, res) => {
       oldPasswordHash: oldPasswordHash
     });
     
+    // SECURITY: Blacklist all existing JWT tokens for this user
+    // Note: We can't blacklist specific JWT tokens since we don't store them
+    // But we can log this for audit purposes and implement future token storage
+    console.log('SECURITY: Password changed for user, all existing sessions should be invalidated');
+    console.log('User ID for token blacklisting:', user._id);
+    
+    // TODO: Implement JWT token storage and blacklisting
+    // For now, we'll rely on JWT expiration and frontend token clearing
+    
     res.json({ message: 'Password has been reset successfully. You can now log in.' });
   } catch (err) {
     console.error('Reset password error:', err);
@@ -452,6 +462,14 @@ router.post('/setup-password', async (req, res) => {
     user.passwordSet = true;
     
     await user.save();
+    
+    // SECURITY: Log that a new password was set
+    console.log('SECURITY: New password set for user:', {
+      id: user._id,
+      email: user.email
+    });
+    console.log('Note: This is a new user setup, no existing sessions to invalidate');
+    
     res.json({ message: 'Password has been set successfully. You can now log in.' });
   } catch (err) {
     console.error('Setup password error:', err);

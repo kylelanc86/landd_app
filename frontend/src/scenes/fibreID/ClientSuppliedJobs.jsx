@@ -30,6 +30,7 @@ import {
   sampleItemsService,
 } from "../../services/api";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
+import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
@@ -154,6 +155,11 @@ const ClientSuppliedJobs = () => {
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
+        {/* PDF Loading Overlay */}
+        <PDFLoadingOverlay
+          open={Object.values(generatingPDF).some(Boolean)}
+          message="Generating Fibre ID Report PDF..."
+        />
         {/* Breadcrumbs */}
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link

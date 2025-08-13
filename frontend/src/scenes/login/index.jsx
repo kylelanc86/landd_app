@@ -35,6 +35,20 @@ const Login = () => {
   const navigate = useNavigate();
   const { login, currentUser, loading } = useAuth();
 
+  // Check for session invalidation message from URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const message = urlParams.get("message");
+
+    if (message === "session_invalidated") {
+      setError(
+        "Your session has been invalidated due to a password change. Please log in again with your new password."
+      );
+      // Clear the message from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // Redirect if already logged in
   useEffect(() => {
     if (currentUser) {

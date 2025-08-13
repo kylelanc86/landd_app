@@ -31,8 +31,13 @@ import {
   CardContent,
   Snackbar,
   Autocomplete,
+  Radio,
+  RadioGroup,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -40,12 +45,19 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import TodayIcon from "@mui/icons-material/Today";
+
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
-import { projectService, userService } from "../../services/api";
+import {
+  projectService,
+  userService,
+  jobService,
+  shiftService,
+} from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import PermissionGate from "../../components/PermissionGate";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
+import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 // ASBESTOS_REMOVALISTS array from air monitoring modal
 const ASBESTOS_REMOVALISTS = [
@@ -88,15 +100,27 @@ const AsbestosClearance = () => {
     asbestosRemovalist: "",
     airMonitoring: false,
     airMonitoringReport: null,
+    airMonitoringReportType: "select", // "select" or "upload"
     sitePlan: false,
     sitePlanFile: null,
     notes: "",
   });
 
+  const [airMonitoringReports, setAirMonitoringReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Fetch clearances, projects, and users on component mount
   useEffect(() => {
-    fetchData();
-  }, []);
+    console.log("useEffect triggered, isInitialized:", isInitialized);
+    if (!isInitialized) {
+      console.log("Fetching data for the first time...");
+      fetchData();
+      setIsInitialized(true);
+    } else {
+      console.log("Data already initialized, skipping fetch");
+    }
+  }, [isInitialized]);
 
   const fetchData = async () => {
     try {
@@ -158,6 +182,54 @@ const AsbestosClearance = () => {
     }
   };
 
+  // Fetch air monitoring reports for a specific project
+  const fetchAirMonitoringReports = async (projectId) => {
+    if (!projectId) {
+      setAirMonitoringReports([]);
+      return;
+    }
+
+    try {
+      setLoadingReports(true);
+
+      // Fetch air monitoring jobs for this project
+      const jobsResponse = await jobService.getAll();
+      const projectJobs =
+        jobsResponse.data?.filter(
+          (job) =>
+            job.projectId?._id === projectId || job.projectId === projectId
+        ) || [];
+
+      // Fetch shifts for these jobs
+      const jobIds = projectJobs.map((job) => job._id);
+      let allShifts = [];
+
+      if (jobIds.length > 0) {
+        const shiftsResponse = await shiftService.getByJobs(jobIds);
+        allShifts = shiftsResponse.data || [];
+      }
+
+      // Create a list of available reports
+      const reports = allShifts.map((shift) => ({
+        id: shift._id,
+        name: `Air Monitoring Report - ${
+          shift.date
+            ? new Date(shift.date).toLocaleDateString("en-GB")
+            : "Unknown Date"
+        }`,
+        shift: shift,
+        job: projectJobs.find((job) => job._id === shift.jobId) || {},
+      }));
+
+      setAirMonitoringReports(reports);
+    } catch (error) {
+      console.error("Error fetching air monitoring reports:", error);
+      setAirMonitoringReports([]);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -204,10 +276,19 @@ const AsbestosClearance = () => {
       asbestosRemovalist: clearance.asbestosRemovalist,
       airMonitoring: clearance.airMonitoring || false,
       airMonitoringReport: clearance.airMonitoringReport || null,
+      airMonitoringReportType: clearance.airMonitoringReport
+        ? "select"
+        : "select",
       sitePlan: clearance.sitePlan || false,
       sitePlanFile: clearance.sitePlanFile || null,
       notes: clearance.notes || "",
     });
+
+    // Fetch air monitoring reports for this project
+    if (clearance.projectId) {
+      fetchAirMonitoringReports(clearance.projectId._id || clearance.projectId);
+    }
+
     setDialogOpen(true);
   };
 
@@ -284,10 +365,12 @@ const AsbestosClearance = () => {
       asbestosRemovalist: "",
       airMonitoring: false,
       airMonitoringReport: null,
+      airMonitoringReportType: "select",
       sitePlan: false,
       sitePlanFile: null,
       notes: "",
     });
+    setAirMonitoringReports([]);
   };
 
   const setDateToToday = () => {
@@ -310,6 +393,13 @@ const AsbestosClearance = () => {
     setForm({ ...form, inspectionTime: currentTime });
   };
 
+  // Handle project selection change
+  const handleProjectChange = (projectId) => {
+    setForm({ ...form, projectId });
+    // Fetch air monitoring reports for the selected project
+    fetchAirMonitoringReports(projectId);
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case "complete":
@@ -321,6 +411,9 @@ const AsbestosClearance = () => {
       default:
         return "default";
     }
+  };
+  const handleBackToHome = () => {
+    navigate("/clearances");
   };
 
   const getProjectName = (projectId) => {
@@ -373,29 +466,41 @@ const AsbestosClearance = () => {
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="20px">
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography
-            variant="h4"
-            color={colors.grey[500]}
-            fontWeight="bold"
-            sx={{ mb: "5px" }}
-          >
-            Asbestos Clearances
-          </Typography>
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => {
-              setEditingClearance(null);
-              resetForm();
-              setDialogOpen(true);
-            }}
-            startIcon={<AddIcon />}
-          >
-            Add Clearance
-          </Button>
-        </Box>
+        {/* PDF Loading Overlay */}
+        <PDFLoadingOverlay
+          open={generatingPDF}
+          message="Generating Asbestos Clearance PDF..."
+        />
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Asbestos Clearances
+        </Typography>
 
+        {/* Breadcrumbs */}
+        <Breadcrumbs sx={{ marginBottom: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToHome}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Clearances
+          </Link>
+          <Typography color="text.primary">Asbestos Clearances</Typography>
+        </Breadcrumbs>
+
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => {
+            setEditingClearance(null);
+            resetForm();
+            setDialogOpen(true);
+          }}
+          startIcon={<AddIcon />}
+        >
+          Add Clearance
+        </Button>
         <Card sx={{ mt: 3 }}>
           <CardContent>
             {loading ? (
@@ -516,10 +621,7 @@ const AsbestosClearance = () => {
                       projects.find((p) => p._id === form.projectId) || null
                     }
                     onChange={(_, newValue) =>
-                      setForm({
-                        ...form,
-                        projectId: newValue ? newValue._id : "",
-                      })
+                      handleProjectChange(newValue ? newValue._id : "")
                     }
                     renderInput={(params) => (
                       <TextField
@@ -665,44 +767,124 @@ const AsbestosClearance = () => {
                 </Grid>
                 {form.airMonitoring && (
                   <Grid item xs={12}>
-                    <input
-                      accept=".pdf"
-                      style={{ display: "none" }}
-                      id="air-monitoring-report-upload"
-                      type="file"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            // Extract just the base64 data from the data URL
-                            const dataUrl = event.target.result;
-                            const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
+                    <Box sx={{ mb: 2 }}>
+                      <FormControl component="fieldset">
+                        <RadioGroup
+                          row
+                          name="reportType"
+                          value={form.airMonitoringReportType}
+                          onChange={(e) =>
                             setForm({
                               ...form,
-                              airMonitoringReport: base64Data,
-                            });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                    <label htmlFor="air-monitoring-report-upload">
-                      <Button
-                        variant="outlined"
-                        component="span"
-                        startIcon={<PictureAsPdfIcon />}
-                      >
-                        Upload Air Monitoring Report (PDF)
-                      </Button>
-                    </label>
+                              airMonitoringReportType: e.target.value,
+                              airMonitoringReport: null,
+                            })
+                          }
+                        >
+                          <FormControlLabel
+                            value="select"
+                            control={<Radio />}
+                            label="Select from existing reports"
+                          />
+                          <FormControlLabel
+                            value="upload"
+                            control={<Radio />}
+                            label="Upload new report"
+                          />
+                        </RadioGroup>
+                      </FormControl>
+                    </Box>
+
+                    {form.airMonitoringReportType === "select" ? (
+                      <FormControl fullWidth>
+                        <InputLabel>Select Air Monitoring Report</InputLabel>
+                        <Select
+                          value={form.airMonitoringReport || ""}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              airMonitoringReport: e.target.value,
+                            })
+                          }
+                          label="Select Air Monitoring Report"
+                          disabled={loadingReports}
+                        >
+                          <MenuItem value="">
+                            <em>Select a report...</em>
+                          </MenuItem>
+                          {airMonitoringReports.map((report) => (
+                            <MenuItem key={report.id} value={report.id}>
+                              {report.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {loadingReports && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mt: 1 }}
+                          >
+                            Loading reports...
+                          </Typography>
+                        )}
+                        {!loadingReports &&
+                          airMonitoringReports.length === 0 &&
+                          form.projectId && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 1 }}
+                            >
+                              No air monitoring reports found for this project
+                            </Typography>
+                          )}
+                      </FormControl>
+                    ) : (
+                      <>
+                        <input
+                          accept=".pdf"
+                          style={{ display: "none" }}
+                          id="air-monitoring-report-upload"
+                          type="file"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                // Extract just the base64 data from the data URL
+                                const dataUrl = event.target.result;
+                                const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
+                                setForm({
+                                  ...form,
+                                  airMonitoringReport: base64Data,
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                        <label htmlFor="air-monitoring-report-upload">
+                          <Button
+                            variant="outlined"
+                            component="span"
+                            startIcon={<PictureAsPdfIcon />}
+                          >
+                            Upload Air Monitoring Report (PDF)
+                          </Button>
+                        </label>
+                      </>
+                    )}
+
                     {form.airMonitoringReport && (
                       <Typography
                         variant="body2"
                         color="success.main"
                         sx={{ mt: 1 }}
                       >
-                        ✓ Report uploaded successfully
+                        ✓{" "}
+                        {form.airMonitoringReportType === "select"
+                          ? "Report selected"
+                          : "Report uploaded successfully"}
                       </Typography>
                     )}
                   </Grid>

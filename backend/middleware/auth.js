@@ -14,6 +14,9 @@ const auth = async (req, res, next) => {
       if (!user) {
         throw new Error('User not found');
       }
+      
+      // Store the token in req for blacklist checking
+      req.token = token;
       req.user = user;
       next();
     } catch (verifyError) {

@@ -106,37 +106,42 @@ app.get('/api/health', (req, res) => {
 // Connect to database
 connectDB()
   .then(() => {
+    // Import middleware first
+    const requireAuth = require('./middleware/auth');
+    const checkTokenBlacklist = require('./middleware/checkTokenBlacklist');
+    
     // Routes
     app.use('/api/auth', authRoutes);
-    app.use('/api/projects', projectRoutes);
-    app.use('/api/clients', clientRoutes);
-    app.use('/api/air-monitoring-jobs', jobRoutes);
-    app.use('/api/samples', sampleRoutes);
-    app.use('/api/invoices', invoiceRoutes);
-    app.use('/api/users', usersRouter);
-    app.use('/api/xero', xeroRoutes);
-    app.use('/api/air-monitoring-shifts', shiftRoutes);
-    app.use('/api/timesheets', timesheetRoutes);
-    app.use('/api/calendar-entries', calendarEntriesRouter);
-    app.use('/api/air-pumps', airPumpRoutes);
-    app.use('/api/air-pump-calibrations', airPumpCalibrationRoutes);
-    app.use('/api/equipment', equipmentRoutes);
-    app.use('/api/asbestos-clearances', asbestosClearanceRoutes);
-    app.use('/api/asbestos-clearance-reports', asbestosClearanceReportRoutes);
-    app.use('/api/asbestos-removal-jobs', asbestosRemovalJobRoutes);
-    app.use('/api/reports', reportsRoutes);
-
-    app.use('/api/asbestos-clearance-templates', asbestosClearanceTemplateRoutes);
-    app.use('/api/lead-assessment-templates', leadAssessmentTemplateRoutes);
-    app.use('/api/asbestos-assessment-templates', asbestosAssessmentTemplateRoutes);
-    app.use('/api/pdf-docraptor-v2', pdfDocRaptorV2Routes);
     
+    // Protected routes with authentication and token blacklist checking
+    app.use('/api/projects', requireAuth, checkTokenBlacklist, projectRoutes);
+    app.use('/api/clients', requireAuth, checkTokenBlacklist, clientRoutes);
+    app.use('/api/air-monitoring-jobs', requireAuth, checkTokenBlacklist, jobRoutes);
+    app.use('/api/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
+    app.use('/api/invoices', requireAuth, checkTokenBlacklist, invoiceRoutes);
+    app.use('/api/users', requireAuth, checkTokenBlacklist, usersRouter);
+    app.use('/api/xero', requireAuth, checkTokenBlacklist, xeroRoutes);
+    app.use('/api/air-monitoring-shifts', requireAuth, checkTokenBlacklist, shiftRoutes);
+    app.use('/api/timesheets', requireAuth, checkTokenBlacklist, timesheetRoutes);
+    app.use('/api/calendar-entries', requireAuth, checkTokenBlacklist, calendarEntriesRouter);
+    app.use('/api/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
+    app.use('/api/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
+    app.use('/api/equipment', requireAuth, checkTokenBlacklist, equipmentRoutes);
+    app.use('/api/asbestos-clearances', requireAuth, checkTokenBlacklist, asbestosClearanceRoutes);
+    app.use('/api/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);
+    app.use('/api/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
+    app.use('/api/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
 
-    const requireAuth = require('./middleware/auth');
-    app.use('/api/assessments', requireAuth, asbestosAssessmentsRoutes);
-    app.use('/api/sample-items', requireAuth, sampleItemsRoutes);
-    app.use('/api/client-supplied-jobs', requireAuth, clientSuppliedJobsRoutes);
-    app.use('/api/invoice-items', invoiceItemsRoutes);
+    app.use('/api/asbestos-clearance-templates', requireAuth, checkTokenBlacklist, asbestosClearanceTemplateRoutes);
+    app.use('/api/lead-assessment-templates', requireAuth, checkTokenBlacklist, leadAssessmentTemplateRoutes);
+    app.use('/api/asbestos-assessment-templates', requireAuth, checkTokenBlacklist, asbestosAssessmentTemplateRoutes);
+    app.use('/api/pdf-docraptor-v2', requireAuth, checkTokenBlacklist, pdfDocRaptorV2Routes);
+    
+    // Additional protected routes with token blacklist checking
+    app.use('/api/assessments', requireAuth, checkTokenBlacklist, asbestosAssessmentsRoutes);
+    app.use('/api/sample-items', requireAuth, checkTokenBlacklist, sampleItemsRoutes);
+    app.use('/api/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
+    app.use('/api/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
 
 
     
