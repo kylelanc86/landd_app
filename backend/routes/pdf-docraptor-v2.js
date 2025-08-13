@@ -277,7 +277,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       );
       
       if (isSitePlanImage) {
-        const sitePlanContentPage = extractPageContent(generateSitePlanContentPage(clearanceData, 'B', logoBase64));
+        const sitePlanContentPage = generateSitePlanContentPage(clearanceData, 'B', logoBase64);
         appendixContent += `
             <!-- Appendix B Site Plan Content Page -->
             ${sitePlanContentPage}
@@ -476,6 +476,23 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
             margin-bottom: 6px;
             border-radius: 2px;
           }
+
+          /* Site Plan specific styles to prevent CSS conflicts */
+          .file-container {
+            width: calc(100% - 96px) !important;
+            max-width: calc(100% - 96px) !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
+
+          .file-container img {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            object-fit: contain !important;
+            display: block !important;
+          }
         </style>
       </head>
       <body>
@@ -527,10 +544,10 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
   if (fileType.startsWith('image/')) {
     // For images, embed directly with caption
     content = `
-      <div class="file-container" style="width: 85vw; margin: 0; padding: 0;">
+      <div class="file-container" style="width: calc(100% - 96px); margin: 0 auto; padding: 0;">
         <img src="data:${fileType};base64,${fileData}" 
              alt="${title}" 
-             style="width: 100vw; height: auto; object-fit: contain; display: block;" />
+             style="width: 100%; height: auto; object-fit: contain; display: block;" />
         <div style="font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 10px;">
           Figure 1: ${figureTitle}
         </div>
@@ -550,100 +567,6 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
   }
   
   return `
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Asbestos Clearance Report - Site Plan</title>
-        <link
-          href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap"
-          rel="stylesheet"
-        />
-        <style>
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-            font-family: "Montserrat", Arial, sans-serif;
-            background: #fff;
-            width: 100%;
-            height: 100%;
-          }
-          .page {
-            width: 100%;
-            height: 100vh;
-            position: relative;
-            background: #fff;
-            margin: 0;
-            padding: 0;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding: 16px 48px 0 48px;
-            margin: 0;
-          }
-          .logo {
-            width: 243px;
-            height: auto;
-            display: block;
-            background: #fff;
-            margin: 0;
-          }
-          .company-details {
-            text-align: right;
-            font-size: 0.75rem;
-            color: #222;
-            line-height: 1.5;
-            margin-top: 8px;
-            margin: 0;
-          }
-          .company-details .website {
-            color: #16b12b;
-            font-weight: 500;
-          }
-          .green-line {
-            width: calc(100% - 96px);
-            height: 4px;
-            background: #16b12b;
-            margin: 8px auto 0 auto;
-            border-radius: 2px;
-          }
-          .content {
-            padding: 0;
-            margin: 0;
-            width: 100vw;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            align-items: center;
-          }
-          .footer {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 16px;
-            width: calc(100% - 96px);
-            margin: 0 auto;
-            text-align: justify;
-            font-size: 0.75rem;
-            color: #222;
-          }
-          .footer-line {
-            width: 100%;
-            height: 4px;
-            background: #16b12b;
-            margin-bottom: 6px;
-            border-radius: 2px;
-          }
-        </style>
-      </head>
-      <body>
         <div class="page">
           <div class="header">
             <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Company Logo" />
@@ -652,7 +575,7 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
               4/6 Dacre Street<br />
               Mitchell ACT 2911<br />
               W: <span class="website">www.landd.com.au</span>
-        </div>
+            </div>
           </div>
           <div class="green-line"></div>
           <div class="content">
@@ -663,9 +586,7 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
             Asbestos Assessment Report: ${data.projectId?.name || data.siteName || 'Unknown Site'}
           </div>
         </div>
-      </body>
-      </html>
-    `;
+      `;
 };
 
 /**
