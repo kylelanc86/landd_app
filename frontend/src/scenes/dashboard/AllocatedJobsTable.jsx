@@ -56,20 +56,8 @@ const AllocatedJobsTable = () => {
 
         const projectsData = response.data.data || [];
 
-        const formattedJobs = projectsData.map((job) => ({
-          id: job._id,
-          projectID: job.projectID,
-          name: job.name,
-          department: job.department || "N/A",
-          status: job.status,
-          d_Date: job.d_Date,
-          overdueInvoice: job.overdueInvoice || {
-            overdueInvoice: false,
-            overdueDays: 0,
-          },
-        }));
-
-        setJobs(formattedJobs);
+        // Store raw data, transformation happens in memoized function
+        setJobs(projectsData);
         setRowCount(response.data.pagination?.total || 0);
 
         const totalTime = performance.now() - startTime;
@@ -122,27 +110,51 @@ const AllocatedJobsTable = () => {
     setPaginationModel(newModel);
   }, []);
 
+  // Memoize formatted jobs to prevent unnecessary re-renders
+  const formattedJobs = useMemo(() => {
+    return jobs.map((job) => ({
+      id: job._id || job.id,
+      projectID: job.projectID,
+      name: job.name,
+      department: job.department || "N/A",
+      status: job.status,
+      d_Date: job.d_Date,
+      overdueInvoice: job.overdueInvoice || {
+        overdueInvoice: false,
+        overdueDays: 0,
+      },
+    }));
+  }, [jobs]);
+
   const columns = useMemo(
     () => [
       {
         field: "projectID",
         headerName: "Project ID",
         flex: 1,
+        minWidth: 120,
+        maxWidth: 150,
       },
       {
         field: "name",
         headerName: "Project Name",
         flex: 2,
+        minWidth: 200,
+        maxWidth: 400,
       },
       {
         field: "department",
         headerName: "Department",
         flex: 1.5,
+        minWidth: 150,
+        maxWidth: 200,
       },
       {
         field: "d_Date",
         headerName: "Due Date",
         flex: 1.5,
+        minWidth: 150,
+        maxWidth: 200,
         renderCell: (params) => {
           if (!params.value) {
             return (
@@ -152,6 +164,7 @@ const AllocatedJobsTable = () => {
             );
           }
 
+          // Optimize date calculation - only calculate when cell is visible
           const dueDate = new Date(params.value);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -185,12 +198,16 @@ const AllocatedJobsTable = () => {
         field: "status",
         headerName: "Status",
         flex: 1,
+        minWidth: 120,
+        maxWidth: 150,
         renderCell: (params) => <StatusChip status={params.value} />,
       },
       {
         field: "overdueInvoice",
         headerName: "Overdue Invoice",
         flex: 1,
+        minWidth: 120,
+        maxWidth: 150,
         renderCell: (params) => {
           const overdue = params.value;
           if (!overdue?.overdueInvoice) return "None Overdue";
@@ -223,7 +240,6 @@ const AllocatedJobsTable = () => {
   return (
     <Box
       m="40px 0 0 0"
-      height="75vh"
       sx={{
         "& .MuiDataGrid-root": { border: "none" },
         "& .MuiDataGrid-cell": {
@@ -254,14 +270,24 @@ const AllocatedJobsTable = () => {
         "& .MuiDataGrid-row:hover": {
           backgroundColor: "#e3f2fd",
         },
+        // Ensure footer is properly positioned
+        "& .MuiDataGrid-footerContainer": {
+          position: "relative",
+          borderTop: "1px solid rgba(224, 224, 224, 1)",
+        },
+        // Remove any empty row spacing
+        "& .MuiDataGrid-virtualScroller": {
+          minHeight: "auto",
+        },
       }}
     >
       <Typography variant="h5" sx={{ mb: 2 }}>
         My Allocated Projects
       </Typography>
 
+      {/* Virtual Scrolling Optimized DataGrid with Proper Footer Positioning */}
       <DataGrid
-        rows={jobs}
+        rows={formattedJobs}
         columns={columns}
         loading={loading}
         paginationMode="server"
@@ -272,9 +298,32 @@ const AllocatedJobsTable = () => {
         checkboxSelection
         disableSelectionOnClick
         autoHeight
+        rowBuffer={5}
+        rowThreshold={100}
+        disableColumnFilter
+        disableColumnSelector
+        disableDensitySelector
+        getRowId={(row) => row.id}
         components={{ Toolbar: GridToolbar }}
         onRowClick={(params) => navigate(`/reports/project/${params.row.id}`)}
-        sx={{ cursor: "pointer" }}
+        sx={{
+          cursor: "pointer",
+          // Ensure proper footer positioning
+          "& .MuiDataGrid-footerContainer": {
+            position: "sticky",
+            bottom: 0,
+            zIndex: 1,
+          },
+          // Remove empty row spacing
+          "& .MuiDataGrid-virtualScroller": {
+            minHeight: "auto !important",
+          },
+          // Ensure rows don't have extra spacing
+          "& .MuiDataGrid-row": {
+            minHeight: "52px !important",
+            maxHeight: "52px !important",
+          },
+        }}
       />
     </Box>
   );

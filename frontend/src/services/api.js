@@ -139,8 +139,10 @@ export const clientService = {
       const data = response.data;
       return {
         ...response,
-        data: data.clients || [],
-        pagination: data.pagination
+        data: {
+          clients: data.clients || [],
+          pagination: data.pagination
+        }
       };
     });
   },

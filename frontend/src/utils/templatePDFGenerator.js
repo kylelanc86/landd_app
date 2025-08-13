@@ -157,9 +157,16 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
 
     const pdfBlob = await response.blob();
 
-    // Generate filename
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const filename = `${type}_${timestamp}.pdf`;
+    // Get filename from response headers if available
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = `${type}_${new Date().toISOString().slice(0, 10)}.pdf`; // fallback
+    
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
 
     // Create download link
     const url2 = window.URL.createObjectURL(pdfBlob);

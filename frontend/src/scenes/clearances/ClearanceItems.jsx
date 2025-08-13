@@ -27,6 +27,8 @@ import {
   Snackbar,
   CircularProgress,
   Chip,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -103,9 +105,6 @@ const ClearanceItems = () => {
         asbestosClearanceService.getItems(clearanceId),
         asbestosClearanceService.getById(clearanceId),
       ]);
-
-      console.log("Clearance items API response:", itemsData);
-      console.log("Clearance API response:", clearanceData);
 
       setItems(itemsData || []);
       setClearance(clearanceData);
@@ -219,6 +218,11 @@ const ClearanceItems = () => {
       default:
         return "default";
     }
+  };
+
+  const formatAsbestosType = (type) => {
+    if (!type) return "Non-friable";
+    return type.charAt(0).toUpperCase() + type.slice(1).replace("-", "-");
   };
 
   const handlePhotoUpload = async (event) => {
@@ -601,6 +605,10 @@ const ClearanceItems = () => {
     }
   };
 
+  const handleBackToHome = () => {
+    navigate("/asbestos-removal");
+  };
+
   if (loading) {
     return (
       <Box
@@ -631,46 +639,31 @@ const ClearanceItems = () => {
           message="Generating Air Monitoring Report PDF..."
         />
 
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Box display="flex" alignItems="center" gap={2}>
-            <IconButton
-              onClick={() => navigate("/clearances/asbestos")}
-              color="primary"
-            >
-              <ArrowBackIcon />
-            </IconButton>
-            <Box>
-              <Typography
-                variant="h2"
-                color={colors.grey[100]}
-                fontWeight="bold"
-                sx={{ mb: "5px" }}
-              >
-                Clearance Items
-              </Typography>
-              {clearance && (
-                <Typography variant="h6" color={colors.secondary[500]}>
-                  {clearance.projectId?.name || "Unknown Project"} -{" "}
-                  {clearance.clearanceDate
-                    ? new Date(clearance.clearanceDate).toLocaleDateString()
-                    : "Unknown Date"}
-                </Typography>
-              )}
-            </Box>
-          </Box>
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => {
-              setEditingItem(null);
-              resetForm();
-              setDialogOpen(true);
-            }}
-            startIcon={<AddIcon />}
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Clearance Items
+        </Typography>
+
+        {/* Breadcrumbs */}
+        <Breadcrumbs sx={{ marginBottom: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={() => navigate(`/clearances/asbestos`)}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            Add Item
-          </Button>
-        </Box>
+            Asbestos Clearances
+          </Link>
+          <Typography color="text.primary">
+            {clearance.projectId?.name || "Unknown Project"}:{" "}
+            {clearance.clearanceDate
+              ? new Date(clearance.clearanceDate).toLocaleDateString()
+              : "Unknown Date"}
+          </Typography>
+        </Breadcrumbs>
+
+        {/* Project Info */}
+
+        <Box display="flex" justifyContent="flex-end" sx={{ mb: 2 }}></Box>
 
         {/* Air Monitoring Buttons */}
         {clearance?.airMonitoring && (
@@ -822,7 +815,19 @@ const ClearanceItems = () => {
             )}
           </CardContent>
         </Card>
-
+        <Button
+          variant="contained"
+          color="secondary"
+          sx={{ mt: 3 }}
+          onClick={() => {
+            setEditingItem(null);
+            resetForm();
+            setDialogOpen(true);
+          }}
+          startIcon={<AddIcon />}
+        >
+          Add Item
+        </Button>
         <Card sx={{ mt: 3 }}>
           <CardContent>
             <TableContainer component={Paper}>
@@ -844,7 +849,7 @@ const ClearanceItems = () => {
                       <TableCell>{item.materialDescription}</TableCell>
                       <TableCell>
                         <Chip
-                          label={item.asbestosType}
+                          label={formatAsbestosType(item.asbestosType)}
                           color={getAsbestosTypeColor(item.asbestosType)}
                           size="small"
                         />

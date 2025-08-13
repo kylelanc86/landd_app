@@ -34,7 +34,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const inspectionDetailsTemplate = fs.readFileSync(path.join(templateDir, 'InspectionDetails.html'), 'utf8');
     const backgroundInformationTemplate = fs.readFileSync(path.join(templateDir, 'BackgroundInformation.html'), 'utf8');
     const appendixACoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
-    const photographsTemplate = fs.readFileSync(path.join(templateDir, 'AsbestosClearancePhotographs.html'), 'utf8');
+    // photographsTemplate no longer used - photos generated independently
+    const photoItemTemplate = fs.readFileSync(path.join(templateDir, 'PhotoItem.html'), 'utf8');
+    const photoPageTemplate = fs.readFileSync(path.join(templateDir, 'PhotoPage.html'), 'utf8');
     const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
     const appendixCCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixCCover.html'), 'utf8');
     
@@ -80,7 +82,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
-      .replace(/\[LAA_NAME\]/g, clearanceData.laaName || 'Unknown LAA')
+      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}_${clearanceData.clearanceType || 'Non-Friable'}_Clearance_${clearanceData.projectId?.name || 'Unknown'}.pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
 
@@ -94,21 +96,26 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         return '<tr><td colspan="4" style="text-align: center; font-style: italic;">No clearance items found</td></tr>';
       }
       
-      const tableRows = items.map((item, index) => 
-        `<tr>
+      const tableRows = items.map((item, index) => {
+        // Format asbestos type properly
+        const formattedAsbestosType = item.asbestosType 
+          ? item.asbestosType.charAt(0).toUpperCase() + item.asbestosType.slice(1).replace('-', '-')
+          : 'Non-friable';
+        
+        return `<tr>
             <td>${index + 1}</td>
           <td>${item.locationDescription || 'Unknown Location'}</td>
           <td>${item.materialDescription || 'Unknown Material'}</td>
-          <td>${item.asbestosType || 'Non-friable'}</td>
-        </tr>`
-      ).join('');
+          <td>${formattedAsbestosType}</td>
+        </tr>`;
+      }).join('');
       
       console.log('Generated table rows:', tableRows);
       return tableRows;
     };
 
-    // Generate photographs content
-    const generatePhotographsContent = () => {
+    // Generate photographs content for clearance reports using template approach
+    const generateClearancePhotographsContent = () => {
       // Use actual clearance items if provided, otherwise use sample data
       const clearanceItems = clearanceData.items || clearanceData.clearanceItems || clearanceData.removalItems || clearanceData.asbestosItems || [];
       
@@ -123,30 +130,36 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
       }
       
-      // Only generate content for the first 2 photos (first photo page)
-      const firstPageItems = itemsWithPhotos.slice(0, 2);
+      // Generate pages with 2 photos each using template
+      const pages = [];
       
-      return firstPageItems.map((item, index) => {
-        const photoNumber = index + 1;
-          
-          return `
-            <!-- Photo ${photoNumber} -->
-            <div class="photo-container">
-              <div class="photo">
-                <img src="${item.photograph}" alt="Photograph ${photoNumber}" style="width: 100%; height: 100%; object-fit: contain;" />
-              </div>
-              <div class="photo-details">
-                <div class="photo-number">Photograph ${photoNumber}</div>
-              <div class="photo-location">
-                ${item.locationDescription || 'Unknown Location'}
-              </div>
-                <div class="photo-materials">
-                ${item.materialDescription || 'Unknown Material'}
-                </div>
-              </div>
-            </div>
-          `;
+      for (let i = 0; i < itemsWithPhotos.length; i += 2) {
+        const pagePhotos = itemsWithPhotos.slice(i, i + 2);
+        const photoItems = pagePhotos.map((item, pageIndex) => {
+          const photoNumber = i + pageIndex + 1;
+          return photoItemTemplate
+            .replace(/\[PHOTO_URL\]/g, item.photograph)
+            .replace(/\[PHOTO_NUMBER\]/g, photoNumber.toString())
+            .replace(/\[LOCATION_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location')
+            .replace(/\[MATERIAL_DESCRIPTION\]/g, item.materialDescription || 'Unknown Material');
         }).join('');
+        
+        // Use the photo page template and replace all placeholders
+        const page = photoPageTemplate
+          .replace(/\[PHOTO_ITEMS\]/g, photoItems)
+          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+          .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+          .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site');
+        
+        pages.push(page);
+        
+        // Add page break between pages (but not after the last page)
+        if (i + 2 < itemsWithPhotos.length) {
+          pages.push('<div class="page-break"></div>');
+        }
+      }
+      
+      return pages.join('');
     };
 
     // Prepare template content placeholders first (async operations)
@@ -230,20 +243,15 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
 
-      const populatedPhotographs = extractPageContent(
-        photographsTemplate
-          .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-          .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-          .replace(/\[PHOTOGRAPHS_CONTENT\]/g, generatePhotographsContent())
-      );
+      // Generate photos section completely independently (no template mixing)
+      const photosSection = generateClearancePhotographsContent();
 
       appendixContent += `
           <!-- Appendix A Cover Page -->
           ${populatedAppendixACover}
           
-          <!-- Photographs Page -->
-          ${populatedPhotographs}
+          <!-- Photographs Section -->
+          ${photosSection}
       `;
     }
     
@@ -762,7 +770,7 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     const siteName = clearanceData.projectId?.name || clearanceData.project?.name || clearanceData.siteName || 'Unknown';
     const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
     const clearanceType = clearanceData.clearanceType || 'Non-friable';
-    const filename = `${projectId}_${clearanceType}_Clearance_V2_${siteName}_${clearanceDate}.pdf`;
+    const filename = `${projectId}_${clearanceType} Asbestos Clearance Certificate_${siteName} (${clearanceDate}).pdf`;
 
     console.log(`[${pdfId}] Generating PDF with DocRaptor V2...`);
     
@@ -794,6 +802,7 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       console.log(`[${pdfId}] airMonitoringReport starts with:`, clearanceData.airMonitoringReport ? clearanceData.airMonitoringReport.substring(0, 100) : 'N/A');
       
       try {
+        // Now that frontend generates PDFs, airMonitoringReport should always be base64 data
         console.log(`[${pdfId}] Merging air monitoring report with clearance PDF...`);
         const mergedPdf = await mergePDFs(finalPdfBuffer, clearanceData.airMonitoringReport);
         console.log(`[${pdfId}] PDFs merged successfully, new size:`, mergedPdf.length);
@@ -1853,7 +1862,7 @@ const generateAssessmentHTML = async (assessmentData) => {
   }
 };
 
-const generatePhotographsContent = (items) => {
+const generateAssessmentPhotographsContent = (items) => {
   if (!items || items.length === 0) {
     return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
   }
@@ -1876,7 +1885,7 @@ const generatePhotographsContent = (items) => {
       return `
         <div class="photo-container">
           <div class="photo">
-            <img src="${item.photograph}" alt="Assessment Photo ${photoNumber}" style="width: 100%; height: 100%; object-fit: contain;" />
+            <img src="${item.photograph}" alt="Assessment Photo ${photoNumber}" />
           </div>
           <div class="photo-details">
             <div class="photo-number">Photo ${photoNumber}</div>

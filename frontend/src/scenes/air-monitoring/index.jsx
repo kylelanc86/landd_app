@@ -32,8 +32,11 @@ import {
   Autocomplete,
   Menu,
   Switch,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import PrintIcon from "@mui/icons-material/Print";
 import CloseIcon from "@mui/icons-material/Close";
@@ -584,19 +587,32 @@ const AirMonitoring = () => {
     setForm(emptyForm);
   };
 
+  const handleBackToHome = () => {
+    navigate("/asbestos-removal");
+  };
+
   if (loading) return <Typography>Loading jobs...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
     <Box m="20px">
-      <Typography
-        variant="h4"
-        color={colors.grey[500]}
-        fontWeight="bold"
-        sx={{ mb: "5px" }}
-      >
+      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
         Active Air Monitoring Jobs
       </Typography>
+
+      {/* Breadcrumbs */}
+      <Breadcrumbs sx={{ marginBottom: 3 }}>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={handleBackToHome}
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          <ArrowBackIcon sx={{ mr: 1 }} />
+          Asbestos Removal
+        </Link>
+        <Typography color="text.primary">Air Monitoring</Typography>
+      </Breadcrumbs>
       <Box
         display="flex"
         justifyContent="space-between"

@@ -92,10 +92,10 @@ const AsbestosRemoval = () => {
       onClick: () => navigate("/air-monitoring"),
     },
     {
-      title: "Clearances",
+      title: "Asbestos Clearance",
       icon: <AssessmentIcon />,
       color: "#2e7d32",
-      onClick: () => navigate("/clearances"),
+      onClick: () => navigate("/clearances/asbestos"),
     },
   ];
 

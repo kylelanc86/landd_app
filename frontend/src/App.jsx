@@ -101,7 +101,6 @@ const MouldValidation = lazy(() =>
 
 // New dashboard components
 const SurveysDashboard = lazy(() => import("./scenes/surveys"));
-const ClearancesDashboard = lazy(() => import("./scenes/clearances"));
 const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
 
 // New landing page components
@@ -511,18 +510,7 @@ function App() {
                             </PermissionRoute>
                           }
                         />
-                        <Route
-                          path="/clearances"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["asbestos.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <ClearancesDashboard />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
+
                         <Route
                           path="/timesheets"
                           element={

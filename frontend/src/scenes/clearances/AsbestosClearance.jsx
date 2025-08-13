@@ -131,6 +131,8 @@ const AsbestosClearance = () => {
           limit: 1000,
           status:
             "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent",
+          sortBy: "projectID",
+          sortOrder: "desc",
         }),
         userService.getAll(),
       ]);
@@ -209,17 +211,46 @@ const AsbestosClearance = () => {
         allShifts = shiftsResponse.data || [];
       }
 
-      // Create a list of available reports
-      const reports = allShifts.map((shift) => ({
-        id: shift._id,
-        name: `Air Monitoring Report - ${
-          shift.date
-            ? new Date(shift.date).toLocaleDateString("en-GB")
-            : "Unknown Date"
-        }`,
-        shift: shift,
-        job: projectJobs.find((job) => job._id === shift.jobId) || {},
-      }));
+      // Fetch samples for all shifts
+      const shiftIds = allShifts.map((shift) => shift._id);
+      let allSamples = [];
+
+      if (shiftIds.length > 0) {
+        try {
+          const { sampleService } = await import("../../services/api");
+          const samplesPromises = shiftIds.map((shiftId) =>
+            sampleService.getByShift(shiftId).catch(() => ({ data: [] }))
+          );
+          const samplesResponses = await Promise.all(samplesPromises);
+          allSamples = samplesResponses.reduce((acc, response) => {
+            return acc.concat(response.data || []);
+          }, []);
+        } catch (error) {
+          console.warn("Could not fetch samples:", error);
+        }
+      }
+
+      // Create a list of available reports with complete data
+      const reports = allShifts.map((shift) => {
+        const job = projectJobs.find((job) => job._id === shift.jobId) || {};
+        const samples = allSamples.filter(
+          (sample) => sample.shiftId === shift._id
+        );
+
+        return {
+          id: shift._id,
+          name: `Air Monitoring Report - ${
+            shift.date
+              ? new Date(shift.date).toLocaleDateString("en-GB")
+              : "Unknown Date"
+          }`,
+          shift: shift,
+          job: job,
+          samples: samples,
+          projectName: job.projectId?.name || job.project?.name,
+          projectId: job.projectId?._id || job.project?._id,
+        };
+      });
 
       setAirMonitoringReports(reports);
     } catch (error) {
@@ -413,7 +444,7 @@ const AsbestosClearance = () => {
     }
   };
   const handleBackToHome = () => {
-    navigate("/clearances");
+    navigate("/asbestos-removal");
   };
 
   const getProjectName = (projectId) => {
@@ -484,7 +515,7 @@ const AsbestosClearance = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Clearances
+            Asbestos Removal
           </Link>
           <Typography color="text.primary">Asbestos Clearances</Typography>
         </Breadcrumbs>
@@ -800,12 +831,56 @@ const AsbestosClearance = () => {
                         <InputLabel>Select Air Monitoring Report</InputLabel>
                         <Select
                           value={form.airMonitoringReport || ""}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              airMonitoringReport: e.target.value,
-                            })
-                          }
+                          onChange={async (e) => {
+                            const selectedShiftId = e.target.value;
+                            if (selectedShiftId) {
+                              try {
+                                // Generate the PDF for the selected shift
+                                const selectedReport =
+                                  airMonitoringReports.find(
+                                    (r) => r.id === selectedShiftId
+                                  );
+                                if (selectedReport) {
+                                  // Import the generateShiftReport function
+                                  const { generateShiftReport } = await import(
+                                    "../../utils/generateShiftReport"
+                                  );
+
+                                  // Generate the PDF and get base64 data
+                                  const pdfData = await generateShiftReport({
+                                    shift: selectedReport.shift,
+                                    job: selectedReport.job,
+                                    samples: selectedReport.samples,
+                                    project: {
+                                      name: selectedReport.projectName,
+                                      projectID: selectedReport.projectId,
+                                    },
+                                    returnPdfData: true,
+                                  });
+
+                                  setForm({
+                                    ...form,
+                                    airMonitoringReport: pdfData,
+                                  });
+                                }
+                              } catch (error) {
+                                console.error(
+                                  "Error generating air monitoring PDF:",
+                                  error
+                                );
+                                // Fallback to storing the shift ID
+                                setForm({
+                                  ...form,
+                                  airMonitoringReport: selectedShiftId,
+                                });
+                              }
+                            } else {
+                              setForm({
+                                ...form,
+                                airMonitoringReport: "",
+                              });
+                            }
+                          }}
                           label="Select Air Monitoring Report"
                           disabled={loadingReports}
                         >

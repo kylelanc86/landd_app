@@ -40,6 +40,7 @@ const ClientSuppliedJobs = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [generatingPDF, setGeneratingPDF] = useState({});
 
+
   useEffect(() => {
     fetchClientSuppliedJobs();
   }, []);

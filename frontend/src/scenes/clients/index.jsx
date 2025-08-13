@@ -75,11 +75,16 @@ const Clients = () => {
   const [searchInput, setSearchInput] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 25,
-    total: 0,
-    pages: 0,
+  const [paginationModel, setPaginationModel] = useState({
+    page: 0,
+    pageSize: 25,
+  });
+  const [rowCount, setRowCount] = useState(0);
+
+  console.log("Current state:", {
+    paginationModel,
+    rowCount,
+    clients: clients.length,
   });
   const searchInputRef = useRef(null);
 
@@ -137,14 +142,14 @@ const Clients = () => {
 
   // Debug pagination changes
   useEffect(() => {
-    console.log("Pagination state changed:", pagination);
-  }, [pagination]);
+    console.log("Pagination model changed:", paginationModel);
+  }, [paginationModel]);
 
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value) => {
       setSearch(value);
-      setPagination((prev) => ({ ...prev, page: 1 }));
+      setPaginationModel((prev) => ({ ...prev, page: 0 }));
     }, 300),
     []
   );
@@ -169,31 +174,50 @@ const Clients = () => {
   const fetchClients = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await clientService.getAll({
-        page: pagination.page,
-        limit: pagination.limit,
+      console.log("Fetching clients with:", {
+        page: paginationModel.page + 1,
+        limit: paginationModel.pageSize,
         search: search,
       });
-      setClients(response.data.clients || response.data);
-      setPagination((prev) => ({
-        ...prev,
-        total:
-          response.data.pagination?.total || response.pagination?.total || 0,
-        pages:
-          response.data.pagination?.pages || response.pagination?.pages || 0,
-      }));
+
+      const response = await clientService.getAll({
+        page: paginationModel.page + 1, // Backend uses 1-based pagination
+        limit: paginationModel.pageSize,
+        search: search,
+      });
+
+      console.log("Clients response:", {
+        clientsCount: response.data.clients?.length || 0,
+        total: response.data.pagination?.total || 0,
+        page: response.data.pagination?.page || 0,
+        fullResponse: response.data,
+      });
+
+      setClients(response.data.clients || []);
+      const totalCount = response.data.pagination?.total || 0;
+      console.log("Setting rowCount to:", totalCount);
+      setRowCount(totalCount);
     } catch (err) {
       console.error("Error fetching clients:", err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, search]);
+  }, [paginationModel.page, paginationModel.pageSize, search]);
 
-  // Fetch clients when search or pagination changes
+  // Fetch clients when search or pagination changes, including initial load
   useEffect(() => {
+    console.log("useEffect triggered - fetching clients");
+    console.log("Current state:", { paginationModel, search });
     fetchClients();
-  }, [fetchClients]);
+  }, [paginationModel.page, paginationModel.pageSize, search]);
+
+  // Reset to first page when search changes
+  useEffect(() => {
+    console.log("Search changed, resetting to page 0");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    // Note: The main useEffect will automatically fetch due to paginationModel.page change
+  }, [search]);
 
   // Maintain focus on search bar after results are loaded
   useEffect(() => {
@@ -202,15 +226,15 @@ const Clients = () => {
     }
   }, [loading]);
 
-  // Handle page change
-  const handlePageChange = useCallback((newPage) => {
-    setPagination((prev) => ({ ...prev, page: newPage }));
-  }, []);
-
-  // Handle page size change
-  const handlePageSizeChange = useCallback((newPageSize) => {
-    setPagination((prev) => ({ ...prev, limit: newPageSize, page: 1 }));
-  }, []);
+  // Handle pagination model change
+  const handlePaginationModelChange = useCallback(
+    (newModel) => {
+      console.log("Pagination model changed:", newModel);
+      console.log("Current paginationModel:", paginationModel);
+      setPaginationModel(newModel);
+    },
+    [paginationModel]
+  );
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -686,12 +710,11 @@ const Clients = () => {
           rows={clients}
           columns={columns}
           getRowId={(row) => row._id}
-          pageSize={pagination.limit}
-          page={pagination.page - 1}
-          rowCount={pagination.total}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
           paginationMode="server"
+          rowCount={rowCount}
+          paginationModel={paginationModel}
+          onPaginationModelChange={handlePaginationModelChange}
+          pageSizeOptions={[10, 25, 50, 100]}
           loading={loading}
           autoHeight
           disableSelectionOnClick
