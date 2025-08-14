@@ -37,7 +37,7 @@ import FibreIdIndex from "./scenes/fibreID/index.jsx";
 import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
 import AsbestosAssessmentJobs from "./scenes/fibreID/AsbestosAssessmentJobs.jsx";
 import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
-import AssessmentItemsPage from "./scenes/fibreID/AssessmentItemsPage.jsx";
+import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 import AssessmentItemAnalysisPage from "./scenes/fibreID/AssessmentItemAnalysisPage.jsx";
 import AssessmentJobsPage from "./scenes/surveys/asbestos";
 

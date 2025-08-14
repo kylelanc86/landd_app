@@ -1565,7 +1565,7 @@ const Invoices = () => {
             getRowId={(row) => row._id}
             pageSize={25}
             rowsPerPageOptions={[10, 25, 50, 100]}
-            checkboxSelection
+            // checkboxSelection
             disableSelectionOnClick
             loading={loading}
             autoHeight

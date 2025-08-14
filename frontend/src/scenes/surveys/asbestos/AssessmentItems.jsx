@@ -24,6 +24,8 @@ import {
   Alert,
   Chip,
   Checkbox,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import {
   PhotoCamera as PhotoCameraIcon,
@@ -78,10 +80,10 @@ const AssessmentItemsPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [itemsData, assessmentData] = await Promise.all([
-          assessmentService.getItems(id),
-          assessmentService.getJob(id),
-        ]);
+        setError(null);
+
+        const itemsData = await assessmentService.getItems(id);
+        const assessmentData = await assessmentService.getJob(id);
 
         setItems(itemsData || []);
         setAssessment(assessmentData);
@@ -93,7 +95,9 @@ const AssessmentItemsPage = () => {
       }
     };
 
-    fetchData();
+    if (id) {
+      fetchData();
+    }
   }, [id]);
 
   const handleAddItem = () => {
@@ -170,12 +174,6 @@ const AssessmentItemsPage = () => {
         const shouldCompress = needsCompression(file, 300); // 300KB threshold
 
         if (shouldCompress) {
-          console.log("Compressing image...");
-          setCompressionStatus({
-            type: "compressing",
-            message: "Compressing image...",
-          });
-
           const compressedImage = await compressImage(file, {
             maxWidth: 1000,
             maxHeight: 1000,
@@ -196,8 +194,6 @@ const AssessmentItemsPage = () => {
             type: "success",
             message: `Compressed: ${originalSizeKB}KB → ${compressedSizeKB}KB (${reduction}% reduction)`,
           });
-
-          console.log("Image compressed successfully");
         } else {
           // Use original if no compression needed
           const reader = new FileReader();
@@ -313,18 +309,6 @@ const AssessmentItemsPage = () => {
         message="Generating Asbestos Assessment PDF..."
       />
 
-      {/* Back Button */}
-      <Box sx={{ mb: 2 }}>
-        <Button
-          variant="outlined"
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/assessments")}
-          sx={{ mb: 2 }}
-        >
-          Back to Assessment Jobs
-        </Button>
-      </Box>
-
       {/* Header and Project Details */}
       <Box
         display="flex"
@@ -336,6 +320,25 @@ const AssessmentItemsPage = () => {
           <Typography variant="h2" fontWeight="bold" sx={{ mb: "5px" }}>
             Assessment Items
           </Typography>
+          <Box sx={{ mb: 2, mt: 2 }}>
+            <Breadcrumbs aria-label="breadcrumb">
+              <Link
+                component="button"
+                variant="body1"
+                onClick={() => navigate("/assessments")}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  color: "#16b12b",
+                }}
+              >
+                <ArrowBackIcon sx={{ mr: 1 }} />
+                Assessment Jobs
+              </Link>
+              <Typography color="text.primary">Assessment Items</Typography>
+            </Breadcrumbs>
+          </Box>
           {assessment && (
             <Box sx={{ mt: 1 }}>
               <Typography variant="h6" color="text.secondary">
@@ -344,27 +347,87 @@ const AssessmentItemsPage = () => {
               <Typography variant="h6" color="text.secondary">
                 Site Name: {assessment.projectId?.name || "N/A"}
               </Typography>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={handleAddItem}
+                sx={{ mt: 2 }}
+              >
+                Add Item
+              </Button>
             </Box>
           )}
         </Box>
-        <Box sx={{ display: "flex", gap: 2 }}>
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<PictureAsPdfIcon />}
-            onClick={handleGeneratePDF}
-            disabled={generatingPDF}
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 2,
+          }}
+        >
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={handleGeneratePDF}
+              disabled={generatingPDF}
+            >
+              {generatingPDF ? "Generating PDF..." : "Generate PDF"}
+            </Button>
+            <Button
+              variant="outlined"
+              color="secondary"
+              onClick={() => navigate(`/fibre-id/assessment/${id}/items`)}
+            >
+              Analysis
+            </Button>
+          </Box>
+          {/* Analysis Status */}
+          <Box
+            sx={{
+              border: "2px solid #1976d2",
+              borderRadius: "6px",
+              padding: "12px 16px",
+              backgroundColor: "#f8f9ff",
+              minWidth: "200px",
+              marginTop: "16px",
+            }}
           >
-            {generatingPDF ? "Generating PDF..." : "Generate PDF"}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleAddItem}
-          >
-            Add Item
-          </Button>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                color: "#1976d2",
+                fontWeight: "bold",
+                textTransform: "uppercase",
+                fontSize: "0.8rem",
+              }}
+            >
+              Analysis Status <br />{" "}
+              <Typography
+                component="span"
+                variant="subtitle2"
+                sx={{
+                  color:
+                    items.length === 0
+                      ? "text.secondary"
+                      : items.every((item) => item.analysisData?.isAnalyzed)
+                      ? "green"
+                      : "red",
+                  fontWeight: "normal",
+                  textTransform: "none",
+                }}
+              >
+                {items.length === 0
+                  ? "No Items"
+                  : items.every((item) => item.analysisData?.isAnalyzed)
+                  ? "Analysis Complete"
+                  : "Analysis In Progress"}
+              </Typography>
+            </Typography>
+          </Box>
         </Box>
       </Box>
 

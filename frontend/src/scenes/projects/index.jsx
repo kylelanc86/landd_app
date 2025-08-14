@@ -1858,7 +1858,7 @@ const Projects = ({ initialFilters = {} }) => {
           getRowId={(row) => row._id || row.id}
           loading={loading && !searchLoading}
           error={error}
-          checkboxSelection
+          // checkboxSelection
           disableRowSelectionOnClick
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
