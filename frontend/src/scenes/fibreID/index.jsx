@@ -36,7 +36,7 @@ const FibreIdIndex = () => {
       icon: <AssignmentIcon />,
       path: "/fibre-id/ldjobs",
       color: "#2e7d32",
-      isAvailable: false,
+      isAvailable: true,
     },
   ];
 

@@ -41,14 +41,10 @@ import {
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
   PictureAsPdf as PictureAsPdfIcon,
-  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 import { useParams, useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
-import {
-  projectService,
-  asbestosAssessmentService,
-} from "../../../services/api";
+import { projectService } from "../../../services/api";
 import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
 
 const AssessmentItemsPage = () => {
@@ -77,7 +73,6 @@ const AssessmentItemsPage = () => {
   const [compressionStatus, setCompressionStatus] = useState(null);
   const [assessment, setAssessment] = useState(null);
   const [generatingPDF, setGeneratingPDF] = useState(false);
-  const [statusMessage, setStatusMessage] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -276,62 +271,37 @@ const AssessmentItemsPage = () => {
 
   const handleGeneratePDF = async () => {
     try {
-      console.log('Starting PDF generation, setting loading state to true');
+      console.log("Starting PDF generation, setting loading state to true");
       setGeneratingPDF(true);
 
       // Get the full assessment data with populated project and items
-      console.log('Fetching assessment data...');
+      console.log("Fetching assessment data...");
       const fullAssessment = await assessmentService.getJob(id);
-      console.log('Assessment data:', fullAssessment);
-      
-      console.log('Fetching assessment items...');
+      console.log("Assessment data:", fullAssessment);
+
+      console.log("Fetching assessment items...");
       const assessmentItems = await assessmentService.getItems(id);
-      console.log('Assessment items:', assessmentItems);
+      console.log("Assessment items:", assessmentItems);
 
       // Combine assessment data with items
       const assessmentData = {
         ...fullAssessment,
         items: assessmentItems,
       };
-      console.log('Combined assessment data:', assessmentData);
+      console.log("Combined assessment data:", assessmentData);
 
       // Generate PDF
-      console.log('Calling generateAssessmentPDF...');
+      console.log("Calling generateAssessmentPDF...");
       const fileName = await generateAssessmentPDF(assessmentData);
-      console.log('PDF generation completed:', fileName);
+      console.log("PDF generation completed:", fileName);
 
       alert(`PDF generated successfully: ${fileName}`);
     } catch (err) {
       console.error("Error generating PDF:", err);
       alert("Failed to generate PDF: " + err.message);
     } finally {
-      console.log('Setting loading state to false');
+      console.log("Setting loading state to false");
       setGeneratingPDF(false);
-    }
-  };
-
-  const handleMarkReadyForAnalysis = async () => {
-    if (
-      window.confirm(
-        "Are you sure you want to mark the entire assessment as ready for analysis?"
-      )
-    ) {
-      try {
-        await asbestosAssessmentService.markAssessmentReadyForAnalysis(id);
-        // Refresh assessment status
-        const updatedAssessment = await assessmentService.getJob(id);
-        setAssessment(updatedAssessment);
-        setStatusMessage({
-          type: "success",
-          text: "Assessment marked as ready for analysis.",
-        });
-      } catch (err) {
-        console.error("Error marking assessment ready for analysis:", err);
-        setStatusMessage({
-          type: "error",
-          text: "Failed to mark assessment ready for analysis.",
-        });
-      }
     }
   };
 
@@ -395,23 +365,8 @@ const AssessmentItemsPage = () => {
           >
             Add Item
           </Button>
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<CheckCircleIcon />}
-            onClick={handleMarkReadyForAnalysis}
-            disabled={assessment?.status === "ready-for-analysis"}
-          >
-            Mark Job Ready for Analysis
-          </Button>
         </Box>
       </Box>
-
-      {statusMessage && (
-        <Alert severity={statusMessage.type} sx={{ mt: 2 }}>
-          {statusMessage.text}
-        </Alert>
-      )}
 
       {/* Abbreviations Box */}
       <Box

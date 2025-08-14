@@ -25,6 +25,7 @@ import {
   Menu,
   Divider,
   Checkbox,
+  ListItemButton,
   ListItemText,
   InputAdornment,
   Switch,
@@ -39,10 +40,10 @@ import {
   Popover,
   List,
   ListItem,
-  ListItemButton,
   ListItemIcon,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+
 import {
   ACTIVE_STATUSES,
   INACTIVE_STATUSES,
@@ -226,6 +227,7 @@ const Projects = ({ initialFilters = {} }) => {
   const location = useLocation();
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
     useJobStatus() || {};
+  const { isAdmin, isManager } = usePermissions();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -378,6 +380,9 @@ const Projects = ({ initialFilters = {} }) => {
   const [googleMaps, setGoogleMaps] = useState(null);
 
   const [clientInputValue, setClientInputValue] = useState("");
+
+  // Editable status state
+  const [statusDropdownAnchor, setStatusDropdownAnchor] = useState(null);
 
   // Initialize Google Places Autocomplete
   useEffect(() => {
@@ -1190,6 +1195,40 @@ const Projects = ({ initialFilters = {} }) => {
     [fetchProjectsWithPagination, filters.searchTerm]
   );
 
+  // Status editing handlers
+  const handleStatusClick = (projectId, event) => {
+    if (isAdmin || isManager) {
+      // Store the project ID in the anchor element's dataset
+      event.currentTarget.dataset.projectId = projectId;
+      setStatusDropdownAnchor(event.currentTarget);
+    }
+  };
+
+  const handleStatusChange = async (projectId, newStatus) => {
+    try {
+      await projectService.update(projectId, { status: newStatus });
+
+      // Update the local state
+      setProjects((prevProjects) =>
+        prevProjects.map((project) =>
+          project._id === projectId
+            ? { ...project, status: newStatus }
+            : project
+        )
+      );
+
+      // Close the dropdown
+      setStatusDropdownAnchor(null);
+    } catch (error) {
+      console.error("Error updating project status:", error);
+      // You might want to show an error message to the user here
+    }
+  };
+
+  const handleStatusClose = () => {
+    setStatusDropdownAnchor(null);
+  };
+
   // Load user preferences from database
   useEffect(() => {
     const loadUserPreferences = async () => {
@@ -1392,16 +1431,34 @@ const Projects = ({ initialFilters = {} }) => {
         minWidth: 60,
         maxWidth: 165,
         renderCell: (params) => (
-          <Box
-            sx={{
-              backgroundColor: getStatusColor(params.value),
-              color: "white",
-              padding: "4px 8px",
-              borderRadius: "4px",
-              fontSize: "0.75rem",
-            }}
-          >
-            {params.value}
+          <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
+            {/* Status display */}
+            <Box
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStatusClick(params.row._id, e);
+              }}
+              sx={{
+                backgroundColor: getStatusColor(params.value),
+                color: "white",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                fontSize: "0.75rem",
+                cursor: isAdmin || isManager ? "pointer" : "default",
+                "&:hover":
+                  isAdmin || isManager
+                    ? {
+                        opacity: 0.8,
+                        transform: "scale(1.02)",
+                        transition: "all 0.2s ease",
+                      }
+                    : {},
+                userSelect: "none",
+                position: "relative",
+              }}
+            >
+              {params.value}
+            </Box>
           </Box>
         ),
       },
@@ -1846,6 +1903,80 @@ const Projects = ({ initialFilters = {} }) => {
           }
         />
       </Box>
+
+      {/* Status Dropdown Menu */}
+      <Menu
+        anchorEl={statusDropdownAnchor}
+        open={Boolean(statusDropdownAnchor)}
+        onClose={handleStatusClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "left",
+        }}
+        sx={{
+          "& .MuiPaper-root": {
+            minWidth: "200px",
+          },
+          zIndex: 9999,
+        }}
+      >
+        {ACTIVE_STATUSES.map((status) => (
+          <MenuItem
+            key={status}
+            onClick={() =>
+              handleStatusChange(
+                statusDropdownAnchor?.dataset?.projectId,
+                status
+              )
+            }
+            sx={{
+              backgroundColor: getStatusColor(status),
+              color: "white",
+              margin: "2px 8px",
+              borderRadius: "4px",
+              "&:hover": {
+                backgroundColor: getStatusColor(status),
+                opacity: 0.8,
+                transform: "scale(1.02)",
+                transition: "all 0.2s ease",
+              },
+            }}
+          >
+            {status}
+          </MenuItem>
+        ))}
+        <Divider sx={{ margin: "8px 0" }} />
+        {INACTIVE_STATUSES.map((status) => (
+          <MenuItem
+            key={status}
+            onClick={() =>
+              handleStatusChange(
+                statusDropdownAnchor?.dataset?.projectId,
+                status
+              )
+            }
+            sx={{
+              backgroundColor: getStatusColor(status),
+              color: "white",
+              margin: "2px 8px",
+              borderRadius: "4px",
+              "&:hover": {
+                backgroundColor: getStatusColor(status),
+                opacity: 0.8,
+                transform: "scale(1.02)",
+                transition: "all 0.2s ease",
+              },
+            }}
+          >
+            {status}
+          </MenuItem>
+        ))}
+      </Menu>
+
       {/* Project Details Dialog */}
       <Dialog
         open={dialogOpen}

@@ -116,7 +116,7 @@ const AllocatedJobsTable = () => {
       id: job._id || job.id,
       projectID: job.projectID,
       name: job.name,
-      department: job.department || "N/A",
+      // department: job.department || "N/A",
       status: job.status,
       d_Date: job.d_Date,
       overdueInvoice: job.overdueInvoice || {
@@ -142,13 +142,13 @@ const AllocatedJobsTable = () => {
         minWidth: 200,
         maxWidth: 400,
       },
-      {
-        field: "department",
-        headerName: "Department",
-        flex: 1.5,
-        minWidth: 150,
-        maxWidth: 200,
-      },
+      // {
+      //   field: "department",
+      //   headerName: "Department",
+      //   flex: 1.5,
+      //   minWidth: 150,
+      //   maxWidth: 200,
+      // },
       {
         field: "d_Date",
         headerName: "Due Date",
@@ -204,13 +204,13 @@ const AllocatedJobsTable = () => {
       },
       {
         field: "overdueInvoice",
-        headerName: "Overdue Invoice",
+        headerName: "Invoice",
         flex: 1,
         minWidth: 120,
         maxWidth: 150,
         renderCell: (params) => {
           const overdue = params.value;
-          if (!overdue?.overdueInvoice) return "None Overdue";
+          if (!overdue?.overdueInvoice) return "None";
           return `${overdue.overdueDays} day${
             overdue.overdueDays === 1 ? "" : "s"
           }`;

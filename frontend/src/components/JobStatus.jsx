@@ -32,7 +32,7 @@ export const INACTIVE_STATUSES = [
 export const getStatusColor = (status) => {
   const statusColors = {
     [JOB_STATUS.IN_PROGRESS]: "#ff9800", // Orange
-    [JOB_STATUS.REPORT_SENT_FOR_REVIEW]: "#f44336", // Red
+    [JOB_STATUS.REPORT_SENT_FOR_REVIEW]: "#9c27b0", // Purple
     [JOB_STATUS.READY_FOR_INVOICING]: "#795548", // Brown
     [JOB_STATUS.INVOICE_SENT]: "#607d8b", // Blue Grey
     [JOB_STATUS.JOB_COMPLETE]: "#4caf50", // Green

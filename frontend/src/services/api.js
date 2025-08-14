@@ -377,7 +377,12 @@ export const asbestosAssessmentService = {
     api.patch(`/assessments/${assessmentId}/items/${itemId}/ready-for-analysis`, { readyForAnalysis }),
   markAssessmentReadyForAnalysis: (assessmentId) => 
     api.patch(`/assessments/${assessmentId}/ready-for-analysis`),
-  getAssessmentsWithReadySamples: () => api.get('/assessments/ready-for-analysis')
+  getAssessmentsWithReadySamples: () => api.get('/assessments/ready-for-analysis'),
+  
+  // Additional methods for the new embedded analysis structure
+  getJob: (jobId) => api.get(`/assessments/${jobId}`).then(res => res.data),
+  updateItemAnalysis: (jobId, itemNumber, analysisData) => 
+    api.put(`/assessments/${jobId}/items/${itemNumber}/analysis`, analysisData).then(res => res.data)
 };
 
 // Client Supplied Jobs service

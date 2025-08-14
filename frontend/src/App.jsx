@@ -34,13 +34,12 @@ import GraticulePage from "./scenes/records/calibrations/GraticulePage.jsx";
 import PrimaryFlowmeterPage from "./scenes/records/calibrations/PrimaryFlowmeterPage.jsx";
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
 import FibreIdIndex from "./scenes/fibreID/index.jsx";
-import AnalysisPage from "./scenes/fibreID/AnalysisPage.jsx";
 import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
 import AsbestosAssessmentJobs from "./scenes/fibreID/AsbestosAssessmentJobs.jsx";
-import AsbestosAssessmentSamples from "./scenes/fibreID/AsbestosAssessmentSamples.jsx";
 import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
+import AssessmentItemsPage from "./scenes/fibreID/AssessmentItemsPage.jsx";
+import AssessmentItemAnalysisPage from "./scenes/fibreID/AssessmentItemAnalysisPage.jsx";
 import AssessmentJobsPage from "./scenes/surveys/asbestos";
-import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
@@ -672,13 +671,25 @@ function App() {
                           }
                         />
                         <Route
-                          path="/fibre-id/ldjobs/:assessmentId/samples"
+                          path="/fibre-id/assessment/:assessmentId/items"
                           element={
                             <PermissionRoute
                               requiredPermissions={["fibre.view"]}
                             >
                               <Suspense fallback={<LoadingSpinner />}>
-                                <AsbestosAssessmentSamples />
+                                <AssessmentItemsPage />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/fibre-id/assessment/:assessmentId/item/:itemNumber/analysis"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["fibre.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <AssessmentItemAnalysisPage />
                               </Suspense>
                             </PermissionRoute>
                           }
@@ -691,18 +702,6 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <ClientSuppliedSamples />
-                              </Suspense>
-                            </PermissionRoute>
-                          }
-                        />
-                        <Route
-                          path="/fibre-id/analysis/:sampleId"
-                          element={
-                            <PermissionRoute
-                              requiredPermissions={["fibre.view"]}
-                            >
-                              <Suspense fallback={<LoadingSpinner />}>
-                                <AnalysisPage />
                               </Suspense>
                             </PermissionRoute>
                           }

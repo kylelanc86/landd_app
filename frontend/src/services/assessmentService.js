@@ -12,6 +12,12 @@ const assessmentService = {
   addItem: (jobId, data) => axios.post(`${API_BASE}/${jobId}/items`, data).then(res => res.data),
   updateItem: (jobId, itemId, data) => axios.put(`${API_BASE}/${jobId}/items/${itemId}`, data).then(res => res.data),
   deleteItem: (jobId, itemId) => axios.delete(`${API_BASE}/${jobId}/items/${itemId}`).then(res => res.data),
+  updateStatus: (jobId, status) => axios.patch(`${API_BASE}/${jobId}/status`, { status }).then(res => res.data),
+  
+  // Update analysis data for a specific assessment item
+  updateItemAnalysis: (jobId, itemNumber, analysisData) => 
+    axios.put(`${API_BASE}/${jobId}/items/${itemNumber}/analysis`, analysisData).then(res => res.data),
+
   generatePDF: (assessmentData) => axios.post('/api/pdf/generate-asbestos-assessment', { assessmentData }, { 
     responseType: 'blob',
     headers: {

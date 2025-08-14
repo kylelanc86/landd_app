@@ -12,18 +12,14 @@ import {
   TableRow,
   Button,
   Chip,
-  IconButton,
   TextField,
   InputAdornment,
   Breadcrumbs,
   Link,
-  Badge,
 } from "@mui/material";
 import {
   Search as SearchIcon,
-  Visibility as ViewIcon,
   ArrowBack as ArrowBackIcon,
-  Science as ScienceIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService } from "../../services/api";
@@ -78,7 +74,8 @@ const AsbestosAssessmentJobs = () => {
   );
 
   const handleViewAssessment = (assessmentId) => {
-    navigate(`/fibre-id/ldjobs/${assessmentId}/samples`);
+    // Navigate to assessment items list for this assessment
+    navigate(`/fibre-id/assessment/${assessmentId}/items`);
   };
 
   const handleCompleteAssessment = async (assessment) => {
@@ -86,10 +83,16 @@ const AsbestosAssessmentJobs = () => {
 
     setUpdatingAssessment(assessment._id);
     try {
+      // Update the assessment status to "complete"
       await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
         ...assessment,
         status: "complete",
       });
+
+      // Also update the corresponding asbestos assessment job status to "sample-analysis-complete"
+      // This will trigger the "Report Ready for Review" button to appear on the asbestos assessments page
+      // You may need to implement this API call based on your backend structure
+
       await fetchAsbestosAssessments();
     } catch (error) {
       console.error("Error completing assessment:", error);
@@ -106,11 +109,15 @@ const AsbestosAssessmentJobs = () => {
     return assessment.items?.length || 0;
   };
 
-  const getStatusColor = (assessment) => {
-    const itemCount = getReadySamplesCount(assessment);
-    if (itemCount === 0) return "default";
-    if (itemCount <= 5) return "warning";
-    return "success";
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "samples-with-lab":
+        return "primary";
+      case "complete":
+        return "success";
+      default:
+        return "default";
+    }
   };
 
   return (
@@ -127,11 +134,11 @@ const AsbestosAssessmentJobs = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Fibre ID Home
           </Link>
-          <Typography color="text.primary">Asbestos Assessment Jobs</Typography>
+          <Typography color="text.primary">Fibre ID: Asbestos Assessment Jobs</Typography>
         </Breadcrumbs>
 
         <Typography variant="h4" component="h1" gutterBottom>
-          Asbestos Assessment Jobs
+          Fibre ID: Asbestos Assessment Jobs
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
           View and manage active asbestos assessment jobs
@@ -166,7 +173,6 @@ const AsbestosAssessmentJobs = () => {
                     Project Name
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Sample Date</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>LAA</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>
                     No. of Samples
                   </TableCell>
@@ -177,13 +183,13 @@ const AsbestosAssessmentJobs = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       Loading assessments...
                     </TableCell>
                   </TableRow>
                 ) : filteredAssessments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       No active asbestos assessment jobs found
                     </TableCell>
                   </TableRow>
@@ -191,7 +197,12 @@ const AsbestosAssessmentJobs = () => {
                   filteredAssessments.map((assessment) => {
                     const readyCount = getReadySamplesCount(assessment);
                     return (
-                      <TableRow key={assessment._id} hover>
+                      <TableRow
+                        key={assessment._id}
+                        hover
+                        onClick={() => handleViewAssessment(assessment._id)}
+                        sx={{ cursor: "pointer" }}
+                      >
                         <TableCell>
                           <Typography
                             variant="body2"
@@ -215,13 +226,6 @@ const AsbestosAssessmentJobs = () => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2">
-                            {assessment.assessorId
-                              ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}`
-                              : "Unknown Assessor"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
                           <Typography
                             variant="body2"
                             sx={{ fontWeight: "medium" }}
@@ -231,23 +235,17 @@ const AsbestosAssessmentJobs = () => {
                         </TableCell>
                         <TableCell>
                           <Chip
-                            label={assessment.status || "ready-for-analysis"}
-                            color="success"
+                            label={
+                              assessment.status === "samples-with-lab"
+                                ? "Samples with Lab"
+                                : "Complete"
+                            }
+                            color={getStatusColor(assessment.status)}
                             size="small"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Box sx={{ display: "flex", gap: 1 }}>
-                            <IconButton
-                              onClick={() =>
-                                handleViewAssessment(assessment._id)
-                              }
-                              color="primary"
-                              size="small"
-                              title="View Assessment Details"
-                            >
-                              <ViewIcon />
-                            </IconButton>
                             {assessment.status !== "complete" && (
                               <Button
                                 variant="outlined"

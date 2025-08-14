@@ -39,7 +39,7 @@ const SurveysDashboard = () => {
       path: "/assessments", // changed from /surveys/asbestos
       requiredPermission: "asbestos.view",
       color: "#1976d2",
-      isAvailable: false,
+      isAvailable: true,
     },
     {
       id: "residential-asbestos-assessment",

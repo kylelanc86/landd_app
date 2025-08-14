@@ -36,7 +36,6 @@ import {
   StatusChip,
 } from "../../components/JobStatus";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
-import { testGoogleMapsApi } from "../../utils/testGoogleMapsApi";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -216,17 +215,8 @@ const ProjectInformation = () => {
         console.error(
           "Google Maps API key is missing. Please check your environment configuration."
         );
-        return;
-      }
-
-      // Test the API key first
-      const isApiWorking = await testGoogleMapsApi();
-      if (!isApiWorking) {
-        console.error(
-          "Google Maps API key is not working. Please check your API key configuration."
-        );
         setGoogleMapsError(
-          "Google Maps API is not working. Please check your API key configuration."
+          "Google Maps API key is missing. Please check your environment configuration."
         );
         return;
       }
@@ -246,8 +236,12 @@ const ProjectInformation = () => {
         setPlacesService(placesService);
 
         console.log("Google Maps services initialized successfully");
+        setGoogleMapsError(null); // Clear any previous errors
       } catch (error) {
         console.error("Error loading Google Maps script:", error);
+        setGoogleMapsError(
+          "Error loading Google Maps. Please try refreshing the page."
+        );
       }
     };
 

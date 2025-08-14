@@ -23,18 +23,14 @@ import {
 } from "@mui/material";
 import {
   Add as AddIcon,
-  List as ListIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
-  Article as ArticleIcon,
   ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import assessmentService from "../../../services/assessmentService";
 import { formatDate, formatDateForInput } from "../../../utils/dateUtils";
-import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
 import projectService from "../../../services/projectService";
-import asbestosAssessmentService from "../../../services/asbestosAssessmentService";
 
 const AssessmentJobsPage = () => {
   const [jobs, setJobs] = useState([]);
@@ -55,8 +51,11 @@ const AssessmentJobsPage = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedEditProject, setSelectedEditProject] = useState(null);
   const [editingJob, setEditingJob] = useState(null);
-  const [generatingCOC, setGeneratingCOC] = useState(null);
   const [completingJob, setCompletingJob] = useState(null);
+  const [cocModalOpen, setCocModalOpen] = useState(false);
+  const [selectedJobForCOC, setSelectedJobForCOC] = useState(null);
+  const [jobSamples, setJobSamples] = useState([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
 
   const fetchJobs = () => {
     setLoading(true);
@@ -97,12 +96,8 @@ const AssessmentJobsPage = () => {
     setCompletingJob(job._id);
     try {
       const newStatus = job.status === "complete" ? "in-progress" : "complete";
-      // Only send necessary fields for the update
-      await assessmentService.updateJob(job._id, {
-        projectId: job.projectId._id || job.projectId,
-        assessmentDate: job.assessmentDate,
-        status: newStatus,
-      });
+      // Update status using the new status update method
+      await assessmentService.updateStatus(job._id, newStatus);
       // Update the job locally instead of fetching all jobs again
       setJobs((prevJobs) =>
         prevJobs.map((j) =>
@@ -113,7 +108,7 @@ const AssessmentJobsPage = () => {
       alert(
         err.message ||
           `Failed to ${
-            job.status === "complete" ? "uncomplete" : "complete"
+            job.status === "complete" ? "reopen" : "complete"
           } assessment job`
       );
     } finally {
@@ -134,30 +129,75 @@ const AssessmentJobsPage = () => {
     }
   };
 
-  const handleGenerateCOC = async (assessmentId) => {
+  const handleGenerateCOC = async (job) => {
     try {
-      setGeneratingCOC(assessmentId);
+      setSelectedJobForCOC(job);
+      setCocModalOpen(true);
 
-      const pdfBlob = await asbestosAssessmentService.generateChainOfCustody(
-        assessmentId
+      // Fetch samples for this job
+      setLoadingSamples(true);
+      const samples = await assessmentService.getItems(job._id);
+      setJobSamples(samples);
+    } catch (err) {
+      console.error("Error opening COC modal:", err);
+      alert("Failed to fetch samples. Please try again.");
+    } finally {
+      setLoadingSamples(false);
+    }
+  };
+
+  const handleVerifyCOC = async () => {
+    if (!selectedJobForCOC) return;
+
+    try {
+      // Update the job status to "samples-with-lab" when COC is verified
+      await assessmentService.updateStatus(
+        selectedJobForCOC._id,
+        "samples-with-lab"
       );
 
-      // Create a download link
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `ChainOfCustody_${assessmentId}_${
-        new Date().toISOString().split("T")[0]
-      }.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // Update the job locally
+      setJobs((prevJobs) =>
+        prevJobs.map((j) =>
+          j._id === selectedJobForCOC._id
+            ? { ...j, status: "samples-with-lab" }
+            : j
+        )
+      );
+
+      alert(
+        "COC verified! Job status updated to 'Samples with Lab'. Samples have been sent to the asbestos assessment jobs table."
+      );
+      setCocModalOpen(false);
+      setSelectedJobForCOC(null);
+      setJobSamples([]);
     } catch (err) {
-      console.error("Error generating Chain of Custody:", err);
-      alert("Failed to generate Chain of Custody PDF. Please try again.");
-    } finally {
-      setGeneratingCOC(null);
+      console.error("Error verifying COC:", err);
+      alert("Failed to verify COC. Please try again.");
+    }
+  };
+
+  const handleCOCModalClose = () => {
+    setCocModalOpen(false);
+    setSelectedJobForCOC(null);
+    setJobSamples([]);
+  };
+
+  const handleReportReadyForReview = async (job) => {
+    try {
+      // Update the job status to "report-ready-for-review"
+      await assessmentService.updateStatus(job._id, "report-ready-for-review");
+
+      // Update the job locally
+      setJobs((prevJobs) =>
+        prevJobs.map((j) =>
+          j._id === job._id ? { ...j, status: "report-ready-for-review" } : j
+        )
+      );
+
+      alert("Job status updated to 'Report Ready for Review'");
+    } catch (err) {
+      alert(err.message || "Failed to update job status");
     }
   };
 
@@ -241,14 +281,29 @@ const AssessmentJobsPage = () => {
     navigate("/surveys");
   };
 
+  // Format status for display
+  const formatStatus = (status) => {
+    switch (status) {
+      case "in-progress":
+        return "In Progress";
+      case "samples-with-lab":
+        return "Samples with Lab";
+      case "sample-analysis-complete":
+        return "Sample Analysis Complete";
+      case "report-ready-for-review":
+        return "Report Ready for Review";
+      case "complete":
+        return "Complete";
+      default:
+        return status;
+    }
+  };
+
+  // Filter out completed assessments
+  const activeJobs = jobs.filter((job) => job.status !== "complete");
+
   return (
     <Box m="20px">
-      {/* PDF Loading Overlay */}
-      <PDFLoadingOverlay
-        open={generatingCOC !== null}
-        message="Generating Chain of Custody PDF..."
-      />
-
       <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
         Asbestos Assessment Jobs
       </Typography>
@@ -262,7 +317,9 @@ const AssessmentJobsPage = () => {
           <ArrowBackIcon sx={{ mr: 1 }} />
           Surveys Home
         </Link>
-        <Typography color="text.primary">Asbestos Assessment Jobs</Typography>
+        <Typography color="text.primary">
+          Active Asbestos Assessment Jobs
+        </Typography>
       </Breadcrumbs>
       <Box
         display="flex"
@@ -271,7 +328,7 @@ const AssessmentJobsPage = () => {
         sx={{ mb: 3 }}
       >
         <Typography variant="h5" fontWeight="bold">
-          Assessment Jobs
+          Active Assessment Jobs
         </Typography>
         <Button
           variant="contained"
@@ -294,68 +351,63 @@ const AssessmentJobsPage = () => {
                 <TableRow>
                   <TableCell>Project ID</TableCell>
                   <TableCell>Project Name</TableCell>
-                  <TableCell>Status</TableCell>
                   <TableCell>Assessment Date</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell sx={{ width: "350px" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {jobs.length === 0 ? (
+                {activeJobs.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={5}
                       align="center"
                       sx={{ color: "text.secondary", py: 6 }}
                     >
-                      No active asbestos assessment jobs.
+                      No active asbestos assessment jobs. Completed assessments
+                      are automatically hidden. Click on a row to view
+                      assessment items.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  jobs.map((job) => (
-                    <TableRow key={job._id}>
+                  activeJobs.map((job) => (
+                    <TableRow
+                      key={job._id}
+                      onClick={() => handleViewItems(job._id)}
+                      sx={{
+                        cursor: "pointer",
+                        "&:hover": { backgroundColor: "action.hover" },
+                      }}
+                    >
                       <TableCell>
                         {job.projectId?.projectID || job.projectId}
                       </TableCell>
                       <TableCell>{job.projectId?.name || ""}</TableCell>
-                      <TableCell>{job.status}</TableCell>
                       <TableCell>
                         {job.assessmentDate
                           ? formatDate(job.assessmentDate)
                           : ""}
                       </TableCell>
-                      <TableCell>
-                        <IconButton
-                          color="primary"
-                          onClick={() => handleViewItems(job._id)}
-                          title="View Items"
-                        >
-                          <ListIcon />
-                        </IconButton>
-                        <IconButton
+                      <TableCell>{formatStatus(job.status)}</TableCell>
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()}
+                        sx={{ width: "350px" }}
+                      >
+                        <Button
+                          variant="contained"
                           color="secondary"
-                          onClick={() => handleGenerateCOC(job._id)}
-                          disabled={generatingCOC === job._id}
+                          onClick={() => handleGenerateCOC(job)}
                           title="Generate Chain of Custody"
-                          sx={{
-                            backgroundColor: "secondary.main",
-                            color: "white",
-                            "&:hover": {
-                              backgroundColor: "secondary.dark",
-                            },
-                            minWidth: "40px",
-                            minHeight: "40px",
-                          }}
+                          size="small"
+                          sx={{ mr: 1 }}
                         >
-                          {generatingCOC === job._id ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <ArticleIcon />
-                          )}
-                        </IconButton>
+                          COC
+                        </Button>
                         <IconButton
                           color="secondary"
                           onClick={() => handleEditAssessment(job)}
                           title="Edit Assessment"
+                          sx={{ mr: 1 }}
                         >
                           <EditIcon />
                         </IconButton>
@@ -363,28 +415,50 @@ const AssessmentJobsPage = () => {
                           color="error"
                           onClick={() => handleDeleteAssessment(job._id)}
                           title="Delete Assessment"
+                          sx={{ mr: 1 }}
                         >
                           <DeleteIcon />
                         </IconButton>
-                        <Button
-                          variant={
-                            job.status === "complete" ? "contained" : "outlined"
-                          }
-                          color={
-                            job.status === "complete" ? "error" : "success"
-                          }
-                          onClick={() => handleToggleComplete(job)}
-                          disabled={completingJob === job._id}
-                          sx={{ mr: 1 }}
-                        >
-                          {completingJob === job._id
-                            ? job.status === "complete"
-                              ? "Uncompleting..."
-                              : "Completing..."
-                            : job.status === "complete"
-                            ? "Uncomplete"
-                            : "Complete"}
-                        </Button>
+
+                        {/* Report Ready for Review Button - Only show when status is "sample-analysis-complete" */}
+                        {job.status === "sample-analysis-complete" && (
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => handleReportReadyForReview(job)}
+                            size="small"
+                            sx={{ mr: 1 }}
+                          >
+                            Report Ready for Review
+                          </Button>
+                        )}
+
+                        {/* Complete/Reopen Button - Only show when status is "report-ready-for-review" or "complete" */}
+                        {(job.status === "report-ready-for-review" ||
+                          job.status === "complete") && (
+                          <Button
+                            variant={
+                              job.status === "complete"
+                                ? "contained"
+                                : "outlined"
+                            }
+                            color={
+                              job.status === "complete" ? "error" : "success"
+                            }
+                            onClick={() => handleToggleComplete(job)}
+                            disabled={completingJob === job._id}
+                            size="small"
+                            sx={{ ml: 2 }}
+                          >
+                            {completingJob === job._id
+                              ? job.status === "complete"
+                                ? "Reopening..."
+                                : "Completing..."
+                              : job.status === "complete"
+                              ? "Reopen"
+                              : "Complete"}
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
@@ -505,6 +579,183 @@ const AssessmentJobsPage = () => {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* COC Modal */}
+      <Dialog
+        open={cocModalOpen}
+        onClose={handleCOCModalClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Typography variant="h6">
+            Chain of Custody -{" "}
+            {selectedJobForCOC?.projectId?.projectID ||
+              selectedJobForCOC?.projectId}
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {selectedJobForCOC && (
+            <Box>
+              {/* Job Details Section */}
+              <Box mb={3}>
+                <Typography variant="h6" gutterBottom>
+                  Job Details
+                </Typography>
+                <Box display="grid" gridTemplateColumns="1fr 1fr" gap={2}>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Project ID
+                    </Typography>
+                    <Typography variant="body1">
+                      {selectedJobForCOC.projectId?.projectID ||
+                        selectedJobForCOC.projectId}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Project Name
+                    </Typography>
+                    <Typography variant="body1">
+                      {selectedJobForCOC.projectId?.name || ""}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Assessment Date
+                    </Typography>
+                    <Typography variant="body1">
+                      {selectedJobForCOC.assessmentDate
+                        ? formatDate(selectedJobForCOC.assessmentDate)
+                        : ""}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Status
+                    </Typography>
+                    <Typography variant="body1">
+                      {formatStatus(selectedJobForCOC.status)}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Created
+                    </Typography>
+                    <Typography variant="body1">
+                      {selectedJobForCOC.createdAt
+                        ? formatDate(selectedJobForCOC.createdAt)
+                        : ""}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Last Updated
+                    </Typography>
+                    <Typography variant="body1">
+                      {selectedJobForCOC.updatedAt
+                        ? formatDate(selectedJobForCOC.updatedAt)
+                        : ""}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Samples Section */}
+              <Box mb={3}>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
+                  <Typography variant="h6">Samples</Typography>
+                  {jobSamples.length > 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      Total: {jobSamples.length} sample
+                      {jobSamples.length !== 1 ? "s" : ""}
+                    </Typography>
+                  )}
+                </Box>
+                {loadingSamples ? (
+                  <Box display="flex" justifyContent="center" p={2}>
+                    <CircularProgress size={24} />
+                  </Box>
+                ) : jobSamples.length > 0 ? (
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Item #</TableCell>
+                          <TableCell>Sample Reference</TableCell>
+                          <TableCell>Location</TableCell>
+                          <TableCell>Material Type</TableCell>
+                          <TableCell>Asbestos Content</TableCell>
+                          <TableCell>Asbestos Type</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {jobSamples.map((sample) => (
+                          <TableRow key={sample._id}>
+                            <TableCell>{sample.itemNumber || ""}</TableCell>
+                            <TableCell>
+                              {sample.sampleReference || ""}
+                            </TableCell>
+                            <TableCell>
+                              {sample.locationDescription || ""}
+                            </TableCell>
+                            <TableCell>{sample.materialType || ""}</TableCell>
+                            <TableCell>
+                              {sample.asbestosContent || ""}
+                            </TableCell>
+                            <TableCell>{sample.asbestosType || ""}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No samples found for this assessment job.
+                  </Typography>
+                )}
+
+                {/* COC Verification Note */}
+                <Box mt={2} p={2} bgcolor="info.light" borderRadius={1}>
+                  <Typography variant="body2" color="info.contrastText">
+                    <strong>Note:</strong> Clicking "Verify COC" will:
+                    <br />• Update job status to "Samples with Lab"
+                    <br />• Send samples to the asbestos assessment jobs table
+                    for further processing
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => {
+              setCocModalOpen(false);
+              handleViewItems(selectedJobForCOC._id);
+            }}
+            sx={{ mr: "auto", color: "white", backgroundColor: "red" }}
+          >
+            Modify Samples
+          </Button>
+          <Button onClick={handleCOCModalClose}>Cancel</Button>
+          <Button
+            onClick={handleVerifyCOC}
+            variant="contained"
+            color="primary"
+            disabled={!selectedJobForCOC}
+          >
+            Verify COC
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
