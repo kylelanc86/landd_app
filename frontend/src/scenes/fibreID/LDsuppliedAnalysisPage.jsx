@@ -59,6 +59,7 @@ const LDsuppliedAnalysisPage = () => {
   const [fibres, setFibres] = useState([]);
   const [finalResult, setFinalResult] = useState("");
   const [noFibreDetected, setNoFibreDetected] = useState(false);
+  const [analysisDate, setAnalysisDate] = useState(new Date());
 
   useEffect(() => {
     if (assessmentId && itemNumber) {
@@ -120,6 +121,9 @@ const LDsuppliedAnalysisPage = () => {
         setCrucibleNo(savedData.crucibleNo || "");
         setFibres(savedData.fibres || []);
         setFinalResult(savedData.finalResult || "");
+        setAnalysisDate(
+          savedData.analyzedAt ? new Date(savedData.analyzedAt) : new Date()
+        );
       } else {
         // Pre-populate sample description if available
         if (item.sampleReference) {
@@ -127,6 +131,8 @@ const LDsuppliedAnalysisPage = () => {
             `Sample ${item.sampleReference} - ${item.locationDescription}`
           );
         }
+        // Set analysis date to today for new analysis
+        setAnalysisDate(new Date());
       }
     } catch (error) {
       console.error("Error fetching assessment details:", error);
@@ -282,6 +288,7 @@ const LDsuppliedAnalysisPage = () => {
         fibres,
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: isAnalysisComplete,
+        analyzedAt: analysisDate,
       };
 
       // Update the assessment item with analysis data
@@ -339,7 +346,7 @@ const LDsuppliedAnalysisPage = () => {
         fibres,
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: true,
-        analyzedAt: new Date(),
+        analyzedAt: analysisDate,
       };
 
       // Update the assessment item with analysis data
@@ -525,14 +532,28 @@ const LDsuppliedAnalysisPage = () => {
               {assessmentItem.materialType || "N/A"}
             </Typography>
           </Grid>
-          {/* <Grid item xs={12} md={3}>
-               <Typography variant="subtitle2" color="text.secondary">
-                 Asbestos Content
-               </Typography>
-               <Typography variant="body1" sx={{ fontWeight: "medium" }}>
-                 {assessmentItem.asbestosContent || "N/A"}
-               </Typography>
-             </Grid> */}
+          <Grid item xs={12} md={3}>
+            <Typography variant="subtitle2" color="text.secondary">
+              Analysis Date
+            </Typography>
+            <TextField
+              fullWidth
+              type="date"
+              value={analysisDate.toISOString().split("T")[0]}
+              onChange={(e) => setAnalysisDate(new Date(e.target.value))}
+              disabled={assessmentItem?.analysisData?.isAnalyzed}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              size="small"
+              sx={{
+                "& .MuiInputBase-input.Mui-disabled": {
+                  backgroundColor: "#f5f5f5",
+                  color: "#666",
+                },
+              }}
+            />
+          </Grid>
         </Grid>
       </Paper>
 

@@ -77,46 +77,46 @@ const ReportTemplates = () => {
       name: "Asbestos Assessment Report",
       color: "#FF6B6B",
     },
-    {
-      id: "leadAssessment",
-      name: "Lead Assessment Report",
-      color: "#4ECDC4",
-    },
-    {
-      id: "mouldAssessment",
-      name: "Mould Assessment Report",
-      color: "#45B7D1",
-    },
-    {
-      id: "airMonitoringReport",
-      name: "Air Monitoring Report",
-      color: "#6C5CE7",
-    },
-    {
-      id: "fibreIdentificationReport",
-      name: "Fibre Identification Report",
-      color: "#00B894",
-    },
-    {
-      id: "inspectionReport",
-      name: "Inspection Report",
-      color: "#E17055",
-    },
-    {
-      id: "complianceReport",
-      name: "Compliance Report",
-      color: "#74B9FF",
-    },
-    {
-      id: "riskAssessmentReport",
-      name: "Risk Assessment Report",
-      color: "#A29BFE",
-    },
-    {
-      id: "managementPlanReport",
-      name: "Management Plan Report",
-      color: "#FD79A8",
-    },
+    // {
+    //   id: "leadAssessment",
+    //   name: "Lead Assessment Report",
+    //   color: "#4ECDC4",
+    // },
+    // {
+    //   id: "mouldAssessment",
+    //   name: "Mould Assessment Report",
+    //   color: "#45B7D1",
+    // },
+    // {
+    //   id: "airMonitoringReport",
+    //   name: "Air Monitoring Report",
+    //   color: "#6C5CE7",
+    // },
+    // {
+    //   id: "fibreIdentificationReport",
+    //   name: "Fibre Identification Report",
+    //   color: "#00B894",
+    // },
+    // {
+    //   id: "inspectionReport",
+    //   name: "Inspection Report",
+    //   color: "#E17055",
+    // },
+    // {
+    //   id: "complianceReport",
+    //   name: "Compliance Report",
+    //   color: "#74B9FF",
+    // },
+    // {
+    //   id: "riskAssessmentReport",
+    //   name: "Risk Assessment Report",
+    //   color: "#A29BFE",
+    // },
+    // {
+    //   id: "managementPlanReport",
+    //   name: "Management Plan Report",
+    //   color: "#FD79A8",
+    // },
   ];
 
   // Template sections organized by page for detailed editing

@@ -109,14 +109,8 @@ const userSchema = new mongoose.Schema({
     }
   },
   labApprovals: {
-    type: {
-      fibreCounting: { type: Boolean, default: false },
-      fibreIdentification: { type: Boolean, default: false }
-    },
-    default: {
-      fibreCounting: false,
-      fibreIdentification: false
-    }
+    fibreCounting: { type: Boolean, default: false },
+    fibreIdentification: { type: Boolean, default: false }
   },
   notifications: {
     email: {

@@ -1362,6 +1362,13 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
       throw new Error('Assessment data is required');
     }
 
+    // Debug logging for fibre analysis report
+    console.log(`[${pdfId}] === ASSESSMENT DATA DEBUG ===`);
+    console.log(`[${pdfId}] assessmentData keys:`, Object.keys(assessmentData));
+    console.log(`[${pdfId}] fibreAnalysisReport exists:`, !!assessmentData.fibreAnalysisReport);
+    console.log(`[${pdfId}] fibreAnalysisReport type:`, typeof assessmentData.fibreAnalysisReport);
+    console.log(`[${pdfId}] fibreAnalysisReport length:`, assessmentData.fibreAnalysisReport ? assessmentData.fibreAnalysisReport.length : 'N/A');
+
     // Generate HTML content
     const html = await generateAssessmentHTML(assessmentData);
     backendPerformanceMonitor.endStage('template-population', pdfId);
@@ -1369,8 +1376,28 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
     // Generate PDF with DocRaptor
     backendPerformanceMonitor.startStage('docraptor-generation', pdfId);
     console.log('Generating PDF with DocRaptor V2...');
-    const pdfBuffer = await docRaptorService.generatePDF(html);
+    let pdfBuffer = await docRaptorService.generatePDF(html);
     backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
+
+    // Check if there's a fibre analysis report to merge
+    if (assessmentData.fibreAnalysisReport) {
+      console.log(`[${pdfId}] === FIBRE ANALYSIS REPORT DEBUG ===`);
+      console.log(`[${pdfId}] fibreAnalysisReport exists:`, !!assessmentData.fibreAnalysisReport);
+      console.log(`[${pdfId}] fibreAnalysisReport type:`, typeof assessmentData.fibreAnalysisReport);
+      console.log(`[${pdfId}] fibreAnalysisReport length:`, assessmentData.fibreAnalysisReport ? assessmentData.fibreAnalysisReport.length : 'N/A');
+      
+      try {
+        console.log(`[${pdfId}] Merging fibre analysis report with assessment PDF...`);
+        const mergedPdf = await mergePDFs(pdfBuffer, assessmentData.fibreAnalysisReport);
+        console.log(`[${pdfId}] PDFs merged successfully, new size:`, mergedPdf.length);
+        pdfBuffer = mergedPdf; // Update the final buffer
+      } catch (error) {
+        console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
+        console.log(`[${pdfId}] Returning PDF without fibre analysis report`);
+      }
+    } else {
+      console.log(`[${pdfId}] No fibre analysis report found in data`);
+    }
 
     // Send response
     backendPerformanceMonitor.startStage('response-sending', pdfId);

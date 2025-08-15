@@ -13,10 +13,19 @@ import {
   Chip,
   Breadcrumbs,
   Link,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
-import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+import {
+  ArrowBack as ArrowBackIcon,
+  PictureAsPdf as PdfIcon,
+} from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
-import { asbestosAssessmentService } from "../../services/api";
+import { asbestosAssessmentService, userService } from "../../services/api";
+import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 
 const LDsuppliedItems = () => {
   const navigate = useNavigate();
@@ -24,12 +33,66 @@ const LDsuppliedItems = () => {
   const [assessment, setAssessment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [analyst, setAnalyst] = useState("");
+  const [analysts, setAnalysts] = useState([]);
 
   useEffect(() => {
     if (assessmentId) {
       fetchAssessmentDetails();
+      fetchAnalysts();
     }
   }, [assessmentId]);
+
+  // Debug effect to log analysts state changes
+  useEffect(() => {
+    console.log("Analysts state changed:", analysts);
+    console.log("Current analyst selected:", analyst);
+  }, [analysts, analyst]);
+
+  const fetchAnalysts = async () => {
+    try {
+      console.log("=== FETCHING ANALYSTS DEBUG ===");
+      const response = await userService.getAll(true); // Get all users including inactive
+      console.log("User service response:", response);
+      console.log("Response data:", response.data);
+      console.log("Number of users returned:", response.data?.length || 0);
+
+      // Log all users to see their structure
+      if (response.data && response.data.length > 0) {
+        response.data.forEach((user, index) => {
+          console.log(`User ${index + 1}:`, {
+            id: user._id,
+            name: `${user.firstName} ${user.lastName}`,
+            labApprovals: user.labApprovals,
+            fibreIdentification: user.labApprovals?.fibreIdentification,
+          });
+        });
+      }
+
+      const fibreIdentificationAnalysts = response.data.filter(
+        (user) => user.labApprovals?.fibreIdentification === true
+      );
+      console.log(
+        "Filtered fibre identification analysts:",
+        fibreIdentificationAnalysts
+      );
+      console.log(
+        "Number of analysts found:",
+        fibreIdentificationAnalysts.length
+      );
+
+      setAnalysts(fibreIdentificationAnalysts);
+
+      // Set default analyst if available
+      if (fibreIdentificationAnalysts.length > 0 && !analyst) {
+        console.log("Setting default analyst:", fibreIdentificationAnalysts[0]);
+        setAnalyst(fibreIdentificationAnalysts[0]._id);
+      }
+    } catch (error) {
+      console.error("Error fetching analysts:", error);
+    }
+  };
 
   const fetchAssessmentDetails = async () => {
     try {
@@ -85,6 +148,114 @@ const LDsuppliedItems = () => {
     navigate(
       `/fibre-id/assessment/${assessmentId}/item/${itemNumber}/analysis`
     );
+  };
+
+  const handleGenerateFibreAnalysisReport = async () => {
+    try {
+      setGeneratingPDF(true);
+
+      console.log("=== FRONTEND FIBRE ANALYSIS REPORT GENERATION DEBUG ===");
+      console.log("Assessment ID:", assessmentId);
+      console.log("Assessment data:", assessment);
+      console.log(
+        "Items to analyze:",
+        assessment.items.filter((item) => item.analysisData?.isAnalyzed)
+      );
+
+      // Debug client information
+      console.log("Project ID structure:", assessment.projectId);
+      console.log("Client structure:", assessment.projectId?.client);
+      console.log("Client name:", assessment.projectId?.client?.name);
+      console.log(
+        "Client contact:",
+        assessment.projectId?.client?.contact1Name
+      );
+      console.log("Client email:", assessment.projectId?.client?.contact1Email);
+      console.log("Client address:", assessment.projectId?.client?.address);
+
+      // Log detailed item structure
+      assessment.items.forEach((item, index) => {
+        console.log(`Item ${index + 1} detailed structure:`, {
+          itemNumber: item.itemNumber,
+          sampleReference: item.sampleReference,
+          locationDescription: item.locationDescription,
+          analysisData: item.analysisData,
+          sampleReferenceType: typeof item.sampleReference,
+          hasSampleReference: !!item.sampleReference,
+        });
+      });
+
+      // Create a mock job object for the fibre analysis report
+      const mockJob = {
+        projectId: assessment.projectId,
+        jobNumber: assessment._id,
+        status: "Completed",
+        assessorId: assessment.assessorId,
+        assessorName: assessment.assessorId?.firstName
+          ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}`
+          : "LAA",
+        analyst: analysts.find((a) => a._id === analyst)?.firstName
+          ? `${analysts.find((a) => a._id === analyst).firstName} ${
+              analysts.find((a) => a._id === analyst).lastName
+            }`
+          : "Unknown Analyst",
+      };
+      console.log("Mock job object:", mockJob);
+
+      // Prepare sample items with the correct structure for the fibre analysis report
+      const sampleItemsForReport = assessment.items
+        .filter((item) => item.analysisData?.isAnalyzed)
+        .map((item) => ({
+          ...item,
+          // Ensure sample reference is properly set
+          sampleReference: item.sampleReference || `Sample ${item.itemNumber}`,
+          // Include analysis data
+          analysisData: item.analysisData,
+          // Include location description as fallback for sample description
+          locationDescription: item.locationDescription,
+        }));
+
+      console.log("Sample items for report:", sampleItemsForReport);
+
+      // Generate the fibre analysis PDF and get base64 data
+      console.log("Generating fibre analysis PDF...");
+      const pdfDataUrl = await generateFibreIDReport({
+        job: mockJob,
+        sampleItems: sampleItemsForReport,
+        openInNewTab: true, // Open in new window for immediate review
+        returnPdfData: true,
+      });
+      console.log(
+        "PDF generated successfully, data URL length:",
+        pdfDataUrl.length
+      );
+
+      // Extract base64 data from data URL
+      const base64Data = pdfDataUrl.split(",")[1];
+      console.log("Base64 data extracted, length:", base64Data.length);
+
+      // Upload the report to the assessment
+      console.log("Uploading fibre analysis report to backend...");
+      const uploadResponse =
+        await asbestosAssessmentService.uploadFibreAnalysisReport(
+          assessmentId,
+          {
+            reportData: base64Data,
+          }
+        );
+      console.log("Upload response:", uploadResponse);
+
+      // Refresh assessment data to show the uploaded report
+      console.log("Refreshing assessment data...");
+      await fetchAssessmentDetails();
+
+      alert("Fibre analysis report generated and uploaded successfully!");
+    } catch (error) {
+      console.error("Error generating fibre analysis report:", error);
+      alert(`Error generating fibre analysis report: ${error.message}`);
+    } finally {
+      setGeneratingPDF(false);
+    }
   };
 
   const getAnalysisStatusColor = (item) => {
@@ -170,17 +341,15 @@ const LDsuppliedItems = () => {
           >
             Assessment Jobs
           </Link>
-          <Typography color="text.primary">{assessment.projectId?.projectID}</Typography>
+          <Typography color="text.primary">
+            {assessment.projectId?.projectID}
+          </Typography>
         </Breadcrumbs>
 
         {/* Header */}
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 3 }}>
           <Typography variant="h4" component="h1" gutterBottom>
-            Fibre ID: Assessment Items
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Project: {assessment.projectId?.projectID || "N/A"} -{" "}
-            {assessment.projectId?.name || "Unknown Project"}
+            Assessment Items
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Assessment Date:{" "}
@@ -188,6 +357,66 @@ const LDsuppliedItems = () => {
               ? new Date(assessment.assessmentDate).toLocaleDateString("en-GB")
               : "N/A"}
           </Typography>
+
+          {/* Fibre Analysis Report Generation Button */}
+          <Box sx={{ mt: 2 }}>
+            {/* Analyst Selection */}
+            <Box sx={{ mb: 2 }}>
+              <FormControl sx={{ minWidth: 200, mr: 2 }}>
+                <InputLabel>Analyst</InputLabel>
+                <Select
+                  value={analyst}
+                  onChange={(e) => setAnalyst(e.target.value)}
+                  label="Analyst"
+                  size="small"
+                >
+                  {analysts.length > 0 ? (
+                    analysts.map((analystUser) => (
+                      <MenuItem key={analystUser._id} value={analystUser._id}>
+                        {analystUser.firstName} {analystUser.lastName}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled>No analysts available</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+              {/* Debug info */}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ ml: 1 }}
+              >
+                {analysts.length > 0
+                  ? `${analysts.length} analyst(s) available`
+                  : "No analysts found - check lab approvals"}
+              </Typography>
+            </Box>
+
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<PdfIcon />}
+              onClick={handleGenerateFibreAnalysisReport}
+              disabled={
+                generatingPDF ||
+                !assessment.items?.some(
+                  (item) => item.analysisData?.isAnalyzed
+                ) ||
+                !analyst
+              }
+              sx={{ mr: 2 }}
+            >
+              {generatingPDF
+                ? "Generating..."
+                : "Generate Fibre Analysis Report"}
+            </Button>
+            {assessment.fibreAnalysisReport && (
+              <Typography variant="body2" color="success.main" sx={{ mt: 1 }}>
+                ✓ Fibre Analysis Report Attached
+              </Typography>
+            )}
+          </Box>
         </Box>
 
         {/* Assessment Items Table */}

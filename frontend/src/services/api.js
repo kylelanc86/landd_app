@@ -382,7 +382,11 @@ export const asbestosAssessmentService = {
   // Additional methods for the new embedded analysis structure
   getJob: (jobId) => api.get(`/assessments/${jobId}`).then(res => res.data),
   updateItemAnalysis: (jobId, itemNumber, analysisData) => 
-    api.put(`/assessments/${jobId}/items/${itemNumber}/analysis`, analysisData).then(res => res.data)
+    api.put(`/assessments/${jobId}/items/${itemNumber}/analysis`, analysisData).then(res => res.data),
+  
+  // Upload fibre analysis report
+  uploadFibreAnalysisReport: (id, reportData) => 
+    api.post(`/assessments/${id}/upload-fibre-analysis-report`, reportData).then(res => res.data)
 };
 
 // Client Supplied Jobs service

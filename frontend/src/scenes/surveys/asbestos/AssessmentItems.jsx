@@ -274,6 +274,10 @@ const AssessmentItemsPage = () => {
       console.log("Fetching assessment data...");
       const fullAssessment = await assessmentService.getJob(id);
       console.log("Assessment data:", fullAssessment);
+      console.log(
+        "Assessment fibreAnalysisReport field:",
+        fullAssessment.fibreAnalysisReport ? "Present" : "Missing"
+      );
 
       console.log("Fetching assessment items...");
       const assessmentItems = await assessmentService.getItems(id);
@@ -285,6 +289,10 @@ const AssessmentItemsPage = () => {
         items: assessmentItems,
       };
       console.log("Combined assessment data:", assessmentData);
+      console.log(
+        "Combined data fibreAnalysisReport field:",
+        assessmentData.fibreAnalysisReport ? "Present" : "Missing"
+      );
 
       // Generate PDF
       console.log("Calling generateAssessmentPDF...");

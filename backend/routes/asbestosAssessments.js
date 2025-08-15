@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
         select: "projectID name client",
         populate: {
           path: "client",
-          select: "name"
+          select: "name contact1Name contact1Email address"
         }
       })
       .populate('assessorId');
@@ -45,7 +45,7 @@ router.post('/', async (req, res) => {
         select: "projectID name client",
         populate: {
           path: "client",
-          select: "name"
+          select: "name contact1Name contact1Email address"
         }
       })
       .populate('assessorId');
@@ -64,7 +64,7 @@ router.get('/:id', async (req, res) => {
         select: "projectID name client",
         populate: {
           path: "client",
-          select: "name"
+          select: "name contact1Name contact1Email address"
         }
       })
       .populate('assessorId');
@@ -97,7 +97,7 @@ router.put('/:id', async (req, res) => {
       select: "projectID name client",
       populate: {
         path: "client",
-        select: "name"
+        select: "name contact1Name contact1Email address"
       }
     }).populate('assessorId');
     
@@ -117,7 +117,7 @@ router.get('/:id/items', async (req, res) => {
         select: "projectID name client",
         populate: {
           path: "client",
-          select: "name"
+          select: "name contact1Name contact1Email address"
         }
       })
       .populate('assessorId');
@@ -297,6 +297,40 @@ router.post('/:id/upload-site-plan', async (req, res) => {
   }
 });
 
+// POST /api/assessments/:id/upload-fibre-analysis-report - upload fibre analysis report
+router.post('/:id/upload-fibre-analysis-report', async (req, res) => {
+  try {
+    const { reportData } = req.body; // Expecting base64 data
+    if (!reportData) {
+      return res.status(400).json({ message: 'Report data is required' });
+    }
+
+    console.log('=== FIBRE ANALYSIS REPORT UPLOAD DEBUG ===');
+    console.log('Assessment ID:', req.params.id);
+    console.log('Report data length:', reportData.length);
+    console.log('Report data type:', typeof reportData);
+    console.log('Report data starts with:', reportData.substring(0, 50));
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    console.log('Found assessment job:', job._id);
+    console.log('Previous fibreAnalysisReport field:', job.fibreAnalysisReport ? 'Present' : 'Missing');
+
+    job.fibreAnalysisReport = reportData;
+    job.updatedAt = new Date();
+    await job.save();
+
+    console.log('Assessment saved successfully');
+    console.log('New fibreAnalysisReport field:', job.fibreAnalysisReport ? 'Present' : 'Missing');
+
+    res.json({ message: 'Fibre analysis report uploaded successfully', job });
+  } catch (err) {
+    console.error('Error uploading fibre analysis report:', err);
+    res.status(400).json({ message: 'Failed to upload fibre analysis report', error: err.message });
+  }
+});
+
 // DELETE /api/assessments/:id/analysis-certificate - delete analysis certificate
 router.delete('/:id/analysis-certificate', async (req, res) => {
   try {
@@ -402,7 +436,7 @@ router.get('/:id/chain-of-custody', async (req, res) => {
         select: "projectID name client",
         populate: {
           path: "client",
-          select: "name email contact"
+          select: "name contact1Name contact1Email address"
         }
       })
       .populate('assessorId');

@@ -205,6 +205,7 @@ const EditUserPage = () => {
         ), // Only include valid licences
         signature: form.signature || "",
         workingHours: form.workingHours,
+        labApprovals: form.labApprovals,
       };
 
       console.log("Updating user with data:", updateData);

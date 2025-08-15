@@ -169,17 +169,18 @@ pdfMake.fonts = {
                 [
                   {
                     stack: [
-                      { text: [ { text: 'Client Name: ', bold: true }, { text: job?.projectId?.client?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Client Contact: ', bold: true }, { text: job?.projectId?.client?.contact1Name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || job?.projectId?.client?.invoiceEmail || job?.projectId?.client?.contact2Email || 'N/A' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Site Name: ', bold: true }, { text: job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Client: ', bold: true }, { text: job?.projectId?.client?.name || 'Unknown Client' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Contact: ', bold: true }, { text: job?.projectId?.client?.contact1Name || 'Unknown Contact' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || 'Unknown Email' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Address: ', bold: true }, { text: job?.projectId?.client?.address || 'Unknown Address' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
                     stack: [
+                      { text: [ { text: 'Laboratory: ', bold: true }, { text: 'Lancaster & Dickenson Consulting Pty Ltd' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Address: ', bold: true }, { text: '4/6 Dacre Street, Mitchell ACT 2911' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Email: ', bold: true }, { text: 'laboratory@landd.com.au' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Lab Manager: ', bold: true }, { text: 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Phone: ', bold: true }, { text: '(02) 6241 2779' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: 'enquiries@landd.com.au' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   }
                 ]
@@ -221,15 +222,15 @@ pdfMake.fonts = {
                     stack: [
                       { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectId?.projectID || job?.jobNumber || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Analysed by: ', bold: true }, { text: job?.analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Sampled by: ', bold: true }, { text: job?.assessorName || job?.assessorId?.firstName ? `${job.assessorId.firstName} ${job.assessorId.lastName}` : 'LAA' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Samples Received: ', bold: true }, { text: job?.projectId?.d_Date ? formatDate(job.projectId.d_Date) : (job?.projectId?.createdAt ? formatDate(job.projectId.createdAt) : formatDate(new Date())) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
                     stack: [
-                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Sampled by: ', bold: true }, { text: 'Client Supplied' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Samples Received: ', bold: true }, { text: job?.projectId?.d_Date ? formatDate(job.projectId.d_Date) : (job?.projectId?.createdAt ? formatDate(job.projectId.createdAt) : formatDate(new Date())) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Analysed by: ', bold: true }, { text: job?.analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Report approved by: ', bold: true }, { text: 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   }
                 ]
@@ -317,22 +318,32 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['15%', '18%', '11%', '19%', '8%', '15%', '15%'],
+              widths: ['11%', '11%', '11%', '23%', '12%', '15%', '17%'],
               body: [
                 [
                   { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
                   { text: 'Sample Reference', style: 'tableHeader', fontSize: 8 },
                   { text: 'Analysis Date', style: 'tableHeader', fontSize: 8 },
                   { text: 'Sample Description', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Sample Mass', style: 'tableHeader', fontSize: 8 },
+                  { text: 'Mass/Dimensions', style: 'tableHeader', fontSize: 8 },
                   { text: 'Non-Asbestos Fibres', style: 'tableHeader', fontSize: 8 },
                   { text: 'Asbestos Fibres', style: 'tableHeader', fontSize: 8 }
                 ],
                 ...sortedSampleItems.map((item, index) => {
-                  const analysisDate = item.analyzedAt 
-                    ? formatDate(item.analyzedAt)
+                  const analysisDate = item.analysisData?.analyzedAt 
+                    ? formatDate(item.analysisData.analyzedAt)
                     : formatDate(new Date());
-                  const sampleMass = item.sampleMass || '1.5 g';
+                  
+                  // Get sample mass from analysis data or use default
+                  let sampleMass = '';
+                  if (item.analysisData?.sampleMass) {
+                    sampleMass = item.analysisData.sampleMass + ' g';
+                  } else if (item.analysisData?.sampleDimensions) {
+                    const dims = item.analysisData.sampleDimensions;
+                    if (dims.x && dims.y && dims.z) {
+                      sampleMass = `${dims.x} × ${dims.y} × ${dims.z} mm`;
+                    }
+                  }
                   
                   // Extract fibre analysis results
                   const getFibreResults = (item) => {
@@ -364,9 +375,9 @@ pdfMake.fonts = {
                   
                   return [
                     { text: `${job?.projectId?.projectID}-${index + 1}`, fontSize: 8 },
-                    { text: item.clientReference || 'LD-', fontSize: 8 },
+                    { text: item.sampleReference || `Sample ${index + 1}`, fontSize: 8 },
                     { text: analysisDate, fontSize: 8 },
-                    { text: item.sampleDescription || '', fontSize: 8 },
+                    { text: item.analysisData?.sampleDescription || item.locationDescription || 'No description', fontSize: 8 },
                     { text: sampleMass, fontSize: 8 },
                     { text: fibreResults.nonAsbestos, fontSize: 8 },
                     { text: fibreResults.asbestos, fontSize: 8, bold: true }
@@ -464,6 +475,13 @@ pdfMake.fonts = {
   const filename = `${projectID}: Fibre ID Report - ${projectName} (${sampleDate}).pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
+  
+  // Handle opening in new tab if requested
+  if (openInNewTab) {
+    pdfDoc.open({}, undefined, filename);
+  }
+  
+  // Handle returning PDF data if requested
   if (returnPdfData) {
     return new Promise((resolve) => {
       pdfDoc.getDataUrl((dataUrl) => {
@@ -471,9 +489,8 @@ pdfMake.fonts = {
       });
     });
   } else {
-    if (openInNewTab) {
-      pdfDoc.open({}, undefined, filename);
-    } else {
+    // Only download if not opening in new tab and not returning data
+    if (!openInNewTab) {
       pdfDoc.download(filename);
     }
   }

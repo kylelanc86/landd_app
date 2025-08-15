@@ -65,6 +65,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   analysisCertificateFile: { type: String },
   sitePlan: { type: Boolean, default: false },
   sitePlanFile: { type: String },
+  fibreAnalysisReport: { type: String }, // Base64 PDF data for fibre analysis report
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
