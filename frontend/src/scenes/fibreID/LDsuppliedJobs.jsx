@@ -24,7 +24,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService } from "../../services/api";
 
-const AsbestosAssessmentJobs = () => {
+const LDsuppliedJobs = () => {
   const navigate = useNavigate();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,7 +134,9 @@ const AsbestosAssessmentJobs = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Fibre ID Home
           </Link>
-          <Typography color="text.primary">Fibre ID: Asbestos Assessment Jobs</Typography>
+          <Typography color="text.primary">
+            Fibre ID: Asbestos Assessment Jobs
+          </Typography>
         </Breadcrumbs>
 
         <Typography variant="h4" component="h1" gutterBottom>
@@ -274,4 +276,4 @@ const AsbestosAssessmentJobs = () => {
   );
 };
 
-export default AsbestosAssessmentJobs;
+export default LDsuppliedJobs;

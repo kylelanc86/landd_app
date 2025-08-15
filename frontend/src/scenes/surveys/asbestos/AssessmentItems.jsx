@@ -317,8 +317,8 @@ const AssessmentItemsPage = () => {
         sx={{ mb: 3 }}
       >
         <Box>
-          <Typography variant="h2" fontWeight="bold" sx={{ mb: "5px" }}>
-            Assessment Items
+          <Typography variant="h4" fontWeight="bold" sx={{ mb: "5px" }}>
+            Asbestos Assessment Items
           </Typography>
           <Box sx={{ mb: 2, mt: 2 }}>
             <Breadcrumbs aria-label="breadcrumb">

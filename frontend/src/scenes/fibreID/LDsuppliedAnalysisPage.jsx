@@ -36,7 +36,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { asbestosAssessmentService } from "../../services/api";
 
-const AssessmentItemAnalysisPage = () => {
+const LDsuppliedAnalysisPage = () => {
   const navigate = useNavigate();
   const { assessmentId, itemNumber } = useParams();
   const [assessment, setAssessment] = useState(null);
@@ -65,6 +65,13 @@ const AssessmentItemAnalysisPage = () => {
       fetchAssessmentDetails();
     }
   }, [assessmentId, itemNumber]);
+
+  useEffect(() => {
+    // Ensure there's always at least one fibre when the component loads
+    if (!noFibreDetected && fibres.length === 0) {
+      ensureOneFibre();
+    }
+  }, [noFibreDetected, fibres.length]);
 
   const fetchAssessmentDetails = async () => {
     try {
@@ -163,7 +170,7 @@ const AssessmentItemAnalysisPage = () => {
       disintegrates: "",
       riLiquid: "",
       colour: "",
-      pleochrism: "",
+      pleochrism: "None",
       birefringence: "",
       extinction: "",
       signOfElongation: "",
@@ -172,6 +179,27 @@ const AssessmentItemAnalysisPage = () => {
       result: "",
     };
     setFibres([...fibres, newFibre]);
+  };
+
+  const ensureOneFibre = () => {
+    if (fibres.length === 0) {
+      const newFibre = {
+        id: Date.now(),
+        name: "Fibre A",
+        morphology: "",
+        disintegrates: "",
+        riLiquid: "",
+        colour: "",
+        pleochrism: "None",
+        birefringence: "",
+        extinction: "",
+        signOfElongation: "",
+        fibreParallel: "",
+        fibrePerpendicular: "",
+        result: "",
+      };
+      setFibres([newFibre]);
+    }
   };
 
   const updateFibre = (fibreId, field, value) => {
@@ -188,9 +216,9 @@ const AssessmentItemAnalysisPage = () => {
           // Auto-calculate result based on disintegrates and morphology
           if (updatedFibre.disintegrates === "yes") {
             if (updatedFibre.morphology === "curly") {
-              updatedFibre.result = "Organic fibres detected";
+              updatedFibre.result = "Organic fibres";
             } else if (updatedFibre.morphology === "straight") {
-              updatedFibre.result = "SMF detected";
+              updatedFibre.result = "SMF";
             }
           } else if (updatedFibre.disintegrates === "no") {
             // For non-disintegrating fibres, result should be manually selected
@@ -227,9 +255,21 @@ const AssessmentItemAnalysisPage = () => {
     return uniqueResults.join(", ");
   };
 
+  const isAnalysisComplete = () => {
+    return (
+      fibres.length > 0 &&
+      fibres.every((fibre) => fibre.result && fibre.result.trim() !== "")
+    );
+  };
+
   const handleSaveAnalysis = async () => {
     try {
       console.log("Starting to save analysis...");
+
+      // Check if analysis is complete (all fibres have results)
+      const isAnalysisComplete =
+        fibres.length > 0 &&
+        fibres.every((fibre) => fibre.result && fibre.result.trim() !== "");
 
       const analysisData = {
         microscope: noFibreDetected ? "N/A" : microscope,
@@ -241,6 +281,7 @@ const AssessmentItemAnalysisPage = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres,
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        isAnalyzed: isAnalysisComplete,
       };
 
       // Update the assessment item with analysis data
@@ -258,7 +299,6 @@ const AssessmentItemAnalysisPage = () => {
         analysisData: {
           ...prev.analysisData,
           ...analysisData,
-          isAnalyzed: true,
         },
       }));
 
@@ -275,7 +315,17 @@ const AssessmentItemAnalysisPage = () => {
 
   const handleMarkAsAnalyzed = async () => {
     try {
-      console.log("Marking item as analyzed...");
+      console.log("Marking item as analysed...");
+
+      // Check if analysis is complete (all fibres have results)
+      const isAnalysisComplete =
+        fibres.length > 0 &&
+        fibres.every((fibre) => fibre.result && fibre.result.trim() !== "");
+
+      if (!isAnalysisComplete) {
+        alert("Cannot mark as analysed: All fibres must have results first.");
+        return;
+      }
 
       // Create analysis data with current form values
       const analysisData = {
@@ -299,7 +349,7 @@ const AssessmentItemAnalysisPage = () => {
         analysisData
       );
 
-      console.log("Item marked as analyzed successfully:", response);
+      console.log("Item marked as analysed successfully:", response);
 
       // Update local state
       setAssessmentItem((prev) => ({
@@ -311,12 +361,57 @@ const AssessmentItemAnalysisPage = () => {
       }));
 
       // You could add a success notification here
-      alert("Item marked as analyzed successfully!");
+      alert("Item marked as analysed successfully!");
     } catch (error) {
-      console.error("Error marking item as analyzed:", error);
+      console.error("Error marking item as analysed:", error);
       console.error("Error details:", error.response?.data);
       // You could add an error notification here
-      alert(`Error marking item as analyzed: ${error.message}`);
+      alert(`Error marking item as analysed: ${error.message}`);
+    }
+  };
+
+  const handleEditAnalysis = async () => {
+    try {
+      console.log("Setting item to editable mode...");
+
+      // Create analysis data with current form values but set isAnalyzed to false
+      const analysisData = {
+        microscope: noFibreDetected ? "N/A" : microscope,
+        sampleDescription,
+        sampleType,
+        sampleMass: sampleType === "mass" ? sampleMass : null,
+        sampleDimensions: sampleType === "dimensions" ? sampleDimensions : null,
+        ashing,
+        crucibleNo: ashing === "yes" ? crucibleNo : null,
+        fibres,
+        finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        isAnalyzed: false,
+        analyzedAt: null,
+      };
+
+      // Update the assessment item with analysis data
+      const response = await asbestosAssessmentService.updateItemAnalysis(
+        assessmentId,
+        itemNumber,
+        analysisData
+      );
+
+      console.log("Item set to editable mode successfully:", response);
+
+      // Update local state
+      setAssessmentItem((prev) => ({
+        ...prev,
+        analysisData: {
+          ...prev.analysisData,
+          ...analysisData,
+        },
+      }));
+
+      alert("Analysis is now editable!");
+    } catch (error) {
+      console.error("Error setting item to editable mode:", error);
+      console.error("Error details:", error.response?.data);
+      alert(`Error setting item to editable mode: ${error.message}`);
     }
   };
 
@@ -328,6 +423,9 @@ const AssessmentItemAnalysisPage = () => {
     if (noFibreDetected) {
       setMicroscope("N/A");
       setFinalResult("No fibres detected");
+    } else {
+      // Ensure there's always at least one fibre when analysis is active
+      ensureOneFibre();
     }
   }, [noFibreDetected]);
 
@@ -448,6 +546,13 @@ const AssessmentItemAnalysisPage = () => {
               label="Sample Description"
               value={sampleDescription}
               onChange={(e) => setSampleDescription(e.target.value)}
+              disabled={assessmentItem?.analysisData?.isAnalyzed}
+              sx={{
+                "& .MuiInputBase-input.Mui-disabled": {
+                  backgroundColor: "#f5f5f5",
+                  color: "#666",
+                },
+              }}
             />
           </Grid>
 
@@ -457,11 +562,12 @@ const AssessmentItemAnalysisPage = () => {
               <RadioGroup
                 value={sampleType}
                 onChange={(e) => setSampleType(e.target.value)}
+                disabled={assessmentItem?.analysisData?.isAnalyzed}
               >
                 <FormControlLabel
                   value="mass"
                   control={<Radio />}
-                  label="Mass"
+                  label="Mass (g)"
                 />
                 <FormControlLabel
                   value="dimensions"
@@ -476,9 +582,16 @@ const AssessmentItemAnalysisPage = () => {
             {sampleType === "mass" ? (
               <TextField
                 fullWidth
-                label="Sample Mass (g)"
+                label="Sample Mass"
                 value={sampleMass}
                 onChange={(e) => setSampleMass(e.target.value)}
+                disabled={assessmentItem?.analysisData?.isAnalyzed}
+                sx={{
+                  "& .MuiInputBase-input.Mui-disabled": {
+                    backgroundColor: "#f5f5f5",
+                    color: "#666",
+                  },
+                }}
               />
             ) : (
               <Grid container spacing={1}>
@@ -493,6 +606,13 @@ const AssessmentItemAnalysisPage = () => {
                         x: e.target.value,
                       })
                     }
+                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    sx={{
+                      "& .MuiInputBase-input.Mui-disabled": {
+                        backgroundColor: "#f5f5f5",
+                        color: "#666",
+                      },
+                    }}
                   />
                 </Grid>
                 <Grid item xs={4}>
@@ -506,6 +626,13 @@ const AssessmentItemAnalysisPage = () => {
                         y: e.target.value,
                       })
                     }
+                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    sx={{
+                      "& .MuiInputBase-input.Mui-disabled": {
+                        backgroundColor: "#f5f5f5",
+                        color: "#666",
+                      },
+                    }}
                   />
                 </Grid>
                 <Grid item xs={4}>
@@ -519,6 +646,13 @@ const AssessmentItemAnalysisPage = () => {
                         z: e.target.value,
                       })
                     }
+                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    sx={{
+                      "& .MuiInputBase-input.Mui-disabled": {
+                        backgroundColor: "#f5f5f5",
+                        color: "#666",
+                      },
+                    }}
                   />
                 </Grid>
               </Grid>
@@ -530,6 +664,7 @@ const AssessmentItemAnalysisPage = () => {
               <RadioGroup
                 value={ashing}
                 onChange={(e) => setAshing(e.target.value)}
+                disabled={assessmentItem?.analysisData?.isAnalyzed}
               >
                 <FormControlLabel
                   value="no"
@@ -549,7 +684,15 @@ const AssessmentItemAnalysisPage = () => {
                 label="Crucible Number"
                 value={crucibleNo}
                 onChange={(e) => setCrucibleNo(e.target.value)}
-                sx={{ width: "150px", ml: 2 }}
+                disabled={assessmentItem?.analysisData?.isAnalyzed}
+                sx={{
+                  width: "150px",
+                  ml: 2,
+                  "& .MuiInputBase-input.Mui-disabled": {
+                    backgroundColor: "#f5f5f5",
+                    color: "#666",
+                  },
+                }}
               />
             )}
           </Grid>
@@ -571,6 +714,7 @@ const AssessmentItemAnalysisPage = () => {
                   <Checkbox
                     checked={noFibreDetected}
                     onChange={(e) => setNoFibreDetected(e.target.checked)}
+                    disabled={assessmentItem?.analysisData?.isAnalyzed}
                   />
                 }
                 label="No fibres detected"
@@ -584,6 +728,7 @@ const AssessmentItemAnalysisPage = () => {
                     value={microscope}
                     onChange={(e) => setMicroscope(e.target.value)}
                     label="Microscope"
+                    disabled={assessmentItem?.analysisData?.isAnalyzed}
                   >
                     <MenuItem value="LD-PLM-1">LD-PLM-1</MenuItem>
                   </Select>
@@ -603,12 +748,30 @@ const AssessmentItemAnalysisPage = () => {
             alignItems="center"
             sx={{ mb: 3 }}
           >
-            <Typography variant="h6">Fibre Analysis</Typography>
+            <Box>
+              <Typography variant="h6">Fibre Analysis</Typography>
+              {fibres.length > 0 && (
+                <Typography
+                  variant="body2"
+                  color={isAnalysisComplete() ? "success.main" : "warning.main"}
+                  sx={{ mt: 0.5 }}
+                >
+                  {isAnalysisComplete()
+                    ? "✓ Analysis Complete"
+                    : `⚠ ${
+                        fibres.filter((f) => f.result && f.result.trim() !== "")
+                          .length
+                      }/${fibres.length} fibres have results`}
+                </Typography>
+              )}
+            </Box>
             <Button
               variant="outlined"
               startIcon={<AddIcon />}
               onClick={addFibre}
-              disabled={fibres.length >= 4}
+              disabled={
+                fibres.length >= 4 || assessmentItem?.analysisData?.isAnalyzed
+              }
               size="small"
             >
               Add Fibre
@@ -617,16 +780,20 @@ const AssessmentItemAnalysisPage = () => {
 
           {fibres.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              No fibres added yet. Click "Add Fibre" to begin analysis.
+              Loading fibre analysis...
             </Typography>
           ) : (
-            <TableContainer>
+            <TableContainer sx={{ maxWidth: "fit-content" }}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Field</TableCell>
+                    <TableCell sx={{ width: "170px" }}>Field</TableCell>
                     {fibres.map((fibre, index) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <Box
                           display="flex"
                           alignItems="center"
@@ -645,6 +812,7 @@ const AssessmentItemAnalysisPage = () => {
                             sx={{ backgroundColor: "white" }}
                             size="small"
                             onClick={() => removeFibre(fibre.id)}
+                            disabled={assessmentItem?.analysisData?.isAnalyzed}
                           >
                             Remove
                           </Button>
@@ -655,13 +823,21 @@ const AssessmentItemAnalysisPage = () => {
                 </TableHead>
                 <TableBody>
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Morphology
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.morphology}
@@ -673,10 +849,10 @@ const AssessmentItemAnalysisPage = () => {
                               )
                             }
                             size="small"
+                            disabled={assessmentItem?.analysisData?.isAnalyzed}
                           >
                             <MenuItem value="curly">Curly</MenuItem>
                             <MenuItem value="straight">Straight</MenuItem>
-                            <MenuItem value="irregular">Irregular</MenuItem>
                           </Select>
                         </FormControl>
                       </TableCell>
@@ -684,13 +860,21 @@ const AssessmentItemAnalysisPage = () => {
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Disintegrates
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.disintegrates}
@@ -702,6 +886,7 @@ const AssessmentItemAnalysisPage = () => {
                               )
                             }
                             size="small"
+                            disabled={assessmentItem?.analysisData?.isAnalyzed}
                           >
                             <MenuItem value="yes">Yes</MenuItem>
                             <MenuItem value="no">No</MenuItem>
@@ -712,33 +897,65 @@ const AssessmentItemAnalysisPage = () => {
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         RI Liquid
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={fibre.riLiquid}
-                          onChange={(e) =>
-                            updateFibre(fibre.id, "riLiquid", e.target.value)
-                          }
-                        />
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={fibre.riLiquid}
+                            onChange={(e) =>
+                              updateFibre(fibre.id, "riLiquid", e.target.value)
+                            }
+                            size="small"
+                            disabled={
+                              fibre.disintegrates === "yes" ||
+                              assessmentItem?.analysisData?.isAnalyzed
+                            }
+                            sx={{
+                              "& .MuiInputBase-input.Mui-disabled": {
+                                backgroundColor: "#f5f5f5",
+                                color: "#666",
+                              },
+                            }}
+                          >
+                            <MenuItem value="">Select RI</MenuItem>
+                            <MenuItem value="1.55">1.55</MenuItem>
+                            <MenuItem value="1.67">1.67</MenuItem>
+                            <MenuItem value="1.70">1.70</MenuItem>
+                          </Select>
+                        </FormControl>
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Colour
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <TextField
                           fullWidth
                           size="small"
@@ -746,107 +963,220 @@ const AssessmentItemAnalysisPage = () => {
                           onChange={(e) =>
                             updateFibre(fibre.id, "colour", e.target.value)
                           }
+                          disabled={
+                            fibre.disintegrates === "yes" ||
+                            assessmentItem?.analysisData?.isAnalyzed
+                          }
+                          sx={{
+                            "& .MuiInputBase-input.Mui-disabled": {
+                              backgroundColor: "#f5f5f5",
+                              color: "#666",
+                            },
+                          }}
                         />
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Pleochrism
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <TextField
                           fullWidth
                           size="small"
-                          value={fibre.pleochrism}
+                          value={fibre.pleochrism || "None"}
                           onChange={(e) =>
                             updateFibre(fibre.id, "pleochrism", e.target.value)
                           }
+                          disabled={
+                            fibre.disintegrates === "yes" ||
+                            assessmentItem?.analysisData?.isAnalyzed
+                          }
+                          placeholder="None"
+                          sx={{
+                            "& .MuiInputBase-input.Mui-disabled": {
+                              backgroundColor: "#f5f5f5",
+                              color: "#666",
+                            },
+                          }}
                         />
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Birefringence
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={fibre.birefringence}
-                          onChange={(e) =>
-                            updateFibre(
-                              fibre.id,
-                              "birefringence",
-                              e.target.value
-                            )
-                          }
-                        />
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={fibre.birefringence}
+                            onChange={(e) =>
+                              updateFibre(
+                                fibre.id,
+                                "birefringence",
+                                e.target.value
+                              )
+                            }
+                            size="small"
+                            disabled={
+                              fibre.disintegrates === "yes" ||
+                              assessmentItem?.analysisData?.isAnalyzed
+                            }
+                            sx={{
+                              "& .MuiInputBase-input.Mui-disabled": {
+                                backgroundColor: "#f5f5f5",
+                                color: "#666",
+                              },
+                            }}
+                          >
+                            <MenuItem value="">Select Birefringence</MenuItem>
+                            <MenuItem value="low">Low</MenuItem>
+                            <MenuItem value="moderate">Moderate</MenuItem>
+                            <MenuItem value="none">None</MenuItem>
+                          </Select>
+                        </FormControl>
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Extinction
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={fibre.extinction}
-                          onChange={(e) =>
-                            updateFibre(fibre.id, "extinction", e.target.value)
-                          }
-                        />
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={fibre.extinction}
+                            onChange={(e) =>
+                              updateFibre(
+                                fibre.id,
+                                "extinction",
+                                e.target.value
+                              )
+                            }
+                            size="small"
+                            disabled={
+                              fibre.disintegrates === "yes" ||
+                              assessmentItem?.analysisData?.isAnalyzed
+                            }
+                            sx={{
+                              "& .MuiInputBase-input.Mui-disabled": {
+                                backgroundColor: "#f5f5f5",
+                                color: "#666",
+                              },
+                            }}
+                          >
+                            <MenuItem value="">Select Extinction</MenuItem>
+                            <MenuItem value="complete">Complete</MenuItem>
+                            <MenuItem value="partial">Partial</MenuItem>
+                          </Select>
+                        </FormControl>
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Sign of Elongation
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={fibre.signOfElongation}
-                          onChange={(e) =>
-                            updateFibre(
-                              fibre.id,
-                              "signOfElongation",
-                              e.target.value
-                            )
-                          }
-                        />
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={fibre.signOfElongation}
+                            onChange={(e) =>
+                              updateFibre(
+                                fibre.id,
+                                "signOfElongation",
+                                e.target.value
+                              )
+                            }
+                            size="small"
+                            disabled={
+                              fibre.disintegrates === "yes" ||
+                              assessmentItem?.analysisData?.isAnalyzed
+                            }
+                            sx={{
+                              "& .MuiInputBase-input.Mui-disabled": {
+                                backgroundColor: "#f5f5f5",
+                                color: "#666",
+                              },
+                            }}
+                          >
+                            <MenuItem value="">
+                              Select Sign of Elongation
+                            </MenuItem>
+                            <MenuItem value="Length-slow">Length-slow</MenuItem>
+                            <MenuItem value="Length-fast">Length-fast</MenuItem>
+                          </Select>
+                        </FormControl>
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Fibre Parallel
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <TextField
                           fullWidth
                           size="small"
@@ -858,19 +1188,37 @@ const AssessmentItemAnalysisPage = () => {
                               e.target.value
                             )
                           }
+                          disabled={
+                            fibre.disintegrates === "yes" ||
+                            assessmentItem?.analysisData?.isAnalyzed
+                          }
+                          sx={{
+                            "& .MuiInputBase-input.Mui-disabled": {
+                              backgroundColor: "#f5f5f5",
+                              color: "#666",
+                            },
+                          }}
                         />
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Fibre Perpendicular
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
                         <TextField
                           fullWidth
                           size="small"
@@ -882,28 +1230,63 @@ const AssessmentItemAnalysisPage = () => {
                               e.target.value
                             )
                           }
+                          disabled={
+                            fibre.disintegrates === "yes" ||
+                            assessmentItem?.analysisData?.isAnalyzed
+                          }
+                          sx={{
+                            "& .MuiInputBase-input.Mui-disabled": {
+                              backgroundColor: "#f5f5f5",
+                              color: "#666",
+                            },
+                          }}
                         />
                       </TableCell>
                     ))}
                   </TableRow>
 
                   <TableRow>
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ width: "170px" }}
+                    >
                       <Typography variant="subtitle2" fontWeight="bold">
                         Result
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell key={fibre.id} align="center">
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={fibre.result}
-                          onChange={(e) =>
-                            updateFibre(fibre.id, "result", e.target.value)
-                          }
-                          placeholder="Auto-calculated or manual"
-                        />
+                      <TableCell
+                        key={fibre.id}
+                        align="center"
+                        sx={{ width: "230px" }}
+                      >
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={fibre.result}
+                            onChange={(e) =>
+                              updateFibre(fibre.id, "result", e.target.value)
+                            }
+                            size="small"
+                            placeholder="Select Result"
+                            disabled={assessmentItem?.analysisData?.isAnalyzed}
+                          >
+                            <MenuItem value="">Select Result</MenuItem>
+                            <MenuItem value="Chrysotile Asbestos">
+                              Chrysotile Asbestos
+                            </MenuItem>
+                            <MenuItem value="Amosite Asbestos">
+                              Amosite Asbestos
+                            </MenuItem>
+                            <MenuItem value="Crocidolite Asbestos">
+                              Crocidolite Asbestos
+                            </MenuItem>
+                            <MenuItem value="Organic fibres">
+                              Organic fibres
+                            </MenuItem>
+                            <MenuItem value="SMF">SMF</MenuItem>
+                          </Select>
+                        </FormControl>
                       </TableCell>
                     ))}
                   </TableRow>
@@ -931,7 +1314,13 @@ const AssessmentItemAnalysisPage = () => {
               ? "No fibres detected"
               : "Summary of all fibre analysis results"
           }
-          disabled={noFibreDetected}
+          disabled={noFibreDetected || assessmentItem?.analysisData?.isAnalyzed}
+          sx={{
+            "& .MuiInputBase-input.Mui-disabled": {
+              backgroundColor: "#f5f5f5",
+              color: "#666",
+            },
+          }}
         />
       </Paper>
 
@@ -943,26 +1332,33 @@ const AssessmentItemAnalysisPage = () => {
           alignItems: "center",
         }}
       >
-        <Button
-          variant="outlined"
-          color="success"
-          onClick={handleMarkAsAnalyzed}
-          size="large"
-          disabled={
-            !assessmentItem?.analysisData ||
-            assessmentItem?.analysisData?.isAnalyzed
-          }
-        >
-          {assessmentItem?.analysisData?.isAnalyzed
-            ? "Already Analyzed"
-            : "Mark as Analyzed"}
-        </Button>
+        {assessmentItem?.analysisData?.isAnalyzed ? (
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={handleEditAnalysis}
+            size="large"
+          >
+            Edit Analysis
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            color="success"
+            onClick={handleMarkAsAnalyzed}
+            size="large"
+            disabled={!assessmentItem?.analysisData || !isAnalysisComplete()}
+          >
+            Mark as Analysed
+          </Button>
+        )}
 
         <Button
           variant="contained"
           color="primary"
           onClick={handleSaveAnalysis}
           size="large"
+          disabled={assessmentItem?.analysisData?.isAnalyzed}
         >
           Save Analysis
         </Button>
@@ -971,4 +1367,4 @@ const AssessmentItemAnalysisPage = () => {
   );
 };
 
-export default AssessmentItemAnalysisPage;
+export default LDsuppliedAnalysisPage;

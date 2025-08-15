@@ -18,7 +18,7 @@ import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
 import { asbestosAssessmentService } from "../../services/api";
 
-const AssessmentItemsPage = () => {
+const LDsuppliedItems = () => {
   const navigate = useNavigate();
   const { assessmentId } = useParams();
   const [assessment, setAssessment] = useState(null);
@@ -99,7 +99,7 @@ const AssessmentItemsPage = () => {
 
   const getAnalysisStatusText = (item) => {
     if (item.analysisData?.isAnalyzed) {
-      return "Analyzed";
+      return "Analysed";
     } else if (item.readyForAnalysis) {
       return "Ready for Analysis";
     } else {
@@ -170,7 +170,7 @@ const AssessmentItemsPage = () => {
           >
             Assessment Jobs
           </Link>
-          <Typography color="text.primary">Assessment Items</Typography>
+          <Typography color="text.primary">{assessment.projectId?.projectID}</Typography>
         </Breadcrumbs>
 
         {/* Header */}
@@ -279,4 +279,4 @@ const AssessmentItemsPage = () => {
   );
 };
 
-export default AssessmentItemsPage;
+export default LDsuppliedItems;

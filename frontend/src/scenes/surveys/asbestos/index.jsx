@@ -429,7 +429,7 @@ const AssessmentJobsPage = () => {
                             size="small"
                             sx={{ mr: 1 }}
                           >
-                            Report Ready for Review
+                            Review Report
                           </Button>
                         )}
 

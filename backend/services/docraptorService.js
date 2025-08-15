@@ -39,7 +39,7 @@ class DocRaptorService {
           body {
             margin: 0;
             padding: 0;
-            font-family: "Montserrat", Arial, sans-serif;
+            font-family: "Gothic", Arial, sans-serif;
             width: 100%;
             height: 100%;
           }

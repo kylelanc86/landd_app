@@ -35,10 +35,11 @@ import PrimaryFlowmeterPage from "./scenes/records/calibrations/PrimaryFlowmeter
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
 import FibreIdIndex from "./scenes/fibreID/index.jsx";
 import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
-import AsbestosAssessmentJobs from "./scenes/fibreID/AsbestosAssessmentJobs.jsx";
+import LDsuppliedJobs from "./scenes/fibreID/LDsuppliedJobs.jsx";
 import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
 import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
-import AssessmentItemAnalysisPage from "./scenes/fibreID/AssessmentItemAnalysisPage.jsx";
+import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
+import LDsuppliedItems from "./scenes/fibreID/LDsuppliedItems.jsx";
 import AssessmentJobsPage from "./scenes/surveys/asbestos";
 
 // Lazy loaded components
@@ -666,7 +667,7 @@ function App() {
                             <PermissionRoute
                               requiredPermissions={["fibre.view"]}
                             >
-                              <AsbestosAssessmentJobs />
+                              <LDsuppliedJobs />
                             </PermissionRoute>
                           }
                         />
@@ -677,7 +678,7 @@ function App() {
                               requiredPermissions={["fibre.view"]}
                             >
                               <Suspense fallback={<LoadingSpinner />}>
-                                <AssessmentItemsPage />
+                                <LDsuppliedItems />
                               </Suspense>
                             </PermissionRoute>
                           }
@@ -689,7 +690,7 @@ function App() {
                               requiredPermissions={["fibre.view"]}
                             >
                               <Suspense fallback={<LoadingSpinner />}>
-                                <AssessmentItemAnalysisPage />
+                                <LDsuppliedAnalysisPage />
                               </Suspense>
                             </PermissionRoute>
                           }
