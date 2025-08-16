@@ -74,7 +74,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[JOB_REFERENCE\]/g, clearanceData.projectId?.projectID || 'Unknown')
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-      .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
+      .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`)
+      .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
+
 
     // Populate version control template with data
     const populatedVersionControl = versionControlTemplate
@@ -177,7 +179,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[ASBESTOS_TYPE\]/g, clearanceData.clearanceType || 'Non-friable')
       .replace(/\[ASBESTOS_REMOVALIST\]/g, clearanceData.asbestosRemovalist || 'Unknown Removalist')
-      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || clearanceData.laaName || 'Unknown LAA')
+      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
       .replace(/\[LAA_LICENSE\]/g, 'AA00031')
       .replace(/\[INSPECTION_TIME\]/g, clearanceData.inspectionTime || 'Unknown Time')
       .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
@@ -606,12 +608,20 @@ const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
     const mergedPdf = await PDFDocument.create();
     console.log('Created merged PDF document');
     
-    // Load the first PDF (clearance report)
+    // Load the first PDF (clearance report or assessment report)
     const pdf1Doc = await PDFDocument.load(pdf1Buffer);
-    console.log('Loaded clearance PDF, pages:', pdf1Doc.getPageCount());
+    console.log('Loaded first PDF, pages:', pdf1Doc.getPageCount());
+    
+    // Debug: Check first PDF page dimensions
+    console.log('=== FIRST PDF DIMENSION DEBUG ===');
+    const firstPdfPages = pdf1Doc.getPages();
+    firstPdfPages.forEach((page, index) => {
+      console.log(`First PDF page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
+    });
+    
     const pdf1Pages = await mergedPdf.copyPages(pdf1Doc, pdf1Doc.getPageIndices());
     pdf1Pages.forEach((page) => mergedPdf.addPage(page));
-    console.log('Added clearance pages to merged PDF');
+    console.log('Added first PDF pages to merged PDF');
     
     // Load the second PDF (air monitoring report or site plan) from base64
     // Handle both pure base64 and data URL formats
@@ -622,15 +632,51 @@ const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
     }
     const pdf2Buffer = Buffer.from(cleanBase64, 'base64');
     console.log('Converted base64 to buffer, length:', pdf2Buffer.length);
-    const pdf2Doc = await PDFDocument.load(pdf2Buffer);
+    
+    // Load the second PDF with specific options to preserve layout
+    const pdf2Doc = await PDFDocument.load(pdf2Buffer, {
+      ignoreEncryption: true,
+      updateMetadata: false
+    });
     console.log('Loaded second PDF, pages:', pdf2Doc.getPageCount());
-    const pdf2Pages = await mergedPdf.copyPages(pdf2Doc, pdf2Doc.getPageIndices());
-    pdf2Pages.forEach((page) => mergedPdf.addPage(page));
-    console.log('Added second PDF pages to merged PDF');
+    
+    // Debug: Check page dimensions before and after copying
+    console.log('=== PAGE DIMENSION DEBUG ===');
+    const originalPages = pdf2Doc.getPages();
+    originalPages.forEach((page, index) => {
+      console.log(`Original page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
+    });
+    
+    // Try to fix the coordinate system issue by using a different approach
+    // Instead of trying to normalize dimensions, let's try to preserve the original layout
+    try {
+      const pdf2Pages = await mergedPdf.copyPages(pdf2Doc, pdf2Doc.getPageIndices());
+      console.log('=== COPIED PAGE DIMENSION DEBUG ===');
+      pdf2Pages.forEach((page, index) => {
+        console.log(`Copied page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
+        
+        // Add the page directly without any modifications
+        // This preserves the original coordinate system and layout exactly as generated
+        mergedPdf.addPage(page);
+      });
+      
+      console.log('Added second PDF pages to merged PDF with original coordinate system preserved');
+    } catch (copyError) {
+      console.log('Error copying pages:', copyError.message);
+      throw copyError;
+    }
     
     // Save the merged PDF
     const mergedPdfBytes = await mergedPdf.save();
     console.log('Saved merged PDF, total pages:', mergedPdf.getPageCount());
+    
+    // Debug: Check final merged PDF page dimensions
+    console.log('=== FINAL MERGED PDF DIMENSION DEBUG ===');
+    const finalPages = mergedPdf.getPages();
+    finalPages.forEach((page, index) => {
+      console.log(`Final merged page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
+    });
+    
     console.log('=== PDF MERGING COMPLETED ===');
     return Buffer.from(mergedPdfBytes);
   } catch (error) {
@@ -689,9 +735,9 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     // Generate filename
     const projectId = clearanceData.projectId?.projectID || clearanceData.project?.projectID || clearanceData.projectId || 'Unknown';
     const siteName = clearanceData.projectId?.name || clearanceData.project?.name || clearanceData.siteName || 'Unknown';
-    const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
+    const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
     const clearanceType = clearanceData.clearanceType || 'Non-friable';
-    const filename = `${projectId}_${clearanceType} Asbestos Clearance Certificate_${siteName} (${clearanceDate}).pdf`;
+    const filename = `${projectId}: ${clearanceType} Asbestos Clearance Certificate - ${siteName} (${clearanceDate}).pdf`;
 
     console.log(`[${pdfId}] Generating PDF with DocRaptor V2...`);
     
@@ -1362,13 +1408,6 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
       throw new Error('Assessment data is required');
     }
 
-    // Debug logging for fibre analysis report
-    console.log(`[${pdfId}] === ASSESSMENT DATA DEBUG ===`);
-    console.log(`[${pdfId}] assessmentData keys:`, Object.keys(assessmentData));
-    console.log(`[${pdfId}] fibreAnalysisReport exists:`, !!assessmentData.fibreAnalysisReport);
-    console.log(`[${pdfId}] fibreAnalysisReport type:`, typeof assessmentData.fibreAnalysisReport);
-    console.log(`[${pdfId}] fibreAnalysisReport length:`, assessmentData.fibreAnalysisReport ? assessmentData.fibreAnalysisReport.length : 'N/A');
-
     // Generate HTML content
     const html = await generateAssessmentHTML(assessmentData);
     backendPerformanceMonitor.endStage('template-population', pdfId);
@@ -1379,34 +1418,31 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
     let pdfBuffer = await docRaptorService.generatePDF(html);
     backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
 
-    // Check if there's a fibre analysis report to merge
+    // Check if there are analyzed items and note that fibre analysis report is available
+    const analyzedItems = assessmentData.items?.filter(item => item.analysisData?.isAnalyzed) || [];
+
+    // Handle PDF merging for fibre analysis report (same approach as clearance reports)
+    let finalPdfBuffer = pdfBuffer;
+
+    // If there's a fibre analysis report, merge it with the generated PDF
     if (assessmentData.fibreAnalysisReport) {
-      console.log(`[${pdfId}] === FIBRE ANALYSIS REPORT DEBUG ===`);
-      console.log(`[${pdfId}] fibreAnalysisReport exists:`, !!assessmentData.fibreAnalysisReport);
-      console.log(`[${pdfId}] fibreAnalysisReport type:`, typeof assessmentData.fibreAnalysisReport);
-      console.log(`[${pdfId}] fibreAnalysisReport length:`, assessmentData.fibreAnalysisReport ? assessmentData.fibreAnalysisReport.length : 'N/A');
-      
       try {
-        console.log(`[${pdfId}] Merging fibre analysis report with assessment PDF...`);
-        const mergedPdf = await mergePDFs(pdfBuffer, assessmentData.fibreAnalysisReport);
-        console.log(`[${pdfId}] PDFs merged successfully, new size:`, mergedPdf.length);
-        pdfBuffer = mergedPdf; // Update the final buffer
+        const mergedPdf = await mergePDFs(finalPdfBuffer, assessmentData.fibreAnalysisReport);
+        finalPdfBuffer = mergedPdf; // Update the final buffer
       } catch (error) {
         console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
         console.log(`[${pdfId}] Returning PDF without fibre analysis report`);
       }
-    } else {
-      console.log(`[${pdfId}] No fibre analysis report found in data`);
     }
 
     // Send response
     backendPerformanceMonitor.startStage('response-sending', pdfId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.send(pdfBuffer);
+    res.setHeader('Content-Length', finalPdfBuffer.length);
+    res.send(finalPdfBuffer);
     backendPerformanceMonitor.endStage('response-sending', pdfId);
 
-    console.log(`[${pdfId}] PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+    console.log(`[${pdfId}] PDF generated successfully, size: ${finalPdfBuffer.length} bytes`);
 
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
@@ -1436,6 +1472,26 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     // Fetch template content from database
     const templateContent = await getTemplateByType('asbestosAssessment');
+    
+    console.log('=== ASBESTOS ASSESSMENT TEMPLATE DEBUG ===');
+    console.log('Template content fetched:', !!templateContent);
+    if (templateContent) {
+      console.log('Template sections available:', Object.keys(templateContent.standardSections || {}));
+      console.log('Introduction content exists:', !!templateContent.standardSections?.introductionContent);
+      console.log('Survey findings content exists:', !!templateContent.standardSections?.surveyFindingsContent);
+      console.log('Discussion content exists:', !!templateContent.standardSections?.discussionContent);
+      console.log('Risk assessment content exists:', !!templateContent.standardSections?.riskAssessmentContent);
+      console.log('Control measures content exists:', !!templateContent.standardSections?.controlMeasuresContent);
+      console.log('Remediation requirements content exists:', !!templateContent.standardSections?.remediationRequirementsContent);
+      console.log('Legislation content exists:', !!templateContent.standardSections?.legislationContent);
+      console.log('Assessment limitations content exists:', !!templateContent.standardSections?.assessmentLimitationsContent);
+      console.log('Sign-off content exists:', !!templateContent.standardSections?.signOffContent);
+      console.log('Signature placeholder exists:', !!templateContent.standardSections?.signaturePlaceholder);
+      console.log('Footer text exists:', !!templateContent.standardSections?.footerText);
+    } else {
+      console.log('No template content found - will use fallbacks');
+    }
+    console.log('=== END TEMPLATE DEBUG ===');
 
     // Populate cover template with data
     const populatedCover = coverTemplate
@@ -1452,7 +1508,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
       .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[ASSESSOR_NAME\]/g, assessmentData.assessorId?.firstName ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : 'Unknown Assessor')
-      .replace(/\[FILENAME\]/g, `${assessmentData.projectId?.projectID || 'Unknown'}_${assessmentData.projectId?.name || 'Unknown'}_Assessment.pdf`)
+      .replace(/\[FILENAME\]/g, `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
 
     // Generate first sample register item for the main page
@@ -1516,7 +1572,7 @@ const generateAssessmentHTML = async (assessmentData) => {
             </div>
             <div class="footer">
               <div class="footer-line"></div>
-              Asbestos Assessment Report - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
+              ${templateContent?.standardSections?.footerText ? await replacePlaceholders(templateContent.standardSections.footerText, assessmentData) : 'Asbestos Assessment Report'} - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
             </div>
           </div>
         `);
@@ -1565,7 +1621,7 @@ const generateAssessmentHTML = async (assessmentData) => {
             </div>
             <div class="footer">
               <div class="footer-line"></div>
-              Asbestos Assessment Report - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
+              ${templateContent?.standardSections?.footerText ? await replacePlaceholders(templateContent.standardSections.footerText, assessmentData) : 'Asbestos Assessment Report'} - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
             </div>
           </div>
         `);
@@ -1580,16 +1636,10 @@ const generateAssessmentHTML = async (assessmentData) => {
     const populatedAsbestosItem1 = asbestosItem1Template
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-      .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.introductionTitle || 'INTRODUCTION')
-      .replace(/\[INTRODUCTION_CONTENT\]/g, (templateContent?.introductionContent || 'Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake an asbestos assessment at {SITE_NAME}. {LAA_NAME} (Licenced Asbestos Assessor - {LAA_LICENSE}) from L & D subsequently visited the above location on {ASSESSMENT_DATE} to undertake the assessment.\n\nThis report covers the inspection and assessment of the following areas/materials only:\n{ASSESSMENT_SCOPE_BULLETS}')
-        .replace(/\{CLIENT_NAME\}/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
-        .replace(/\{SITE_NAME\}/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
-        .replace(/\{LAA_NAME\}/g, assessmentData.assessorId?.firstName ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : 'Unknown Assessor')
-        .replace(/\{LAA_LICENSE\}/g, 'AA00031') // Default license - will be looked up in replacePlaceholders
-        .replace(/\{ASSESSMENT_DATE\}/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
-        .replace(/\{ASSESSMENT_SCOPE_BULLETS\}/g, assessmentItems.map(item => `<li>${item.locationDescription || 'Unknown Location'}</li>`).join('')))
-      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.surveyFindingsTitle || 'SURVEY FINDINGS')
-      .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, templateContent?.surveyFindingsContent || 'Table 1 below details the suspected ACM sampled as part of the assessment. Information is also included regarding materials which are presumed to contain asbestos and materials which the assessor visually assessed to be the consistent with a sampled material. Photographs of assessed materials are also presented in the sample register below.\n\nSample analysis was undertaken by L&D\'s National Association of Testing Authorities (NATA) accredited laboratory. The samples were analysed by Polarised Light Microscopy using dispersion staining techniques in accordance with AS 4964-2004.')
+      .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
+      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, assessmentData) : 'Introduction content not found')
+      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || 'SURVEY FINDINGS')
+      .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, templateContent?.standardSections?.surveyFindingsContent ? await replacePlaceholders(templateContent.standardSections.surveyFindingsContent, assessmentData) : 'Survey findings content not found')
       .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
 
     // Populate Discussion and Conclusions template with dynamic content
@@ -1609,33 +1659,51 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[SIGNATURE_IMAGE\]/g, '') // Placeholder for signature - can be added later if needed
       .replace(/\[LAA_NAME\]/g, assessmentData.assessorId?.firstName ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : 'Unknown Assessor')
       .replace(/\[LAA_LICENCE\]/g, 'AA00031') // Default license - will be looked up in replacePlaceholders
-      .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site');
+      .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
+      .replace(/\[DISCUSSION_TITLE\]/g, templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')
+      .replace(/\[DISCUSSION_CONTENT\]/g, templateContent?.standardSections?.discussionContent ? await replacePlaceholders(templateContent.standardSections.discussionContent, assessmentData) : 'Discussion and conclusions content not found');
 
 
 
     // Generate two pages of additional sections with proper content distribution
     const sections = [
       {
-        title: templateContent?.riskAssessmentTitle || 'RISK ASSESSMENT',
-        content: templateContent?.riskAssessmentContent || 'Identified ACM was risk assessed based on the following criteria:\n• the condition of the material at the time of the assessment;\n• the accessibility of the material;\n• the likelihood of the material being disturbed resulting in a release of asbestos fibre.\nEach ACM is categorised into one of four (4) risk categories:'
+        title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT',
+        content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, assessmentData) : 'Risk assessment content not found'
       },
       {
-        title: templateContent?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES',
-        content: templateContent?.controlMeasuresContent || 'The Work Health and Safety (How to Manage and Control Asbestos in the Workplace Code of Practice) Approval 2022 requires that when choosing the most appropriate control measure for managing ACM or asbestos, the following hierarchy of controls must be considered:\n• eliminating the risk, for example: removing the asbestos (most preferred)\n• substituting for the risk, isolating the risk or applying engineering controls, for example: enclosing, encapsulation or sealing\n• using administrative controls, for example: labelling, safe work practices etc.\n• using PPE (least preferred)\nA combination of these controls may be required in order to adequately manage and control asbestos or ACM.'
+        title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES',
+        content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, assessmentData) : 'Control measures content not found'
       },
       {
-        title: templateContent?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM',
-        content: templateContent?.remediationRequirementsContent || 'Prior to Work Commencing\nPrior to the commencement of any works associated with asbestos, the licensed asbestos removalist is required to notify Worksafe ACT five (5) days prior to commencement of asbestos removal works. As part of the notification process the licensed removalist must supply an Asbestos Removal Control Plan (ARCP) and a Safe Work Method Statement (SWMS) outlining how the works are to be undertaken.\n\nAsbestos Removal Works\nFriable asbestos removal or remediation work must be undertaken by an ACT licensed Class A Asbestos Removalist. Air monitoring, which is mandatory during the removal or remediation of friable asbestos, must be undertaken in accordance with the Guidance Note on the Membrane Filter Method for Estimating Airborne Asbestos Fibres, 2nd Edition [NOHSC: 3003(2005)].\n\nNon-friable asbestos removal or remediation must be undertaken by a Class A or B Asbestos Removalist. Air monitoring is not mandatory for the removal of non-friable asbestos.\n\nAll asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022) and in accordance with EPA (2011) Contaminated Sites Information Sheet No. 5 \'Requirements for the Transport and Disposal of Asbestos Contaminated Wastes\' and Information Sheet No.6 \'Management of Small Scale, Low Risk Soil Asbestos Contamination\'.\n\nFollowing Completion of Asbestos Removal Works\nOn completion of asbestos removal or remediation works an independent ACT licensed Asbestos Assessor must be employed to undertake a Clearance Inspection. A satisfactory clearance certificate for the remediated areas must include no visible suspect material and where applicable, clearance monitoring must also indicate that airborne fibre levels are satisfactory.'
+        title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM',
+        content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, assessmentData) : 'Remediation requirements content not found'
       },
       {
-        title: templateContent?.legislationTitle || 'LEGISLATION',
-        content: templateContent?.legislationContent || 'This report was written in general accordance with and with reference to:\n• ACT Work Health and Safety (WHS) Act 2011\n• ACT Work Health and Safety Regulation 2011\n• ACT Work Health and Safety (How to Safely Remove Asbestos Code of Practice) Approval 2022\n• ACT Work Health and Safety (How to Manage and Control Asbestos in the Workplace Code of Practice) Approval 2022'
+        title: templateContent?.standardSections?.legislationTitle || 'LEGISLATION',
+        content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, assessmentData) : 'Legislation content not found'
       },
       {
-        title: templateContent?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS',
-        content: templateContent?.assessmentLimitationsContent || 'This report covers the inspection and assessment of the location and materials outlined within this document only and is specific to the date the assessment was conducted. L&D did not inspect any areas of the property that fall outside of the locations listed in this report and therefore make no comment regarding the presence or condition of further ACM that may or may not be present.\n\nWhilst every effort has been made to identify all ACM within the inspected areas, the random nature in which asbestos was often installed can mean unidentified asbestos may be uncovered/identified. Should suspect ACM be identified or disturbed, works should cease until an assessment of the materials is completed.'
+        title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS',
+        content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, assessmentData) : 'Assessment limitations content not found'
       }
     ];
+
+    // Add sign-off section if it exists in template
+    if (templateContent?.standardSections?.signOffContent) {
+      sections.push({
+        title: 'SIGN-OFF',
+        content: await replacePlaceholders(templateContent.standardSections.signOffContent, assessmentData)
+      });
+    }
+
+    // Add signature section if it exists in template
+    if (templateContent?.standardSections?.signaturePlaceholder) {
+      sections.push({
+        title: 'SIGNATURE',
+        content: await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, assessmentData)
+      });
+    }
 
     // Convert content to HTML format
     const convertContentToHtml = (content) => {
@@ -1708,21 +1776,8 @@ const generateAssessmentHTML = async (assessmentData) => {
           ${populatedAppendixACover}
       `;
 
-      // Add analysis certificate content if it exists
-      if (assessmentData.analysisCertificate && assessmentData.analysisCertificateFile) {
-        const isAnalysisCertificateImage = assessmentData.analysisCertificateFile && (
-          assessmentData.analysisCertificateFile.startsWith('/9j/') || 
-          assessmentData.analysisCertificateFile.startsWith('iVBORw0KGgo')
-        );
-
-        if (isAnalysisCertificateImage) {
-          const analysisCertificateContentPage = generateSitePlanContentPage(assessmentData, 'A', logoBase64, 'analysisCertificateFile', 'CERTIFICATE OF ANALYSIS', 'Analysis Certificate');
-          appendixContent += `
-              <!-- Appendix A Analysis Certificate Content Page -->
-              ${analysisCertificateContentPage}
-          `;
-        }
-      }
+      // Note: Analysis certificate content is now handled by merging the fibre analysis report PDF
+      // No need to generate HTML content here
     }
 
     // Add site plan if it exists

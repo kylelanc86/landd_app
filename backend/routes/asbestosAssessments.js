@@ -69,6 +69,87 @@ router.get('/:id', async (req, res) => {
       })
       .populate('assessorId');
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    
+    // Debug logging for fibre analysis report
+    console.log('=== ASSESSMENT FETCH DEBUG ===');
+    console.log('Assessment ID:', job._id);
+    console.log('Assessment fields:', Object.keys(job.toObject()));
+    console.log('fibreAnalysisReport exists:', !!job.fibreAnalysisReport);
+    console.log('fibreAnalysisReport type:', typeof job.fibreAnalysisReport);
+    console.log('fibreAnalysisReport length:', job.fibreAnalysisReport ? job.fibreAnalysisReport.length : 'N/A');
+    if (job.fibreAnalysisReport) {
+      console.log('fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+      console.log('fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+      console.log('fibreAnalysisReport middle (100 chars):', job.fibreAnalysisReport.substring(Math.floor(job.fibreAnalysisReport.length / 2) - 50, Math.floor(job.fibreAnalysisReport.length / 2) + 50));
+      
+      // Check for common corruption patterns
+      console.log('=== CORRUPTION PATTERN CHECK ===');
+      console.log('Contains null bytes:', job.fibreAnalysisReport.includes('\0'));
+      console.log('Contains undefined:', job.fibreAnalysisReport.includes('undefined'));
+      console.log('Contains [object Object]:', job.fibreAnalysisReport.includes('[object Object]'));
+      console.log('Contains NaN:', job.fibreAnalysisReport.includes('NaN'));
+      console.log('Contains Infinity:', job.fibreAnalysisReport.includes('Infinity'));
+      console.log('Contains -Infinity:', job.fibreAnalysisReport.includes('-Infinity'));
+      console.log('Contains invalid base64 chars:', /[^A-Za-z0-9+/=]/.test(job.fibreAnalysisReport));
+      
+      // More specific NaN detection
+      if (job.fibreAnalysisReport.includes('NaN')) {
+        console.log('=== DETAILED NaN ANALYSIS ===');
+        const nanIndex = job.fibreAnalysisReport.indexOf('NaN');
+        console.log('First NaN found at index:', nanIndex);
+        console.log('Context around NaN (50 chars before):', job.fibreAnalysisReport.substring(Math.max(0, nanIndex - 50), nanIndex));
+        console.log('Context around NaN (50 chars after):', job.fibreAnalysisReport.substring(nanIndex + 3, nanIndex + 53));
+        
+        // Check if it's actually part of base64 data or text content
+        const beforeContext = job.fibreAnalysisReport.substring(Math.max(0, nanIndex - 10), nanIndex);
+        const afterContext = job.fibreAnalysisReport.substring(nanIndex + 3, nanIndex + 13);
+        console.log('Immediate context before NaN:', beforeContext);
+        console.log('Immediate context after NaN:', afterContext);
+        
+        // Check if it's surrounded by valid base64 characters
+        const isBase64Context = /^[A-Za-z0-9+/=]*$/.test(beforeContext + afterContext);
+        console.log('NaN is in base64 context:', isBase64Context);
+        console.log('=== END DETAILED NaN ANALYSIS ===');
+      }
+      
+      // Check for other potential PDF corruption patterns
+      console.log('=== ADDITIONAL CORRUPTION CHECKS ===');
+      console.log('Contains "null" string:', job.fibreAnalysisReport.includes('null'));
+      console.log('Contains "undefined" string:', job.fibreAnalysisReport.includes('undefined'));
+      console.log('Contains "false" string:', job.fibreAnalysisReport.includes('false'));
+      console.log('Contains "true" string:', job.fibreAnalysisReport.includes('true'));
+      console.log('Contains "0" string:', job.fibreAnalysisReport.includes('0'));
+      console.log('Contains "1" string:', job.fibreAnalysisReport.includes('1'));
+      
+      // Check for potential PDF structure issues
+      console.log('Contains PDF header "JVBERi0xLjMK":', job.fibreAnalysisReport.startsWith('JVBERi0xLjMK'));
+      console.log('Contains PDF trailer "%%EOF":', job.fibreAnalysisReport.includes('%%EOF'));
+      console.log('Contains PDF object markers "obj":', job.fibreAnalysisReport.includes('obj'));
+      console.log('Contains PDF stream markers "stream":', job.fibreAnalysisReport.includes('stream'));
+      
+      // Check for potential encoding issues
+      console.log('Contains non-ASCII characters:', /[^\x00-\x7F]/.test(job.fibreAnalysisReport));
+      console.log('Contains control characters:', /[\x00-\x1F\x7F]/.test(job.fibreAnalysisReport));
+      console.log('=== END ADDITIONAL CORRUPTION CHECKS ===');
+      console.log('=== END CORRUPTION PATTERN CHECK ===');
+    }
+    console.log('=== END ASSESSMENT FETCH DEBUG ===');
+    
+    // Log the final state before sending response
+    console.log('=== PRE-RESPONSE DEBUG ===');
+    if (job.fibreAnalysisReport) {
+      console.log('About to send - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
+      console.log('About to send - fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+      console.log('About to send - fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+      console.log('About to send - fibreAnalysisReport type:', typeof job.fibreAnalysisReport);
+      console.log('About to send - fibreAnalysisReport is string:', typeof job.fibreAnalysisReport === 'string');
+      console.log('About to send - fibreAnalysisReport is null:', job.fibreAnalysisReport === null);
+      console.log('About to send - fibreAnalysisReport is undefined:', job.fibreAnalysisReport === undefined);
+    } else {
+      console.log('About to send - fibreAnalysisReport is missing/null/undefined');
+    }
+    console.log('=== END PRE-RESPONSE DEBUG ===');
+    
     res.json(job);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch assessment job', error: err.message });
@@ -310,19 +391,58 @@ router.post('/:id/upload-fibre-analysis-report', async (req, res) => {
     console.log('Report data length:', reportData.length);
     console.log('Report data type:', typeof reportData);
     console.log('Report data starts with:', reportData.substring(0, 50));
+    console.log('Report data ends with:', reportData.substring(reportData.length - 50));
+    console.log('Report data middle (100 chars):', reportData.substring(Math.floor(reportData.length / 2) - 50, Math.floor(reportData.length / 2) + 50));
+    console.log('=== END UPLOAD DEBUG ===');
 
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
 
+    console.log('=== BEFORE SAVE DEBUG ===');
     console.log('Found assessment job:', job._id);
     console.log('Previous fibreAnalysisReport field:', job.fibreAnalysisReport ? 'Present' : 'Missing');
+    if (job.fibreAnalysisReport) {
+      console.log('Previous fibreAnalysisReport length:', job.fibreAnalysisReport.length);
+      console.log('Previous fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+      console.log('Previous fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+    }
+    console.log('=== END BEFORE SAVE DEBUG ===');
 
+    // Store original data for comparison
+    const originalReportData = reportData;
+    
     job.fibreAnalysisReport = reportData;
     job.updatedAt = new Date();
+    
+    console.log('=== IMMEDIATELY BEFORE SAVE DEBUG ===');
+    console.log('About to save - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
+    console.log('About to save - fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+    console.log('About to save - fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+    console.log('Data integrity check - lengths match:', originalReportData.length === job.fibreAnalysisReport.length);
+    console.log('Data integrity check - content matches:', originalReportData === job.fibreAnalysisReport);
+    console.log('=== END IMMEDIATELY BEFORE SAVE DEBUG ===');
+    
     await job.save();
 
+    console.log('=== AFTER SAVE DEBUG ===');
     console.log('Assessment saved successfully');
     console.log('New fibreAnalysisReport field:', job.fibreAnalysisReport ? 'Present' : 'Missing');
+    console.log('After save - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
+    console.log('After save - fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+    console.log('After save - fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+    
+    // Compare with original data
+    console.log('=== DATA INTEGRITY COMPARISON ===');
+    console.log('Original data length:', originalReportData.length);
+    console.log('Stored data length:', job.fibreAnalysisReport.length);
+    console.log('Lengths match:', originalReportData.length === job.fibreAnalysisReport.length);
+    console.log('Content matches:', originalReportData === job.fibreAnalysisReport);
+    if (originalReportData !== job.fibreAnalysisReport) {
+      console.log('WARNING: Data corruption detected during save!');
+      console.log('First 100 chars match:', originalReportData.substring(0, 100) === job.fibreAnalysisReport.substring(0, 100));
+      console.log('Last 100 chars match:', originalReportData.substring(originalReportData.length - 100) === job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 100));
+    }
+    console.log('=== END DATA INTEGRITY COMPARISON ===');
 
     res.json({ message: 'Fibre analysis report uploaded successfully', job });
   } catch (err) {
@@ -456,7 +576,7 @@ router.get('/:id/chain-of-custody', async (req, res) => {
     console.log('PDF generated successfully, size:', pdfBuffer.length);
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="ChainOfCustody_${populatedAssessment.projectId?.projectID || 'Unknown'}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${populatedAssessment.projectId?.projectID || 'Unknown'}: Chain of Custody - ${populatedAssessment.projectId?.name || 'Unknown'}.pdf"`);
     res.send(pdfBuffer);
     
     console.log('=== CHAIN OF CUSTODY REQUEST END ===');

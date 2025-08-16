@@ -40,7 +40,7 @@ async function loadImageAsBase64(imagePath) {
   }
 }
 
-export async function generateFibreIDReport({ job, sampleItems, openInNewTab, returnPdfData = false }) {
+export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false }) {
 
   // Determine base URL for fonts - use window.location for reliable detection
   console.log('Fibre ID - Window location:', {
@@ -66,8 +66,8 @@ pdfMake.fonts = {
   
 
   // Load logos
-  const companyLogo = await loadImageAsBase64('/logo.png');
-  const nataLogo = await loadImageAsBase64('/NATA_logo.png');
+  const companyLogo = await loadImageAsBase64(`${baseUrl}/logo.png`);
+  const nataLogo = await loadImageAsBase64(`${baseUrl}/NATA_logo.png`);
 
   console.log('Logo loading results:');
   console.log('Company logo loaded:', !!companyLogo);
@@ -95,6 +95,15 @@ pdfMake.fonts = {
       font: 'Gothic'
     },
     images: nataLogo ? { nataLogo: nataLogo } : {},
+    
+    // DEBUG: Log document definition structure
+    _debug: {
+      pageSize: "A4",
+      pageMargins: [40, 30, 40, 90],
+      defaultStyle: { font: 'Gothic' },
+      hasNataLogo: !!nataLogo,
+      hasCompanyLogo: !!companyLogo
+    },
     styles: {
       header: {
         fontSize: 12,
@@ -121,6 +130,18 @@ pdfMake.fonts = {
         margin: [0, 5, 0, 2],
       },
     },
+    
+    // DEBUG: Log assessment data before content creation
+    _debugAssessment: (function() {
+      console.log('=== ASSESSMENT DATA DEBUG ===');
+      console.log('assessment?.projectId?.client?.name:', assessment?.projectId?.client?.name, 'type:', typeof assessment?.projectId?.client?.name);
+      console.log('assessment?.projectId?.client?.contact1Name:', assessment?.projectId?.client?.contact1Name, 'type:', typeof assessment?.projectId?.client?.contact1Name);
+      console.log('assessment?.projectId?.client?.contact1Email:', assessment?.projectId?.client?.contact1Email, 'type:', typeof assessment?.projectId?.client?.contact1Email);
+      console.log('assessment?.projectId?.client?.address:', assessment?.projectId?.client?.address, 'type:', typeof assessment?.projectId?.client?.address);
+      console.log('=== END ASSESSMENT DATA DEBUG ===');
+      return null;
+    })(),
+    
     content: [
       // Page 1 Content
       {
@@ -141,38 +162,40 @@ pdfMake.fonts = {
             margin: [0, 0, 0, 4],
           },
           
-          // Green border beneath header
+          // Green border beneath header - USING TABLE BORDER INSTEAD OF CANVAS
           {
-            canvas: [
-              {
-                type: 'line',
-                x1: 0, y1: 0, x2: 520, y2: 0,
-                lineWidth: 2,
-                lineColor: '#16b12b'
-              }
-            ],
+            table: {
+              body: [['']],
+              widths: ['100%']
+            },
+            layout: {
+              hLineWidth: function(i) { return i === 0 ? 2 : 0; }, // Only top border
+              vLineWidth: function() { return 0; },
+              hLineColor: function(i) { return i === 0 ? '#16b12b' : 'white'; }, // Only top border green
+              vLineColor: function() { return 'white'; }
+            },
             margin: [0, 0, 0, 20]
           },
           
-          { text: 'ASBESTOS FIBRE CERTIFICATE OF ANALYSIS', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
+                    { text: 'ASBESTOS FIBRE CERTIFICATE OF ANALYSIS', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
           
           // Client and Lab details in single table
           {
-            table: {
-              headerRows: 1,
-              widths: ['50%', '50%'],
-              body: [
-                [
-                  { text: 'CLIENT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' },
-                  { text: 'LABORATORY DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' }
-                ],
+              table: {
+                headerRows: 1,
+                widths: ['50%', '50%'],
+                body: [
+                  [
+                    { text: 'CLIENT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' },
+                    { text: 'LABORATORY DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' }
+                  ],
                 [
                   {
                     stack: [
-                      { text: [ { text: 'Client: ', bold: true }, { text: job?.projectId?.client?.name || 'Unknown Client' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Contact: ', bold: true }, { text: job?.projectId?.client?.contact1Name || 'Unknown Contact' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || 'Unknown Email' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Address: ', bold: true }, { text: job?.projectId?.client?.address || 'Unknown Address' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Client: ', bold: true }, { text: assessment?.projectId?.client?.name || 'Unknown Client' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Contact: ', bold: true }, { text: assessment?.projectId?.client?.contact1Name || 'Unknown Contact' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: assessment?.projectId?.client?.contact1Email || 'Unknown Email' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Address: ', bold: true }, { text: assessment?.projectId?.client?.address || 'Unknown Address' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
@@ -220,15 +243,25 @@ pdfMake.fonts = {
                 [
                   {
                     stack: [
-                      { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectId?.projectID || job?.jobNumber || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || assessment?.jobNumber || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Sampled by: ', bold: true }, { text: job?.assessorName || job?.assessorId?.firstName ? `${job.assessorId.firstName} ${job.assessorId.lastName}` : 'LAA' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Samples Received: ', bold: true }, { text: job?.projectId?.d_Date ? formatDate(job.projectId.d_Date) : (job?.projectId?.createdAt ? formatDate(job.projectId.createdAt) : formatDate(new Date())) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Sampled by: ', bold: true }, { text: assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Samples Received: ', bold: true }, { text: (() => {
+                        if (assessment?.projectId?.d_Date) {
+                          const date = new Date(assessment.projectId.d_Date);
+                          return !isNaN(date.getTime()) ? formatDate(assessment.projectId.d_Date) : 'Date invalid';
+                        } else if (assessment?.projectId?.createdAt) {
+                          const date = new Date(assessment.projectId.createdAt);
+                          return !isNaN(date.getTime()) ? formatDate(assessment.projectId.createdAt) : 'Date invalid';
+                        } else {
+                          return formatDate(new Date());
+                        }
+                      })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
                     stack: [
-                      { text: [ { text: 'Analysed by: ', bold: true }, { text: job?.analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Report approved by: ', bold: true }, { text: 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
@@ -301,16 +334,18 @@ pdfMake.fonts = {
             margin: [0, 0, 0, 10],
           },
           
-          // Green border beneath header
+          // Green border beneath header - USING TABLE BORDER INSTEAD OF CANVAS
           {
-            canvas: [
-              {
-                type: 'line',
-                x1: 0, y1: 0, x2: 520, y2: 0,
-                lineWidth: 2,
-                lineColor: '#16b12b'
-              }
-            ],
+            table: {
+              body: [['']],
+              widths: ['100%']
+            },
+            layout: {
+              hLineWidth: function(i) { return i === 0 ? 2 : 0; }, // Only top border
+              vLineWidth: function() { return 0; },
+              hLineColor: function(i) { return i === 0 ? '#16b12b' : 'white'; }, // Only top border green
+              vLineColor: function() { return 'white'; }
+            },
             margin: [0, 0, 0, 20]
           },
           
@@ -330,57 +365,155 @@ pdfMake.fonts = {
                   { text: 'Asbestos Fibres', style: 'tableHeader', fontSize: 8 }
                 ],
                 ...sortedSampleItems.map((item, index) => {
-                  const analysisDate = item.analysisData?.analyzedAt 
-                    ? formatDate(item.analysisData.analyzedAt)
-                    : formatDate(new Date());
+                  // DEBUG: Log all item data to find NaN source
+                  console.log(`=== ITEM ${index + 1} DEBUG ===`);
+                  console.log('Item:', item);
+                  console.log('analysisData:', item.analysisData);
+                  console.log('sampleDimensions:', item.analysisData?.sampleDimensions);
+                  console.log('sampleMass:', item.analysisData?.sampleMass);
+                  console.log('analyzedAt:', item.analysisData?.analyzedAt);
+                  console.log('fibres:', item.analysisData?.fibres);
+                  
+                  // Get analysis date with safety checks
+                  let analysisDate = '';
+                  if (item.analysisData?.analyzedAt) {
+                    const date = new Date(item.analysisData.analyzedAt);
+                    console.log('Date object created:', date);
+                    console.log('Date is valid:', !isNaN(date.getTime()));
+                    if (!isNaN(date.getTime())) {
+                      analysisDate = formatDate(item.analysisData.analyzedAt);
+                    } else {
+                      analysisDate = 'Date invalid';
+                    }
+                  } else {
+                    analysisDate = formatDate(new Date());
+                  }
+                  
+                  // Ensure analysisDate is never undefined or null
+                  if (!analysisDate || analysisDate === 'undefined' || analysisDate === 'null') {
+                    analysisDate = 'Date not specified';
+                  }
+                  
+                  console.log('Final analysisDate:', analysisDate);
                   
                   // Get sample mass from analysis data or use default
                   let sampleMass = '';
                   if (item.analysisData?.sampleMass) {
                     sampleMass = item.analysisData.sampleMass + ' g';
+                    console.log('Using sampleMass:', sampleMass);
                   } else if (item.analysisData?.sampleDimensions) {
                     const dims = item.analysisData.sampleDimensions;
-                    if (dims.x && dims.y && dims.z) {
+                    console.log('Raw dimensions:', dims);
+                    console.log('dims.x:', dims.x, 'type:', typeof dims.x, 'isNaN:', isNaN(dims.x));
+                    console.log('dims.y:', dims.y, 'type:', typeof dims.y, 'isNaN:', isNaN(dims.y));
+                    console.log('dims.z:', dims.z, 'type:', typeof dims.z, 'isNaN:', isNaN(dims.z));
+                    
+                    if (dims.x && dims.y && dims.z && 
+                        !isNaN(dims.x) && !isNaN(dims.y) && !isNaN(dims.z) &&
+                        dims.x !== 'undefined' && dims.y !== 'undefined' && dims.z !== 'undefined') {
                       sampleMass = `${dims.x} × ${dims.y} × ${dims.z} mm`;
+                      console.log('Using calculated dimensions:', sampleMass);
+                    } else {
+                      sampleMass = 'Dimensions not specified';
+                      console.log('Using fallback dimensions text');
                     }
+                  } else {
+                    sampleMass = 'Not specified';
+                    console.log('Using fallback text');
                   }
+                  console.log('Final sampleMass:', sampleMass);
+                  console.log(`=== END ITEM ${index + 1} DEBUG ===`);
                   
                   // Extract fibre analysis results
                   const getFibreResults = (item) => {
-                    if (!item.analysisData || !item.analysisData.fibres) {
-                      return { nonAsbestos: 'Pending', asbestos: 'Pending' };
+                    console.log('=== FIBRE RESULTS DEBUG ===');
+                    console.log('item.analysisData:', item.analysisData);
+                    console.log('item.analysisData.fibres:', item.analysisData?.fibres);
+                    
+                    if (!item.analysisData || !item.analysisData.fibres || !Array.isArray(item.analysisData.fibres)) {
+                      console.log('No fibres data, returning defaults');
+                      return { nonAsbestos: 'None detected', asbestos: 'None detected' };
                     }
                     
                     const fibres = item.analysisData.fibres;
+                    console.log('Raw fibres array:', fibres);
                     const nonAsbestosResults = [];
                     const asbestosResults = [];
                     
-                    fibres.forEach(fibre => {
-                      if (fibre.result) {
-                        if (fibre.result.includes('Asbestos')) {
-                          asbestosResults.push(fibre.result);
+                    // Ensure fibres is an array and has valid items
+                    if (Array.isArray(fibres) && fibres.length > 0) {
+                      fibres.forEach((fibre, fibreIndex) => {
+                        console.log(`Fibre ${fibreIndex}:`, fibre);
+                        console.log(`Fibre result:`, fibre.result, 'type:', typeof fibre.result);
+                        
+                        if (fibre && fibre.result && fibre.result.trim() !== '' && fibre.result !== 'undefined' && fibre.result !== 'null') {
+                          if (fibre.result.includes('Asbestos')) {
+                            asbestosResults.push(fibre.result);
+                            console.log('Added to asbestos results');
+                          } else {
+                            nonAsbestosResults.push(fibre.result);
+                            console.log('Added to non-asbestos results');
+                          }
                         } else {
-                          nonAsbestosResults.push(fibre.result);
+                          console.log('Skipping invalid fibre result');
                         }
-                      }
-                    });
+                      });
+                    } else {
+                      console.log('No valid fibres array found');
+                    }
                     
-                    return {
+                    const result = {
                       nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(', ') : 'None detected',
                       asbestos: asbestosResults.length > 0 ? asbestosResults.join(', ') : 'None detected'
                     };
+                    
+                    // Ensure we never return undefined values
+                    if (!result.nonAsbestos) result.nonAsbestos = 'None detected';
+                    if (!result.asbestos) result.asbestos = 'None detected';
+                    
+                    console.log('Final fibre results:', result);
+                    console.log('=== END FIBRE RESULTS DEBUG ===');
+                    return result;
                   };
                   
                   const fibreResults = getFibreResults(item);
                   
+                  // Ensure all values are safe strings to prevent NaN
+                  const safeProjectID = (assessment?.projectId?.projectID && assessment.projectId.projectID !== 'undefined' && assessment.projectId.projectID !== 'null') ? assessment.projectId.projectID : 'Unknown';
+                  const safeSampleRef = (item.sampleReference && item.sampleReference !== 'undefined' && item.sampleReference !== 'null') ? item.sampleReference : `Sample ${index + 1}`;
+                  const safeAnalysisDate = (analysisDate && analysisDate !== 'undefined' && analysisDate !== 'null') ? analysisDate : 'Unknown';
+                  const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription) ? (item.analysisData.sampleDescription || item.locationDescription) : 'No description';
+                  const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
+                  const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None detected';
+                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'None detected';
+                  
+                  // DEBUG: Log every single value being passed to pdfMake
+                  console.log(`=== TABLE ROW ${index + 1} DEBUG ===`);
+                  console.log('safeProjectID:', safeProjectID, 'type:', typeof safeProjectID, 'length:', safeProjectID.length);
+                  console.log('safeSampleRef:', safeSampleRef, 'type:', typeof safeSampleRef, 'length:', safeSampleRef.length);
+                  console.log('safeAnalysisDate:', safeAnalysisDate, 'type:', typeof safeAnalysisDate, 'length:', safeAnalysisDate.length);
+                  console.log('safeDescription:', safeDescription, 'type:', typeof safeDescription, 'length:', safeDescription.length);
+                  console.log('safeSampleMass:', safeSampleMass, 'type:', typeof safeSampleMass, 'length:', safeSampleMass.length);
+                  console.log('safeNonAsbestos:', safeNonAsbestos, 'type:', typeof safeNonAsbestos, 'length:', safeNonAsbestos.length);
+                  console.log('safeAsbestos:', safeAsbestos, 'type:', typeof safeAsbestos, 'length:', safeAsbestos.length);
+                  
+                  // Check for any problematic values
+                  const allValues = [safeProjectID, safeSampleRef, safeAnalysisDate, safeDescription, safeSampleMass, safeNonAsbestos, safeAsbestos];
+                  allValues.forEach((value, i) => {
+                    if (value === null || value === undefined || value === 'null' || value === 'undefined' || value === 'NaN' || value.includes('NaN')) {
+                      console.error(`PROBLEMATIC VALUE FOUND at index ${i}:`, value);
+                    }
+                  });
+                  console.log(`=== END TABLE ROW ${index + 1} DEBUG ===`);
+                  
                   return [
-                    { text: `${job?.projectId?.projectID}-${index + 1}`, fontSize: 8 },
-                    { text: item.sampleReference || `Sample ${index + 1}`, fontSize: 8 },
-                    { text: analysisDate, fontSize: 8 },
-                    { text: item.analysisData?.sampleDescription || item.locationDescription || 'No description', fontSize: 8 },
-                    { text: sampleMass, fontSize: 8 },
-                    { text: fibreResults.nonAsbestos, fontSize: 8 },
-                    { text: fibreResults.asbestos, fontSize: 8, bold: true }
+                    { text: `${safeProjectID}-${index + 1}`, fontSize: 8 },
+                    { text: safeSampleRef, fontSize: 8 },
+                    { text: safeAnalysisDate, fontSize: 8 },
+                    { text: safeDescription, fontSize: 8 },
+                    { text: safeSampleMass, fontSize: 8 },
+                    { text: safeNonAsbestos, fontSize: 8 },
+                    { text: safeAsbestos, fontSize: 8, bold: true }
                   ];
                 })
               ]
@@ -403,10 +536,9 @@ pdfMake.fonts = {
               paddingTop: function(i, node) { return 9; },
               paddingBottom: function(i, node) { return 9; },
               fillColor: function (rowIndex, node, columnIndex) {
-                return (rowIndex % 2 === 0) ? '#f9f9f9' : null;
+                return (rowIndex % 2 === 0) ? '#f9f9f9' : 'white';
               }
             },
-            pageBreak: 'auto'
           },
         ]
       }
@@ -414,6 +546,14 @@ pdfMake.fonts = {
     
     footer: (function(nataLogo) {
       return function(currentPage, pageCount) {
+        // DEBUG: Log footer function parameters
+        console.log('=== FOOTER FUNCTION DEBUG ===');
+        console.log('currentPage:', currentPage, 'type:', typeof currentPage);
+        console.log('pageCount:', pageCount, 'type:', typeof pageCount);
+        console.log('nataLogo exists:', !!nataLogo);
+        console.log('assessment?.projectId?.projectID:', assessment?.projectId?.projectID, 'type:', typeof assessment?.projectId?.projectID);
+        console.log('=== END FOOTER FUNCTION DEBUG ===');
+        
         return {
           stack: [
             // Green border above footer
@@ -427,7 +567,7 @@ pdfMake.fonts = {
               columns: [
                 {
                   stack: [
-                    { text: `Report Reference: ${job?.projectId?.projectID}`, fontSize: 8 },
+                    { text: `Report Reference: ${assessment?.projectId?.projectID}`, fontSize: 8 },
                     { text: 'Revision: 0', fontSize: 8 }
                   ],
                   alignment: 'left',
@@ -454,25 +594,124 @@ pdfMake.fonts = {
     })(nataLogo)
   };
 
+  // DEBUG: Log filename generation
+  console.log('=== FILENAME GENERATION DEBUG ===');
+  console.log('assessment?.projectId?.projectID:', assessment?.projectId?.projectID, 'type:', typeof assessment?.projectId?.projectID);
+  console.log('assessment?.projectId?.name:', assessment?.projectId?.name, 'type:', typeof assessment?.projectId?.name);
+  
   // Build filename: ProjectID: Fibre ID Report - ProjectName (SampleDate).pdf
-  const projectID = job?.projectId?.projectID || '';
-  const projectNameRaw = job?.projectId?.name || '';
+  const projectID = assessment?.projectId?.projectID || '';
+  const projectNameRaw = assessment?.projectId?.name || '';
   // Sanitize project name for filename (remove/replace unsafe characters)
   const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+  
+  console.log('projectID:', projectID, 'type:', typeof projectID);
+  console.log('projectNameRaw:', projectNameRaw, 'type:', typeof projectNameRaw);
+  console.log('projectName (sanitized):', projectName, 'type:', typeof projectName);
+  console.log('=== END FILENAME GENERATION DEBUG ===');
+  
+  // DEBUG: Log sample date generation
+  console.log('=== SAMPLE DATE GENERATION DEBUG ===');
+  console.log('sampleItems:', sampleItems, 'type:', typeof sampleItems, 'length:', sampleItems?.length);
+  if (sampleItems && sampleItems.length > 0) {
+    console.log('sampleItems[0].analyzedAt:', sampleItems[0].analyzedAt, 'type:', typeof sampleItems[0].analyzedAt);
+  }
+  console.log('assessment?.projectId?.d_Date:', assessment?.projectId?.d_Date, 'type:', typeof assessment?.projectId?.d_Date);
+  console.log('assessment?.projectId?.createdAt:', assessment?.projectId?.createdAt, 'type:', typeof assessment?.projectId?.createdAt);
   
   // Get sample date - try to use the first sample's date, or job creation date, or current date
   let sampleDate = '';
   if (sampleItems && sampleItems.length > 0 && sampleItems[0].analyzedAt) {
-    sampleDate = formatDate(sampleItems[0].analyzedAt);
-  } else if (job?.projectId?.d_Date) {
-    sampleDate = formatDate(job.projectId.d_Date);
-  } else if (job?.projectId?.createdAt) {
-    sampleDate = formatDate(job.projectId.createdAt);
+    const date = new Date(sampleItems[0].analyzedAt);
+    sampleDate = !isNaN(date.getTime()) ? formatDate(sampleItems[0].analyzedAt) : formatDate(new Date());
+  } else if (assessment?.projectId?.d_Date) {
+    const date = new Date(assessment.projectId.d_Date);
+    sampleDate = !isNaN(date.getTime()) ? formatDate(assessment.projectId.d_Date) : formatDate(new Date());
+  } else if (assessment?.projectId?.createdAt) {
+    const date = new Date(assessment.projectId.createdAt);
+    sampleDate = !isNaN(date.getTime()) ? formatDate(assessment.projectId.createdAt) : formatDate(new Date());
   } else {
     sampleDate = formatDate(new Date());
   }
   
+  console.log('Final sampleDate:', sampleDate, 'type:', typeof sampleDate);
+  console.log('=== END SAMPLE DATE GENERATION DEBUG ===');
+  
   const filename = `${projectID}: Fibre ID Report - ${projectName} (${sampleDate}).pdf`;
+
+      // DEBUG: Final check before pdfMake.createPdf
+    console.log('=== FINAL DEBUG BEFORE PDFMAKE ===');
+    console.log('docDefinition type:', typeof docDefinition);
+    console.log('docDefinition keys:', Object.keys(docDefinition));
+    console.log('docDefinition.content type:', typeof docDefinition.content);
+    console.log('docDefinition.content length:', docDefinition.content?.length);
+    console.log('docDefinition.styles type:', typeof docDefinition.styles);
+    console.log('docDefinition.images type:', typeof docDefinition.images);
+    console.log('docDefinition.images keys:', Object.keys(docDefinition.images || {}));
+    console.log('docDefinition.defaultStyle:', docDefinition.defaultStyle);
+    
+    // DEBUG: Inspect content array structure
+    console.log('=== CONTENT ARRAY INSPECTION ===');
+    if (docDefinition.content && Array.isArray(docDefinition.content)) {
+      docDefinition.content.forEach((item, index) => {
+        console.log(`Content item ${index}:`, item);
+        if (item && typeof item === 'object') {
+          console.log(`  Item ${index} keys:`, Object.keys(item));
+          
+          // DEBUG: Inspect stack arrays in detail
+          if (item.stack && Array.isArray(item.stack)) {
+            console.log(`  Item ${index} stack length:`, item.stack.length);
+            item.stack.forEach((stackItem, stackIndex) => {
+              console.log(`    Stack item ${stackIndex}:`, stackItem);
+              if (stackItem && typeof stackItem === 'object') {
+                console.log(`      Stack item ${stackIndex} keys:`, Object.keys(stackItem));
+                
+                // DEBUG: Inspect table structures
+                if (stackItem.table && stackItem.table.body) {
+                  console.log(`      Stack item ${stackIndex} table body rows:`, stackItem.table.body.length);
+                  stackItem.table.body.forEach((row, rowIndex) => {
+                    console.log(`        Row ${rowIndex}:`, row);
+                    if (Array.isArray(row)) {
+                      row.forEach((cell, cellIndex) => {
+                        console.log(`          Cell ${cellIndex}:`, cell, 'type:', typeof cell);
+                        if (cell && typeof cell === 'object') {
+                          console.log(`            Cell ${cellIndex} keys:`, Object.keys(cell));
+                        }
+                      });
+                    }
+                  });
+                }
+                
+                // DEBUG: Inspect canvas lines
+                if (stackItem.canvas) {
+                  console.log(`      Stack item ${stackIndex} canvas:`, stackItem.canvas);
+                  if (stackItem.canvas.length) {
+                    stackItem.canvas.forEach((line, lineIndex) => {
+                      console.log(`        Canvas line ${lineIndex}:`, line);
+                      if (line && typeof line === 'object') {
+                        console.log(`          Line ${lineIndex} keys:`, Object.keys(line));
+                        if (line.x1 !== undefined) console.log(`          Line ${lineIndex} x1:`, line.x1, 'type:', typeof line.x1);
+                        if (line.y1 !== undefined) console.log(`          Line ${lineIndex} y1:`, line.y1, 'type:', typeof line.y1);
+                        if (line.x2 !== undefined) console.log(`          Line ${lineIndex} x2:`, line.x2, 'type:', typeof line.x2);
+                        if (line.y2 !== undefined) console.log(`          Line ${lineIndex} y2:`, line.y2, 'type:', typeof line.y2);
+                      }
+                    });
+                  }
+                }
+                
+                // DEBUG: Inspect text elements
+                if (stackItem.text !== undefined) {
+                  console.log(`      Stack item ${stackIndex} text:`, stackItem.text, 'type:', typeof stackItem.text);
+                }
+              }
+            });
+          }
+        }
+      });
+    }
+    console.log('=== END CONTENT ARRAY INSPECTION ===');
+    
+    console.log('=== END FINAL DEBUG BEFORE PDFMAKE ===');
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
   

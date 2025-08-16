@@ -109,6 +109,13 @@ const LDsuppliedAnalysisPage = () => {
         const savedData = item.analysisData;
         console.log("Loading saved analysis data:", savedData);
 
+        // Check if this was saved as "no fibres detected"
+        const wasNoFibreDetected =
+          savedData.finalResult === "No fibres detected" ||
+          (savedData.fibres && savedData.fibres.length === 0);
+
+        setNoFibreDetected(wasNoFibreDetected);
+
         // Populate form fields with saved data
         setMicroscope(savedData.microscope || "LD-PLM-1");
         setSampleDescription(savedData.sampleDescription || "");
@@ -285,7 +292,7 @@ const LDsuppliedAnalysisPage = () => {
         sampleDimensions: sampleType === "dimensions" ? sampleDimensions : null,
         ashing,
         crucibleNo: ashing === "yes" ? crucibleNo : null,
-        fibres,
+        fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: isAnalysisComplete,
         analyzedAt: analysisDate,
@@ -343,7 +350,7 @@ const LDsuppliedAnalysisPage = () => {
         sampleDimensions: sampleType === "dimensions" ? sampleDimensions : null,
         ashing,
         crucibleNo: ashing === "yes" ? crucibleNo : null,
-        fibres,
+        fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: true,
         analyzedAt: analysisDate,
@@ -390,7 +397,7 @@ const LDsuppliedAnalysisPage = () => {
         sampleDimensions: sampleType === "dimensions" ? sampleDimensions : null,
         ashing,
         crucibleNo: ashing === "yes" ? crucibleNo : null,
-        fibres,
+        fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: false,
         analyzedAt: null,
