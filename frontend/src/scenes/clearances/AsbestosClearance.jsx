@@ -548,10 +548,14 @@ const AsbestosClearance = () => {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell>Project ID</TableCell>
-                      <TableCell>Clearance Date</TableCell>
-                      <TableCell>Project Name</TableCell>
-                      <TableCell>Type</TableCell>
+                      <TableCell sx={{ maxWidth: "120px" }}>
+                        Project ID
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: "120px" }}>Date</TableCell>
+                      <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                        Project Name
+                      </TableCell>
+                      <TableCell>Asbestos Removalist</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Actions</TableCell>
                     </TableRow>
@@ -560,10 +564,10 @@ const AsbestosClearance = () => {
                     {Array.isArray(clearances) &&
                       (clearances || []).map((clearance) => (
                         <TableRow key={clearance._id}>
-                          <TableCell>
+                          <TableCell sx={{ maxWidth: "120px" }}>
                             {getProjectName(clearance.projectId)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ maxWidth: "120px" }}>
                             {clearance.clearanceDate
                               ? new Date(
                                   clearance.clearanceDate
@@ -574,10 +578,28 @@ const AsbestosClearance = () => {
                                 })
                               : "N/A"}
                           </TableCell>
-                          <TableCell>
-                            {getProjectDisplayName(clearance.projectId)}
+                          <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                            <Box>
+                              <Typography
+                                variant="body2"
+                                component="div"
+                                color="black"
+                              >
+                                {getProjectDisplayName(clearance.projectId)}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                component="div"
+                                color="text.secondary"
+                                sx={{ fontStyle: "italic" }}
+                              >
+                                {clearance.clearanceType}
+                              </Typography>
+                            </Box>
                           </TableCell>
-                          <TableCell>{clearance.clearanceType}</TableCell>
+                          <TableCell>
+                            {clearance.asbestosRemovalist || "N/A"}
+                          </TableCell>
                           <TableCell>
                             <Chip
                               label={clearance.status}
