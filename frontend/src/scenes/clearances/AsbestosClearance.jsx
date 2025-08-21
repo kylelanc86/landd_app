@@ -103,6 +103,7 @@ const AsbestosClearance = () => {
     sitePlan: false,
     sitePlanFile: null,
     notes: "",
+    useComplexTemplate: false,
   });
 
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
@@ -312,6 +313,7 @@ const AsbestosClearance = () => {
       sitePlan: clearance.sitePlan || false,
       sitePlanFile: clearance.sitePlanFile || null,
       notes: clearance.notes || "",
+      useComplexTemplate: clearance.useComplexTemplate || false,
     });
 
     // Fetch air monitoring reports for this project
@@ -427,6 +429,7 @@ const AsbestosClearance = () => {
       sitePlan: false,
       sitePlanFile: null,
       notes: "",
+      useComplexTemplate: false,
     });
     setAirMonitoringReports([]);
   };
@@ -456,6 +459,39 @@ const AsbestosClearance = () => {
     setForm({ ...form, projectId });
     // Fetch air monitoring reports for the selected project
     fetchAirMonitoringReports(projectId);
+  };
+
+  // Function to automatically determine clearance type based on asbestos items
+  const determineClearanceType = (items) => {
+    if (!items || items.length === 0) {
+      return "Non-friable"; // Default if no items
+    }
+
+    const hasFriable = items.some((item) => item.asbestosType === "Friable");
+    const hasNonFriable = items.some(
+      (item) => item.asbestosType === "Non-friable"
+    );
+
+    if (hasFriable && hasNonFriable) {
+      return "Mixed";
+    } else if (hasFriable) {
+      return "Friable";
+    } else {
+      return "Non-friable";
+    }
+  };
+
+  // Function to update clearance type and air monitoring based on asbestos items
+  const updateClearanceTypeFromItems = (items) => {
+    const newClearanceType = determineClearanceType(items);
+    const requiresAirMonitoring =
+      newClearanceType === "Friable" || newClearanceType === "Mixed";
+
+    setForm((prev) => ({
+      ...prev,
+      clearanceType: newClearanceType,
+      airMonitoring: requiresAirMonitoring ? true : prev.airMonitoring,
+    }));
   };
 
   const getStatusColor = (status) => {
@@ -799,28 +835,50 @@ const AsbestosClearance = () => {
                   </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <FormControl fullWidth required>
-                    <InputLabel>Clearance Type</InputLabel>
+                  <FormControl fullWidth>
+                    <InputLabel>Clearance Type (Auto-determined)</InputLabel>
                     <Select
                       value={form.clearanceType}
-                      onChange={(e) => {
-                        const newClearanceType = e.target.value;
-                        setForm({
-                          ...form,
-                          clearanceType: newClearanceType,
-                          // Automatically enable air monitoring for friable clearance
-                          airMonitoring:
-                            newClearanceType === "Friable"
-                              ? true
-                              : form.airMonitoring,
-                        });
-                      }}
-                      label="Clearance Type"
+                      disabled
+                      label="Clearance Type (Auto-determined)"
                     >
                       <MenuItem value="Non-friable">Non-friable</MenuItem>
                       <MenuItem value="Friable">Friable</MenuItem>
+                      <MenuItem value="Mixed">
+                        Mixed (Friable & Non-friable)
+                      </MenuItem>
+                      <MenuItem value="Complex">
+                        Complex Clearance Certificate
+                      </MenuItem>
                     </Select>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ mt: 1, display: "block" }}
+                    >
+                      Clearance type is automatically determined based on the
+                      asbestos items added to this clearance. Non-friable: Only
+                      non-friable items | Friable: Only friable items | Mixed:
+                      Both friable and non-friable items
+                    </Typography>
                   </FormControl>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.useComplexTemplate}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            useComplexTemplate: e.target.checked,
+                          })
+                        }
+                        color="primary"
+                      />
+                    }
+                    label="Use Complex Clearance Template"
+                  />
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth required>
@@ -869,13 +927,13 @@ const AsbestosClearance = () => {
                         onChange={(e) =>
                           setForm({ ...form, airMonitoring: e.target.checked })
                         }
-                        disabled={form.clearanceType === "Friable"}
                         color="primary"
                       />
                     }
                     label={`Include Air Monitoring Report${
-                      form.clearanceType === "Friable"
-                        ? " (Required for Friable Clearance)"
+                      form.clearanceType === "Friable" ||
+                      form.clearanceType === "Mixed"
+                        ? " (Required for Friable and Mixed Clearances)"
                         : ""
                     }`}
                   />

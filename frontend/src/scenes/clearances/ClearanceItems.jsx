@@ -69,7 +69,7 @@ const ClearanceItems = () => {
   const [form, setForm] = useState({
     locationDescription: "",
     materialDescription: "",
-    asbestosType: "non-friable",
+    asbestosType: "Non-friable",
     photograph: "",
     notes: "",
   });
@@ -155,7 +155,11 @@ const ClearanceItems = () => {
       setDialogOpen(false);
       setEditingItem(null);
       resetForm();
-      fetchData();
+      await fetchData();
+
+      // Update clearance type based on all items
+      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
+      await updateClearanceTypeFromItems(updatedItems);
     } catch (err) {
       console.error("Error saving item:", err);
       setSnackbar({
@@ -189,7 +193,13 @@ const ClearanceItems = () => {
           message: "Item deleted successfully",
           severity: "success",
         });
-        fetchData();
+        await fetchData();
+
+        // Update clearance type based on remaining items
+        const updatedItems = await asbestosClearanceService.getItems(
+          clearanceId
+        );
+        await updateClearanceTypeFromItems(updatedItems);
       } catch (err) {
         console.error("Error deleting item:", err);
         setSnackbar({
@@ -205,7 +215,7 @@ const ClearanceItems = () => {
     setForm({
       locationDescription: "",
       materialDescription: "",
-      asbestosType: "non-friable",
+      asbestosType: "Non-friable",
       photograph: "",
       notes: "",
     });
@@ -214,11 +224,53 @@ const ClearanceItems = () => {
     setCompressionStatus(null);
   };
 
+  // Function to automatically determine and update clearance type based on asbestos items
+  const updateClearanceTypeFromItems = async (items) => {
+    if (!items || items.length === 0) {
+      return;
+    }
+
+    const hasFriable = items.some((item) => item.asbestosType === "Friable");
+    const hasNonFriable = items.some(
+      (item) => item.asbestosType === "Non-friable"
+    );
+
+    let newClearanceType;
+    if (hasFriable && hasNonFriable) {
+      newClearanceType = "Mixed";
+    } else if (hasFriable) {
+      newClearanceType = "Friable";
+    } else {
+      newClearanceType = "Non-friable";
+    }
+
+    // Update the clearance type if it has changed
+    if (clearance && clearance.clearanceType !== newClearanceType) {
+      try {
+        await asbestosClearanceService.update(clearanceId, {
+          clearanceType: newClearanceType,
+        });
+
+        // Update local state
+        setClearance((prev) => ({
+          ...prev,
+          clearanceType: newClearanceType,
+        }));
+
+        console.log(
+          `Clearance type automatically updated to: ${newClearanceType}`
+        );
+      } catch (error) {
+        console.error("Error updating clearance type:", error);
+      }
+    }
+  };
+
   const getAsbestosTypeColor = (type) => {
     switch (type) {
-      case "friable":
+      case "Friable":
         return "error";
-      case "non-friable":
+      case "Non-friable":
         return "warning";
       default:
         return "default";
@@ -976,8 +1028,8 @@ const ClearanceItems = () => {
                       }
                       label="Asbestos Type"
                     >
-                      <MenuItem value="non-friable">Non-friable</MenuItem>
-                      <MenuItem value="friable">Friable</MenuItem>
+                      <MenuItem value="Non-friable">Non-friable</MenuItem>
+                      <MenuItem value="Friable">Friable</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>

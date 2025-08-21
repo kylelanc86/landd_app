@@ -1,5 +1,6 @@
 const NonFriableClearance = require('../models/clearanceTemplates/asbestos/NonFriableClearance');
 const FriableClearance = require('../models/clearanceTemplates/asbestos/FriableClearance');
+const MixedClearance = require('../models/clearanceTemplates/asbestos/MixedClearance');
 const AsbestosAssessmentTemplate = require('../models/assessmentTemplates/asbestos/AsbestosAssessmentTemplate');
 const mongoose = require('mongoose');
 
@@ -34,6 +35,10 @@ const getTemplateByType = async (templateType) => {
         return await NonFriableClearance.findOne();
       } else if (templateType === "asbestosClearanceFriable") {
         return await FriableClearance.findOne();
+      } else if (templateType === "asbestosClearanceMixed") {
+        return await MixedClearance.findOne();
+      } else if (templateType === "asbestosClearanceComplex") {
+        return null; // Complex type doesn't use default templates
       } else if (templateType === "asbestosAssessment") {
         return await AsbestosAssessmentTemplate.findOne();
       }
@@ -56,6 +61,10 @@ const getTemplateByType = async (templateType) => {
         title = "NON-FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
       } else if (templateType === "asbestosClearanceFriable") {
         title = "FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      } else if (templateType === "asbestosClearanceMixed") {
+        title = "MIXED ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      } else if (templateType === "asbestosClearanceComplex") {
+        title = "COMPLEX ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
       } else if (templateType === "asbestosAssessment") {
         title = "ASBESTOS MATERIAL ASSESSMENT REPORT";
       }
@@ -156,6 +165,61 @@ const getTemplateByType = async (templateType) => {
           reportHeaders: {
             title: title,
             subtitle: "Clearance Inspection Report"
+          },
+          standardSections
+        });
+      } else if (templateType === "asbestosClearanceMixed") {
+        // Mixed clearance content (same as Friable initially)
+        standardSections = {
+          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING MIXED ASBESTOS CLEARANCE INSPECTIONS",
+          backgroundInformationContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          legislativeRequirementsTitle: "LEGISLATIVE REQUIREMENTS",
+          legislativeRequirementsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          mixedClearanceCertificateLimitationsTitle: "MIXED ASBESTOS CLEARANCE CERTIFICATE LIMITATIONS",
+          mixedClearanceCertificateLimitationsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          inspectionDetailsTitle: "INSPECTION DETAILS",
+          inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
+          
+          inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
+          inspectionExclusionsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
+          clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
+          
+          signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
+          
+          footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
+        };
+        
+        template = new MixedClearance({
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Clearance Inspection Report"
+          },
+          standardSections
+        });
+      } else if (templateType === "asbestosClearanceComplex") {
+        // Complex clearance content - minimal template since it doesn't use default content
+        standardSections = {
+          note: "This is a Complex Clearance Certificate that requires custom content generation. The standard template content system is not used for this clearance type.",
+          customSections: [
+            "Project-specific requirements",
+            "Specialist methodology", 
+            "Custom assessment criteria",
+            "Project-specific conclusions",
+            "Specialist recommendations"
+          ]
+        };
+        
+        template = new NonFriableClearance({
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Specialist Clearance Certificate"
           },
           standardSections
         });

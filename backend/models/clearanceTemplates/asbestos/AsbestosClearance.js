@@ -22,7 +22,7 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     clearanceType: {
       type: String,
-      enum: ["Non-friable", "Friable"],
+      enum: ["Non-friable", "Friable", "Mixed", "Complex"],
       required: true,
     },
     LAA: {

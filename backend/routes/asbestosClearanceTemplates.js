@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const NonFriableClearance = require("../models/clearanceTemplates/asbestos/NonFriableClearance");
 const FriableClearance = require("../models/clearanceTemplates/asbestos/FriableClearance");
+const MixedClearance = require("../models/clearanceTemplates/asbestos/MixedClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 
@@ -18,6 +19,11 @@ router.get("/", auth, checkPermission("admin.view"), async (req, res) => {
       .populate("updatedBy", "firstName lastName")
       .sort({ createdAt: -1 });
 
+    const mixedTemplates = await MixedClearance.find()
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName")
+      .sort({ createdAt: -1 });
+
     // Combine and format the results
     const allTemplates = [
       ...nonFriableTemplates.map(template => ({
@@ -27,6 +33,10 @@ router.get("/", auth, checkPermission("admin.view"), async (req, res) => {
       ...friableTemplates.map(template => ({
         ...template.toObject(),
         templateType: "asbestosClearanceFriable"
+      })),
+      ...mixedTemplates.map(template => ({
+        ...template.toObject(),
+        templateType: "asbestosClearanceMixed"
       }))
     ];
 
@@ -51,6 +61,35 @@ router.get("/:templateType", auth, checkPermission("admin.view"), async (req, re
       template = await FriableClearance.findOne()
         .populate("createdBy", "firstName lastName")
         .populate("updatedBy", "firstName lastName");
+    } else if (templateType === "asbestosClearanceMixed") {
+      template = await MixedClearance.findOne()
+        .populate("createdBy", "firstName lastName")
+        .populate("updatedBy", "firstName lastName");
+    }
+
+    // If template doesn't exist, try to create it automatically
+    if (!template) {
+      console.log(`Template ${templateType} not found, attempting automatic creation...`);
+      
+      try {
+        // Import the template service to create the template
+        const templateService = require('../services/templateService');
+        template = await templateService.getTemplateByType(templateType);
+        
+        if (template) {
+          console.log(`Template ${templateType} created automatically`);
+          // Populate the user fields for the response
+          template = await template.populate([
+            { path: "createdBy", select: "firstName lastName" },
+            { path: "updatedBy", select: "firstName lastName" }
+          ]);
+        }
+      } catch (createError) {
+        console.error(`Error creating template ${templateType}:`, createError);
+        return res.status(500).json({ 
+          message: `Template not found and could not be created automatically: ${createError.message}` 
+        });
+      }
     }
 
     if (!template) {
@@ -104,6 +143,19 @@ router.post("/", auth, checkPermission("admin.create"), async (req, res) => {
         standardSections,
         createdBy: req.user.id,
       });
+    } else if (templateType === "asbestosClearanceMixed") {
+      // Check if template already exists
+      const existingTemplate = await MixedClearance.findOne();
+      if (existingTemplate) {
+        return res.status(400).json({ message: "Mixed clearance template already exists" });
+      }
+
+      template = new MixedClearance({
+        companyDetails,
+        reportHeaders,
+        standardSections,
+        createdBy: req.user.id,
+      });
     } else {
       return res.status(400).json({ message: "Invalid template type" });
     }
@@ -144,6 +196,8 @@ router.put("/:templateType", auth, checkPermission("admin.edit"), async (req, re
       template = await NonFriableClearance.findOne();
     } else if (templateType === "asbestosClearanceFriable") {
       template = await FriableClearance.findOne();
+    } else if (templateType === "asbestosClearanceMixed") {
+      template = await MixedClearance.findOne();
     } else {
       return res.status(400).json({ message: "Invalid template type" });
     }

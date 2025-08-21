@@ -73,6 +73,11 @@ const ReportTemplates = () => {
       color: "#FF6B6B",
     },
     {
+      id: "asbestosClearanceMixed",
+      name: "Mixed Asbestos Clearance Report",
+      color: "#FF6B6B",
+    },
+    {
       id: "asbestosAssessment",
       name: "Asbestos Assessment Report",
       color: "#FF6B6B",
@@ -121,10 +126,11 @@ const ReportTemplates = () => {
 
   // Template sections organized by page for detailed editing
   const getTemplateSections = (templateType) => {
-    // Asbestos clearance templates (both non-friable and friable)
+    // Asbestos clearance templates (non-friable, friable, and mixed)
     if (
       templateType === "asbestosClearanceNonFriable" ||
-      templateType === "asbestosClearanceFriable"
+      templateType === "asbestosClearanceFriable" ||
+      templateType === "asbestosClearanceMixed"
     ) {
       const baseSections = {
         "Background Information": [
@@ -161,6 +167,11 @@ const ReportTemplates = () => {
         baseSections["Friable Clearance Certificate Limitations"] = [
           "friableClearanceCertificateLimitationsTitle",
           "friableClearanceCertificateLimitationsContent",
+        ];
+      } else if (templateType === "asbestosClearanceMixed") {
+        baseSections["Mixed Clearance Certificate Limitations"] = [
+          "mixedClearanceCertificateLimitationsTitle",
+          "mixedClearanceCertificateLimitationsContent",
         ];
       }
 
@@ -268,10 +279,45 @@ const ReportTemplates = () => {
     setTemplateSections(sections);
   }, [selectedTemplate]);
 
-  const handleTemplateChange = (event) => {
+  const handleTemplateChange = async (event) => {
     const newTemplateType = event.target.value;
     setSelectedTemplate(newTemplateType);
     setPreviewData({});
+
+    // Check if the selected template exists in our current state
+    if (!templates[newTemplateType]) {
+      try {
+        console.log(
+          `Template ${newTemplateType} not found in state, fetching from backend...`
+        );
+        setLoading(true);
+
+        // Fetch the specific template from the backend
+        const templateData = await reportTemplateService.getTemplateByType(
+          newTemplateType
+        );
+
+        // Update the templates state with the new template
+        setTemplates((prev) => ({
+          ...prev,
+          [newTemplateType]: templateData,
+        }));
+
+        console.log(
+          `Template ${newTemplateType} loaded successfully:`,
+          templateData
+        );
+      } catch (error) {
+        console.error(`Error fetching template ${newTemplateType}:`, error);
+        setSaveStatus({
+          show: true,
+          message: `Error loading template. Please refresh the page.`,
+          severity: "error",
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const handleEdit = (section, data) => {
@@ -796,23 +842,52 @@ const ReportTemplates = () => {
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="h5" sx={{ mb: 2 }}>
-                {replacePlaceholders(
-                  template.standardSections
-                    .nonFriableClearanceCertificateLimitationsTitle
-                )}
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{ mb: 2, whiteSpace: "pre-line" }}
-              >
-                {replacePlaceholders(
-                  template.standardSections
-                    .nonFriableClearanceCertificateLimitationsContent
-                )}
-              </Typography>
+              {/* Dynamic Limitations Section */}
+              {(() => {
+                let limitationsTitle = "";
+                let limitationsContent = "";
 
-              <Divider sx={{ my: 2 }} />
+                if (selectedTemplate === "asbestosClearanceNonFriable") {
+                  limitationsTitle =
+                    template.standardSections
+                      .nonFriableClearanceCertificateLimitationsTitle;
+                  limitationsContent =
+                    template.standardSections
+                      .nonFriableClearanceCertificateLimitationsContent;
+                } else if (selectedTemplate === "asbestosClearanceFriable") {
+                  limitationsTitle =
+                    template.standardSections
+                      .friableClearanceCertificateLimitationsTitle;
+                  limitationsContent =
+                    template.standardSections
+                      .friableClearanceCertificateLimitationsContent;
+                } else if (selectedTemplate === "asbestosClearanceMixed") {
+                  limitationsTitle =
+                    template.standardSections
+                      .mixedClearanceCertificateLimitationsTitle;
+                  limitationsContent =
+                    template.standardSections
+                      .mixedClearanceCertificateLimitationsContent;
+                }
+
+                if (limitationsTitle && limitationsContent) {
+                  return (
+                    <>
+                      <Typography variant="h5" sx={{ mb: 2 }}>
+                        {replacePlaceholders(limitationsTitle)}
+                      </Typography>
+                      <Typography
+                        variant="body1"
+                        sx={{ mb: 2, whiteSpace: "pre-line" }}
+                      >
+                        {replacePlaceholders(limitationsContent)}
+                      </Typography>
+                      <Divider sx={{ my: 2 }} />
+                    </>
+                  );
+                }
+                return null;
+              })()}
 
               <Typography variant="h5" sx={{ mb: 2 }}>
                 {replacePlaceholders(
@@ -999,7 +1074,8 @@ const ReportTemplates = () => {
 
     if (
       selectedTemplate === "asbestosClearanceNonFriable" ||
-      selectedTemplate === "asbestosClearanceFriable"
+      selectedTemplate === "asbestosClearanceFriable" ||
+      selectedTemplate === "asbestosClearanceMixed"
     ) {
       availablePlaceholders = [...basePlaceholders, ...asbestosPlaceholders];
     } else if (selectedTemplate === "leadAssessment") {

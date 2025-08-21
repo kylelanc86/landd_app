@@ -36,7 +36,7 @@ const reportTemplateService = {
     try {
       let response;
       
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable') {
+      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable' || templateType === 'asbestosClearanceMixed') {
         response = await api.get(`/asbestos-clearance-templates/${templateType}`);
       } else if (templateType === 'leadAssessment') {
         response = await api.get(`/lead-assessment-templates/${templateType}`);
@@ -59,7 +59,7 @@ const reportTemplateService = {
       const { templateType } = templateData;
       let response;
       
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable') {
+      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable' || templateType === 'asbestosClearanceMixed') {
         response = await api.post('/asbestos-clearance-templates', templateData);
       } else if (templateType === 'leadAssessment') {
         response = await api.post('/lead-assessment-templates', templateData);
@@ -81,7 +81,7 @@ const reportTemplateService = {
     try {
       let response;
       
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable') {
+      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable' || templateType === 'asbestosClearanceMixed') {
         response = await api.put(`/asbestos-clearance-templates/${templateType}`, updateData);
       } else if (templateType === 'leadAssessment') {
         response = await api.put(`/lead-assessment-templates/${templateType}`, updateData);

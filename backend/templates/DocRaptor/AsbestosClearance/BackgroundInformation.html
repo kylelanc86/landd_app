@@ -140,29 +140,20 @@
       }
 
       .bullets {
-        margin: 8px 0 12px 24px;
+        margin: 16px 0 16px 24px;
         padding: 0;
         font-size: 0.8rem;
         color: #222;
-        line-height: 1.5;
-        text-align: justify;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        hyphens: auto;
+        page-break-inside: avoid;
       }
 
       .bullets li {
         margin-bottom: 8px;
-        list-style-type: disc;
-        list-style-position: outside;
-        text-indent: -24px;
-        padding-left: 24px;
+        margin-top: 4px;
         line-height: 1.4;
-      }
-
-      .bullets li::marker {
-        font-size: 200%;
-        color: #222;
+        word-break: keep-all;
+        overflow-wrap: normal;
+        hyphens: none;
       }
 
       .footer {

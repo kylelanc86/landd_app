@@ -52,9 +52,62 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     console.log('Background loaded:', backgroundBase64.length > 0);
 
     // Fetch template content from database
-    const templateType = clearanceData.clearanceType === 'Friable' ? 'asbestosClearanceFriable' : 'asbestosClearanceNonFriable';
+    let templateType;
+    
+    // If useComplexTemplate is true, use Complex template regardless of clearance type
+    if (clearanceData.useComplexTemplate) {
+      templateType = 'asbestosClearanceComplex';
+    } else {
+      // Auto-determine clearance type based on asbestos items if not explicitly set
+      let clearanceType = clearanceData.clearanceType;
+      
+      if (!clearanceType && clearanceData.items && clearanceData.items.length > 0) {
+        const hasFriable = clearanceData.items.some(item => item.asbestosType === 'Friable');
+        const hasNonFriable = clearanceData.items.some(item => item.asbestosType === 'Non-friable');
+        
+        if (hasFriable && hasNonFriable) {
+          clearanceType = 'Mixed';
+        } else if (hasFriable) {
+          clearanceType = 'Friable';
+        } else {
+          clearanceType = 'Non-friable';
+        }
+      }
+      
+      // Map clearance type to template type
+      if (clearanceType === 'Friable') {
+        templateType = 'asbestosClearanceFriable';
+      } else if (clearanceType === 'Non-friable') {
+        templateType = 'asbestosClearanceNonFriable';
+      } else if (clearanceType === 'Mixed') {
+        templateType = 'asbestosClearanceMixed';
+      } else {
+        templateType = 'asbestosClearanceNonFriable'; // Default fallback
+      }
+    }
+    
     const templateContent = await getTemplateByType(templateType);
     
+    // Special handling for Complex clearance type - bypass default template content
+    if (clearanceData.useComplexTemplate || clearanceData.clearanceType === 'Complex') {
+      console.log('[COMPLEX CLEARANCE] Bypassing default template content system');
+      // For Complex clearance, we'll use minimal template content and generate custom content
+      const complexTemplateContent = {
+        standardSections: {
+          note: "This is a Complex Clearance Certificate that requires custom content generation.",
+          customSections: [
+            "Project-specific requirements",
+            "Specialist methodology", 
+            "Custom assessment criteria",
+            "Project-specific conclusions",
+            "Specialist recommendations"
+          ]
+        }
+      };
+      
+      // Use the complex template content instead of the default
+      templateContent = complexTemplateContent;
+    }
 
 
     // Debug logging for cover page data
@@ -1471,7 +1524,41 @@ const generateAssessmentHTML = async (assessmentData) => {
     const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
     // Fetch template content from database
-    const templateContent = await getTemplateByType('asbestosAssessment');
+    let templateType;
+    
+    // If useComplexTemplate is true, use Complex template regardless of clearance type
+    if (clearanceData.useComplexTemplate) {
+      templateType = 'asbestosClearanceComplex';
+    } else {
+      // Auto-determine clearance type based on asbestos items if not explicitly set
+      let clearanceType = clearanceData.clearanceType;
+      
+      if (!clearanceType && clearanceData.items && clearanceData.items.length > 0) {
+        const hasFriable = clearanceData.items.some(item => item.asbestosType === 'Friable');
+        const hasNonFriable = clearanceData.items.some(item => item.asbestosType === 'Non-friable');
+        
+        if (hasFriable && hasNonFriable) {
+          clearanceType = 'Mixed';
+        } else if (hasFriable) {
+          clearanceType = 'Friable';
+        } else {
+          clearanceType = 'Non-friable';
+        }
+      }
+      
+      // Map clearance type to template type
+      if (clearanceType === 'Friable') {
+        templateType = 'asbestosClearanceFriable';
+      } else if (clearanceType === 'Non-friable') {
+        templateType = 'asbestosClearanceNonFriable';
+      } else if (clearanceType === 'Mixed') {
+        templateType = 'asbestosClearanceMixed';
+      } else {
+        templateType = 'asbestosClearanceNonFriable'; // Default fallback
+      }
+    }
+    
+    const templateContent = await getTemplateByType(templateType);
     
     console.log('=== ASBESTOS ASSESSMENT TEMPLATE DEBUG ===');
     console.log('Template content fetched:', !!templateContent);
