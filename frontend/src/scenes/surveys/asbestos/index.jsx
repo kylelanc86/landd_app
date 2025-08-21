@@ -76,7 +76,15 @@ const AssessmentJobsPage = () => {
       const projectsData = Array.isArray(response)
         ? response
         : response.data || response.projects || response.data?.data || [];
-      setProjects(projectsData);
+
+      // Sort projects by projectID in descending order
+      const sortedProjects = projectsData.sort((a, b) => {
+        const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
+        const bNum = parseInt(b.projectID?.replace(/\D/g, "")) || 0;
+        return bNum - aNum; // Descending order (highest first)
+      });
+
+      setProjects(sortedProjects);
     } catch (error) {
       setProjects([]);
     }
@@ -689,7 +697,6 @@ const AssessmentJobsPage = () => {
                         <TableRow>
                           <TableCell>Item #</TableCell>
                           <TableCell>Sample Reference</TableCell>
-                          <TableCell>Location</TableCell>
                           <TableCell>Material Type</TableCell>
                           <TableCell>Asbestos Content</TableCell>
                           <TableCell>Asbestos Type</TableCell>
@@ -701,9 +708,6 @@ const AssessmentJobsPage = () => {
                             <TableCell>{sample.itemNumber || ""}</TableCell>
                             <TableCell>
                               {sample.sampleReference || ""}
-                            </TableCell>
-                            <TableCell>
-                              {sample.locationDescription || ""}
                             </TableCell>
                             <TableCell>{sample.materialType || ""}</TableCell>
                             <TableCell>

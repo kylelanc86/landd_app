@@ -56,10 +56,13 @@ const AssessmentItemsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     itemNumber: "",
     sampleReference: "",
+    roomArea: "",
     locationDescription: "",
     materialType: "",
     asbestosContent: "",
@@ -87,6 +90,11 @@ const AssessmentItemsPage = () => {
 
         setItems(itemsData || []);
         setAssessment(assessmentData);
+
+        // Auto-sync analysis data to ensure all items are properly formatted
+        if (itemsData && itemsData.length > 0) {
+          await autoSyncAnalysisData(itemsData);
+        }
       } catch (err) {
         console.error("Error fetching data:", err);
         setError("Failed to load data");
@@ -105,8 +113,8 @@ const AssessmentItemsPage = () => {
       itemNumber: getNextItemNumber(),
       sampleReference: "",
       locationDescription: "",
+      roomArea: "",
       materialType: "",
-      asbestosContent: "",
       asbestosType: "",
       condition: "",
       risk: "",
@@ -124,9 +132,29 @@ const AssessmentItemsPage = () => {
     setForm({
       itemNumber: "",
       sampleReference: "",
+      roomArea: "",
       locationDescription: "",
       materialType: "",
-      asbestosContent: "",
+      asbestosType: "",
+      condition: "",
+      risk: "",
+      photograph: "",
+      recommendationActions: "",
+    });
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    setCompressionStatus(null);
+  };
+
+  const handleEditDialogClose = () => {
+    setEditDialogOpen(false);
+    setEditingItem(null);
+    setForm({
+      itemNumber: "",
+      sampleReference: "",
+      roomArea: "",
+      locationDescription: "",
+      materialType: "",
       asbestosType: "",
       condition: "",
       risk: "",
@@ -146,16 +174,142 @@ const AssessmentItemsPage = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await assessmentService.addItem(id, form);
-      handleDialogClose();
+      if (editingItem) {
+        // Update existing item
+        await assessmentService.updateItem(id, editingItem._id, form);
+        handleEditDialogClose();
+      } else {
+        // Add new item
+        await assessmentService.addItem(id, form);
+        handleDialogClose();
+      }
       // Refresh items
       const updatedItems = await assessmentService.getItems(id);
       setItems(updatedItems);
     } catch (err) {
-      alert(err.message || "Failed to add item");
+      alert(err.message || `Failed to ${editingItem ? "update" : "add"} item`);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Function to auto-sync analysis data on page load
+  const autoSyncAnalysisData = async (itemsData) => {
+    try {
+      // Find items that need formatting updates
+      const itemsToUpdate = itemsData.filter((item) => {
+        return (
+          item.analysisData?.isAnalyzed &&
+          item.analysisData?.finalResult &&
+          // Update if current content is not properly formatted
+          (!item.asbestosContent ||
+            item.asbestosContent.includes("organic fibres") ||
+            item.asbestosContent.includes("Organic fibres") ||
+            item.asbestosContent.includes("SMF") ||
+            item.asbestosContent.includes("synthetic mineral fibres") ||
+            // Or if it's the old array format
+            Array.isArray(item.asbestosContent))
+        );
+      });
+
+      if (itemsToUpdate.length > 0) {
+        // Update each item with properly formatted asbestos content
+        for (const item of itemsToUpdate) {
+          const formattedContent = formatAsbestosContent(
+            item.analysisData.finalResult
+          );
+
+          if (formattedContent !== item.asbestosContent) {
+            const updateData = {
+              ...item,
+              asbestosContent: formattedContent,
+            };
+
+            await assessmentService.updateItem(id, item._id, updateData);
+          }
+        }
+
+        // Refresh items to show updated data
+        const updatedItems = await assessmentService.getItems(id);
+        setItems(updatedItems);
+      }
+    } catch (err) {
+      console.error("Error in auto-sync:", err);
+      // Don't show alert for auto-sync errors, just log them
+    }
+  };
+
+  // Helper function to format asbestos content
+  const formatAsbestosContent = (finalResult) => {
+    if (!finalResult) return "";
+
+    // Handle both string and array formats
+    let results = finalResult;
+    if (typeof finalResult === "string") {
+      // Split by comma and clean up whitespace
+      results = finalResult.split(",").map((item) => item.trim());
+    } else if (!Array.isArray(finalResult)) {
+      return "";
+    }
+
+    // Check if no asbestos was detected
+    if (results.some((result) => result.includes("No asbestos detected"))) {
+      return "NAD";
+    }
+
+    // Check if only non-asbestos materials are found
+    const hasAsbestos = results.some(
+      (result) =>
+        result &&
+        typeof result === "string" &&
+        (result.includes("Chrysotile") ||
+          result.includes("Amosite") ||
+          result.includes("Crocidolite"))
+    );
+
+    // If no asbestos found, check for organic fibres or SMF
+    if (!hasAsbestos) {
+      const hasNonAsbestos = results.some(
+        (result) =>
+          result &&
+          typeof result === "string" &&
+          (result.includes("organic fibres") ||
+            result.includes("Organic fibres") ||
+            result.includes("SMF") ||
+            result.includes("synthetic mineral fibres"))
+      );
+
+      if (hasNonAsbestos) {
+        return "NAD";
+      } else {
+        // Keep original results if no asbestos and no recognized non-asbestos materials
+        return results.join(", ");
+      }
+    } else {
+      // Map asbestos types to abbreviations - ONLY show asbestos, ignore non-asbestos materials
+      const abbreviations = results
+        .filter((result) => result && typeof result === "string")
+        .map((result) => {
+          if (result.includes("Chrysotile")) return "CHR";
+          if (result.includes("Amosite")) return "AMO";
+          if (result.includes("Crocidolite")) return "CROC";
+          return null; // Don't include non-asbestos materials
+        })
+        .filter((abbr) => abbr !== null && abbr !== "No asbestos detected"); // Remove nulls and NAD
+
+      return abbreviations.join(", ");
+    }
+  };
+
+  // Helper function to check if item has asbestos
+  const hasAsbestos = (asbestosContent) => {
+    if (!asbestosContent) return false;
+    return (
+      asbestosContent !== "NAD" &&
+      (asbestosContent.includes("CHR") ||
+        asbestosContent.includes("AMO") ||
+        asbestosContent.includes("CROC"))
+    );
   };
 
   const handlePhotoUpload = async (event) => {
@@ -249,7 +403,25 @@ const AssessmentItemsPage = () => {
   };
 
   const handleEditItem = (itemId) => {
-    // TODO: Implement edit item logic/modal
+    const item = items.find((item) => item._id === itemId);
+    if (item) {
+      setForm({
+        itemNumber: item.itemNumber || "",
+        sampleReference: item.sampleReference || "",
+        roomArea: item.roomArea || "",
+        locationDescription: item.locationDescription || "",
+        materialType: item.materialType || "",
+        asbestosContent: item.asbestosContent || "",
+        asbestosType: item.asbestosType || "",
+        condition: item.condition || "",
+        risk: item.risk || "",
+        photograph: item.photograph || "",
+        recommendationActions: item.recommendationActions || "",
+      });
+      setPhotoPreview(item.photograph || null);
+      setEditingItem(item);
+      setEditDialogOpen(true);
+    }
   };
 
   const handleDeleteItem = async (itemId) => {
@@ -583,7 +755,10 @@ const AssessmentItemsPage = () => {
                     Sample Ref
                   </TableCell>
                   <TableCell sx={{ verticalAlign: "middle" }}>
-                    Location/Description
+                    Room/Area
+                  </TableCell>
+                  <TableCell sx={{ verticalAlign: "middle" }}>
+                    Material Description
                   </TableCell>
                   <TableCell sx={{ verticalAlign: "middle" }}>
                     Material Type
@@ -593,7 +768,7 @@ const AssessmentItemsPage = () => {
                       width: "40px",
                       minWidth: "40px",
                       maxWidth: "40px",
-                      padding: "8px 4px",
+                      padding: "8px 8px",
                       height: "120px",
                       textAlign: "center",
                       verticalAlign: "middle",
@@ -605,15 +780,16 @@ const AssessmentItemsPage = () => {
                         transform: "rotate(-90deg)",
                         transformOrigin: "center",
                         whiteSpace: "nowrap",
-                        width: "100px",
-                        height: "20px",
+                        width: "80px",
+                        height: "40px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "absolute",
-                        left: "-20px",
+                        left: "50%",
                         top: "50%",
-                        marginTop: "-10px",
+                        marginLeft: "-40px",
+                        marginTop: "-20px",
                         lineHeight: "0.9",
                         letterSpacing: "0.5px",
                       }}
@@ -640,15 +816,16 @@ const AssessmentItemsPage = () => {
                         transform: "rotate(-90deg)",
                         transformOrigin: "center",
                         whiteSpace: "nowrap",
-                        width: "100px",
-                        height: "20px",
+                        width: "80px",
+                        height: "40px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "absolute",
-                        left: "-20px",
+                        left: "50%",
                         top: "50%",
-                        marginTop: "-10px",
+                        marginLeft: "-40px",
+                        marginTop: "-20px",
                         lineHeight: "0.9",
                         letterSpacing: "0.5px",
                       }}
@@ -675,15 +852,15 @@ const AssessmentItemsPage = () => {
                         transform: "rotate(-90deg)",
                         transformOrigin: "center",
                         whiteSpace: "nowrap",
-                        // fontWeight: "bold",
-                        width: "100px",
+                        width: "60px",
                         height: "20px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "absolute",
-                        left: "-20px",
+                        left: "50%",
                         top: "50%",
+                        marginLeft: "-30px",
                         marginTop: "-10px",
                         letterSpacing: "0.5px",
                       }}
@@ -708,14 +885,15 @@ const AssessmentItemsPage = () => {
                         transform: "rotate(-90deg)",
                         transformOrigin: "center",
                         whiteSpace: "nowrap",
-                        width: "100px",
+                        width: "30px",
                         height: "20px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "absolute",
-                        left: "-20px",
+                        left: "50%",
                         top: "50%",
+                        marginLeft: "-15px",
                         marginTop: "-10px",
                         letterSpacing: "0.5px",
                       }}
@@ -785,19 +963,41 @@ const AssessmentItemsPage = () => {
                     <TableRow key={item._id}>
                       <TableCell>{item.itemNumber || ""}</TableCell>
                       <TableCell>{item.sampleReference}</TableCell>
+                      <TableCell>{item.roomArea || ""}</TableCell>
                       <TableCell>{item.locationDescription}</TableCell>
                       <TableCell>{item.materialType}</TableCell>
                       <TableCell title={item.asbestosContent}>
-                        {getAsbestosContentAbbr(item.asbestosContent)}
+                        <Typography
+                          sx={{
+                            fontWeight:
+                              item.asbestosContent &&
+                              item.asbestosContent !== "NAD"
+                                ? "bold"
+                                : "normal",
+                            color:
+                              item.asbestosContent &&
+                              item.asbestosContent !== "NAD"
+                                ? "error.main"
+                                : "inherit",
+                          }}
+                        >
+                          {getAsbestosContentAbbr(item.asbestosContent)}
+                        </Typography>
                       </TableCell>
                       <TableCell title={item.asbestosType}>
-                        {getAsbestosTypeAbbr(item.asbestosType)}
+                        {item.asbestosContent === "NAD"
+                          ? "-"
+                          : getAsbestosTypeAbbr(item.asbestosType)}
                       </TableCell>
                       <TableCell title={item.condition}>
-                        {getConditionAbbr(item.condition)}
+                        {item.asbestosContent === "NAD"
+                          ? "-"
+                          : getConditionAbbr(item.condition)}
                       </TableCell>
                       <TableCell title={item.risk}>
-                        {getRiskAbbr(item.risk)}
+                        {item.asbestosContent === "NAD"
+                          ? "-"
+                          : getRiskAbbr(item.risk)}
                       </TableCell>
                       <TableCell>
                         <IconButton
@@ -857,7 +1057,16 @@ const AssessmentItemsPage = () => {
                 required
               />
               <TextField
-                label="Location/Description"
+                label="Room/Area"
+                name="roomArea"
+                value={form.roomArea}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                placeholder="Enter room or area (optional)"
+              />
+              <TextField
+                label="Material Description"
                 name="locationDescription"
                 value={form.locationDescription}
                 onChange={handleFormChange}
@@ -875,32 +1084,6 @@ const AssessmentItemsPage = () => {
                 required
                 placeholder="Enter material type"
               />
-              <FormControl fullWidth margin="normal" required>
-                <InputLabel>Asbestos Content</InputLabel>
-                <Select
-                  name="asbestosContent"
-                  value={form.asbestosContent}
-                  onChange={handleFormChange}
-                  label="Asbestos Content"
-                >
-                  <MenuItem value="Chrysotile asbestos">
-                    Chrysotile asbestos
-                  </MenuItem>
-                  <MenuItem value="Amosite asbestos">Amosite asbestos</MenuItem>
-                  <MenuItem value="Crocidolite asbestos">
-                    Crocidolite asbestos
-                  </MenuItem>
-                  <MenuItem value="Chrysotile & Amosite Asbestos">
-                    Chrysotile & Amosite Asbestos
-                  </MenuItem>
-                  <MenuItem value="Chrysotile, Amosite & Crocidolite asbestos">
-                    Chrysotile, Amosite & Crocidolite asbestos
-                  </MenuItem>
-                  <MenuItem value="No asbestos detected">
-                    No asbestos detected
-                  </MenuItem>
-                </Select>
-              </FormControl>
               <FormControl fullWidth margin="normal" required>
                 <InputLabel>Asbestos Type</InputLabel>
                 <Select
@@ -1027,6 +1210,210 @@ const AssessmentItemsPage = () => {
               disabled={submitting}
             >
               {submitting ? "Adding..." : "Add Item"}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Edit Item Dialog */}
+      <Dialog
+        open={editDialogOpen}
+        onClose={handleEditDialogClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Edit Assessment Item</DialogTitle>
+        <form onSubmit={handleFormSubmit}>
+          <DialogContent>
+            <Box
+              sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}
+            >
+              <TextField
+                label="Item Number"
+                name="itemNumber"
+                value={form.itemNumber}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                required
+                disabled
+              />
+              <TextField
+                label="Sample Reference"
+                name="sampleReference"
+                value={form.sampleReference}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                required
+              />
+              <TextField
+                label="Room/Area"
+                name="roomArea"
+                value={form.roomArea}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                placeholder="Enter room or area (optional)"
+              />
+              <TextField
+                label="Material Description"
+                name="locationDescription"
+                value={form.locationDescription}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                required
+              />
+              <TextField
+                label="Material Type"
+                name="materialType"
+                value={form.materialType}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                required
+                placeholder="Enter material type"
+              />
+              <TextField
+                label="Asbestos Content (Auto-filled from Analysis)"
+                name="asbestosContent"
+                value={form.asbestosContent || ""}
+                fullWidth
+                margin="normal"
+                disabled
+                sx={{
+                  backgroundColor: "action.disabledBackground",
+                  color: "text.disabled",
+                }}
+                helperText="This field is automatically populated from lab analysis data"
+              />
+              <FormControl fullWidth margin="normal" required>
+                <InputLabel>Asbestos Type</InputLabel>
+                <Select
+                  name="asbestosType"
+                  value={form.asbestosType}
+                  onChange={handleFormChange}
+                  label="Asbestos Type"
+                >
+                  <MenuItem value="Non-friable">Non-friable</MenuItem>
+                  <MenuItem value="Friable">Friable</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl fullWidth margin="normal" required>
+                <InputLabel>Condition</InputLabel>
+                <Select
+                  name="condition"
+                  value={form.condition}
+                  onChange={handleFormChange}
+                  label="Condition"
+                >
+                  <MenuItem value="Very good">Very good</MenuItem>
+                  <MenuItem value="Good">Good</MenuItem>
+                  <MenuItem value="Fair">Fair</MenuItem>
+                  <MenuItem value="Poor">Poor</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl fullWidth margin="normal" required>
+                <InputLabel>Risk</InputLabel>
+                <Select
+                  name="risk"
+                  value={form.risk}
+                  onChange={handleFormChange}
+                  label="Risk"
+                >
+                  <MenuItem value="Very low">Very low</MenuItem>
+                  <MenuItem value="Low">Low</MenuItem>
+                  <MenuItem value="Medium">Medium</MenuItem>
+                  <MenuItem value="High">High</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Photo Section */}
+              <Box sx={{ gridColumn: "1 / -1", mt: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Photo
+                </Typography>
+                <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<PhotoCameraIcon />}
+                    onClick={handleTakePhoto}
+                  >
+                    Take Photo
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<UploadIcon />}
+                    component="label"
+                  >
+                    Upload Photo
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                    />
+                  </Button>
+                  {photoPreview && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeletePhotoIcon />}
+                      onClick={handleRemovePhoto}
+                    >
+                      Remove Photo
+                    </Button>
+                  )}
+                </Box>
+
+                {compressionStatus && (
+                  <Alert severity={compressionStatus.type} sx={{ mb: 2 }}>
+                    {compressionStatus.message}
+                  </Alert>
+                )}
+
+                {photoPreview && (
+                  <Box sx={{ mt: 2 }}>
+                    <img
+                      src={photoPreview}
+                      alt="Preview"
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "200px",
+                        objectFit: "contain",
+                        border: "1px solid #ddd",
+                        borderRadius: "4px",
+                      }}
+                    />
+                  </Box>
+                )}
+              </Box>
+
+              <TextField
+                label="Recommendation Actions/Comments"
+                name="recommendationActions"
+                value={form.recommendationActions}
+                onChange={handleFormChange}
+                fullWidth
+                margin="normal"
+                multiline
+                rows={3}
+                sx={{ gridColumn: "1 / -1" }}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleEditDialogClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={submitting}
+            >
+              {submitting ? "Updating..." : "Update Item"}
             </Button>
           </DialogActions>
         </form>

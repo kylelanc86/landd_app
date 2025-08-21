@@ -525,14 +525,6 @@ const LDsuppliedAnalysisPage = () => {
           </Grid>
           <Grid item xs={12} md={3}>
             <Typography variant="subtitle2" color="text.secondary">
-              Location
-            </Typography>
-            <Typography variant="body1" sx={{ fontWeight: "medium" }}>
-              {assessmentItem.locationDescription || "N/A"}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Typography variant="subtitle2" color="text.secondary">
               Material Type
             </Typography>
             <Typography variant="body1" sx={{ fontWeight: "medium" }}>

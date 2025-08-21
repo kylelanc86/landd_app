@@ -4,6 +4,8 @@ const AssessmentItemSchema = new mongoose.Schema({
   itemNumber: { type: Number, required: true },
   sampleReference: { type: String, required: true },
   locationDescription: { type: String, required: true },
+  levelFloor: { type: String, required: false },
+  roomArea: { type: String, required: false },
   materialType: { type: String, required: true },
   asbestosContent: { type: String, required: false },
   asbestosType: { type: String, required: true },

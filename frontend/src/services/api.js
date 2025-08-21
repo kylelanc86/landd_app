@@ -7,8 +7,6 @@ const config = {
   defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api",
   currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api")
 };
-console.log('Environment Info:', config);
-
 // Create axios instance
 const api = axios.create({
   baseURL: config.currentUrl,
