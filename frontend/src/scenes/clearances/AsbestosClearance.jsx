@@ -43,7 +43,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import TodayIcon from "@mui/icons-material/Today";
 
 import Header from "../../components/Header";
@@ -348,6 +347,34 @@ const AsbestosClearance = () => {
     navigate(`/clearances/${clearance._id}/items`);
   };
 
+  const handleCloseJob = async (clearance) => {
+    if (
+      window.confirm(
+        "Are you sure you want to close this job? This will remove it from the asbestos clearances table."
+      )
+    ) {
+      try {
+        await asbestosClearanceService.update(clearance._id, {
+          status: "closed",
+        });
+        setSnackbar({
+          open: true,
+          message: "Job closed successfully and removed from table",
+          severity: "success",
+        });
+        // Refresh the data to remove the closed job from the table
+        fetchData();
+      } catch (err) {
+        console.error("Error closing job:", err);
+        setSnackbar({
+          open: true,
+          message: "Failed to close job",
+          severity: "error",
+        });
+      }
+    }
+  };
+
   const handleGeneratePDF = async (clearance) => {
     try {
       console.log("handleGeneratePDF called with clearance:", clearance);
@@ -439,6 +466,8 @@ const AsbestosClearance = () => {
         return "warning";
       case "Site Work Complete":
         return "info";
+      case "closed":
+        return "default";
       default:
         return "default";
     }
@@ -559,91 +588,124 @@ const AsbestosClearance = () => {
                       <TableCell>Status</TableCell>
                       <TableCell>Actions</TableCell>
                     </TableRow>
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        sx={{ textAlign: "center", py: 1 }}
+                      >
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ color: "white" }}
+                        >
+                          💡 Click any row to view clearance items
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
                   </TableHead>
                   <TableBody>
                     {Array.isArray(clearances) &&
-                      (clearances || []).map((clearance) => (
-                        <TableRow key={clearance._id}>
-                          <TableCell sx={{ maxWidth: "120px" }}>
-                            {getProjectName(clearance.projectId)}
-                          </TableCell>
-                          <TableCell sx={{ maxWidth: "120px" }}>
-                            {clearance.clearanceDate
-                              ? new Date(
-                                  clearance.clearanceDate
-                                ).toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })
-                              : "N/A"}
-                          </TableCell>
-                          <TableCell sx={{ minWidth: "200px", flex: 2 }}>
-                            <Box>
-                              <Typography
-                                variant="body2"
-                                component="div"
-                                color="black"
+                      (clearances || [])
+                        .filter((clearance) => clearance.status !== "closed")
+                        .map((clearance) => (
+                          <TableRow
+                            key={clearance._id}
+                            onClick={() => handleViewItems(clearance)}
+                            sx={{
+                              cursor: "pointer",
+                              transition: "background-color 0.2s ease",
+                              "&:hover": {
+                                backgroundColor: "action.hover",
+                                boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                              },
+                              "&:active": {
+                                backgroundColor: "action.selected",
+                              },
+                            }}
+                          >
+                            <TableCell sx={{ maxWidth: "120px" }}>
+                              {getProjectName(clearance.projectId)}
+                            </TableCell>
+                            <TableCell sx={{ maxWidth: "120px" }}>
+                              {clearance.clearanceDate
+                                ? new Date(
+                                    clearance.clearanceDate
+                                  ).toLocaleDateString("en-GB", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                  })
+                                : "N/A"}
+                            </TableCell>
+                            <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                              <Box>
+                                <Typography
+                                  variant="body2"
+                                  component="div"
+                                  color="black"
+                                >
+                                  {getProjectDisplayName(clearance.projectId)}
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  component="div"
+                                  color="text.secondary"
+                                  sx={{ fontStyle: "italic" }}
+                                >
+                                  {clearance.clearanceType}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              {clearance.asbestosRemovalist || "N/A"}
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                label={clearance.status}
+                                color={getStatusColor(clearance.status)}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              {clearance.status === "complete" && (
+                                <Button
+                                  onClick={() => handleCloseJob(clearance)}
+                                  color="success"
+                                  size="small"
+                                  variant="contained"
+                                  sx={{ mr: 1 }}
+                                >
+                                  Close Job
+                                </Button>
+                              )}
+                              <IconButton
+                                onClick={() => handleEdit(clearance)}
+                                color="primary"
+                                size="small"
+                                title="Edit"
                               >
-                                {getProjectDisplayName(clearance.projectId)}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                component="div"
-                                color="text.secondary"
-                                sx={{ fontStyle: "italic" }}
+                                <EditIcon />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => handleGeneratePDF(clearance)}
+                                color="secondary"
+                                size="small"
+                                disabled={generatingPDF}
+                                title="Generate PDF"
                               >
-                                {clearance.clearanceType}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            {clearance.asbestosRemovalist || "N/A"}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={clearance.status}
-                              color={getStatusColor(clearance.status)}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <IconButton
-                              onClick={() => handleViewItems(clearance)}
-                              color="info"
-                              size="small"
-                              title="View Items"
-                            >
-                              <VisibilityIcon />
-                            </IconButton>
-                            <IconButton
-                              onClick={() => handleEdit(clearance)}
-                              color="primary"
-                              size="small"
-                              title="Edit"
-                            >
-                              <EditIcon />
-                            </IconButton>
-                            <IconButton
-                              onClick={() => handleGeneratePDF(clearance)}
-                              color="secondary"
-                              size="small"
-                              disabled={generatingPDF}
-                              title="Generate PDF"
-                            >
-                              <PictureAsPdfIcon />
-                            </IconButton>
-                            <IconButton
-                              onClick={() => handleDelete(clearance)}
-                              color="error"
-                              size="small"
-                              title="Delete"
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                <PictureAsPdfIcon />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => handleDelete(clearance)}
+                                color="error"
+                                size="small"
+                                title="Delete"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                   </TableBody>
                 </Table>
               </TableContainer>

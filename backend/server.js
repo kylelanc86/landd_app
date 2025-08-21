@@ -143,6 +143,7 @@ connectDB()
     app.use('/api/sample-items', requireAuth, checkTokenBlacklist, sampleItemsRoutes);
     app.use('/api/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
     app.use('/api/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
+    app.use('/api/custom-data-fields', requireAuth, checkTokenBlacklist, require('./routes/customDataFields'));
 
 
     

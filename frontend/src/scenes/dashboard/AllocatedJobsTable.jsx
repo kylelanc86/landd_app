@@ -34,11 +34,6 @@ const AllocatedJobsTable = () => {
       setLoading(true);
 
       try {
-        console.log(
-          `[AllocatedJobsTable] Starting data fetch for page ${page + 1}`
-        );
-
-        // Use the new optimized endpoint with active statuses and overdue data
         const response = await projectService.getAssignedToMe({
           page: page + 1, // Backend uses 1-based pagination
           limit: pageSize,
@@ -48,11 +43,6 @@ const AllocatedJobsTable = () => {
         });
 
         const dataFetchTime = performance.now() - startTime;
-        console.log(
-          `[AllocatedJobsTable] Data fetch completed in ${dataFetchTime.toFixed(
-            2
-          )}ms`
-        );
 
         const projectsData = response.data.data || [];
 
@@ -66,12 +56,7 @@ const AllocatedJobsTable = () => {
           dataFetchTime: dataFetchTime,
           renderTime: 0,
         });
-
-        console.log(
-          `[AllocatedJobsTable] Total fetch time: ${totalTime.toFixed(2)}ms`
-        );
       } catch (err) {
-        console.error("Error fetching allocated jobs:", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -83,14 +68,6 @@ const AllocatedJobsTable = () => {
   useEffect(() => {
     const renderStartTime = performance.now();
 
-    // Log performance improvement
-    console.log(
-      `[AllocatedJobsTable] 🚀 Performance Optimization: Reduced from 26+ API calls to 1 API call`
-    );
-    console.log(
-      `[AllocatedJobsTable] 📊 Expected improvement: 80-90% reduction in load time`
-    );
-
     fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
 
     // Measure render time after the next tick
@@ -100,9 +77,6 @@ const AllocatedJobsTable = () => {
         ...prev,
         renderTime: renderTime,
       }));
-      console.log(
-        `[AllocatedJobsTable] Render time: ${renderTime.toFixed(2)}ms`
-      );
     });
   }, [authLoading, currentUser, paginationModel, fetchAllocatedJobs]);
 
@@ -123,6 +97,7 @@ const AllocatedJobsTable = () => {
         overdueInvoice: false,
         overdueDays: 0,
       },
+      invoiceInfo: job.invoiceInfo || { hasInvoice: false },
     }));
   }, [jobs]);
 
@@ -209,11 +184,74 @@ const AllocatedJobsTable = () => {
         minWidth: 120,
         maxWidth: 150,
         renderCell: (params) => {
-          const overdue = params.value;
-          if (!overdue?.overdueInvoice) return "None";
-          return `${overdue.overdueDays} day${
-            overdue.overdueDays === 1 ? "" : "s"
-          }`;
+          const overdue = params.row.overdueInvoice;
+          const invoiceInfo = params.row.invoiceInfo;
+
+          // If there's an overdue invoice, show that prominently
+          if (overdue?.overdueInvoice && overdue.overdueDays > 0) {
+            return (
+              <span style={{ color: "#d32f2f", fontWeight: "bold" }}>
+                {overdue.overdueDays} day{overdue.overdueDays === 1 ? "" : "s"}{" "}
+                overdue
+              </span>
+            );
+          }
+
+          // If there's an invoice but not overdue, show status and days until due
+          if (invoiceInfo?.hasInvoice) {
+            let statusColor = "#666";
+            let statusText = invoiceInfo.status || "Unknown";
+
+            // Color code the status
+            switch (invoiceInfo.status) {
+              case "paid":
+                statusColor = "#2e7d32"; // Green
+                break;
+              case "unpaid":
+                statusColor = "#ed6c02"; // Orange
+                break;
+              case "draft":
+                statusColor = "#666"; // Gray
+                break;
+              case "awaiting_approval":
+                statusColor = "#1976d2"; // Blue
+                break;
+              default:
+                statusColor = "#666";
+            }
+
+            // Show status and days until due if applicable
+            if (
+              invoiceInfo.daysUntilDue !== null &&
+              invoiceInfo.daysUntilDue >= 0
+            ) {
+              return (
+                <div>
+                  <div style={{ color: statusColor, fontWeight: "bold" }}>
+                    {statusText.charAt(0).toUpperCase() + statusText.slice(1)}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "#666" }}>
+                    {invoiceInfo.daysUntilDue === 0
+                      ? "Due today"
+                      : `${invoiceInfo.daysUntilDue} day${
+                          invoiceInfo.daysUntilDue === 1 ? "" : "s"
+                        } left`}
+                  </div>
+                </div>
+              );
+            } else {
+              return (
+                <span style={{ color: statusColor, fontWeight: "bold" }}>
+                  {statusText.charAt(0).toUpperCase() + statusText.slice(1)}
+                </span>
+              );
+            }
+          }
+
+          // No invoice found
+          return (
+            <span style={{ color: "#666", fontStyle: "italic" }}>None</span>
+          );
         },
       },
     ],

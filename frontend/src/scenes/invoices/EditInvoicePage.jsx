@@ -26,7 +26,11 @@ import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 
-import { projectService, invoiceService } from "../../services/api";
+import {
+  projectService,
+  invoiceService,
+  clientService,
+} from "../../services/api";
 import invoiceItemService from "../../services/invoiceItemService";
 import { formatDateForInput } from "../../utils/dateFormat";
 
@@ -34,16 +38,22 @@ const EditInvoicePage = () => {
   const navigate = useNavigate();
   const { invoiceId } = useParams();
   const [projects, setProjects] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectInputValue, setProjectInputValue] = useState("");
 
   // Invoice header state
   const [invoiceHeader, setInvoiceHeader] = useState({
+    invoiceNumber: "",
+    invoiceDate: "",
     dueDate: "",
-    invoiceDate: new Date().toISOString().split("T")[0],
-    reference: "",
-    paymentTerms: 30, // Default to 30 days
+    client: "",
+    project: "",
+    status: "draft",
+    totalAmount: 0,
+    totalTax: 0,
+    grandTotal: 0,
   });
 
   // Client state (auto-populated from project)
@@ -62,15 +72,19 @@ const EditInvoicePage = () => {
 
   useEffect(() => {
     fetchProjects();
+    fetchClients();
     fetchAvailableInvoiceItems();
   }, [invoiceId]);
 
-  // Fetch invoice data after projects are loaded
-  useEffect(() => {
-    if (projects.length > 0) {
-      fetchInvoiceData();
+  const fetchClients = async () => {
+    try {
+      const response = await clientService.getAll();
+      setClients(response.data?.clients || response.data || []);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+      setClients([]);
     }
-  }, [projects, invoiceId, fetchInvoiceData]);
+  };
 
   const fetchInvoiceData = async () => {
     try {
@@ -107,12 +121,15 @@ const EditInvoicePage = () => {
 
       // Set invoice header data
       setInvoiceHeader({
+        invoiceNumber: invoice.invoiceID || "",
+        invoiceDate: invoice.date ? formatDateForInput(invoice.date) : "",
         dueDate: invoice.dueDate ? formatDateForInput(invoice.dueDate) : "",
-        invoiceDate: invoice.date
-          ? formatDateForInput(invoice.date)
-          : new Date().toISOString().split("T")[0],
-        reference: invoice.xeroReference || "",
-        paymentTerms: 30, // Default to 30 days
+        client: invoice.xeroClientName || "",
+        project: project?.name || "",
+        status: invoice.status || "draft",
+        totalAmount: invoice.totalAmount || 0,
+        totalTax: invoice.totalTax || 0,
+        grandTotal: invoice.grandTotal || 0,
       });
 
       // Set invoice items
@@ -150,6 +167,13 @@ const EditInvoicePage = () => {
       setLoading(false);
     }
   };
+
+  // Fetch invoice data after projects are loaded
+  useEffect(() => {
+    if (projects.length > 0) {
+      fetchInvoiceData();
+    }
+  }, [projects, invoiceId]);
 
   const fetchProjects = async () => {
     try {
@@ -213,8 +237,19 @@ const EditInvoicePage = () => {
         name: newValue.client,
         _id: newValue.client, // Use client name as ID for now
       });
+
+      // Auto-populate reference field with project's workOrder
+      setInvoiceHeader((prev) => ({
+        ...prev,
+        reference: newValue.workOrder || "",
+      }));
     } else {
       setSelectedClient(null);
+      // Clear reference field when no project is selected
+      setInvoiceHeader((prev) => ({
+        ...prev,
+        reference: "",
+      }));
     }
   };
 
@@ -222,12 +257,30 @@ const EditInvoicePage = () => {
     setInvoiceHeader((prev) => {
       const updatedHeader = { ...prev, [field]: value };
 
-      // Auto-calculate due date when invoice date or payment terms change
-      if (field === "invoiceDate" || field === "paymentTerms") {
-        if (updatedHeader.invoiceDate && updatedHeader.paymentTerms) {
+      // Auto-calculate due date when invoice date changes
+      if (field === "invoiceDate") {
+        if (updatedHeader.invoiceDate) {
           const invoiceDate = new Date(updatedHeader.invoiceDate);
           const dueDate = new Date(invoiceDate);
-          dueDate.setDate(invoiceDate.getDate() + updatedHeader.paymentTerms);
+
+          // Get payment terms from the selected client
+          const selectedClientObj = clients.find(
+            (client) => client.name === selectedClient?.name
+          );
+          let paymentTerms = 30; // Default fallback
+
+          if (selectedClientObj?.paymentTerms) {
+            if (selectedClientObj.paymentTerms === "Standard (30 days)") {
+              paymentTerms = 30;
+            } else if (
+              selectedClientObj.paymentTerms ===
+              "Payment before Report (7 days)"
+            ) {
+              paymentTerms = 7;
+            }
+          }
+
+          dueDate.setDate(invoiceDate.getDate() + paymentTerms);
           updatedHeader.dueDate = dueDate.toISOString().split("T")[0];
         }
       }
@@ -335,12 +388,28 @@ const EditInvoicePage = () => {
       // Calculate due date if not set
       let effectiveDueDate = invoiceHeader.dueDate;
       if (!effectiveDueDate) {
-        if (invoiceHeader.invoiceDate && invoiceHeader.paymentTerms) {
+        if (invoiceHeader.invoiceDate) {
           const invoiceDate = new Date(invoiceHeader.invoiceDate);
           const calculatedDueDate = new Date(invoiceDate);
-          calculatedDueDate.setDate(
-            invoiceDate.getDate() + invoiceHeader.paymentTerms
+
+          // Get payment terms from the selected client
+          const selectedClientObj = clients.find(
+            (client) => client.name === selectedClient?.name
           );
+          let paymentTerms = 30; // Default fallback
+
+          if (selectedClientObj?.paymentTerms) {
+            if (selectedClientObj.paymentTerms === "Standard (30 days)") {
+              paymentTerms = 30;
+            } else if (
+              selectedClientObj.paymentTerms ===
+              "Payment before Report (7 days)"
+            ) {
+              paymentTerms = 7;
+            }
+          }
+
+          calculatedDueDate.setDate(invoiceDate.getDate() + paymentTerms);
           effectiveDueDate = calculatedDueDate.toISOString().split("T")[0];
         } else {
           console.error("Due date is required");
@@ -359,7 +428,8 @@ const EditInvoicePage = () => {
         dueDate: new Date(effectiveDueDate), // Convert to Date object
         description: `Invoice for project ${selectedProject.name}`, // Description
         xeroClientName: selectedClient?.name, // Store client name in Xero field
-        xeroReference: invoiceHeader.reference || "", // Store reference in Xero field
+        xeroReference:
+          invoiceHeader.reference || selectedProject?.workOrder || "", // Store reference in Xero field
         lineItems: invoiceItems.map((item) => ({
           itemNo: item.itemNo,
           description: item.description,
@@ -565,22 +635,26 @@ const EditInvoicePage = () => {
           </Grid>
 
           <Grid item xs={12} md={3}>
-            <FormControl fullWidth>
-              <InputLabel>Payment Terms</InputLabel>
-              <Select
-                value={invoiceHeader.paymentTerms}
-                label="Payment Terms"
-                onChange={(e) =>
-                  handleHeaderChange("paymentTerms", e.target.value)
-                }
-              >
-                <MenuItem value={1}>1 day</MenuItem>
-                <MenuItem value={7}>7 days</MenuItem>
-                <MenuItem value={14}>14 days</MenuItem>
-                <MenuItem value={30}>30 days</MenuItem>
-                <MenuItem value={60}>60 days</MenuItem>
-              </Select>
-            </FormControl>
+            <Box
+              sx={{
+                p: 2,
+                border: "1px solid #e0e0e0",
+                borderRadius: 1,
+                backgroundColor: "#f5f5f5",
+              }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Payment Terms:{" "}
+                {(() => {
+                  const selectedClientObj = clients.find(
+                    (client) => client.name === selectedClient?.name
+                  );
+                  return (
+                    selectedClientObj?.paymentTerms || "Standard (30 days)"
+                  );
+                })()}
+              </Typography>
+            </Box>
           </Grid>
 
           <Grid item xs={12} md={3}>

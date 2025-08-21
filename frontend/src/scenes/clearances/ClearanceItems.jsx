@@ -92,6 +92,8 @@ const ClearanceItems = () => {
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
   const [generatingAirMonitoringPDF, setGeneratingAirMonitoringPDF] =
     useState(false);
+  const [attachmentsModalOpen, setAttachmentsModalOpen] = useState(false);
+  const [jobCompleted, setJobCompleted] = useState(false);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
@@ -108,6 +110,9 @@ const ClearanceItems = () => {
 
       setItems(itemsData || []);
       setClearance(clearanceData);
+
+      // Set job completed state based on clearance status
+      setJobCompleted(clearanceData?.status === "complete");
     } catch (err) {
       console.error("Error fetching data:", err);
       setError("Failed to load data");
@@ -609,6 +614,30 @@ const ClearanceItems = () => {
     navigate("/asbestos-removal");
   };
 
+  const handleCompleteJob = async () => {
+    if (window.confirm("Are you sure you want to complete this job?")) {
+      try {
+        await asbestosClearanceService.update(clearanceId, {
+          status: "complete",
+        });
+        setJobCompleted(true);
+        setSnackbar({
+          open: true,
+          message: "Job completed successfully!",
+          severity: "success",
+        });
+        fetchData(); // Refresh the data to show updated status
+      } catch (error) {
+        console.error("Error completing job:", error);
+        setSnackbar({
+          open: true,
+          message: "Failed to complete job",
+          severity: "error",
+        });
+      }
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -663,9 +692,33 @@ const ClearanceItems = () => {
 
         {/* Project Info */}
 
-        <Box display="flex" justifyContent="flex-end" sx={{ mb: 2 }}></Box>
+        <Box display="flex" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => setAttachmentsModalOpen(true)}
+            startIcon={<DescriptionIcon />}
+          >
+            Attachments
+          </Button>
 
-        {/* Air Monitoring Buttons */}
+          <Button
+            variant="contained"
+            color={jobCompleted ? "error" : "success"}
+            onClick={jobCompleted ? undefined : handleCompleteJob}
+            disabled={!items || items.length === 0 || jobCompleted}
+            sx={{
+              backgroundColor: jobCompleted ? "#d32f2f" : undefined,
+              "&:hover": {
+                backgroundColor: jobCompleted ? "#d32f2f" : undefined,
+              },
+            }}
+          >
+            {jobCompleted ? "COMPLETED" : "COMPLETE JOB"}
+          </Button>
+        </Box>
+
+        {/* Air Monitoring Indicators */}
         {clearance?.airMonitoring && (
           <Box display="flex" gap={2} sx={{ mt: 2 }} alignItems="center">
             {clearance.airMonitoringReport && (
@@ -677,30 +730,19 @@ const ClearanceItems = () => {
                 ✓ Air Monitoring Report Attached
               </Typography>
             )}
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={handleOpenAirMonitoringReportsDialog}
-              startIcon={<DescriptionIcon />}
-            >
-              {clearance.airMonitoringReport
-                ? "Replace Air Monitoring Report"
-                : "Select Air Monitoring Report"}
-            </Button>
-            {clearance.airMonitoringReport && (
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleRemoveAirMonitoringReport}
-                startIcon={<DeleteIcon />}
+            {!clearance.airMonitoringReport && (
+              <Typography
+                variant="body2"
+                color="warning.main"
+                sx={{ fontWeight: "medium" }}
               >
-                Remove Report
-              </Button>
+                ⚠ Air Monitoring Report Required
+              </Typography>
             )}
           </Box>
         )}
 
-        {/* Site Plan Buttons */}
+        {/* Site Plan Indicators */}
         {clearance?.sitePlan && (
           <Box display="flex" gap={2} sx={{ mt: 2 }} alignItems="center">
             {clearance.sitePlanFile && (
@@ -712,25 +754,14 @@ const ClearanceItems = () => {
                 ✓ Site Plan Attached
               </Typography>
             )}
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={() => setSitePlanDialogOpen(true)}
-              startIcon={<UploadIcon />}
-            >
-              {clearance.sitePlanFile
-                ? "Replace Site Plan"
-                : "Upload Site Plan"}
-            </Button>
-            {clearance.sitePlanFile && (
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleRemoveSitePlan}
-                startIcon={<DeleteIcon />}
+            {!clearance.sitePlanFile && (
+              <Typography
+                variant="body2"
+                color="warning.main"
+                sx={{ fontWeight: "medium" }}
               >
-                Remove Site Plan
-              </Button>
+                ⚠ Site Plan Required
+              </Typography>
             )}
           </Box>
         )}
@@ -738,37 +769,37 @@ const ClearanceItems = () => {
         {/* Job Specific Exclusions */}
         <Card sx={{ mt: 3 }}>
           <CardContent>
-            <Typography variant="h6" color={colors.grey[100]} sx={{ mb: 2 }}>
+            <Typography variant="h6" color="black" sx={{ mb: 2 }}>
               Job Specific Exclusions
             </Typography>
-            <TextField
-              fullWidth
-              label="Job Specific Exclusions"
-              value={clearance?.jobSpecificExclusions || ""}
-              onChange={(e) => {
-                // Update local state for the text field
-                setClearance((prev) => ({
-                  ...prev,
-                  jobSpecificExclusions: e.target.value,
-                }));
-              }}
-              multiline
-              rows={4}
-              placeholder="Enter job-specific exclusions that will be added to the Inspection Exclusions section of the report..."
-              helperText={
-                clearance?.jobSpecificExclusions && !savingExclusions
-                  ? "This text will be appended to the standard Inspection Exclusions section in the clearance report."
-                  : savingExclusions
-                  ? "Saving..."
-                  : "This text will be appended to the standard Inspection Exclusions section in the clearance report."
-              }
-              InputProps={{
-                endAdornment: savingExclusions ? (
-                  <CircularProgress size={20} sx={{ mr: 1 }} />
-                ) : null,
-              }}
-            />
-            <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+            <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+              <TextField
+                sx={{ flex: 1 }}
+                label="Job Specific Exclusions"
+                value={clearance?.jobSpecificExclusions || ""}
+                onChange={(e) => {
+                  // Update local state for the text field
+                  setClearance((prev) => ({
+                    ...prev,
+                    jobSpecificExclusions: e.target.value,
+                  }));
+                }}
+                multiline
+                rows={3}
+                placeholder="Enter job-specific exclusions that will be added to the Inspection Exclusions section of the report..."
+                // helperText={
+                //   clearance?.jobSpecificExclusions && !savingExclusions
+                //     ? "This text will be appended to the standard Inspection Exclusions section in the clearance report."
+                //     : savingExclusions
+                //     ? "Saving..."
+                //     : "This text will be appended to the standard Inspection Exclusions section in the clearance report."
+                // }
+                InputProps={{
+                  endAdornment: savingExclusions ? (
+                    <CircularProgress size={20} sx={{ mr: 1 }} />
+                  ) : null,
+                }}
+              />
               <Button
                 variant="contained"
                 color="primary"
@@ -800,6 +831,7 @@ const ClearanceItems = () => {
                   }
                 }}
                 disabled={savingExclusions}
+                sx={{ minWidth: "120px" }}
               >
                 {savingExclusions ? (
                   <CircularProgress size={24} color="inherit" />
@@ -828,6 +860,7 @@ const ClearanceItems = () => {
         >
           Add Item
         </Button>
+
         <Card sx={{ mt: 3 }}>
           <CardContent>
             <TableContainer component={Paper}>
@@ -1221,6 +1254,108 @@ const ClearanceItems = () => {
               }
             >
               {uploadingSitePlan ? "Uploading..." : "Upload Site Plan"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Attachments Modal */}
+        <Dialog
+          open={attachmentsModalOpen}
+          onClose={() => setAttachmentsModalOpen(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>Manage Attachments</DialogTitle>
+          <DialogContent>
+            {/* Air Monitoring Section */}
+            {clearance?.airMonitoring && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" color="black" sx={{ mb: 2 }}>
+                  Air Monitoring Report
+                </Typography>
+                {clearance.airMonitoringReport && (
+                  <Typography
+                    variant="body2"
+                    color="success.main"
+                    sx={{ mb: 2, fontWeight: "medium" }}
+                  >
+                    ✓ Air Monitoring Report Currently Attached
+                  </Typography>
+                )}
+                <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    onClick={handleOpenAirMonitoringReportsDialog}
+                    startIcon={<DescriptionIcon />}
+                  >
+                    {clearance.airMonitoringReport
+                      ? "Replace Air Monitoring Report"
+                      : "Select Air Monitoring Report"}
+                  </Button>
+                  {clearance.airMonitoringReport && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={handleRemoveAirMonitoringReport}
+                      startIcon={<DeleteIcon />}
+                    >
+                      Remove Report
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {/* Site Plan Section */}
+            {clearance?.sitePlan && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" color="black" sx={{ mb: 2 }}>
+                  Site Plan
+                </Typography>
+                {clearance.sitePlanFile && (
+                  <Typography
+                    variant="body2"
+                    color="success.main"
+                    sx={{ mb: 2, fontWeight: "medium" }}
+                  >
+                    ✓ Site Plan Currently Attached
+                  </Typography>
+                )}
+                <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    onClick={() => setSitePlanDialogOpen(true)}
+                    startIcon={<UploadIcon />}
+                  >
+                    {clearance.sitePlanFile
+                      ? "Replace Site Plan"
+                      : "Upload Site Plan"}
+                  </Button>
+                  {clearance.sitePlanFile && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={handleRemoveSitePlan}
+                      startIcon={<DeleteIcon />}
+                    >
+                      Remove Site Plan
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {!clearance?.airMonitoring && !clearance?.sitePlan && (
+              <Typography variant="body2" color="text.secondary">
+                No attachments are configured for this clearance type.
+              </Typography>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAttachmentsModalOpen(false)}>
+              Close
             </Button>
           </DialogActions>
         </Dialog>

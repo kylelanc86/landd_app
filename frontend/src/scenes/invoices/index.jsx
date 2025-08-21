@@ -40,16 +40,6 @@ import SyncIcon from "@mui/icons-material/Sync";
 import { hasPermission } from "../../config/permissions";
 import AddIcon from "@mui/icons-material/Add";
 
-const TERMS_OPTIONS = [
-  { label: "Due on receipt", days: 0 },
-  { label: "Net 7 days", days: 7 },
-  { label: "Net 14 days", days: 14 },
-  { label: "Net 30 days", days: 30 },
-  { label: "Net 45 days", days: 45 },
-  { label: "Net 60 days", days: 60 },
-  { label: "Net 90 days", days: 90 },
-];
-
 const emptyForm = {
   projectID: "",
   invoiceNumber: "",
@@ -57,8 +47,8 @@ const emptyForm = {
   amount: "",
   date: new Date().toISOString().split("T")[0], // Today's date in YYYY-MM-DD format
   dueDate: "",
-  terms: 30, // Default to Net 30 days
   description: "",
+  reference: "",
 };
 
 const Invoices = () => {
@@ -132,6 +122,33 @@ const Invoices = () => {
 
     fetchData();
   }, [authLoading, currentUser]);
+
+  // Auto-calculate due date when invoice date or client changes
+  useEffect(() => {
+    if (form.date && form.client && !dueDateManuallyChanged) {
+      const selectedClient = clients.find(
+        (client) => client._id === form.client
+      );
+      let paymentTerms = 30; // Default fallback
+
+      if (selectedClient?.paymentTerms) {
+        if (selectedClient.paymentTerms === "Standard (30 days)") {
+          paymentTerms = 30;
+        } else if (
+          selectedClient.paymentTerms === "Payment before Report (7 days)"
+        ) {
+          paymentTerms = 7;
+        }
+      }
+
+      const dateObj = new Date(form.date);
+      dateObj.setDate(dateObj.getDate() + paymentTerms);
+      setForm((prev) => ({
+        ...prev,
+        dueDate: dateObj.toISOString().split("T")[0], // format as yyyy-mm-dd for input
+      }));
+    }
+  }, [form.date, form.client, clients, dueDateManuallyChanged]);
 
   // Add this effect to check Xero connection status
   useEffect(() => {
@@ -238,17 +255,14 @@ const Invoices = () => {
     }
   }, [location.search]);
 
-  // When invoice date changes, auto-set due date if not manually changed
-  useEffect(() => {
-    if (form.date && !dueDateManuallyChanged) {
-      const dateObj = new Date(form.date);
-      dateObj.setDate(dateObj.getDate() + (form.terms || 30));
-      setForm((prev) => ({
-        ...prev,
-        dueDate: dateObj.toISOString().split("T")[0], // format as yyyy-mm-dd for input
-      }));
-    }
-  }, [form.date, form.terms, dueDateManuallyChanged]);
+  // Update client when client selection changes
+  const handleClientChange = (e) => {
+    const clientId = e.target.value;
+    setForm((prev) => ({
+      ...prev,
+      client: clientId,
+    }));
+  };
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -795,24 +809,24 @@ const Invoices = () => {
         return clientName;
       },
     },
-    {
-      field: "amount",
-      headerName: "Amount",
-      flex: 0.5,
-      minWidth: 150,
-      maxWidth: 180,
-      sortable: true,
-      valueGetter: (params) => {
-        const amount = params?.row?.amount || params;
-        if (amount !== undefined && amount !== null) {
-          return `$${Number(amount).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`;
-        }
-        return "N/A";
-      },
-    },
+    // {
+    //   field: "amount",
+    //   headerName: "Amount",
+    //   flex: 0.5,
+    //   minWidth: 150,
+    //   maxWidth: 180,
+    //   sortable: true,
+    //   valueGetter: (params) => {
+    //     const amount = params?.row?.amount || params;
+    //     if (amount !== undefined && amount !== null) {
+    //       return `$${Number(amount).toLocaleString(undefined, {
+    //         minimumFractionDigits: 2,
+    //         maximumFractionDigits: 2,
+    //       })}`;
+    //     }
+    //     return "N/A";
+    //   },
+    // },
     {
       field: "date",
       headerName: "Invoice Date",
@@ -909,7 +923,7 @@ const Invoices = () => {
     },
     {
       field: "dueDate",
-      headerName: "Overdue",
+      headerName: "Due/Overdue",
       flex: 1,
       minWidth: 100,
       maxWidth: 120,
@@ -1064,24 +1078,6 @@ const Invoices = () => {
     }));
   };
 
-  const handleTermsChange = (e) => {
-    const selectedTerms = parseInt(e.target.value);
-    setForm((prev) => ({ ...prev, terms: selectedTerms }));
-
-    // Auto-calculate due date based on terms and invoice date
-    if (form.date) {
-      const invoiceDate = new Date(form.date);
-      const dueDate = new Date(invoiceDate);
-      dueDate.setDate(invoiceDate.getDate() + selectedTerms);
-
-      setForm((prev) => ({
-        ...prev,
-        terms: selectedTerms,
-        dueDate: dueDate.toISOString().split("T")[0],
-      }));
-    }
-  };
-
   const handleSaveDraft = async (e) => {
     e.preventDefault();
     try {
@@ -1095,12 +1091,29 @@ const Invoices = () => {
         return;
       }
 
-      // Calculate due date based on invoice date and terms
+      // Calculate due date based on invoice date and client payment terms
       let dueDate = null;
       if (form.date) {
         const invoiceDate = new Date(form.date);
         const calculatedDueDate = new Date(invoiceDate);
-        calculatedDueDate.setDate(invoiceDate.getDate() + (form.terms || 30));
+
+        // Get payment terms from the selected client
+        const selectedClient = clients.find(
+          (client) => client._id === form.client
+        );
+        let paymentTerms = 30; // Default fallback
+
+        if (selectedClient?.paymentTerms) {
+          if (selectedClient.paymentTerms === "Standard (30 days)") {
+            paymentTerms = 30;
+          } else if (
+            selectedClient.paymentTerms === "Payment before Report (7 days)"
+          ) {
+            paymentTerms = 7;
+          }
+        }
+
+        calculatedDueDate.setDate(invoiceDate.getDate() + paymentTerms);
         dueDate = calculatedDueDate.toISOString();
       }
 
@@ -1123,6 +1136,7 @@ const Invoices = () => {
         amount: parseFloat(form.amount),
         projectId: selectedProject._id,
         xeroClientName: clientName, // Save the actual client name
+        xeroReference: form.reference || "", // Save the reference field
         status: "draft", // Always save as draft
       };
 
@@ -1152,12 +1166,29 @@ const Invoices = () => {
         return;
       }
 
-      // Calculate due date based on invoice date and terms
+      // Calculate due date based on invoice date and client payment terms
       let dueDate = null;
       if (form.date) {
         const invoiceDate = new Date(form.date);
         const calculatedDueDate = new Date(invoiceDate);
-        calculatedDueDate.setDate(invoiceDate.getDate() + (form.terms || 30));
+
+        // Get payment terms from the selected client
+        const selectedClient = clients.find(
+          (client) => client._id === form.client
+        );
+        let paymentTerms = 30; // Default fallback
+
+        if (selectedClient?.paymentTerms) {
+          if (selectedClient.paymentTerms === "Standard (30 days)") {
+            paymentTerms = 30;
+          } else if (
+            selectedClient.paymentTerms === "Payment before Report (7 days)"
+          ) {
+            paymentTerms = 7;
+          }
+        }
+
+        calculatedDueDate.setDate(invoiceDate.getDate() + paymentTerms);
         dueDate = calculatedDueDate.toISOString();
       }
 
@@ -1180,6 +1211,7 @@ const Invoices = () => {
         amount: parseFloat(form.amount),
         projectId: selectedProject._id,
         xeroClientName: clientName, // Save the actual client name
+        xeroReference: form.reference || "", // Save the reference field
         status: "awaiting_approval", // Set to awaiting approval
       };
 
@@ -1297,24 +1329,6 @@ const Invoices = () => {
     }
   };
 
-  const handleDisconnectXero = async () => {
-    try {
-      await xeroService.disconnect();
-      setXeroConnected(false);
-      setXeroError("Disconnected from Xero.");
-      setShowXeroAlert(true);
-      console.log("Xero disconnected successfully.");
-    } catch (error) {
-      console.error("Error disconnecting from Xero:", error);
-      setXeroError(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to disconnect from Xero"
-      );
-      setShowXeroAlert(true);
-    }
-  };
-
   if (authLoading) {
     return (
       <Box
@@ -1405,26 +1419,24 @@ const Invoices = () => {
 
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Box display="flex" gap={2}>
-          {canSyncXero && (
+          {canSyncXero && !xeroConnected && (
             <Button
               variant="outlined"
-              color={xeroConnected ? "error" : "primary"}
-              onClick={xeroConnected ? handleDisconnectXero : handleConnectXero}
+              color="primary"
+              onClick={handleConnectXero}
               startIcon={<AccountBalanceIcon />}
               sx={{
                 minWidth: "200px",
-                color: xeroConnected ? "error.main" : "primary.main",
-                borderColor: xeroConnected ? "error.main" : "primary.main",
+                color: "primary.main",
+                borderColor: "primary.main",
                 "&:hover": {
-                  backgroundColor: xeroConnected
-                    ? "error.main"
-                    : "primary.main",
+                  backgroundColor: "primary.main",
                   color: "white",
-                  borderColor: xeroConnected ? "error.main" : "primary.main",
+                  borderColor: "primary.main",
                 },
               }}
             >
-              {xeroConnected ? "Disconnect from Xero" : "Connect to Xero"}
+              Connect to Xero
             </Button>
           )}
           {xeroConnected && canSyncXero && (
@@ -1512,9 +1524,6 @@ const Invoices = () => {
       >
         <Typography variant="body1" color="text.secondary" fontWeight="bold">
           {invoices.length} invoices
-        </Typography>
-        <Typography variant="body1" color="red" fontWeight="bold">
-          Total Unpaid: ${totalUnpaid}
         </Typography>
       </Box>
 
@@ -1632,12 +1641,14 @@ const Invoices = () => {
                       ...prev,
                       projectID: newValue.projectID,
                       client: clientId, // Auto-populate client field
+                      reference: newValue.workOrder || "", // Auto-populate reference with project workOrder
                     }));
                   } else {
                     setForm((prev) => ({
                       ...prev,
                       projectID: "",
                       client: "", // Clear client field
+                      reference: "", // Clear reference field
                     }));
                   }
                 }}
@@ -1665,7 +1676,7 @@ const Invoices = () => {
                   label="Client"
                   name="client"
                   value={form.client}
-                  onChange={handleChange}
+                  onChange={handleClientChange}
                   required
                 >
                   {Array.isArray(clients)
@@ -1701,21 +1712,28 @@ const Invoices = () => {
                 required
                 sx={{ flex: 1 }}
               />
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Terms</InputLabel>
-                <Select
-                  label="Terms"
-                  name="terms"
-                  value={form.terms}
-                  onChange={handleTermsChange}
+              {form.client && (
+                <Box
+                  sx={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
                 >
-                  {TERMS_OPTIONS.map((term) => (
-                    <MenuItem key={term.days} value={term.days}>
-                      {term.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  <Typography variant="body2" color="text.secondary">
+                    Payment Terms:{" "}
+                    {(() => {
+                      const selectedClient = clients.find(
+                        (client) => client._id === form.client
+                      );
+                      return (
+                        selectedClient?.paymentTerms || "Standard (30 days)"
+                      );
+                    })()}
+                  </Typography>
+                </Box>
+              )}
               <TextField
                 label="Due Date"
                 name="dueDate"
@@ -1736,6 +1754,15 @@ const Invoices = () => {
               rows={4}
               fullWidth
               sx={{ mt: 2 }}
+            />
+            <TextField
+              label="Reference"
+              name="reference"
+              value={form.reference}
+              onChange={handleChange}
+              fullWidth
+              sx={{ mt: 2 }}
+              placeholder="Project reference will be auto-populated"
             />
           </DialogContent>
           <DialogActions>

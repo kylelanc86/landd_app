@@ -36,10 +36,15 @@ const sampleSchema = new mongoose.Schema({
   },
   flowmeter: {
     type: String,
-    required: true
+    required: false
   },
   cowlNo: {
     type: String,
+    required: false
+  },
+  sampler: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: false
   },
   filterSize: {

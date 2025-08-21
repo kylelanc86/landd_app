@@ -61,21 +61,38 @@ const ProjectReports = () => {
 
         switch (selectedCategory) {
           case "asbestos-assessment":
-            const response = await fetch(
-              `${
-                process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-              }/reports/asbestos-assessment/${projectId}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem("token")}`,
-                },
+            // Get asbestos assessment reports for this project
+            try {
+              const assessmentReports =
+                await reportService.getAsbestosAssessmentReports(projectId);
+
+              if (!assessmentReports || !Array.isArray(assessmentReports)) {
+                console.warn(
+                  "No assessment reports returned or invalid format:",
+                  assessmentReports
+                );
+                reportsData = [];
+                break;
               }
-            );
-            if (!response.ok) {
-              throw new Error("Failed to fetch asbestos assessment reports");
+
+              // Map to our standard report format
+              reportsData = assessmentReports.map((report) => ({
+                id: report.id || report._id,
+                date: report.date || report.assessmentDate || report.createdAt,
+                reference: report.reference || report.assessmentNumber || "N/A",
+                description: report.description || "Asbestos Assessment Report",
+                additionalInfo: report.assessorName || "N/A",
+                status: report.status || "Unknown",
+                type: "asbestos_assessment",
+                data: report,
+              }));
+            } catch (error) {
+              console.error(
+                "Error fetching asbestos assessment reports:",
+                error
+              );
+              reportsData = [];
             }
-            const assessmentReports = await response.json();
-            reportsData = assessmentReports;
             break;
 
           case "air-monitoring":
@@ -99,7 +116,7 @@ const ProjectReports = () => {
                 date: shift.date,
                 reference: `${job.jobID}-${shift.name}`,
                 description: "Air Monitoring Report",
-                additionalInfo: `${job.name} • ${shift.name}`,
+                additionalInfo: `${shift.name}`,
                 status: shift.status,
                 type: "shift",
                 data: { shift, job },
@@ -110,22 +127,42 @@ const ProjectReports = () => {
             break;
 
           case "clearance":
-            const clearanceReports =
-              await asbestosClearanceReportService.getAll({
-                projectId,
-              });
+            // Import asbestosClearanceService dynamically
+            const { default: asbestosClearanceService } = await import(
+              "../../services/asbestosClearanceService"
+            );
 
-            if (clearanceReports.reports) {
-              reportsData = clearanceReports.reports.map((report) => ({
-                id: report._id,
-                date: report.clearanceId?.clearanceDate || report.createdAt,
-                reference: report.clearanceId?.clearanceNumber || "N/A",
-                description: "Asbestos Clearance Report",
-                status: report.clearanceId?.status || "Unknown",
-                type: "clearance",
-                data: report,
-              }));
+            const allClearances = await asbestosClearanceService.getAll();
+
+            // Filter clearances by projectId
+            let projectClearances = [];
+            if (allClearances && Array.isArray(allClearances)) {
+              projectClearances = allClearances.filter(
+                (clearance) =>
+                  clearance.projectId === projectId ||
+                  clearance.projectId?._id === projectId
+              );
+            } else if (
+              allClearances.clearances &&
+              Array.isArray(allClearances.clearances)
+            ) {
+              projectClearances = allClearances.clearances.filter(
+                (clearance) =>
+                  clearance.projectId === projectId ||
+                  clearance.projectId?._id === projectId
+              );
             }
+
+            reportsData = projectClearances.map((clearance) => ({
+              id: clearance._id,
+              date: clearance.clearanceDate || clearance.createdAt,
+              reference: clearance.projectId?.projectID || "N/A",
+              description: `${clearance.clearanceType} Asbestos Clearance`,
+              additionalInfo: `${clearance.asbestosRemovalist || "N/A"}`,
+              status: clearance.status || "Unknown",
+              type: "clearance",
+              data: clearance,
+            }));
             break;
 
           case "fibre-id":
@@ -159,13 +196,16 @@ const ProjectReports = () => {
               throw new Error("Failed to fetch invoices");
             }
             const invoicesData = await invoicesResponse.json();
+
+            // Map to our standard report format
             reportsData = invoicesData.map((invoice) => ({
-              id: invoice.id,
-              date: invoice.date,
-              reference: invoice.reference,
-              description: invoice.description,
-              additionalInfo: invoice.additionalInfo,
-              status: invoice.status,
+              id: invoice.id || invoice._id,
+              date: invoice.date || invoice.invoiceDate || invoice.createdAt,
+              reference: invoice.reference || invoice.invoiceNumber || "N/A",
+              description: invoice.description || "Project Invoice",
+              additionalInfo:
+                invoice.additionalInfo || invoice.projectName || "N/A",
+              status: invoice.status || "Unknown",
               type: "invoice",
               data: invoice,
             }));
@@ -231,22 +271,25 @@ const ProjectReports = () => {
           openInNewTab: true,
         });
       } else if (report.type === "clearance") {
-        // Generate clearance report PDF
-        const api = require("../../services/axios").default;
-        const response = await api.post(
-          "/pdf-pdfshift/generate-asbestos-clearance",
-          {
-            clearanceData: { _id: report.data.clearanceId._id },
-          },
-          {
-            responseType: "blob",
-          }
+        // Generate clearance report PDF using the new template system
+        const { generateHTMLTemplatePDF } = await import(
+          "../../utils/templatePDFGenerator"
         );
 
-        // Open PDF in new tab
-        const blob = new Blob([response.data], { type: "application/pdf" });
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, "_blank");
+        // Get the full clearance data
+        const { default: asbestosClearanceService } = await import(
+          "../../services/asbestosClearanceService"
+        );
+        const fullClearance = await asbestosClearanceService.getById(
+          report.data._id
+        );
+
+        // Generate the PDF
+        await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
+      } else if (report.type === "asbestos_assessment") {
+        // For asbestos assessment reports, we'll navigate to the assessment details page
+        // This assumes there's a route like /asbestos-assessment/:id
+        navigate(`/asbestos-assessment/${report.data.id || report.data._id}`);
       } else if (report.type === "fibre_id") {
         // Navigate to the fibre ID job details page
         navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
@@ -300,16 +343,27 @@ const ProjectReports = () => {
           openInNewTab: false,
         });
       } else if (report.type === "clearance") {
-        const asbestosClearanceService =
-          require("../../services/asbestosClearanceService").default;
-        const fullClearance = await asbestosClearanceService.getById(
-          report.data.clearanceId._id
+        // Generate clearance report PDF using the new template system
+        const { generateHTMLTemplatePDF } = await import(
+          "../../utils/templatePDFGenerator"
         );
 
-        const {
-          generateHTMLTemplatePDF,
-        } = require("../../utils/templatePDFGenerator");
+        // Get the full clearance data
+        const { default: asbestosClearanceService } = await import(
+          "../../services/asbestosClearanceService"
+        );
+        const fullClearance = await asbestosClearanceService.getById(
+          report.data._id
+        );
+
+        // Generate the PDF
         await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
+      } else if (report.type === "asbestos_assessment") {
+        // For asbestos assessment reports, we'll navigate to the assessment details page where download is available
+        navigate(`/asbestos-assessment/${report.data.id || report.data._id}`);
+      } else if (report.type === "fibre_id") {
+        // For fibre ID reports, we'll navigate to the fibre ID job details page where download is available
+        navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
       } else if (report.type === "invoice") {
         // For invoices, we'll navigate to the invoice edit page where download is available
         navigate(`/invoices/edit/${report.data.id}`);
@@ -326,6 +380,32 @@ const ProjectReports = () => {
     setTimeout(() => {
       window.print();
     }, 1000);
+  };
+
+  const handleReviseReport = async (report) => {
+    try {
+      if (report.type === "shift") {
+        // Navigate to the shift edit page
+        navigate(`/air-monitoring/shifts/${report.data.shift._id}/edit`);
+      } else if (report.type === "clearance") {
+        // Navigate to the clearance edit page
+        navigate(`/clearances/asbestos/${report.data._id}/edit`);
+      } else if (report.type === "asbestos_assessment") {
+        // Navigate to the asbestos assessment edit page
+        navigate(
+          `/asbestos-assessment/${report.data.id || report.data._id}/edit`
+        );
+      } else if (report.type === "fibre_id") {
+        // Navigate to the fibre ID job edit page
+        navigate(`/fibre-id/client-supplied/${report.data.id}/edit`);
+      } else if (report.type === "invoice") {
+        // Navigate to the invoice edit page
+        navigate(`/invoices/edit/${report.data.id}`);
+      }
+    } catch (err) {
+      console.error("Error navigating to revise report:", err);
+      setError("Failed to navigate to revise report");
+    }
   };
 
   return (
@@ -408,6 +488,7 @@ const ProjectReports = () => {
             onView={handleViewReport}
             onDownload={handleDownloadReport}
             onPrint={handlePrintReport}
+            onRevise={handleReviseReport}
           />
         </>
       )}

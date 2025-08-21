@@ -104,16 +104,19 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     console.log('Found project:', { _id: project._id, name: project.name, projectID: project.projectID });
 
     // Check for existing active jobs for this project
-    const existingActiveJob = await AirMonitoringJob.findOne({
+    const existingActiveJobs = await AirMonitoringJob.find({
       projectId: req.body.projectId,
       status: { $in: ['pending', 'in_progress'] }
     });
 
-    if (existingActiveJob) {
-      return res.status(400).json({
-        message: 'This project already has an active air monitoring job',
-        existingJobId: existingActiveJob._id
-      });
+    // If there are existing active jobs, include them in the response but don't block creation
+    if (existingActiveJobs.length > 0) {
+      console.log(`Found ${existingActiveJobs.length} existing active jobs for project ${req.body.projectId}`);
+      
+      // If forceCreate is true, allow creation despite existing jobs
+      if (req.body.forceCreate) {
+        console.log('Force create requested - allowing job creation despite existing jobs');
+      }
     }
 
     // Generate a unique jobID
@@ -171,7 +174,21 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       })
       .populate('assignedTo', 'firstName lastName');
 
-    res.status(201).json(populatedJob);
+    // Include information about existing active jobs in the response
+    const response = {
+      job: populatedJob,
+      existingActiveJobs: existingActiveJobs.length > 0 ? existingActiveJobs.map(job => ({
+        _id: job._id,
+        status: job.status,
+        createdAt: job.createdAt,
+        asbestosRemovalist: job.asbestosRemovalist,
+        name: job.name
+      })) : [],
+      warning: existingActiveJobs.length > 0 ? 
+        `This project already has ${existingActiveJobs.length} active air monitoring job(s)` : null
+    };
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error creating air monitoring job:', error);
     res.status(400).json({ 

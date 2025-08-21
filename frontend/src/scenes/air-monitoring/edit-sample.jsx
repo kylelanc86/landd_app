@@ -53,6 +53,7 @@ const EditSample = () => {
     notes: "",
     date: formatDateForInput(new Date()),
     isFieldBlank: false,
+    status: "pending",
   });
   const [projectID, setProjectID] = useState(null);
   const [job, setJob] = useState(null);
@@ -152,6 +153,7 @@ const EditSample = () => {
             sampleData.isFieldBlank || sampleData.location === "Field blank"
               ? true
               : false,
+          status: sampleData.status || "pending",
         });
         setJob(sampleData.job);
         setError(null);
@@ -187,26 +189,84 @@ const EditSample = () => {
 
   // Calculate average flowrate when initial or final flowrate changes
   useEffect(() => {
-    if (form.initialFlowrate) {
-      if (form.finalFlowrate) {
-        const avg =
-          (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) /
-          2;
-        setForm((prev) => ({
-          ...prev,
-          averageFlowrate: Math.round(avg).toString(),
-        }));
-      } else {
-        // If no final flowrate, use initial flowrate as average
-        setForm((prev) => ({
-          ...prev,
-          averageFlowrate: Math.round(
-            parseFloat(form.initialFlowrate)
-          ).toString(),
-        }));
-      }
+    // Don't run this effect if we're currently submitting or if there are any field errors
+    if (isSubmitting || Object.keys(fieldErrors).length > 0) return;
+
+    if (form.initialFlowrate && form.finalFlowrate) {
+      const avg =
+        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
+
+      // Check if flowrates are equal to determine status
+      const initial = parseFloat(form.initialFlowrate);
+      const final = parseFloat(form.finalFlowrate);
+      const newStatus = Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+      setForm((prev) => ({
+        ...prev,
+        averageFlowrate: Math.round(avg).toString(),
+        status: newStatus,
+      }));
+    } else {
+      // Clear average flowrate and status if either flowrate is missing
+      setForm((prev) => ({
+        ...prev,
+        averageFlowrate: "",
+        status: "pending",
+      }));
     }
-  }, [form.initialFlowrate, form.finalFlowrate]);
+  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
+
+  // Separate effect to ensure sample number is calculated when projectID is available
+  useEffect(() => {
+    const calculateSampleNumber = async () => {
+      if (!projectID) return;
+
+      try {
+        const allProjectSamplesResponse = await sampleService.getByProject(
+          projectID
+        );
+        const allProjectSamples = allProjectSamplesResponse.data || [];
+
+        // Find the highest sample number across all shifts
+        const highestNumber = Math.max(
+          ...allProjectSamples.map((sample) => {
+            // Only consider air monitoring samples (with AM prefix in sample number)
+            if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
+              const match = sample.fullSampleID?.match(/AM(\d+)$/);
+              return match ? parseInt(match[1]) : 0;
+            }
+            return 0; // Ignore non-AM samples
+          }),
+          0 // Start from 0 if no samples exist
+        );
+
+        const nextSampleNumber = `AM${highestNumber + 1}`;
+        console.log(
+          "Auto-calculated next sample number for edit:",
+          nextSampleNumber
+        );
+
+        // Only update if we don't already have a sample number
+        if (!form.sampleNumber) {
+          setForm((prev) => ({
+            ...prev,
+            sampleNumber: nextSampleNumber.toString(),
+          }));
+        }
+      } catch (error) {
+        console.error("Error auto-calculating sample number for edit:", error);
+        // Set default if calculation fails and no sample number exists
+        if (!form.sampleNumber) {
+          setForm((prev) => ({
+            ...prev,
+            sampleNumber: "AM1",
+          }));
+        }
+      }
+    };
+
+    calculateSampleNumber();
+  }, [projectID, form.sampleNumber]);
 
   const setCurrentTime = (field) => {
     const now = new Date();
@@ -299,25 +359,26 @@ const EditSample = () => {
         job: job._id,
         sampleNumber: form.sampleNumber,
         fullSampleID: fullSampleID,
-        type: sampleType || undefined,
-        location: form.location || undefined,
-        pumpNo: form.pumpNo || undefined,
-        flowmeter: form.flowmeter || undefined,
-        cowlNo: form.cowlNo || undefined,
-        filterSize: form.filterSize || undefined,
-        startTime: form.startTime ? formatTime(form.startTime) : undefined,
-        endTime: form.endTime ? formatTime(form.endTime) : undefined,
+        type: sampleType || null,
+        location: form.location || null,
+        pumpNo: form.pumpNo || null,
+        flowmeter: form.flowmeter || null,
+        cowlNo: form.cowlNo || null,
+        sampler: form.sampler,
+        filterSize: form.filterSize || null,
+        startTime: form.startTime ? formatTime(form.startTime) : null,
+        endTime: form.endTime ? formatTime(form.endTime) : null,
         initialFlowrate: form.initialFlowrate
           ? parseFloat(form.initialFlowrate)
-          : undefined,
+          : null,
         finalFlowrate: form.finalFlowrate
           ? parseFloat(form.finalFlowrate)
-          : undefined,
+          : null,
         averageFlowrate: form.averageFlowrate
           ? parseFloat(form.averageFlowrate)
-          : undefined,
-        status: "pending",
-        notes: form.notes || undefined,
+          : null,
+        status: form.status || "pending",
+        notes: form.notes || null,
         collectedBy: form.sampler,
       };
 
@@ -419,6 +480,7 @@ const EditSample = () => {
             onChange={handleChange}
             required
             fullWidth
+            disabled
             error={!!fieldErrors.sampleNumber}
             helperText={
               fieldErrors.sampleNumber
@@ -470,20 +532,6 @@ const EditSample = () => {
                 error={!!fieldErrors.location}
                 helperText={fieldErrors.location}
               />
-            </>
-          )}
-          {form.isFieldBlank && (
-            <TextField
-              name="location"
-              label="Location"
-              value="Field blank"
-              disabled
-              required
-              fullWidth
-            />
-          )}
-          {!form.isFieldBlank && (
-            <>
               <FormControl fullWidth>
                 <InputLabel>Pump No.</InputLabel>
                 <Select
@@ -509,6 +557,8 @@ const EditSample = () => {
                 onChange={handleChange}
                 required
                 fullWidth
+                error={!!fieldErrors.cowlNo}
+                helperText={fieldErrors.cowlNo}
               />
               <FormControl fullWidth>
                 <InputLabel>Filter Size</InputLabel>
@@ -522,105 +572,152 @@ const EditSample = () => {
                   <MenuItem value="13mm">13mm</MenuItem>
                 </Select>
               </FormControl>
+              <FormControl
+                fullWidth
+                required={!form.isFieldBlank}
+                error={!!fieldErrors.flowmeter}
+              >
+                <InputLabel>Flowmeter</InputLabel>
+                <Select
+                  name="flowmeter"
+                  value={form.flowmeter}
+                  onChange={handleChange}
+                  label="Flowmeter"
+                  required={!form.isFieldBlank}
+                >
+                  <MenuItem value="">
+                    <em>Select a flowmeter</em>
+                  </MenuItem>
+                  {flowmeters.map((flowmeter) => (
+                    <MenuItem
+                      key={flowmeter._id}
+                      value={flowmeter.equipmentReference}
+                    >
+                      {flowmeter.equipmentReference} - {flowmeter.brandModel} (
+                      {flowmeter.equipmentType})
+                    </MenuItem>
+                  ))}
+                </Select>
+                {fieldErrors.flowmeter && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.flowmeter}
+                  </Typography>
+                )}
+              </FormControl>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: theme.palette.primary.main,
+                  borderBottom: `2px solid ${theme.palette.primary.main}`,
+                  pb: 1,
+                  mb: 2,
+                }}
+              >
+                Air-monitor Setup
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  name="startTime"
+                  label="Start Time"
+                  type="time"
+                  value={form.startTime}
+                  onChange={handleChange}
+                  required
+                  fullWidth
+                  error={!!fieldErrors.startTime}
+                  helperText={fieldErrors.startTime}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 60 }}
+                />
+                <IconButton
+                  onClick={() => setCurrentTime("startTime")}
+                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                >
+                  <AccessTimeIcon />
+                </IconButton>
+              </Box>
+              <TextField
+                name="initialFlowrate"
+                label="Initial Flowrate (L/min)"
+                type="number"
+                value={form.initialFlowrate}
+                onChange={handleChange}
+                required
+                fullWidth
+                error={!!fieldErrors.initialFlowrate}
+                helperText={fieldErrors.initialFlowrate}
+                inputProps={{ step: "0.1" }}
+              />
+              <Typography
+                variant="h6"
+                sx={{
+                  color: theme.palette.primary.main,
+                  borderBottom: `2px solid ${theme.palette.primary.main}`,
+                  pb: 1,
+                  mb: 2,
+                  mt: 3,
+                }}
+              >
+                Air-monitor Collection
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <TextField
+                  name="endTime"
+                  label="End Time"
+                  type="time"
+                  value={form.endTime}
+                  onChange={handleChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 60 }}
+                />
+                <IconButton
+                  onClick={() => setCurrentTime("endTime")}
+                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                >
+                  <AccessTimeIcon />
+                </IconButton>
+              </Box>
+              <TextField
+                name="finalFlowrate"
+                label="Final Flowrate (L/min)"
+                type="number"
+                value={form.finalFlowrate}
+                onChange={handleChange}
+                fullWidth
+                inputProps={{ step: "0.1" }}
+              />
+              <TextField
+                name="averageFlowrate"
+                label="Average Flowrate"
+                value={
+                  form.status === "failed"
+                    ? "FAILED - Flowrates don't match"
+                    : form.averageFlowrate
+                }
+                disabled
+                required
+                fullWidth
+                sx={{
+                  "& .MuiInputBase-input": {
+                    color:
+                      form.status === "failed" ? "error.main" : "text.primary",
+                    fontWeight: form.status === "failed" ? "bold" : "normal",
+                  },
+                }}
+              />
             </>
           )}
-          <FormControl fullWidth required error={!!fieldErrors.flowmeter}>
-            <InputLabel>Flowmeter</InputLabel>
-            <Select
-              name="flowmeter"
-              value={form.flowmeter}
-              onChange={handleChange}
-              label="Flowmeter"
-              required
-            >
-              <MenuItem value="">
-                <em>Select a flowmeter</em>
-              </MenuItem>
-              {flowmeters.map((flowmeter) => (
-                <MenuItem
-                  key={flowmeter._id}
-                  value={flowmeter.equipmentReference}
-                >
-                  {flowmeter.equipmentReference} - {flowmeter.brandModel} (
-                  {flowmeter.equipmentType})
-                </MenuItem>
-              ))}
-            </Select>
-            {fieldErrors.flowmeter && (
-              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                {fieldErrors.flowmeter}
-              </Typography>
-            )}
-          </FormControl>
-          <Box sx={{ display: "flex", gap: 1 }}>
+          {form.isFieldBlank && (
             <TextField
-              name="startTime"
-              label="Start Time"
-              type="time"
-              value={form.startTime}
-              onChange={handleChange}
+              name="location"
+              label="Location"
+              value="Field blank"
+              disabled
               required
               fullWidth
-              error={!!fieldErrors.startTime}
-              helperText={fieldErrors.startTime}
-              InputLabelProps={{ shrink: true }}
-              inputProps={{ step: 60 }}
             />
-            <IconButton
-              onClick={() => setCurrentTime("startTime")}
-              sx={{ alignSelf: "flex-end", mb: 1 }}
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          </Box>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <TextField
-              name="endTime"
-              label="End Time"
-              type="time"
-              value={form.endTime}
-              onChange={handleChange}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              inputProps={{ step: 60 }}
-            />
-            <IconButton
-              onClick={() => setCurrentTime("endTime")}
-              sx={{ alignSelf: "flex-end", mb: 1 }}
-            >
-              <AccessTimeIcon />
-            </IconButton>
-          </Box>
-          <TextField
-            name="initialFlowrate"
-            label="Initial Flowrate (L/min)"
-            type="number"
-            value={form.initialFlowrate}
-            onChange={handleChange}
-            required
-            fullWidth
-            error={!!fieldErrors.initialFlowrate}
-            helperText={fieldErrors.initialFlowrate}
-            inputProps={{ step: "0.1" }}
-          />
-          <TextField
-            name="finalFlowrate"
-            label="Final Flowrate (L/min)"
-            type="number"
-            value={form.finalFlowrate}
-            onChange={handleChange}
-            fullWidth
-            inputProps={{ step: "0.1" }}
-          />
-          <TextField
-            name="averageFlowrate"
-            label="Average Flowrate"
-            value={form.averageFlowrate}
-            disabled
-            required
-            fullWidth
-          />
-
+          )}
           <TextField
             name="notes"
             label="Notes"

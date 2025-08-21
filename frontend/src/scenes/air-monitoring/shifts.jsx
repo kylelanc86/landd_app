@@ -10,6 +10,8 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../theme/tokens";
@@ -27,6 +29,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateUtils";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import { hasPermission } from "../../config/permissions";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -73,7 +76,8 @@ const Shifts = () => {
             );
             const sampleNumbers = (samplesResponse.data || [])
               .map((sample) => {
-                const match = sample.fullSampleID?.match(/-(\d+)$/);
+                // Extract just the number part from AM prefix (e.g., "AM1" -> "1")
+                const match = sample.fullSampleID?.match(/AM(\d+)$/);
                 return match ? match[1] : null;
               })
               .filter(Boolean)
@@ -289,6 +293,7 @@ const Shifts = () => {
       field: "status",
       headerName: "Status",
       flex: 0.8,
+      maxWidth: 230,
       renderCell: (params) => {
         const statusColors = {
           ongoing: theme.palette.primary.main,
@@ -333,16 +338,40 @@ const Shifts = () => {
     {
       field: "sampleNumbers",
       headerName: "Sample Numbers",
-      width: 200,
+      width: 150,
       renderCell: (params) => {
         const numbers = params.row.sampleNumbers || [];
         return numbers.length > 0 ? numbers.join(", ") : "No samples";
       },
     },
     {
+      field: "descriptionOfWorks",
+      headerName: "Description of Works",
+      flex: 1,
+      renderCell: (params) => {
+        const description = params.row.descriptionOfWorks || "No description";
+        return (
+          <Typography
+            variant="body2"
+            sx={{
+              maxWidth: 300,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={description} // Show full text on hover
+          >
+            {description}
+          </Typography>
+        );
+      },
+    },
+    {
       field: "actions",
       headerName: "Actions",
       flex: 2,
+      minWidth: 300,
+      width: "auto",
       renderCell: ({ row }) => {
         const handleSamplesClick = () => {
           // Don't allow access to samples if report is authorized
@@ -530,83 +559,6 @@ const Shifts = () => {
           }
         };
 
-        const handleDownloadCSV = async () => {
-          try {
-            // Fetch all samples for this shift
-            const samplesResponse = await sampleService.getByShift(row._id);
-            const samples = await Promise.all(
-              (samplesResponse.data || []).map(async (sample) => {
-                if (!sample.analysis) {
-                  // Fetch full sample if analysis is missing
-                  const fullSample = await sampleService.getById(sample._id);
-                  return fullSample.data;
-                }
-                return sample;
-              })
-            );
-
-            // Prepare CSV headers
-            const headers = [
-              ...Object.keys(samples[0] || {}),
-              ...(samples[0]?.analysis ? Object.keys(samples[0].analysis) : []),
-              ...(samples[0]?.analysis?.fibreCounts
-                ? samples[0].analysis.fibreCounts.map(
-                    (_, i) => `fibreCount_${i + 1}`
-                  )
-                : []),
-            ];
-
-            // Prepare CSV rows
-            const rows = samples.map((sample) => {
-              const base = { ...sample };
-              const analysis = sample.analysis || {};
-              // Flatten fibreCounts if present
-              let fibreCounts = {};
-              if (Array.isArray(analysis.fibreCounts)) {
-                analysis.fibreCounts.forEach((val, i) => {
-                  fibreCounts[`fibreCount_${i + 1}`] = Array.isArray(val)
-                    ? val.join("|")
-                    : val;
-                });
-              }
-              // Merge all fields
-              return {
-                ...base,
-                ...analysis,
-                ...fibreCounts,
-              };
-            });
-
-            // Convert to CSV string
-            const csv = [
-              headers.join(","),
-              ...rows.map((row) =>
-                headers
-                  .map((field) =>
-                    row[field] !== undefined && row[field] !== null
-                      ? `"${String(row[field]).replace(/"/g, '""')}"`
-                      : ""
-                  )
-                  .join(",")
-              ),
-            ].join("\r\n");
-
-            // Download CSV
-            const blob = new Blob([csv], { type: "text/csv" });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${row.name || row._id}_samples.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-          } catch (err) {
-            console.error("Error downloading CSV:", err);
-            alert("Failed to download CSV.");
-          }
-        };
-
         return (
           <Box display="flex" alignItems="center">
             {row.status !== "shift_complete" && (
@@ -650,24 +602,26 @@ const Shifts = () => {
                 >
                   {row.reportApprovedBy ? "Download Report" : "View Report"}
                 </Button>
-                {!row.reportApprovedBy && reportViewedShiftIds.has(row._id) && (
-                  <Button
-                    variant="contained"
-                    size="small"
-                    color="success"
-                    onClick={handleAuthoriseReport}
-                    sx={{
-                      mr: 1,
-                      backgroundColor: theme.palette.success.main,
-                      color: theme.palette.common.white,
-                      "&:hover": {
-                        backgroundColor: theme.palette.success.dark,
-                      },
-                    }}
-                  >
-                    Authorise Report
-                  </Button>
-                )}
+                {!row.reportApprovedBy &&
+                  reportViewedShiftIds.has(row._id) &&
+                  hasPermission(currentUser, "admin.view") && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      color="success"
+                      onClick={handleAuthoriseReport}
+                      sx={{
+                        mr: 1,
+                        backgroundColor: theme.palette.success.main,
+                        color: theme.palette.common.white,
+                        "&:hover": {
+                          backgroundColor: theme.palette.success.dark,
+                        },
+                      }}
+                    >
+                      Authorise Report
+                    </Button>
+                  )}
               </>
             )}
             {[
@@ -675,33 +629,22 @@ const Shifts = () => {
               "samples_submitted_to_lab",
               "analysis_complete",
               "shift_complete",
-            ].includes(row.status) && (
-              <IconButton
-                size="small"
-                onClick={() => handleResetStatus(row._id)}
-                title="Reset status to Ongoing"
-                sx={{ color: theme.palette.error.main, mr: 1 }}
-              >
-                <CloseIcon fontSize="small" />
+            ].includes(row.status) &&
+              hasPermission(currentUser, "admin.view") && (
+                <IconButton
+                  size="small"
+                  onClick={() => handleResetStatus(row._id)}
+                  title="Reset status to Ongoing"
+                  sx={{ color: theme.palette.error.main, mr: 1 }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              )}
+
+            {hasPermission(currentUser, "admin.view") && (
+              <IconButton onClick={() => handleDeleteShift(row._id)}>
+                <DeleteIcon />
               </IconButton>
-            )}
-            <IconButton
-              onClick={handleDownloadCSV}
-              title="Download raw sample & analysis data"
-            >
-              <DownloadIcon />
-            </IconButton>
-            <IconButton onClick={() => handleDeleteShift(row._id)}>
-              <DeleteIcon />
-            </IconButton>
-            {row.reportApprovedBy && (
-              <Typography
-                variant="body2"
-                color="error.main"
-                sx={{ ml: 2, fontStyle: "italic", fontWeight: 500 }}
-              >
-                Report Authorised
-              </Typography>
             )}
           </Box>
         );
@@ -718,6 +661,28 @@ const Shifts = () => {
       >
         Back to Jobs
       </Button>
+
+      {/* Breadcrumbs */}
+      <Breadcrumbs sx={{ marginBottom: 3 }}>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={() => navigate("/asbestos-removal")}
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          <ArrowBackIcon sx={{ mr: 1 }} />
+          Asbestos Removal
+        </Link>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={() => navigate("/air-monitoring")}
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          Air Monitoring
+        </Link>
+        <Typography color="text.primary">Shifts</Typography>
+      </Breadcrumbs>
 
       <Box
         display="flex"

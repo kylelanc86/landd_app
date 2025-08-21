@@ -37,6 +37,11 @@ const clientSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
+  paymentTerms: {
+    type: String,
+    enum: ['Standard (30 days)', 'Payment before Report (7 days)'],
+    default: 'Standard (30 days)'
+  },
   written_off: {
     type: Boolean,
     default: false

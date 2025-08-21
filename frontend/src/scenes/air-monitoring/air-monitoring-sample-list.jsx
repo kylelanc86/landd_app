@@ -15,6 +15,8 @@ import {
   Stack,
   InputAdornment,
   useTheme,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
@@ -23,6 +25,8 @@ import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import MicIcon from "@mui/icons-material/Mic";
+import DownloadIcon from "@mui/icons-material/Download";
 import { sampleService, shiftService } from "../../services/api";
 import { formatDate, formatTime } from "../../utils/dateUtils";
 
@@ -32,7 +36,7 @@ const SampleList = () => {
   const navigate = useNavigate();
   const [samples, setSamples] = useState([]);
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState("sampleNumber");
+  const [sortField, setSortField] = useState("fullSampleID");
   const [sortAsc, setSortAsc] = useState(true);
   const [shift, setShift] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,10 +45,13 @@ const SampleList = () => {
   const [nextSampleNumber, setNextSampleNumber] = useState(null);
   const [descriptionOfWorks, setDescriptionOfWorks] = useState("");
   const [descSaveStatus, setDescSaveStatus] = useState("");
+  const [isDictating, setIsDictating] = useState(false);
+  const [dictationError, setDictationError] = useState("");
 
   // Function to extract the numeric part from a sample number
   const extractSampleNumber = (sampleNumber) => {
-    const match = sampleNumber?.match(/-(\d+)$/);
+    // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
+    const match = sampleNumber?.match(/AM(\d+)$/);
     return match ? parseInt(match[1]) : 0;
   };
 
@@ -99,7 +106,7 @@ const SampleList = () => {
 
           // Find the highest sample number
           const highestNumber = allProjectSamples.reduce((max, sample) => {
-            const match = sample.fullSampleID?.match(/-(\d+)$/);
+            const match = sample.fullSampleID?.match(/AM(\d+)$/);
             const number = match ? parseInt(match[1]) : 0;
             return Math.max(max, number);
           }, 0);
@@ -112,7 +119,6 @@ const SampleList = () => {
           setDescriptionOfWorks(shiftResponse.data.descriptionOfWorks);
         }
 
-        setIsCompleteDisabled(!validateSamplesComplete(samples));
         setError(null);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -124,6 +130,16 @@ const SampleList = () => {
 
     fetchData();
   }, [shiftId]);
+
+  // Re-validate samples whenever samples change
+  useEffect(() => {
+    if (samples.length > 0) {
+      const isValid = validateSamplesComplete(samples);
+      setIsCompleteDisabled(!isValid);
+    } else {
+      setIsCompleteDisabled(true);
+    }
+  }, [samples]);
 
   const handleSearch = (event) => {
     setSearch(event.target.value);
@@ -150,6 +166,81 @@ const SampleList = () => {
     }
   };
 
+  const handleDownloadCSV = async () => {
+    try {
+      // Fetch all samples for this shift with complete data
+      const samplesResponse = await sampleService.getByShift(shiftId);
+      const samples = await Promise.all(
+        (samplesResponse.data || []).map(async (sample) => {
+          if (!sample.analysis) {
+            // Fetch full sample if analysis is missing
+            const fullSample = await sampleService.getById(sample._id);
+            return fullSample.data;
+          }
+          return sample;
+        })
+      );
+
+      // Prepare CSV headers
+      const headers = [
+        ...Object.keys(samples[0] || {}),
+        ...(samples[0]?.analysis ? Object.keys(samples[0].analysis) : []),
+        ...(samples[0]?.analysis?.fibreCounts
+          ? samples[0].analysis.fibreCounts.map((_, i) => `fibreCount_${i + 1}`)
+          : []),
+      ];
+
+      // Prepare CSV rows
+      const rows = samples.map((sample) => {
+        const base = { ...sample };
+        const analysis = sample.analysis || {};
+        // Flatten fibreCounts if present
+        let fibreCounts = {};
+        if (Array.isArray(analysis.fibreCounts)) {
+          analysis.fibreCounts.forEach((val, i) => {
+            fibreCounts[`fibreCount_${i + 1}`] = Array.isArray(val)
+              ? val.join("|")
+              : val;
+          });
+        }
+        // Merge all fields
+        return {
+          ...base,
+          ...analysis,
+          ...fibreCounts,
+        };
+      });
+
+      // Convert to CSV string
+      const csv = [
+        headers.join(","),
+        ...rows.map((row) =>
+          headers
+            .map((field) =>
+              row[field] !== undefined && row[field] !== null
+                ? `"${String(row[field]).replace(/"/g, '""')}"`
+                : ""
+            )
+            .join(",")
+        ),
+      ].join("\r\n");
+
+      // Download CSV
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${shift?.name || shiftId}_samples.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading CSV:", err);
+      alert("Failed to download CSV.");
+    }
+  };
+
   const filteredSamples = samples.filter((sample) =>
     Object.values(sample).some(
       (value) =>
@@ -159,8 +250,9 @@ const SampleList = () => {
 
   const sortedSamples = [...filteredSamples].sort((a, b) => {
     if (sortField === "sampleNumber" || sortField === "fullSampleID") {
-      const aMatch = a.fullSampleID?.match(/-(\d+)$/);
-      const bMatch = b.fullSampleID?.match(/-(\d+)$/);
+      // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
+      const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
+      const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
       const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
       const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
       return sortAsc ? aNum - bNum : bNum - aNum;
@@ -175,24 +267,68 @@ const SampleList = () => {
 
   // Add validation function
   const validateSamplesComplete = (samples) => {
-    return samples.every((sample) => {
-      // If it's a field blank sample, skip validation
+    if (!samples || samples.length === 0) {
+      console.log("No samples to validate");
+      return false; // No samples means not complete
+    }
+
+    console.log("Validating samples:", samples.length, "samples");
+
+    const result = samples.every((sample) => {
+      // Handle sampler field - use sampler if available, fall back to collectedBy
+      const sampler = sample.sampler || sample.collectedBy;
+
+      console.log(`Sample ${sample.fullSampleID}:`, {
+        sampleNumber: sample.sampleNumber,
+        type: sample.type,
+        location: sample.location,
+        sampler: sampler,
+        pumpNo: sample.pumpNo,
+        flowmeter: sample.flowmeter,
+        cowlNo: sample.cowlNo,
+        filterSize: sample.filterSize,
+        startTime: sample.startTime,
+        endTime: sample.endTime,
+        initialFlowrate: sample.initialFlowrate,
+        finalFlowrate: sample.finalFlowrate,
+        averageFlowrate: sample.averageFlowrate,
+        status: sample.status,
+      });
+
+      // If it's a field blank sample, only validate basic required fields
       if (sample.location === "Field blank") {
-        return true;
+        const isValid =
+          sample.sampleNumber && sample.location && sampler && sample.cowlNo;
+        console.log(`Field blank sample validation:`, isValid);
+        return isValid;
       }
 
       // For non-field blank samples, validate all required fields
-      return (
+      const isValid =
         sample.sampleNumber &&
         sample.type &&
         sample.location &&
+        sampler &&
+        sample.pumpNo &&
+        sample.flowmeter &&
+        sample.cowlNo &&
+        sample.filterSize &&
         sample.startTime &&
         sample.endTime &&
         sample.initialFlowrate &&
         sample.finalFlowrate &&
-        sample.averageFlowrate
-      );
+        sample.averageFlowrate &&
+        // Ensure flowrates are valid numbers and not failed
+        parseFloat(sample.initialFlowrate) > 0 &&
+        parseFloat(sample.finalFlowrate) > 0 &&
+        sample.status !== "failed";
+
+      console.log(`Regular sample validation:`, isValid);
+      return isValid;
     });
+
+    console.log("Overall validation result:", result);
+    return result;
   };
 
   // Add handleSampleComplete function
@@ -247,6 +383,76 @@ const SampleList = () => {
     }
   };
 
+  // Dictation functions
+  const startDictation = () => {
+    // Check if browser supports speech recognition
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      setDictationError(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+      );
+      return;
+    }
+
+    try {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-AU";
+
+      recognition.onstart = () => {
+        setIsDictating(true);
+        setDictationError("");
+      };
+
+      recognition.onresult = (event) => {
+        let finalTranscript = "";
+        let interimTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        // Update the description field with the final transcript
+        if (finalTranscript) {
+          setDescriptionOfWorks(
+            (prev) => prev + (prev ? " " : "") + finalTranscript
+          );
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setDictationError(`Dictation error: ${event.error}`);
+        setIsDictating(false);
+      };
+
+      recognition.onend = () => {
+        setIsDictating(false);
+      };
+
+      recognition.start();
+    } catch (error) {
+      console.error("Error starting dictation:", error);
+      setDictationError("Failed to start dictation. Please try again.");
+    }
+  };
+
+  const stopDictation = () => {
+    // The recognition will automatically stop, but we can set the state
+    setIsDictating(false);
+  };
+
   if (loading) {
     return <Typography>Loading...</Typography>;
   }
@@ -267,10 +473,46 @@ const SampleList = () => {
         Back to Shifts
       </Button>
 
+      {/* Breadcrumbs */}
+      <Breadcrumbs sx={{ marginBottom: 3 }}>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={() => navigate("/asbestos-removal")}
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          <ArrowBackIcon sx={{ mr: 1 }} />
+          Asbestos Removal
+        </Link>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={() => navigate("/air-monitoring")}
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          Air Monitoring
+        </Link>
+        <Link
+          component="button"
+          variant="body1"
+          onClick={() =>
+            navigate(`/air-monitoring/jobs/${shift?.job?._id}/shifts`)
+          }
+          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+        >
+          Shifts
+        </Link>
+        <Typography color="text.primary">Samples</Typography>
+      </Breadcrumbs>
+
       {/* Description of Works Field */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h6" sx={{ mb: 1 }}>
           Description of Works
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Type your description or click the microphone icon to dictate. Speak
+          clearly and naturally for best results.
         </Typography>
         <TextField
           fullWidth
@@ -285,7 +527,61 @@ const SampleList = () => {
           helperText={
             !descriptionOfWorks ? "Description of works is required" : ""
           }
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={isDictating ? stopDictation : startDictation}
+                  color={isDictating ? "error" : "primary"}
+                  title={isDictating ? "Stop Dictation" : "Start Dictation"}
+                  sx={{
+                    backgroundColor: isDictating
+                      ? theme.palette.error.light
+                      : "transparent",
+                    "&:hover": {
+                      backgroundColor: isDictating
+                        ? theme.palette.error.main
+                        : theme.palette.action.hover,
+                    },
+                  }}
+                >
+                  <MicIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
         />
+        {/* Dictation Status and Errors */}
+        {isDictating && (
+          <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                backgroundColor: "error.main",
+                animation: "pulse 1.5s ease-in-out infinite",
+                "@keyframes pulse": {
+                  "0%": { opacity: 1 },
+                  "50%": { opacity: 0.5 },
+                  "100%": { opacity: 1 },
+                },
+              }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Dictating... Speak clearly into your microphone
+            </Typography>
+          </Box>
+        )}
+        {dictationError && (
+          <Typography
+            variant="caption"
+            color="error.main"
+            sx={{ mt: 1, display: "block" }}
+          >
+            {dictationError}
+          </Typography>
+        )}
         <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
           <Button
             variant="contained"
@@ -348,6 +644,21 @@ const SampleList = () => {
             ),
           }}
         />
+        <Button
+          variant="outlined"
+          startIcon={<DownloadIcon />}
+          onClick={handleDownloadCSV}
+          sx={{
+            borderColor: theme.palette.primary.main,
+            color: theme.palette.primary.main,
+            "&:hover": {
+              borderColor: theme.palette.primary.dark,
+              backgroundColor: theme.palette.primary.light,
+            },
+          }}
+        >
+          Download Raw Data
+        </Button>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -434,25 +745,40 @@ const SampleList = () => {
           "analysis_complete",
           "shift_complete",
         ].includes(shift?.status) && (
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleSampleComplete}
-            disabled={isCompleteDisabled || shift?.status !== "ongoing"}
-            sx={{
-              backgroundColor: theme.palette.info.main,
-              color: theme.palette.info.contrastText,
-              "&:hover": {
-                backgroundColor: theme.palette.info.dark,
-              },
-              "&.Mui-disabled": {
-                backgroundColor: theme.palette.grey[700],
-                color: theme.palette.grey[500],
-              },
-            }}
-          >
-            Sampling Complete
-          </Button>
+          <>
+            {isCompleteDisabled && shift?.status === "ongoing" && (
+              <Typography
+                variant="body2"
+                color="warning.main"
+                sx={{
+                  alignSelf: "center",
+                  mr: 2,
+                  fontStyle: "italic",
+                }}
+              >
+                Complete all sample data before marking sampling complete
+              </Typography>
+            )}
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSampleComplete}
+              disabled={isCompleteDisabled || shift?.status !== "ongoing"}
+              sx={{
+                backgroundColor: theme.palette.info.main,
+                color: theme.palette.info.contrastText,
+                "&:hover": {
+                  backgroundColor: theme.palette.info.dark,
+                },
+                "&.Mui-disabled": {
+                  backgroundColor: theme.palette.grey[700],
+                  color: theme.palette.grey[500],
+                },
+              }}
+            >
+              Sampling Complete
+            </Button>
+          </>
         )}
         {![
           "samples_submitted_to_lab",

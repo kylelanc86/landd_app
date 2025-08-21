@@ -17,6 +17,7 @@ import {
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   sampleService,
   shiftService,
@@ -57,6 +58,7 @@ const NewSample = () => {
     notes: "",
     isFieldBlank: false,
     sampler: "",
+    status: "pending",
   });
   const [projectID, setProjectID] = useState(null);
   const [job, setJob] = useState(null);
@@ -138,34 +140,56 @@ const NewSample = () => {
         console.log("Full shift response:", response.data);
         setShift(response.data);
 
-        // Get the next sample number from location state
-        const nextNumber = location.state?.nextSampleNumber;
-        console.log("Next sample number from location:", nextNumber);
+        // Get the project ID from the shift's job
+        const projectID = response.data.job?.projectId?.projectID;
+        if (projectID) {
+          setProjectID(projectID);
 
-        if (nextNumber) {
-          // Get the project ID from the shift's job
-          const projectID = response.data.job?.projectId?.projectID;
-          if (projectID) {
-            // Set just the number part as the sample number
+          // Get the next sample number from location state (project-based)
+          const nextNumber = location.state?.nextSampleNumber;
+          console.log("Next sample number from location:", nextNumber);
+
+          // Always calculate the next sample number to ensure proper AM format
+          try {
+            const allProjectSamplesResponse = await sampleService.getByProject(
+              projectID
+            );
+            const allProjectSamples = allProjectSamplesResponse.data || [];
+
+            // Find the highest sample number across all shifts
+            const highestNumber = Math.max(
+              ...allProjectSamples.map((sample) => {
+                // Only consider air monitoring samples (with AM prefix in sample number)
+                if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
+                  const match = sample.fullSampleID?.match(/AM(\d+)$/);
+                  return match ? parseInt(match[1]) : 0;
+                }
+                return 0; // Ignore non-AM samples
+              }),
+              0 // Start from 0 if no samples exist
+            );
+
+            const nextSampleNumber = `AM${highestNumber + 1}`;
+            console.log("Calculated next sample number:", nextSampleNumber);
+
             setForm((prev) => ({
               ...prev,
-              sampleNumber: nextNumber.toString(),
+              sampleNumber: nextSampleNumber.toString(),
             }));
-            // Store the project ID for later use in fullSampleID
-            setProjectID(projectID);
+          } catch (error) {
+            console.error("Error calculating next sample number:", error);
+            // Start from 1 if we can't calculate
+            setForm((prev) => ({
+              ...prev,
+              sampleNumber: "AM1",
+            }));
           }
         }
 
-        // Get the number of samples in this shift by querying the samples
+        // Get the number of samples in this shift for display purposes only
         const samplesResponse = await sampleService.getByShift(shiftId);
         const samplesInShift = samplesResponse.data || [];
-        const shiftSampleNumber = samplesInShift.length + 1;
         console.log("Number of samples in shift:", samplesInShift.length);
-        console.log(
-          "This will be sample number:",
-          shiftSampleNumber,
-          "in this shift"
-        );
 
         // If there's no default sampler but we have samples, check the first sample
         if (!response.data.defaultSampler && samplesInShift.length > 0) {
@@ -261,6 +285,16 @@ const NewSample = () => {
             return updatedForm;
           });
         }
+
+        // Fetch job details
+        if (response.data.job?._id) {
+          try {
+            const jobResponse = await jobService.getById(response.data.job._id);
+            setJob(jobResponse.data);
+          } catch (error) {
+            console.error("Error fetching job details:", error);
+          }
+        }
       } catch (err) {
         console.error("Error fetching shift:", err);
         setError("Failed to load shift details");
@@ -269,41 +303,6 @@ const NewSample = () => {
 
     fetchShift();
   }, [shiftId, location.state]);
-
-  useEffect(() => {
-    const fetchShiftDetails = async () => {
-      if (!shiftId) {
-        setError("No shift ID provided");
-        return;
-      }
-
-      try {
-        console.log("Fetching shift details for shiftId:", shiftId);
-        const response = await shiftService.getById(shiftId);
-        console.log("Full shift response:", response);
-        const shift = response.data;
-
-        // Get project ID from the job's project
-        if (shift.job && shift.job.projectId) {
-          setProjectID(shift.job.projectId.projectID);
-          console.log("Project ID set to:", shift.job.projectId.projectID);
-        } else {
-          console.error("No project data found in job");
-          setError("No project data found for this job");
-          return;
-        }
-
-        // Fetch job details
-        const jobResponse = await jobService.getById(shift.job._id);
-        setJob(jobResponse.data);
-      } catch (error) {
-        console.error("Error fetching shift details:", error);
-        setError("Failed to fetch shift details");
-      }
-    };
-
-    fetchShiftDetails();
-  }, [shiftId]);
 
   // Effect to handle flowmeter persistence when flowmeters are loaded
   useEffect(() => {
@@ -334,6 +333,50 @@ const NewSample = () => {
     }
   }, [flowmeters, shift, form.flowmeter]);
 
+  // Remove the separate sample number calculation effect that's causing conflicts
+  // useEffect(() => {
+  //   const calculateSampleNumber = async () => {
+  //     if (!projectID) return;
+
+  //     try {
+  //       const allProjectSamplesResponse = await sampleService.getByProject(
+  //         projectID
+  //       );
+  //       const allProjectSamples = allProjectSamplesResponse.data || [];
+
+  //       // Find the highest sample number across all shifts
+  //       const highestNumber = Math.max(
+  //         ...allProjectSamples.map((sample) => {
+  //           // Only consider air monitoring samples (with AM prefix in sample number)
+  //           if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
+  //             const match = sample.fullSampleID?.match(/AM(\d+)$/);
+  //             return match ? parseInt(match[1]) : 0;
+  //             }
+  //           return 0; // Ignore non-AM samples
+  //         }),
+  //         0 // Start from 0 if no samples exist
+  //       );
+
+  //       const nextSampleNumber = `AM${highestNumber + 1}`;
+  //       console.log("Auto-calculated next sample number:", nextSampleNumber);
+
+  //       setForm((prev) => ({
+  //         ...prev,
+  //         sampleNumber: nextSampleNumber.toString(),
+  //       }));
+  //     } catch (error) {
+  //       console.error("Error auto-calculating sample number:", error);
+  //       // Set default if calculation fails
+  //       setForm((prev) => ({
+  //         ...prev,
+  //         sampleNumber: "AM1",
+  //       }));
+  //     }
+  //   };
+
+  //   calculateSampleNumber();
+  // }, [projectID]);
+
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
 
@@ -358,26 +401,32 @@ const NewSample = () => {
 
   // Calculate average flowrate when initial or final flowrate changes
   useEffect(() => {
-    if (form.initialFlowrate) {
-      if (form.finalFlowrate) {
-        const avg =
-          (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) /
-          2;
-        setForm((prev) => ({
-          ...prev,
-          averageFlowrate: Math.round(avg).toString(),
-        }));
-      } else {
-        // If no final flowrate, use initial flowrate as average
-        setForm((prev) => ({
-          ...prev,
-          averageFlowrate: Math.round(
-            parseFloat(form.initialFlowrate)
-          ).toString(),
-        }));
-      }
+    // Don't run this effect if we're currently submitting or if there are any field errors
+    if (isSubmitting || Object.keys(fieldErrors).length > 0) return;
+
+    if (form.initialFlowrate && form.finalFlowrate) {
+      const avg =
+        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
+
+      // Check if flowrates are equal to determine status
+      const initial = parseFloat(form.initialFlowrate);
+      const final = parseFloat(form.finalFlowrate);
+      const newStatus = Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+      setForm((prev) => ({
+        ...prev,
+        averageFlowrate: Math.round(avg).toString(),
+        status: newStatus,
+      }));
+    } else {
+      // Clear average flowrate and status if either flowrate is missing
+      setForm((prev) => ({
+        ...prev,
+        averageFlowrate: "",
+        status: "pending",
+      }));
     }
-  }, [form.initialFlowrate, form.finalFlowrate]);
+  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
 
   const setCurrentTime = (field) => {
     const now = new Date();
@@ -387,7 +436,7 @@ const NewSample = () => {
     setForm((prev) => ({ ...prev, [field]: timeString }));
   };
 
-  const validateForm = () => {
+  const validateForm = async () => {
     const errors = {};
 
     if (!form.sampler) {
@@ -396,10 +445,42 @@ const NewSample = () => {
 
     if (!form.sampleNumber) {
       errors.sampleNumber = "Sample number is required";
+    } else {
+      // Check if sample number is unique across the project
+      try {
+        if (projectID) {
+          const allProjectSamplesResponse = await sampleService.getByProject(
+            projectID
+          );
+          const allProjectSamples = allProjectSamplesResponse.data || [];
+
+          const isDuplicate = allProjectSamples.some((sample) => {
+            // Only check against air monitoring samples (with AM prefix in sample number)
+            if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
+              const extractedNumber =
+                sample.fullSampleID?.match(/AM(\d+)$/)?.[1];
+              return extractedNumber === form.sampleNumber.replace("AM", "");
+            }
+            return false; // Not an AM sample, so no conflict
+          });
+
+          if (isDuplicate) {
+            errors.sampleNumber =
+              "Sample number already exists in this project. Please use a different number.";
+          }
+        }
+      } catch (error) {
+        console.error("Error checking sample number uniqueness:", error);
+        // Don't block submission if we can't check uniqueness
+      }
     }
 
     if (!form.isFieldBlank && !form.flowmeter) {
-      errors.flowmeter = "Flowmeter is required";
+      // Only require flowmeter if user has explicitly set isFieldBlank to false
+      // During initial load, isFieldBlank defaults to false but shouldn't block sample number calculation
+      if (form.isFieldBlank === false) {
+        errors.flowmeter = "Flowmeter is required for non-field blank samples";
+      }
     }
 
     if (!form.cowlNo) {
@@ -431,7 +512,8 @@ const NewSample = () => {
     setFieldErrors({});
 
     // Validate form before submission
-    if (!validateForm()) {
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 
@@ -450,13 +532,12 @@ const NewSample = () => {
         throw new Error("Shift ID is required");
       }
 
-      // Get the number of samples in this shift
+      // Get the number of samples in this shift for first sample detection
       const samplesResponse = await sampleService.getByShift(shiftId);
       const samplesInShift = samplesResponse.data || [];
-      const shiftSampleNumber = samplesInShift.length + 1;
 
       // If this is the first sample in the shift and we have a sampler, set it as the default
-      if (shiftSampleNumber === 1 && form.sampler) {
+      if (samplesInShift.length === 0 && form.sampler) {
         try {
           await shiftService.update(shiftId, {
             defaultSampler: form.sampler,
@@ -467,7 +548,7 @@ const NewSample = () => {
       }
 
       // If this is the first sample in the shift and we have a flowmeter, set it as the default
-      if (shiftSampleNumber === 1 && form.flowmeter) {
+      if (samplesInShift.length === 0 && form.flowmeter) {
         try {
           await shiftService.update(shiftId, {
             defaultFlowmeter: form.flowmeter,
@@ -483,8 +564,18 @@ const NewSample = () => {
         shift: shiftId,
         job: job._id,
         fullSampleID: `${projectID}-${form.sampleNumber}`,
+        sampler: form.sampler,
         collectedBy: form.sampler,
-        flowmeter: form.flowmeter, // Explicitly include flowmeter
+        flowmeter: form.flowmeter || null, // Explicitly include flowmeter
+        initialFlowrate: form.initialFlowrate
+          ? parseFloat(form.initialFlowrate)
+          : null,
+        finalFlowrate: form.finalFlowrate
+          ? parseFloat(form.finalFlowrate)
+          : null,
+        averageFlowrate: form.averageFlowrate
+          ? parseFloat(form.averageFlowrate)
+          : null,
       };
 
       await sampleService.create(sampleData);
@@ -564,24 +655,27 @@ const NewSample = () => {
               </Typography>
             )}
           </FormControl>
-          <TextField
-            name="sampleNumber"
-            label="Sample Number"
-            value={form.sampleNumber}
-            onChange={handleChange}
-            required
-            fullWidth
-            error={!!fieldErrors.sampleNumber}
-            helperText={
-              fieldErrors.sampleNumber
-                ? fieldErrors.sampleNumber
-                : projectID
-                ? `Full Sample ID will be: ${projectID}-${
-                    form.sampleNumber || "XXX"
-                  }`
-                : "Loading job details..."
-            }
-          />
+          <Box>
+            <TextField
+              name="sampleNumber"
+              label="Sample Number"
+              value={form.sampleNumber}
+              onChange={handleChange}
+              required
+              fullWidth
+              disabled
+              error={!!fieldErrors.sampleNumber}
+              helperText={
+                fieldErrors.sampleNumber
+                  ? fieldErrors.sampleNumber
+                  : projectID
+                  ? `Full Sample ID will be: ${projectID}-${
+                      form.sampleNumber || "XXX"
+                    }`
+                  : "Loading job details..."
+              }
+            />
+          </Box>
           <FormControlLabel
             control={
               <Checkbox
@@ -679,14 +773,18 @@ const NewSample = () => {
             helperText={fieldErrors.cowlNo}
           />
           {!form.isFieldBlank && (
-            <FormControl fullWidth required error={!!fieldErrors.flowmeter}>
+            <FormControl
+              fullWidth
+              required={!form.isFieldBlank}
+              error={!!fieldErrors.flowmeter}
+            >
               <InputLabel>Flowmeter</InputLabel>
               <Select
                 name="flowmeter"
                 value={form.flowmeter}
                 onChange={handleChange}
                 label="Flowmeter"
-                required
+                required={!form.isFieldBlank}
               >
                 <MenuItem value="">
                   <em>Select a flowmeter</em>
@@ -717,6 +815,17 @@ const NewSample = () => {
           )}
           {!form.isFieldBlank && (
             <>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: theme.palette.primary.main,
+                  borderBottom: `2px solid ${theme.palette.primary.main}`,
+                  pb: 1,
+                  mb: 2,
+                }}
+              >
+                Air-monitor Setup
+              </Typography>
               <Box sx={{ display: "flex", gap: 1 }}>
                 <TextField
                   name="startTime"
@@ -750,6 +859,18 @@ const NewSample = () => {
                 helperText={fieldErrors.initialFlowrate}
                 inputProps={{ step: "0.1" }}
               />
+              <Typography
+                variant="h6"
+                sx={{
+                  color: theme.palette.primary.main,
+                  borderBottom: `2px solid ${theme.palette.primary.main}`,
+                  pb: 1,
+                  mb: 2,
+                  mt: 3,
+                }}
+              >
+                Air-monitor Collection
+              </Typography>
               <Box sx={{ display: "flex", gap: 1 }}>
                 <TextField
                   name="endTime"
@@ -780,10 +901,21 @@ const NewSample = () => {
               <TextField
                 name="averageFlowrate"
                 label="Average Flowrate"
-                value={form.averageFlowrate}
+                value={
+                  form.status === "failed"
+                    ? "FAILED - Flowrates don't match"
+                    : form.averageFlowrate
+                }
                 disabled
                 required
                 fullWidth
+                sx={{
+                  "& .MuiInputBase-input": {
+                    color:
+                      form.status === "failed" ? "error.main" : "text.primary",
+                    fontWeight: form.status === "failed" ? "bold" : "normal",
+                  },
+                }}
               />
             </>
           )}

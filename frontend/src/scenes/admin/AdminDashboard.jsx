@@ -14,6 +14,7 @@ import {
   Assessment as AssessmentIcon,
   ReceiptOutlined as ReceiptIcon,
   ArrowForward as ArrowForwardIcon,
+  Storage as StorageIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme/tokens";
@@ -54,6 +55,16 @@ const AdminDashboard = () => {
       path: "/admin/invoice-items",
       requiredPermission: "admin.view",
       color: "#ed6c02",
+    },
+    {
+      id: "custom-data-fields",
+      title: "Custom Data Fields",
+      description:
+        "Manage reference data for asbestos removalists, locations, and materials",
+      icon: <StorageIcon />,
+      path: "/admin/custom-data-fields",
+      requiredPermission: "admin.view",
+      color: "#9c27b0",
     },
   ];
 

@@ -34,6 +34,7 @@ import {
   Switch,
   Breadcrumbs,
   Link,
+  Chip,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -45,6 +46,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import DescriptionIcon from "@mui/icons-material/Description";
+
 import {
   jobService,
   projectService,
@@ -104,6 +106,10 @@ const AirMonitoring = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [dialogError, setDialogError] = useState(null);
   const [isDataFetched, setIsDataFetched] = useState(false);
+  const [dialogSuccess, setDialogSuccess] = useState(null);
+  const [showExistingJobsDialog, setShowExistingJobsDialog] = useState(false);
+  const [existingJobsInfo, setExistingJobsInfo] = useState([]);
+  const [confirmingJobCreation, setConfirmingJobCreation] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -140,7 +146,7 @@ const AirMonitoring = () => {
 
               if (shifts.length > 0) {
                 // Determine overall shift status
-                const hasCompletedShifts = shifts.some(
+                const allShiftsCompleted = shifts.every(
                   (shift) =>
                     shift.status === "shift_complete" || shift.reportApprovedBy
                 );
@@ -153,7 +159,20 @@ const AirMonitoring = () => {
                     shift.status === "samples_submitted_to_lab"
                 );
 
-                if (hasCompletedShifts) {
+                // Debug logging for status determination
+                console.log(`Job ${job._id} status determination:`, {
+                  shiftCount: shifts.length,
+                  allShiftsCompleted,
+                  hasAnalysisComplete,
+                  hasSamplingComplete,
+                  shifts: shifts.map((s) => ({
+                    id: s._id,
+                    status: s.status,
+                    reportApprovedBy: s.reportApprovedBy,
+                  })),
+                });
+
+                if (allShiftsCompleted) {
                   shiftStatus = "Reports Complete";
                 } else if (hasAnalysisComplete) {
                   shiftStatus = "Analysis Complete";
@@ -218,7 +237,23 @@ const AirMonitoring = () => {
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data.data || [];
-        setProjects(projectsData);
+
+        // Debug: Log the first few projects to see their structure
+        console.log("Projects data structure:", projectsData.slice(0, 3));
+        if (projectsData.length > 0) {
+          console.log("First project client field:", projectsData[0].client);
+          console.log("First project full structure:", projectsData[0]);
+        }
+
+        // Sort projects by projectID in descending order
+        const sortedProjects = projectsData.sort((a, b) => {
+          // Extract numeric part from projectID for proper sorting
+          const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
+          const bNum = parseInt(b.projectID?.replace(/\D/g, "")) || 0;
+          return bNum - aNum; // Descending order (highest first)
+        });
+
+        setProjects(sortedProjects);
       } else {
         setProjects([]);
       }
@@ -258,15 +293,22 @@ const AirMonitoring = () => {
       return;
     }
 
+    // Always attempt to create the job - let the backend handle warnings
+    await createJob();
+  };
+
+  const createJob = async () => {
     setLoading(true);
     setDialogError(null);
+    setDialogSuccess(null);
+
     try {
       console.log("Creating new job with form data:", form);
       console.log("Selected project:", selectedProject);
 
       const newJob = {
         name: selectedProject.name,
-        project: selectedProject._id,
+        projectId: selectedProject._id,
         status: "in_progress",
         startDate: new Date(),
         asbestosRemovalist: form.asbestosRemovalist,
@@ -283,14 +325,28 @@ const AirMonitoring = () => {
         throw new Error("No data received from server");
       }
 
+      // Handle the new response format that includes existing jobs info
+      const responseData = response.data;
+      const newJobData = responseData.job || responseData; // Handle both old and new formats
+      const existingJobs = responseData.existingActiveJobs || [];
+      const warning = responseData.warning;
+
+      // If there are existing jobs and this is a new response format, show confirmation
+      if (existingJobs.length > 0 && responseData.job) {
+        setExistingJobsInfo(existingJobs);
+        setShowExistingJobsDialog(true);
+        setLoading(false);
+        return;
+      }
+
       // Process the new job to include project details
       const processedJob = {
-        id: response.data._id,
-        _id: response.data._id,
+        id: newJobData._id,
+        _id: newJobData._id,
         projectID: selectedProject.projectID,
         projectName: selectedProject.name,
         status: "in_progress",
-        asbestosRemovalist: response.data.asbestosRemovalist,
+        asbestosRemovalist: newJobData.asbestosRemovalist,
         shiftStatus: "No Shifts",
         shiftCount: 0,
       };
@@ -300,6 +356,14 @@ const AirMonitoring = () => {
 
       // Refresh the projects list to get updated status
       await fetchProjects();
+
+      // Show success message with warning if there are existing jobs
+      if (warning) {
+        setDialogError(null);
+        setDialogSuccess(`${warning}. New job created successfully.`);
+        // Clear success message after 5 seconds
+        setTimeout(() => setDialogSuccess(null), 5000);
+      }
 
       setOpenDialog(false);
       setSelectedProject(null);
@@ -500,7 +564,7 @@ const AirMonitoring = () => {
       headerName: "Shift Progress",
       flex: 1,
       minWidth: 150,
-      maxWidth: 150,
+      maxWidth: 230,
       renderCell: (params) => {
         const getShiftStatusColor = (status) => {
           switch (status) {
@@ -582,9 +646,79 @@ const AirMonitoring = () => {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
-    setDialogError(null);
     setSelectedProject(null);
     setForm(emptyForm);
+    setDialogError(null);
+    setDialogSuccess(null);
+  };
+
+  const handleCloseExistingJobsDialog = () => {
+    setShowExistingJobsDialog(false);
+    setExistingJobsInfo([]);
+  };
+
+  const handleConfirmCreateJob = async () => {
+    setShowExistingJobsDialog(false);
+    setExistingJobsInfo([]);
+    setConfirmingJobCreation(true);
+
+    // Now create the job with the existing data
+    const newJob = {
+      name: selectedProject.name,
+      projectId: selectedProject._id,
+      status: "in_progress",
+      startDate: new Date(),
+      asbestosRemovalist: form.asbestosRemovalist,
+      description: `Air monitoring job for ${selectedProject.name}`,
+      location: selectedProject.address || "Not specified",
+      forceCreate: true, // Signal to backend that user confirmed creation despite existing jobs
+    };
+
+    try {
+      const response = await jobService.create(newJob);
+
+      if (!response.data) {
+        throw new Error("No data received from server");
+      }
+
+      const responseData = response.data;
+      const newJobData = responseData.job || responseData;
+
+      // Process the new job to include project details
+      const processedJob = {
+        id: newJobData._id,
+        _id: newJobData._id,
+        projectID: selectedProject.projectID,
+        projectName: selectedProject.name,
+        status: "in_progress",
+        asbestosRemovalist: newJobData.asbestosRemovalist,
+        shiftStatus: "No Shifts",
+        shiftCount: 0,
+      };
+
+      // Add the new job to the list
+      setJobs((prevJobs) => [processedJob, ...prevJobs]);
+
+      // Refresh the projects list to get updated status
+      await fetchProjects();
+
+      // Show success message
+      setDialogSuccess("New job created successfully!");
+      setTimeout(() => setDialogSuccess(null), 5000);
+
+      setOpenDialog(false);
+      setSelectedProject(null);
+      setForm(emptyForm);
+    } catch (error) {
+      console.error("Error creating job after confirmation:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create job";
+      setDialogError(errorMessage);
+    } finally {
+      setConfirmingJobCreation(false);
+    }
   };
 
   const handleBackToHome = () => {
@@ -741,6 +875,19 @@ const AirMonitoring = () => {
                 <Typography variant="body2">{dialogError}</Typography>
               </Box>
             )}
+            {dialogSuccess && (
+              <Box
+                sx={{
+                  mb: 2,
+                  p: 2,
+                  backgroundColor: theme.palette.success.light,
+                  color: theme.palette.success.contrastText,
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="body2">{dialogSuccess}</Typography>
+              </Box>
+            )}
             <FormControl fullWidth sx={{ mb: 2 }}>
               <Autocomplete
                 options={Array.isArray(projects) ? projects : []}
@@ -756,10 +903,16 @@ const AirMonitoring = () => {
                       ...form,
                       projectId: newValue._id,
                       projectName: newValue.name,
-                      client: newValue.client?.name || "Not specified",
+                      client:
+                        typeof newValue.client === "string"
+                          ? newValue.client
+                          : newValue.client?.name || "Not specified",
                     });
                   }
                 }}
+                isOptionEqualToValue={(option, value) =>
+                  option._id === value._id
+                }
                 renderInput={(params) => (
                   <TextField {...params} label="Select Project" required />
                 )}
@@ -770,7 +923,10 @@ const AirMonitoring = () => {
                         {option.projectID} - {option.name}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Client: {option.client?.name || "Not specified"}
+                        Client:{" "}
+                        {typeof option.client === "string"
+                          ? option.client
+                          : option.client?.name || "Not specified"}
                       </Typography>
                     </Box>
                   </li>
@@ -879,6 +1035,74 @@ const AirMonitoring = () => {
           Completed
         </MenuItem>
       </Menu>
+
+      {/* Existing Jobs Confirmation Dialog */}
+      <Dialog
+        open={showExistingJobsDialog}
+        onClose={handleCloseExistingJobsDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Project Already Has {existingJobsInfo.length} Active Job
+          {existingJobsInfo.length === 1 ? "" : "s"}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            This project already has {existingJobsInfo.length} active air
+            monitoring job{existingJobsInfo.length === 1 ? "" : "s"}. Are you
+            sure you want to create another one?
+          </Typography>
+
+          <Typography variant="h6" sx={{ mb: 1, mt: 2 }}>
+            Existing Active Jobs:
+          </Typography>
+
+          <TableContainer component={Paper} sx={{ mt: 1 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Start Date</TableCell>
+                  <TableCell>Asbestos Removalist</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {existingJobsInfo.map((job) => (
+                  <TableRow key={job.id || job._id}>
+                    <TableCell>
+                      <Chip
+                        label={job.status}
+                        color={
+                          job.status === "in_progress" ? "warning" : "default"
+                        }
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {job.createdAt
+                        ? new Date(job.createdAt).toLocaleDateString()
+                        : "N/A"}
+                    </TableCell>
+                    <TableCell>{job.asbestosRemovalist || "N/A"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseExistingJobsDialog}>Cancel</Button>
+          <Button
+            onClick={handleConfirmCreateJob}
+            variant="contained"
+            color="warning"
+            disabled={confirmingJobCreation}
+          >
+            {confirmingJobCreation ? "Creating..." : "Create Job Anyway"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

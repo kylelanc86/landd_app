@@ -18,7 +18,6 @@ router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.v
       .populate('assessorId');
 
     const reports = assessments
-      .filter(assessment => assessment.status === 'complete' || assessment.status === 'approved')
       .map(assessment => ({
         id: assessment._id,
         date: assessment.assessmentDate || assessment.createdAt,

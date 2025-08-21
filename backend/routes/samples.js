@@ -10,6 +10,7 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
     const samples = await Sample.find()
       .populate('job')
       .populate('collectedBy')
+      .populate('sampler')
       .populate('analyzedBy')
       .sort({ createdAt: -1 });
     res.json(samples);
@@ -23,6 +24,7 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
   try {
     const samples = await Sample.find({ shift: req.params.shiftId })
       .populate('collectedBy')
+      .populate('sampler')
       .populate('analyzedBy')
       .populate({
         path: 'job',
@@ -49,6 +51,7 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
         }
       })
       .populate('collectedBy')
+      .populate('sampler')
       .populate('analyzedBy')
       .sort({ createdAt: -1 });
 
@@ -71,6 +74,7 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
         }
       })
       .populate('collectedBy')
+      .populate('sampler')
       .populate('analyzedBy');
     if (!sample) {
       return res.status(404).json({ message: 'Sample not found' });
@@ -96,6 +100,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       pumpNo: req.body.pumpNo,
       flowmeter: req.body.flowmeter,
       cowlNo: req.body.cowlNo,
+      sampler: req.body.sampler,
       filterSize: req.body.filterSize,
       startTime: req.body.startTime,
       endTime: req.body.endTime,

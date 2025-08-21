@@ -13,11 +13,13 @@ import {
   Tooltip,
   Chip,
   CircularProgress,
+  Button,
 } from "@mui/material";
 import {
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
   Print as PrintIcon,
+  Edit as EditIcon,
 } from "@mui/icons-material";
 import { format } from "date-fns";
 
@@ -29,6 +31,7 @@ const ReportsList = ({
   onView,
   onDownload,
   onPrint,
+  onRevise,
 }) => {
   const getCategoryTitle = () => {
     switch (category) {
@@ -215,6 +218,15 @@ const ReportsList = ({
                         <PrintIcon />
                       </IconButton>
                     </Tooltip>
+                    <Button
+                      size="small"
+                      onClick={() => onRevise(report)}
+                      color="warning"
+                      variant="outlined"
+                      sx={{ minWidth: "auto", px: 1 }}
+                    >
+                      Revise Report
+                    </Button>
                   </Box>
                 </TableCell>
               </TableRow>

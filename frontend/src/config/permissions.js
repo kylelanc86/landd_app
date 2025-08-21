@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
   'xero.sync': 'Sync with Xero',
+  'clients.write_off': 'Write off client accounts',
 
   // Admin permissions
   'admin.view': 'Access admin features',
@@ -40,6 +41,7 @@ export const ROLE_PERMISSIONS = {
     'invoices.approve',
     'timesheets.approve',
     'xero.sync',
+    'clients.write_off',
   ],
   employee: [
     'projects.view',

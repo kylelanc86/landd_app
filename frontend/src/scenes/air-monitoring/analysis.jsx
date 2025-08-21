@@ -210,10 +210,18 @@ const SampleSummary = React.memo(
               </Box>
               <Box sx={{ textAlign: "center" }}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Concentration
+                  Actual Concentration
                 </Typography>
                 <Typography variant="h6">
                   {calculateConcentration(sample._id) || "N/A"} fibres/mL
+                </Typography>
+              </Box>
+              <Box sx={{ textAlign: "center" }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Reported Concentration
+                </Typography>
+                <Typography variant="h6">
+                  {getReportedConcentration(sample._id) || "N/A"} fibres/mL
                 </Typography>
               </Box>
             </Stack>
@@ -280,13 +288,13 @@ const Analysis = () => {
         console.log("Sample count:", samplesResponse.data.length);
 
         const sortStart = performance.now();
-        // Sort samples by the numeric part after the last hyphen
+        // Sort samples by AM number in descending order (AM1 first, then AM2, etc.)
         const sortedSamples = samplesResponse.data.sort((a, b) => {
-          const aMatch = a.fullSampleID.match(/-(\d+)$/);
-          const bMatch = b.fullSampleID.match(/-(\d+)$/);
+          const aMatch = a.fullSampleID.match(/AM(\d+)$/);
+          const bMatch = b.fullSampleID.match(/AM(\d+)$/);
           const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
           const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
-          return aNum - bNum;
+          return aNum - bNum; // Keep ascending order for AM numbers (AM1, AM2, AM3...)
         });
         console.log(`Sorting took ${performance.now() - sortStart}ms`);
 
@@ -654,7 +662,7 @@ const Analysis = () => {
       (fibresForCalculation / fieldsCounted) *
       (1 / (averageFlowrate * 1000 * minutes));
 
-    return parseFloat(concentration.toFixed(3));
+    return parseFloat(concentration.toFixed(2));
   };
 
   const getReportedConcentration = (sampleId) => {
@@ -667,7 +675,23 @@ const Analysis = () => {
       return "<0.01";
     }
 
-    return calculatedConc.toFixed(3);
+    return calculatedConc.toFixed(2);
+  };
+
+  // Check if all required fields for concentration calculation are filled
+  const canCalculateConcentration = (sampleId) => {
+    const analysis = sampleAnalyses[sampleId];
+    const sample = samples.find((s) => s._id === sampleId);
+
+    if (!analysis || !sample) return false;
+
+    // Check if all required fields are filled
+    const hasFibreCounts =
+      analysis.fibresCounted > 0 && analysis.fieldsCounted > 0;
+    const hasFlowrate = parseFloat(sample.averageFlowrate) > 0;
+    const hasTiming = sample.startTime && sample.endTime;
+
+    return hasFibreCounts && hasFlowrate && hasTiming;
   };
 
   const isFormComplete = () => {
@@ -1040,7 +1064,7 @@ const Analysis = () => {
           mb: 4,
         }}
       >
-        Microscope Calibration
+        Fibre Count Analysis
       </Typography>
 
       {/* Analyst Dropdown - moved to top */}
@@ -1365,6 +1389,28 @@ const Analysis = () => {
                         </TableRow>
                         <TableRow>
                           <TableCell colSpan={21}>
+                            {/* Status message for concentration calculation */}
+                            {activeSampleId && (
+                              <Box sx={{ mb: 2, textAlign: "center" }}>
+                                {canCalculateConcentration(activeSampleId) ? (
+                                  <Typography
+                                    variant="body2"
+                                    color="success.main"
+                                  >
+                                    ✓ All fields completed - Concentration
+                                    calculated
+                                  </Typography>
+                                ) : (
+                                  <Typography
+                                    variant="body2"
+                                    color="warning.main"
+                                  >
+                                    ⚠ Complete fibre counts, flowrate, and
+                                    timing to calculate concentration
+                                  </Typography>
+                                )}
+                              </Box>
+                            )}
                             <Stack
                               direction="row"
                               spacing={4}
@@ -1379,9 +1425,14 @@ const Analysis = () => {
                                   Calculated Concentration
                                 </Typography>
                                 <Typography variant="h4">
-                                  {calculateConcentration(activeSampleId) ||
-                                    "N/A"}{" "}
-                                  fibres/mL
+                                  {activeSampleId &&
+                                  canCalculateConcentration(activeSampleId)
+                                    ? calculateConcentration(activeSampleId)
+                                    : "Complete all fields"}{" "}
+                                  {activeSampleId &&
+                                  canCalculateConcentration(activeSampleId)
+                                    ? "fibres/mL"
+                                    : ""}
                                 </Typography>
                               </Box>
                               <Box>
@@ -1392,8 +1443,14 @@ const Analysis = () => {
                                   Reported Concentration
                                 </Typography>
                                 <Typography variant="h4">
-                                  {getReportedConcentration(activeSampleId)}{" "}
-                                  fibres/mL
+                                  {activeSampleId &&
+                                  canCalculateConcentration(activeSampleId)
+                                    ? getReportedConcentration(activeSampleId)
+                                    : "Complete all fields"}{" "}
+                                  {activeSampleId &&
+                                  canCalculateConcentration(activeSampleId)
+                                    ? "fibres/mL"
+                                    : ""}
                                 </Typography>
                               </Box>
                             </Stack>

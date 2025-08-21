@@ -19,16 +19,37 @@ export const formatPhoneNumber = (phoneNumber) => {
 };
 
 /**
- * Validates if a phone number is a valid Australian mobile number
+ * Validates if a phone number is a valid Australian mobile number or dash
  * @param {string} phoneNumber - The phone number to validate
  * @returns {boolean} - Whether the phone number is valid
  */
 export const isValidAustralianMobile = (phoneNumber) => {
   if (!phoneNumber) return false;
   
+  // Allow dash as a valid entry
+  if (phoneNumber === '-') return true;
+  
   // Remove all non-digit characters
   const cleaned = phoneNumber.replace(/\D/g, '');
   
   // Check if it's a valid Australian mobile number (10 digits starting with 04)
   return cleaned.length === 10 && cleaned.startsWith('04');
-}; 
+};
+
+/**
+ * Validates if an email is valid or is a dash
+ * @param {string} email - The email to validate
+ * @returns {boolean} - Whether the email is valid
+ */
+export const isValidEmailOrDash = (email) => {
+  if (!email) return false;
+  
+  // Allow dash as a valid entry
+  if (email === '-') return true;
+  
+  // Basic email validation regex
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+ 

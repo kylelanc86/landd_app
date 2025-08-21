@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, memo, useRef } from "react";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Grid,
   Typography,
   useTheme,
@@ -25,6 +24,10 @@ import {
   Checkbox,
   Divider,
   LinearProgress,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  FormControl,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
@@ -32,7 +35,7 @@ import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
+
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
@@ -41,6 +44,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import {
   formatPhoneNumber,
   isValidAustralianMobile,
+  isValidEmailOrDash,
 } from "../../utils/formatters";
 import { debounce } from "lodash";
 
@@ -54,6 +58,7 @@ const emptyForm = {
   contact2Name: "",
   contact2Number: "",
   contact2Email: "",
+  paymentTerms: "Standard (30 days)",
   written_off: false,
 };
 
@@ -62,14 +67,14 @@ const Clients = () => {
 
   const theme = useTheme();
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+
   const [form, setForm] = useState(emptyForm);
-  const [editForm, setEditForm] = useState(emptyForm);
-  const [editId, setEditId] = useState(null);
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
   const [searchInput, setSearchInput] = useState("");
@@ -95,7 +100,7 @@ const Clients = () => {
     contact1Name: true,
     contact1Number: true,
     address: false, // Hide address column by default
-    written_off: true,
+    written_off: can("clients.write_off"),
     actions: true,
   });
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
@@ -106,7 +111,13 @@ const Clients = () => {
       try {
         const response = await userPreferencesService.getPreferences();
         if (response.data?.columnVisibility?.clients) {
-          setColumnVisibilityModel(response.data.columnVisibility.clients);
+          const savedVisibility = response.data.columnVisibility.clients;
+          // Ensure written_off column visibility respects permissions
+          setColumnVisibilityModel({
+            ...savedVisibility,
+            written_off:
+              can("clients.write_off") && savedVisibility.written_off,
+          });
         }
       } catch (error) {
         console.error("Error loading user preferences:", error);
@@ -117,7 +128,11 @@ const Clients = () => {
         if (savedColumnVisibility) {
           try {
             const parsed = JSON.parse(savedColumnVisibility);
-            setColumnVisibilityModel(parsed);
+            // Ensure written_off column visibility respects permissions
+            setColumnVisibilityModel({
+              ...parsed,
+              written_off: can("clients.write_off") && parsed.written_off,
+            });
           } catch (parseError) {
             console.error("Error parsing saved column visibility:", parseError);
           }
@@ -127,7 +142,7 @@ const Clients = () => {
     };
 
     loadUserPreferences();
-  }, []);
+  }, [can]);
 
   // Debug mount/unmount
   useEffect(() => {
@@ -245,15 +260,6 @@ const Clients = () => {
     }
   };
 
-  const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    if (name === "contact1Number" || name === "contact2Number") {
-      setEditForm({ ...editForm, [name]: formatPhoneNumber(value) });
-    } else {
-      setEditForm({ ...editForm, [name]: value });
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -272,46 +278,6 @@ const Clients = () => {
     }
   };
 
-  const handleEditSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await clientService.update(editId, editForm);
-      setClients(
-        clients.map((client) =>
-          client._id === editId ? response.data : client
-        )
-      );
-      setEditDialogOpen(false);
-      setEditForm(emptyForm);
-      setEditId(null);
-    } catch (err) {
-      if (err.response) {
-        alert(
-          `Error updating client: ${
-            err.response.data.message || "Unknown error"
-          }`
-        );
-      }
-    }
-  };
-
-  const handleEdit = (client) => {
-    setEditForm({
-      name: client.name,
-      invoiceEmail: client.invoiceEmail,
-      address: client.address,
-      contact1Name: client.contact1Name,
-      contact1Number: client.contact1Number,
-      contact1Email: client.contact1Email,
-      contact2Name: client.contact2Name || "",
-      contact2Number: client.contact2Number || "",
-      contact2Email: client.contact2Email || "",
-      written_off: client.written_off || false,
-    });
-    setEditId(client._id);
-    setEditDialogOpen(true);
-  };
-
   const handleDeleteClick = (client) => {
     setClientToDelete(client);
     setDeleteDialogOpen(true);
@@ -323,12 +289,6 @@ const Clients = () => {
       setClients(clients.filter((client) => client._id !== clientToDelete._id));
       setDeleteDialogOpen(false);
       setClientToDelete(null);
-      // Also close edit dialog if it's open
-      if (editDialogOpen) {
-        setEditDialogOpen(false);
-        setEditForm(emptyForm);
-        setEditId(null);
-      }
     } catch (err) {
       if (err.response) {
         alert(
@@ -456,29 +416,33 @@ const Clients = () => {
         </Typography>
       ),
     },
-    {
-      field: "written_off",
-      headerName: "Written Off",
-      flex: 0.5,
-      renderCell: (params) => (
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          {params.row.written_off && (
-            <CheckCircleIcon
-              sx={{
-                color: "red",
-                fontSize: 20,
-              }}
-            />
-          )}
-        </Box>
-      ),
-    },
+    ...(can("clients.write_off")
+      ? [
+          {
+            field: "written_off",
+            headerName: "Written Off",
+            flex: 0.5,
+            renderCell: (params) => (
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                {params.row.written_off && (
+                  <CheckCircleIcon
+                    sx={{
+                      color: "red",
+                      fontSize: 20,
+                    }}
+                  />
+                )}
+              </Box>
+            ),
+          },
+        ]
+      : []),
     {
       field: "actions",
       headerName: "Actions",
@@ -495,12 +459,15 @@ const Clients = () => {
           >
             <AttachMoneyIcon />
           </IconButton>
-          <IconButton
-            onClick={() => handleEdit(params.row)}
-            title="Edit Client"
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => navigate(`/clients/${params.row._id}`)}
+            title="View Details"
+            sx={{ mr: 1 }}
           >
-            <EditIcon />
-          </IconButton>
+            Details
+          </Button>
           <IconButton
             onClick={() => handleDeleteClick(params.row)}
             title="Delete Client"
@@ -754,16 +721,24 @@ const Clients = () => {
                 type="email"
                 value={form.invoiceEmail}
                 onChange={handleChange}
-                required
                 fullWidth
+                placeholder="email@example.com or '-' for no email"
+                error={
+                  form.invoiceEmail && !isValidEmailOrDash(form.invoiceEmail)
+                }
+                helperText={
+                  form.invoiceEmail && !isValidEmailOrDash(form.invoiceEmail)
+                    ? "Please enter a valid email address or use '-' for no email"
+                    : ""
+                }
               />
               <TextField
                 label="Address"
                 name="address"
                 value={form.address}
                 onChange={handleChange}
-                required
                 fullWidth
+                placeholder="Address or '-' for no address"
               />
               <Typography variant="h6" sx={{ mt: 2 }}>
                 Primary Contact
@@ -773,17 +748,16 @@ const Clients = () => {
                 name="contact1Name"
                 value={form.contact1Name}
                 onChange={handleChange}
-                required
                 fullWidth
+                placeholder="Contact name or '-' for no contact"
               />
               <TextField
                 label="Contact Phone"
                 name="contact1Number"
                 value={form.contact1Number}
                 onChange={handleChange}
-                required
                 fullWidth
-                placeholder="04xx xxx xxx"
+                placeholder="04xx xxx xxx or '-' for no phone"
                 error={
                   form.contact1Number &&
                   !isValidAustralianMobile(form.contact1Number)
@@ -791,18 +765,25 @@ const Clients = () => {
                 helperText={
                   form.contact1Number &&
                   !isValidAustralianMobile(form.contact1Number)
-                    ? "Please enter a valid Australian mobile number"
+                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
                     : ""
                 }
               />
               <TextField
                 label="Contact Email"
                 name="contact1Email"
-                type="email"
                 value={form.contact1Email}
                 onChange={handleChange}
-                required
                 fullWidth
+                placeholder="email@example.com or '-' for no email"
+                error={
+                  form.contact1Email && !isValidEmailOrDash(form.contact1Email)
+                }
+                helperText={
+                  form.contact1Email && !isValidEmailOrDash(form.contact1Email)
+                    ? "Please enter a valid email address or use '-' for no email"
+                    : ""
+                }
               />
               <Typography variant="h6" sx={{ mt: 2 }}>
                 Secondary Contact (Optional)
@@ -813,6 +794,7 @@ const Clients = () => {
                 value={form.contact2Name}
                 onChange={handleChange}
                 fullWidth
+                placeholder="Contact name or '-' for no contact"
               />
               <TextField
                 label="Contact Phone"
@@ -820,7 +802,7 @@ const Clients = () => {
                 value={form.contact2Number}
                 onChange={handleChange}
                 fullWidth
-                placeholder="04xx xxx xxx"
+                placeholder="04xx xxx xxx or '-' for no phone"
                 error={
                   form.contact2Number &&
                   !isValidAustralianMobile(form.contact2Number)
@@ -828,39 +810,71 @@ const Clients = () => {
                 helperText={
                   form.contact2Number &&
                   !isValidAustralianMobile(form.contact2Number)
-                    ? "Please enter a valid Australian mobile number"
+                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
                     : ""
                 }
               />
               <TextField
                 label="Contact Email"
                 name="contact2Email"
-                type="email"
                 value={form.contact2Email}
                 onChange={handleChange}
                 fullWidth
+                placeholder="email@example.com or '-' for no email"
+                error={
+                  form.contact2Email && !isValidEmailOrDash(form.contact2Email)
+                }
+                helperText={
+                  form.contact2Email && !isValidEmailOrDash(form.contact2Email)
+                    ? "Please enter a valid email address or use '-' for no email"
+                    : ""
+                }
               />
-              <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
-                <Checkbox
-                  name="written_off"
-                  checked={form.written_off}
-                  onChange={(e) =>
-                    setForm({ ...form, written_off: e.target.checked })
-                  }
-                  sx={{
-                    color: "red",
-                    "&.Mui-checked": {
-                      color: "red",
-                    },
-                  }}
-                />
-                <Typography
-                  variant="body1"
-                  sx={{ color: "red", fontWeight: "bold" }}
+              <Typography variant="h6" sx={{ mt: 2 }}>
+                Payment Terms
+              </Typography>
+              <FormControl component="fieldset">
+                <RadioGroup
+                  name="paymentTerms"
+                  value={form.paymentTerms}
+                  onChange={handleChange}
+                  row
                 >
-                  WRITTEN OFF?
-                </Typography>
-              </Box>
+                  <FormControlLabel
+                    value="Standard (30 days)"
+                    control={<Radio />}
+                    label="Standard (30 days)"
+                  />
+                  <FormControlLabel
+                    value="Payment before Report (7 days)"
+                    control={<Radio />}
+                    label="Payment before Report (7 days)"
+                  />
+                </RadioGroup>
+              </FormControl>
+              {can("clients.write_off") && (
+                <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    name="written_off"
+                    checked={form.written_off}
+                    onChange={(e) =>
+                      setForm({ ...form, written_off: e.target.checked })
+                    }
+                    sx={{
+                      color: "red",
+                      "&.Mui-checked": {
+                        color: "red",
+                      },
+                    }}
+                  />
+                  <Typography
+                    variant="body1"
+                    sx={{ color: "red", fontWeight: "bold" }}
+                  >
+                    WRITTEN OFF?
+                  </Typography>
+                </Box>
+              )}
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -869,152 +883,6 @@ const Clients = () => {
             </Button>
             <Button type="submit" variant="contained" color="primary">
               Create Client
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
-
-      {/* Edit Client Dialog */}
-      <Dialog
-        open={editDialogOpen}
-        onClose={() => setEditDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Edit Client</DialogTitle>
-        <form onSubmit={handleEditSubmit}>
-          <DialogContent>
-            <Stack spacing={2}>
-              <TextField
-                label="Client Name"
-                name="name"
-                value={editForm.name}
-                onChange={handleEditChange}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Invoice Email"
-                name="invoiceEmail"
-                type="email"
-                value={editForm.invoiceEmail}
-                onChange={handleEditChange}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Address"
-                name="address"
-                value={editForm.address}
-                onChange={handleEditChange}
-                required
-                fullWidth
-              />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Primary Contact
-              </Typography>
-              <TextField
-                label="Contact Name"
-                name="contact1Name"
-                value={editForm.contact1Name}
-                onChange={handleEditChange}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Contact Phone"
-                name="contact1Number"
-                value={editForm.contact1Number}
-                onChange={handleEditChange}
-                required
-                fullWidth
-                placeholder="04xx xxx xxx"
-                error={
-                  editForm.contact1Number &&
-                  !isValidAustralianMobile(editForm.contact1Number)
-                }
-                helperText={
-                  editForm.contact1Number &&
-                  !isValidAustralianMobile(editForm.contact1Number)
-                    ? "Please enter a valid Australian mobile number"
-                    : ""
-                }
-              />
-              <TextField
-                label="Contact Email"
-                name="contact1Email"
-                type="email"
-                value={editForm.contact1Email}
-                onChange={handleEditChange}
-                required
-                fullWidth
-              />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Secondary Contact (Optional)
-              </Typography>
-              <TextField
-                label="Contact Name"
-                name="contact2Name"
-                value={editForm.contact2Name}
-                onChange={handleEditChange}
-                fullWidth
-              />
-              <TextField
-                label="Contact Phone"
-                name="contact2Number"
-                value={editForm.contact2Number}
-                onChange={handleEditChange}
-                fullWidth
-                placeholder="04xx xxx xxx"
-                error={
-                  editForm.contact2Number &&
-                  !isValidAustralianMobile(editForm.contact2Number)
-                }
-                helperText={
-                  editForm.contact2Number &&
-                  !isValidAustralianMobile(editForm.contact2Number)
-                    ? "Please enter a valid Australian mobile number"
-                    : ""
-                }
-              />
-              <TextField
-                label="Contact Email"
-                name="contact2Email"
-                type="email"
-                value={editForm.contact2Email}
-                onChange={handleEditChange}
-                fullWidth
-              />
-              <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
-                <Checkbox
-                  name="written_off"
-                  checked={editForm.written_off}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, written_off: e.target.checked })
-                  }
-                  sx={{
-                    color: "red",
-                    "&.Mui-checked": {
-                      color: "red",
-                    },
-                  }}
-                />
-                <Typography
-                  variant="body1"
-                  sx={{ color: "red", fontWeight: "bold" }}
-                >
-                  WRITTEN OFF?
-                </Typography>
-              </Box>
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Box sx={{ flex: "1" }} />
-            <Button onClick={() => setEditDialogOpen(false)} color="secondary">
-              Cancel
-            </Button>
-            <Button type="submit" variant="contained" color="primary">
-              Save Changes
             </Button>
           </DialogActions>
         </form>

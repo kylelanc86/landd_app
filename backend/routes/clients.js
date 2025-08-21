@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
 
     // Execute query with pagination
     const clients = await Client.find(query)
-      .select('name invoiceEmail contact1Name contact1Number address written_off')
+      .select('name invoiceEmail contact1Name contact1Number address written_off paymentTerms')
       .sort({ name: 1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -83,6 +83,7 @@ router.post('/', async (req, res) => {
     contact2Name: req.body.contact2Name || "-",
     contact2Number: req.body.contact2Number || "-",
     contact2Email: req.body.contact2Email || "-",
+    paymentTerms: req.body.paymentTerms || "Standard (30 days)",
     written_off: req.body.written_off || false
   });
 

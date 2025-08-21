@@ -75,40 +75,102 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       }
     }
 
-    // Add search filter if specified
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { projectID: { $regex: search, $options: 'i' } },
-        { 'client.name': { $regex: search, $options: 'i' } },
-      ];
-    }
-
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     try {
-      const total = await Project.countDocuments(query);
-      const pages = Math.ceil(total / parseInt(limit));
+      let projects, total;
 
-      // Get projects with pagination and sorting
-      const projects = await Project.find(query)
-        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('client', 'name')
-        .populate('users', 'firstName lastName');
+      if (search) {
+        // Use aggregation for search to properly search through client names
+        const aggregationPipeline = [
+          {
+            $lookup: {
+              from: 'clients',
+              localField: 'client',
+              foreignField: '_id',
+              as: 'clientData'
+            }
+          },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'users',
+              foreignField: '_id',
+              as: 'userData'
+            }
+          },
+          {
+            $match: {
+              $and: [
+                // Apply other filters first
+                ...(query.department ? [{ department: query.department }] : []),
+                ...(query.status ? [{ status: query.status }] : []),
+                // Then apply search filter
+                {
+                  $or: [
+                    { name: { $regex: search, $options: 'i' } },
+                    { projectID: { $regex: search, $options: 'i' } },
+                    { 'clientData.name': { $regex: search, $options: 'i' } }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            $sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 }
+          }
+        ];
+
+        // Get total count for pagination
+        const countPipeline = [...aggregationPipeline, { $count: "total" }];
+        const countResult = await Project.aggregate(countPipeline);
+        total = countResult.length > 0 ? countResult[0].total : 0;
+
+        // Get paginated results
+        const dataPipeline = [
+          ...aggregationPipeline,
+          { $skip: skip },
+          { $limit: parseInt(limit) }
+        ];
+        
+        const aggregationResult = await Project.aggregate(dataPipeline);
+        
+        // Transform aggregation result to match expected format
+        projects = aggregationResult.map(project => ({
+          ...project,
+          client: project.clientData?.[0] || null,
+          users: project.userData || []
+        }));
+      } else {
+        // Use regular find for non-search queries
+        total = await Project.countDocuments(query);
+        projects = await Project.find(query)
+          .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .populate('client', 'name')
+          .populate('users', 'firstName lastName');
+      }
+
+      const pages = Math.ceil(total / parseInt(limit));
 
       // Transform the response
       const response = {
-        data: projects.map(project => ({
-          ...project.toObject(),
-          client: project.client?.name || '',
-          department: project.department || '',
-          assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || '',
-          d_Date: project.d_Date,
-          reports_present: project.reports_present || false
-        })),
+        data: projects.map(project => {
+          // Handle both aggregated and populated project formats
+          const projectObj = project.toObject ? project.toObject() : project;
+          
+          return {
+            ...projectObj,
+            client: project.client?.name || projectObj.client?.name || '',
+            department: projectObj.department || '',
+            assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || 
+                       projectObj.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || '',
+            d_Date: projectObj.d_Date,
+            reports_present: projectObj.reports_present || false
+          };
+        }),
         pagination: {
           total,
           pages,
@@ -405,26 +467,37 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       const invoiceStartTime = Date.now();
       const projectIds = projects.map(p => p._id);
       
-      // Aggregate overdue invoice data for all projects
-      const overdueData = await require('../models/Invoice').aggregate([
+      // Aggregate invoice data for all projects (both overdue and general invoice info)
+      const invoiceData = await require('../models/Invoice').aggregate([
         {
           $match: {
             projectId: { $in: projectIds },
-            status: 'unpaid',
             isDeleted: { $ne: true }
           }
         },
         {
           $group: {
             _id: '$projectId',
+            invoices: { $push: '$$ROOT' },
             overdueDays: {
               $max: {
-                $ceil: {
-                  $divide: [
-                    { $subtract: [new Date(), '$dueDate'] },
-                    1000 * 60 * 60 * 24
-                  ]
-                }
+                $cond: [
+                  { 
+                    $and: [
+                      { $eq: ['$status', 'unpaid'] },
+                      { $lt: ['$dueDate', new Date()] }
+                    ]
+                  },
+                  {
+                    $ceil: {
+                      $divide: [
+                        { $subtract: [new Date(), '$dueDate'] },
+                        1000 * 60 * 60 * 24
+                      ]
+                    }
+                  },
+                  0
+                ]
               }
             }
           }
@@ -432,6 +505,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         {
           $project: {
             _id: 1,
+            invoices: 1,
             overdueDays: { $max: ['$overdueDays', 0] }
           }
         }
@@ -440,18 +514,50 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       const invoiceTime = Date.now() - invoiceStartTime;
       console.log(`[${userId}] Invoice aggregation completed in ${invoiceTime}ms`);
 
-      // Create a map for quick lookup
+      // Create maps for quick lookup
       const overdueMap = {};
-      overdueData.forEach(item => {
+      const invoiceMap = {};
+      
+      invoiceData.forEach(item => {
+        const projectId = item._id.toString();
+        
+        // Handle overdue invoices
         if (item.overdueDays > 0) {
-          overdueMap[item._id.toString()] = {
+          overdueMap[projectId] = {
             overdueInvoice: true,
             overdueDays: item.overdueDays
           };
         }
+        
+        // Handle general invoice info
+        if (item.invoices && item.invoices.length > 0) {
+          // Get the most recent invoice for this project
+          const latestInvoice = item.invoices.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+          
+          // Calculate days until due for unpaid invoices
+          let daysUntilDue = null;
+          if (latestInvoice.status === 'unpaid' && latestInvoice.dueDate) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dueDate = new Date(latestInvoice.dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+            
+            const diffTime = dueDate - today;
+            daysUntilDue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          }
+          
+          invoiceMap[projectId] = {
+            hasInvoice: true,
+            status: latestInvoice.status,
+            xeroStatus: latestInvoice.xeroStatus,
+            daysUntilDue: daysUntilDue,
+            amount: latestInvoice.amount,
+            invoiceID: latestInvoice.invoiceID
+          };
+        }
       });
 
-      // Transform the response with overdue data
+      // Transform the response with both overdue and invoice data
       const response = {
         data: projects.map(project => ({
           _id: project._id,
@@ -463,7 +569,8 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           users: project.users,
           createdAt: project.createdAt,
           d_Date: project.d_Date,
-          overdueInvoice: overdueMap[project._id.toString()] || { overdueInvoice: false, overdueDays: 0 }
+          overdueInvoice: overdueMap[project._id.toString()] || { overdueInvoice: false, overdueDays: 0 },
+          invoiceInfo: invoiceMap[project._id.toString()] || { hasInvoice: false }
         })),
         pagination: {
           total,

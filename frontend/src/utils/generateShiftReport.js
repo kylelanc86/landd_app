@@ -8,6 +8,16 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-GB');
 }
 
+// Helper to format date as YYYYMMDD for filenames
+function formatDateForFilename(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
 // Helper to format time as HH:mm
 function formatTime(timeStr) {
   if (!timeStr) return '';
@@ -78,9 +88,17 @@ const formatReportedConcentration = (sample) => {
     return reportedConc;
   }
   
-  // If it's a number, format it
+  // If it's a number, format it to 2 decimal places
   if (typeof reportedConc === 'number') {
     return reportedConc.toFixed(2);
+  }
+  
+  // If it's a string that represents a number, parse it and format to 2 decimal places
+  if (typeof reportedConc === 'string') {
+    const numValue = parseFloat(reportedConc);
+    if (!isNaN(numValue)) {
+      return numValue.toFixed(2);
+    }
   }
   
   return reportedConc;
@@ -313,17 +331,17 @@ pdfMake.fonts = {
                   {
                     columns: [
                       {
-                        text: [ { text: 'Analysis Date: ', bold: true }, { text: shift?.analysisDate ? formatDate(shift.analysisDate) : 'N/A' } ],
+                        text: [ { text: 'Analysed by: ', bold: true }, { text: shift?.analysedBy || 'Jordan Smith' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Samples Received: ', bold: true }, { text: shift?.samplesReceivedDate ? formatDate(shift.samplesReceivedDate) : 'N/A' } ],
+                        text: [ { text: 'Analysis Date: ', bold: true }, { text: shift?.analysisDate ? formatDate(shift.analysisDate) : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
-                      }
+                      },
                     ]
                   }
                 ],
@@ -331,7 +349,7 @@ pdfMake.fonts = {
                   {
                     columns: [
                       {
-                        text: [ { text: 'Analysed by: ', bold: true }, { text: shift?.analysedBy || 'Jordan Smith' } ],
+                        text: [ { text: 'Report Authorised by: ', bold: true }, { text: shift?.reportApprovedBy || 'Pending authorization' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -342,6 +360,7 @@ pdfMake.fonts = {
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       }
+
                     ]
                   }
                 ]
@@ -399,9 +418,8 @@ pdfMake.fonts = {
                           { text: '1. Samples taken from the direct flow of negative air units are reported as a fibre count only', style: 'notes' },
                           { text: '2. The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL', style: 'notes' },
                           { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
-                          { text: '4. AFC = air fibre concentration (fibres/ml)', style: 'notes' },
-                          { text: '5. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
-                          { text: '6. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                          { text: '4. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
+                          { text: '5. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
                         ],
                         margin: [0, 0, 0, 3],
                       }
@@ -436,7 +454,7 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['12%', '33%', '7%', '7%', '10%', '9%', '9%', '13%'],
+              widths: ['16%', '29%', '7%', '7%', '10%', '9%', '9%', '13%'],
               body: [
                                   [
                     { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
@@ -446,7 +464,7 @@ pdfMake.fonts = {
                     { text: 'Ave flow (mL/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                     { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                     { text: 'Fibres Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'AFC (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
+                    { text: 'Reported Concentration (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                   ],
                                   ...sortedSamples.map(sample => [
                     { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
@@ -534,8 +552,8 @@ pdfMake.fonts = {
   const projectID = job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
   const projectNameRaw = project?.name || '';
   const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
-  const samplingDate = shift?.date ? formatDate(shift.date) : '';
-  const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
+  const samplingDate = shift?.date ? formatDateForFilename(shift.date) : '';
+  const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? `_${samplingDate}` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
   if (returnPdfData) {

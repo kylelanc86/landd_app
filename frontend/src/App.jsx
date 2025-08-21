@@ -70,11 +70,13 @@ const ClearanceReports = lazy(() =>
 );
 
 const Clients = lazy(() => import("./scenes/clients"));
+const ClientDetails = lazy(() => import("./scenes/clients/ClientDetails"));
 const AdminDashboard = lazy(() => import("./scenes/admin/AdminDashboard"));
 const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
 
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
 const InvoiceItems = lazy(() => import("./scenes/admin/InvoiceItems"));
+const CustomDataFields = lazy(() => import("./scenes/admin/CustomDataFields"));
 
 // New lazy loaded components for missing pages
 const LeadAssessment = lazy(() =>
@@ -170,6 +172,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <Clients />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/clients/:id"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["clients.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <ClientDetails />
                               </Suspense>
                             </PermissionRoute>
                           }
@@ -772,6 +786,18 @@ function App() {
                             >
                               <Suspense fallback={<LoadingSpinner />}>
                                 <InvoiceItems />
+                              </Suspense>
+                            </PermissionRoute>
+                          }
+                        />
+                        <Route
+                          path="/admin/custom-data-fields"
+                          element={
+                            <PermissionRoute
+                              requiredPermissions={["admin.view"]}
+                            >
+                              <Suspense fallback={<LoadingSpinner />}>
+                                <CustomDataFields />
                               </Suspense>
                             </PermissionRoute>
                           }

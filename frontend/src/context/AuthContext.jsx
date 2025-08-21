@@ -29,26 +29,17 @@ export const AuthProvider = ({ children }) => {
   const restoreUserState = async () => {
     // If we've already attempted to restore, don't try again
     if (restoreAttempted.current) {
-      console.log("Auth Debug - restoreUserState: Already attempted restore");
       return;
     }
     restoreAttempted.current = true;
 
-    console.log("Auth Debug - restoreUserState: called");
     const token = localStorage.getItem("token");
     if (token) {
       try {
-        console.log(
-          "Auth Debug - restoreUserState: Found token, attempting to restore user"
-        );
         const response = await authService.getCurrentUser();
         const user = response.data;
-        console.log("Auth Debug - restoreUserState: User data received:", user);
 
         if (!user || !user._id) {
-          console.error(
-            "Auth Debug - restoreUserState: Invalid user data received"
-          );
           throw new Error("Invalid user data");
         }
 
@@ -62,22 +53,13 @@ export const AuthProvider = ({ children }) => {
 
         localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
         setCurrentUser(normalizedUser);
-        console.log(
-          "Auth Debug - restoreUserState: User restored successfully",
-          normalizedUser
-        );
       } catch (error) {
-        console.error(
-          "Auth Debug - restoreUserState: Failed to restore user state",
-          error
-        );
         // If we can't restore the user state, clear everything
         localStorage.removeItem("token");
         localStorage.removeItem("currentUser");
         setCurrentUser(null);
       }
     } else {
-      console.log("Auth Debug - restoreUserState: No token found");
       localStorage.removeItem("currentUser");
       setCurrentUser(null);
     }
@@ -86,37 +68,21 @@ export const AuthProvider = ({ children }) => {
 
   // Check and restore user state when the app loads
   useEffect(() => {
-    console.log("Auth Debug - AuthProvider mounted");
     restoreUserState();
   }, []);
 
   const login = async (credentials) => {
     setLoading(true);
     try {
-      console.log("Auth Debug - Login attempt with credentials:", {
-        email: credentials.email,
-      });
       const response = await authService.login(credentials);
-      console.log("Auth Debug - Login response received:", response);
-      console.log("Auth Debug - Response data:", response.data);
 
       const { token, user } = response.data;
-      console.log("Auth Debug - Extracted token and user:", {
-        hasToken: !!token,
-        userData: user,
-        userId: user?._id || user?.id,
-      });
 
       if (!user) {
-        console.error("Auth Debug - Login: No user data in response");
         throw new Error("No user data received");
       }
 
       if (!user._id && !user.id) {
-        console.error(
-          "Auth Debug - Login: No user ID found in user data",
-          user
-        );
         throw new Error("No user ID found in user data");
       }
 
@@ -127,20 +93,12 @@ export const AuthProvider = ({ children }) => {
         id: user._id || user.id,
         token,
       };
-      console.log("Auth Debug - Normalized user object:", normalizedUser);
 
       localStorage.setItem("token", token);
       localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
       setCurrentUser(normalizedUser);
-      console.log("Auth Debug - Login successful, user state updated");
       return normalizedUser;
     } catch (error) {
-      console.error("Auth Debug - Login failed:", {
-        error,
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
       throw error;
     } finally {
       setLoading(false);
@@ -148,7 +106,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    console.log("Auth Debug - Logout called");
     localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
     setCurrentUser(null);
