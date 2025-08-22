@@ -737,7 +737,11 @@ const ClearanceItems = () => {
           <Typography color="text.primary">
             {clearance.projectId?.name || "Unknown Project"}:{" "}
             {clearance.clearanceDate
-              ? new Date(clearance.clearanceDate).toLocaleDateString()
+              ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "2-digit",
+                })
               : "Unknown Date"}
           </Typography>
         </Breadcrumbs>
@@ -788,7 +792,7 @@ const ClearanceItems = () => {
                 color="warning.main"
                 sx={{ fontWeight: "medium" }}
               >
-                ⚠ Air Monitoring Report Required
+                ⚠ No Air Monitoring Report Attached
               </Typography>
             )}
           </Box>
@@ -812,7 +816,7 @@ const ClearanceItems = () => {
                 color="warning.main"
                 sx={{ fontWeight: "medium" }}
               >
-                ⚠ Site Plan Required
+                ⚠ No Site Plan Attached
               </Typography>
             )}
           </Box>

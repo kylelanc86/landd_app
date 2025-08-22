@@ -219,10 +219,30 @@
         margin-bottom: 6px;
         border-radius: 2px;
       }
+
+      .watermark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 450px;
+        height: auto;
+        opacity: 0.2;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .watermark img {
+        width: 100%;
+        height: auto;
+      }
     </style>
   </head>
   <body>
     <div class="page cover-page">
+      <div class="watermark">
+        <img src="[WATERMARK_PATH]" alt="Watermark" />
+      </div>
       <img class="cover-bg" src="[BACKGROUND_IMAGE]" alt="Worker" />
       <!-- White polygon shape matching the bracket -->
       <svg

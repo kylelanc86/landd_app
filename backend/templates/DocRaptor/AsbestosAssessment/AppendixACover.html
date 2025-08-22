@@ -100,6 +100,23 @@
         border-radius: 2px;
       }
 
+      .watermark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 450px;
+        height: auto;
+        opacity: 0.2;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .watermark img {
+        width: 100%;
+        height: auto;
+      }
+
       .appendix-a-page .content {
         padding: 10px 48px 24px 48px;
         flex: 1;
@@ -155,6 +172,9 @@
   </head>
   <body>
     <div class="page appendix-a-page">
+      <div class="watermark">
+        <img src="[WATERMARK_PATH]" alt="Watermark" />
+      </div>
       <div class="header">
         <img class="logo" src="[LOGO_PATH]" alt="Company Logo" />
         <div class="company-details">

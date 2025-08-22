@@ -713,7 +713,18 @@ pdfMake.fonts = {
     
     console.log('=== END FINAL DEBUG BEFORE PDFMAKE ===');
 
-  const pdfDoc = pdfMake.createPdf(docDefinition);
+  const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
+    // Security options to prevent text selection/copying
+    permissions: {
+      printing: 'highResolution',
+      modifying: false,
+      copying: false,
+      annotating: false,
+      fillingForms: false,
+      contentAccessibility: false,
+      documentAssembly: false
+    }
+  });
   
   // Handle opening in new tab if requested
   if (openInNewTab) {

@@ -27,6 +27,13 @@ class DocRaptorService {
         document_content: cleanedHtml,
         document_type: 'pdf',
         test: process.env.NODE_ENV === 'development', // Use test mode in development
+        // Security options to prevent text selection/copying
+        security: {
+          no_copy: true,        // Prevents text selection/copying
+          no_print: false,      // Keeps printing enabled
+          no_modify: false,     // Keep modifications enabled
+          no_annotations: false // Keep annotations enabled
+        },
         // Page formatting options for DocRaptor
         page_size: 'A4',
         page_margin: '0in', // NO DocRaptor margins - let CSS handle everything

@@ -108,6 +108,33 @@ const AsbestosClearance = () => {
 
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  // Helper function to get the correct value for the air monitoring report select
+  const getAirMonitoringReportValue = () => {
+    if (!form.airMonitoringReport) return "";
+
+    // If it's a short string, it's likely a shift ID
+    if (
+      typeof form.airMonitoringReport === "string" &&
+      form.airMonitoringReport.length < 100
+    ) {
+      // Check if this shift ID exists in our reports
+      const reportExists = airMonitoringReports.find(
+        (report) => report.id === form.airMonitoringReport
+      );
+      console.log("Air monitoring report value check:", {
+        airMonitoringReport: form.airMonitoringReport,
+        reportExists,
+        availableReports: airMonitoringReports.map((r) => ({
+          id: r.id,
+          name: r.name,
+        })),
+      });
+      return reportExists ? form.airMonitoringReport : "";
+    }
+
+    return "";
+  };
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Fetch clearances, projects, and users on component mount
@@ -121,6 +148,33 @@ const AsbestosClearance = () => {
       console.log("Data already initialized, skipping fetch");
     }
   }, [isInitialized]);
+
+  // Update form when air monitoring reports are loaded (for edit mode)
+  useEffect(() => {
+    if (
+      editingClearance &&
+      airMonitoringReports.length > 0 &&
+      form.airMonitoringReport
+    ) {
+      // If we're editing and have reports loaded, check if the current report is a valid shift ID
+      if (
+        typeof form.airMonitoringReport === "string" &&
+        form.airMonitoringReport.length < 100
+      ) {
+        const reportExists = airMonitoringReports.find(
+          (report) => report.id === form.airMonitoringReport
+        );
+        if (!reportExists) {
+          // The shift ID doesn't exist in our reports, clear it
+          console.log(
+            "Clearing invalid air monitoring report ID:",
+            form.airMonitoringReport
+          );
+          setForm((prev) => ({ ...prev, airMonitoringReport: null }));
+        }
+      }
+    }
+  }, [airMonitoringReports, editingClearance, form.airMonitoringReport]);
 
   const fetchData = async () => {
     try {
@@ -211,8 +265,13 @@ const AsbestosClearance = () => {
         allShifts = shiftsResponse.data || [];
       }
 
+      // Filter only completed shifts
+      const completedShifts = allShifts.filter(
+        (shift) => shift.status === "shift_complete"
+      );
+
       // Fetch samples for all shifts
-      const shiftIds = allShifts.map((shift) => shift._id);
+      const shiftIds = completedShifts.map((shift) => shift._id);
       let allSamples = [];
 
       if (shiftIds.length > 0) {
@@ -231,7 +290,7 @@ const AsbestosClearance = () => {
       }
 
       // Create a list of available reports with complete data
-      const reports = allShifts.map((shift) => {
+      const reports = completedShifts.map((shift) => {
         const job = projectJobs.find((job) => job._id === shift.jobId) || {};
         const samples = allSamples.filter(
           (sample) => sample.shiftId === shift._id
@@ -241,7 +300,11 @@ const AsbestosClearance = () => {
           id: shift._id,
           name: `Air Monitoring Report - ${
             shift.date
-              ? new Date(shift.date).toLocaleDateString("en-GB")
+              ? new Date(shift.date).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "2-digit",
+                })
               : "Unknown Date"
           }`,
           shift: shift,
@@ -308,7 +371,10 @@ const AsbestosClearance = () => {
       airMonitoring: clearance.airMonitoring || false,
       airMonitoringReport: clearance.airMonitoringReport || null,
       airMonitoringReportType: clearance.airMonitoringReport
-        ? "select"
+        ? typeof clearance.airMonitoringReport === "string" &&
+          clearance.airMonitoringReport.length < 100
+          ? "select"
+          : "upload"
         : "select",
       sitePlan: clearance.sitePlan || false,
       sitePlanFile: clearance.sitePlanFile || null,
@@ -318,6 +384,14 @@ const AsbestosClearance = () => {
 
     // Fetch air monitoring reports for this project
     if (clearance.projectId) {
+      console.log("Edit modal - clearance data:", {
+        airMonitoringReport: clearance.airMonitoringReport,
+        airMonitoringReportType:
+          typeof clearance.airMonitoringReport === "string" &&
+          clearance.airMonitoringReport.length < 100
+            ? "select"
+            : "upload",
+      });
       fetchAirMonitoringReports(clearance.projectId._id || clearance.projectId);
     }
 
@@ -506,6 +580,30 @@ const AsbestosClearance = () => {
         return "default";
       default:
         return "default";
+    }
+  };
+
+  // Helper function to capitalize status text
+  const capitalizeStatus = (status) => {
+    if (!status) return "";
+
+    switch (status) {
+      case "complete":
+        return "Complete";
+      case "in progress":
+        return "In Progress";
+      case "Site Work Complete":
+        return "Site Work Complete";
+      case "closed":
+        return "Closed";
+      default:
+        // Capitalize first letter of each word for unknown statuses
+        return status
+          .split(" ")
+          .map(
+            (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          )
+          .join(" ");
     }
   };
   const handleBackToHome = () => {
@@ -697,7 +795,7 @@ const AsbestosClearance = () => {
                             </TableCell>
                             <TableCell>
                               <Chip
-                                label={clearance.status}
+                                label={capitalizeStatus(clearance.status)}
                                 color={getStatusColor(clearance.status)}
                                 size="small"
                               />
@@ -972,7 +1070,7 @@ const AsbestosClearance = () => {
                       <FormControl fullWidth>
                         <InputLabel>Select Air Monitoring Report</InputLabel>
                         <Select
-                          value={form.airMonitoringReport || ""}
+                          value={getAirMonitoringReportValue()}
                           onChange={async (e) => {
                             const selectedShiftId = e.target.value;
                             if (selectedShiftId) {
@@ -1052,7 +1150,32 @@ const AsbestosClearance = () => {
                               color="text.secondary"
                               sx={{ mt: 1 }}
                             >
-                              No air monitoring reports found for this project
+                              No completed air monitoring shifts found for this
+                              project
+                            </Typography>
+                          )}
+                        {!loadingReports && airMonitoringReports.length > 0 && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mt: 1 }}
+                          >
+                            Only completed shifts are shown
+                          </Typography>
+                        )}
+                        {!loadingReports &&
+                          form.airMonitoringReport &&
+                          typeof form.airMonitoringReport === "string" &&
+                          form.airMonitoringReport.length < 100 &&
+                          !airMonitoringReports.find(
+                            (report) => report.id === form.airMonitoringReport
+                          ) && (
+                            <Typography
+                              variant="body2"
+                              color="error"
+                              sx={{ mt: 1 }}
+                            >
+                              Previously selected shift is no longer available
                             </Typography>
                           )}
                       </FormControl>

@@ -40,9 +40,15 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
     const appendixCCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixCCover.html'), 'utf8');
     
-    // Load logo and background images
+    // Load logo, background, and watermark images
     const logoPath = path.join(__dirname, '../assets/logo.png');
     const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+    
+    const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
+    const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
+    console.log('Watermark path:', watermarkPath);
+    console.log('Watermark exists:', fs.existsSync(watermarkPath));
+    console.log('Watermark loaded:', watermarkBase64.length > 0);
     
     const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
     console.log('\n\n>>>>> BACKGROUND_CHECK <<<<<');
@@ -139,7 +145,8 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}_${clearanceData.clearanceType || 'Non-Friable'}_Clearance_${clearanceData.projectId?.name || 'Unknown'}.pdf`)
-      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
 
     // Generate clearance items table
     const generateClearanceItemsTable = () => {
@@ -296,7 +303,8 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       const populatedAppendixACover = appendixACoverTemplate
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
+        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
 
       // Generate photos section completely independently (no template mixing)
       const photosSection = generateClearancePhotographsContent();
@@ -318,6 +326,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
       );
       
       appendixContent += `
@@ -346,6 +355,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
             .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
             .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
             .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+            .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
         );
         
         appendixContent += `
@@ -360,6 +370,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
           .replace(/APPENDIX B/g, 'APPENDIX B')
           .replace(/SITE PLAN/g, 'AIR MONITORING REPORT')
       );
@@ -1586,8 +1597,10 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
       .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-      .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
+      .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`)
+      .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
 
     // Populate version control template with data
     const populatedVersionControl = versionControlTemplate
