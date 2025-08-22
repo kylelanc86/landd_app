@@ -54,23 +54,10 @@ import {
   shiftService,
 } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
+import customDataFieldService from "../../services/customDataFieldService";
 import PermissionGate from "../../components/PermissionGate";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
-
-// ASBESTOS_REMOVALISTS array from air monitoring modal
-const ASBESTOS_REMOVALISTS = [
-  "AGH",
-  "Aztech Services",
-  "Capstone",
-  "Crown Asbestos Removals",
-  "Empire Contracting",
-  "Glade Group",
-  "IAR",
-  "Jesco",
-  "Ozbestos",
-  "Spec Services",
-];
 
 const AsbestosClearance = () => {
   const colors = tokens;
@@ -79,6 +66,7 @@ const AsbestosClearance = () => {
   const [clearances, setClearances] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -109,6 +97,19 @@ const AsbestosClearance = () => {
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
 
+  // Fetch asbestos removalists from CustomDataFields
+  const fetchAsbestosRemovalists = async () => {
+    try {
+      const data = await customDataFieldService.getByType(
+        "asbestos_removalist"
+      );
+      setAsbestosRemovalists(data || []);
+    } catch (error) {
+      console.error("Error fetching asbestos removalists:", error);
+      setAsbestosRemovalists([]);
+    }
+  };
+
   // Helper function to get the correct value for the air monitoring report select
   const getAirMonitoringReportValue = () => {
     if (!form.airMonitoringReport) return "";
@@ -135,19 +136,12 @@ const AsbestosClearance = () => {
 
     return "";
   };
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Fetch clearances, projects, and users on component mount
+  // Load data on component mount
   useEffect(() => {
-    console.log("useEffect triggered, isInitialized:", isInitialized);
-    if (!isInitialized) {
-      console.log("Fetching data for the first time...");
-      fetchData();
-      setIsInitialized(true);
-    } else {
-      console.log("Data already initialized, skipping fetch");
-    }
-  }, [isInitialized]);
+    fetchData();
+    fetchAsbestosRemovalists();
+  }, []);
 
   // Update form when air monitoring reports are loaded (for edit mode)
   useEffect(() => {
@@ -473,7 +467,9 @@ const AsbestosClearance = () => {
 
       setSnackbar({
         open: true,
-        message: `PDF generated successfully: ${fileName}`,
+        message: `PDF generated successfully! Check your downloads folder for: ${
+          fileName.filename || fileName
+        }`,
         severity: "success",
       });
     } catch (err) {
@@ -801,7 +797,7 @@ const AsbestosClearance = () => {
                               />
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              {clearance.status === "complete" && (
+                              {clearance.status !== "complete" && (
                                 <Button
                                   onClick={() => handleCloseJob(clearance)}
                                   color="success"
@@ -1009,9 +1005,9 @@ const AsbestosClearance = () => {
                       }
                       label="Asbestos Removalist"
                     >
-                      {ASBESTOS_REMOVALISTS.map((removalist) => (
-                        <MenuItem key={removalist} value={removalist}>
-                          {removalist}
+                      {asbestosRemovalists.map((removalist) => (
+                        <MenuItem key={removalist._id} value={removalist.text}>
+                          {removalist.text}
                         </MenuItem>
                       ))}
                     </Select>
@@ -1315,6 +1311,7 @@ const AsbestosClearance = () => {
           open={snackbar.open}
           autoHideDuration={6000}
           onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         >
           <Alert
             onClose={() => setSnackbar({ ...snackbar, open: false })}

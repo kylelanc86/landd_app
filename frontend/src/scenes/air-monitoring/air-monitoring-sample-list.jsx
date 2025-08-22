@@ -17,6 +17,8 @@ import {
   useTheme,
   Breadcrumbs,
   Link,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
@@ -47,6 +49,11 @@ const SampleList = () => {
   const [descSaveStatus, setDescSaveStatus] = useState("");
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Function to extract the numeric part from a sample number
   const extractSampleNumber = (sampleNumber) => {
@@ -237,7 +244,11 @@ const SampleList = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error downloading CSV:", err);
-      alert("Failed to download CSV.");
+      setSnackbar({
+        open: true,
+        message: "Failed to download CSV.",
+        severity: "error",
+      });
     }
   };
 
@@ -824,6 +835,22 @@ const SampleList = () => {
           </Button>
         </Box>
       )}
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

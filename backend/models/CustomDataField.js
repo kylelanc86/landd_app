@@ -4,12 +4,20 @@ const CustomDataFieldSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area'],
+    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation'],
     index: true
   },
   text: {
     type: String,
     required: true,
+    trim: true
+  },
+  legislationTitle: {
+    type: String,
+    trim: true
+  },
+  jurisdiction: {
+    type: String,
     trim: true
   },
   isActive: {
@@ -33,8 +41,16 @@ const CustomDataFieldSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound index to ensure unique text per type
-CustomDataFieldSchema.index({ type: 1, text: 1 }, { unique: true });
+// Compound index to ensure proper uniqueness:
+// For legislation: unique on type + text + jurisdiction 
+// For other types: unique on type + text
+CustomDataFieldSchema.index({ type: 1, text: 1, jurisdiction: 1 }, { 
+  unique: true,
+  partialFilterExpression: { jurisdiction: { $exists: true } }
+});
+
+// General index for queries
+CustomDataFieldSchema.index({ type: 1, text: 1 });
 
 // Pre-save middleware to update updatedAt
 CustomDataFieldSchema.pre('save', function(next) {

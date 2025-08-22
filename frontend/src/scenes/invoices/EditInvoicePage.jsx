@@ -78,7 +78,7 @@ const EditInvoicePage = () => {
 
   const fetchClients = async () => {
     try {
-      const response = await clientService.getAll();
+      const response = await clientService.getAll({ limit: 100 });
       setClients(response.data?.clients || response.data || []);
     } catch (error) {
       console.error("Error fetching clients:", error);
@@ -92,17 +92,11 @@ const EditInvoicePage = () => {
       const invoice = response.data;
       setCurrentInvoice(invoice); // Store the invoice data
 
-      console.log("Invoice data:", invoice);
-      console.log("Available projects:", projects);
-      console.log("Looking for projectId:", invoice.projectId);
-
       // Extract the actual project ID from the projectId object
       const actualProjectId = invoice.projectId?._id || invoice.projectId;
-      console.log("Actual project ID to search for:", actualProjectId);
 
       // Find the project using the stored projectId
       const project = projects.find((p) => p._id === actualProjectId);
-      console.log("Found project:", project);
 
       if (project) {
         setSelectedProject(project);
@@ -110,13 +104,6 @@ const EditInvoicePage = () => {
           name: invoice.xeroClientName || project.client || "",
           _id: project.client || "",
         });
-        console.log("Set selected project:", project);
-        console.log(
-          "Set selected client:",
-          invoice.xeroClientName || project.client || ""
-        );
-      } else {
-        console.log("Project not found for projectId:", invoice.projectId);
       }
 
       // Set invoice header data

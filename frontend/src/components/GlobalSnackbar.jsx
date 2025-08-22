@@ -8,21 +8,21 @@ const GlobalSnackbar = ({ open, message, severity, onClose }) => {
       open={open}
       autoHideDuration={6000}
       onClose={onClose}
-      anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       sx={{
         position: "fixed",
         zIndex: 9999999,
-        top: "0 !important",
-        left: "50% !important",
-        transform: "translateX(-50%) !important",
-        width: "100%",
-        maxWidth: "600px",
+        bottom: "20px !important",
+        right: "20px !important",
+        transform: "none !important",
+        width: "auto",
+        maxWidth: "400px",
         pointerEvents: "none",
         "& .MuiAlert-root": {
           width: "100%",
           minWidth: "300px",
           boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-          margin: "10px",
+          margin: "0",
           pointerEvents: "auto",
         },
       }}
@@ -36,7 +36,7 @@ const GlobalSnackbar = ({ open, message, severity, onClose }) => {
           zIndex: 9999999,
           "& .MuiAlert-message": {
             width: "100%",
-            textAlign: "center",
+            textAlign: "left",
           },
         }}
       >

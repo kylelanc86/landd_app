@@ -11,6 +11,14 @@ const asbestosClearanceItemsSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    levelFloor: {
+      type: String,
+      required: false,
+    },
+    roomArea: {
+      type: String,
+      required: true,
+    },
     materialDescription: {
       type: String,
       required: true,

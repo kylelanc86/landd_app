@@ -33,6 +33,12 @@ const PERMISSIONS = {
   'equipment.edit': 'Edit equipment',
   'equipment.delete': 'Delete equipment',
   
+  // Asbestos permissions
+  'asbestos.view': 'View asbestos clearances',
+  'asbestos.create': 'Create asbestos clearances',
+  'asbestos.edit': 'Edit asbestos clearances',
+  'asbestos.delete': 'Delete asbestos clearances',
+  
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
@@ -69,6 +75,10 @@ const ROLE_PERMISSIONS = {
     'equipment.create',
     'equipment.edit',
     'equipment.delete',
+    'asbestos.view',
+    'asbestos.create',
+    'asbestos.edit',
+    'asbestos.delete',
     'invoices.approve',
     'timesheets.approve',
   ],

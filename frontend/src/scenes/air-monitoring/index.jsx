@@ -31,7 +31,6 @@ import {
   InputLabel,
   Autocomplete,
   Menu,
-  Switch,
   Breadcrumbs,
   Link,
   Chip,
@@ -53,24 +52,12 @@ import {
   clientService,
   shiftService,
 } from "../../services/api";
+import customDataFieldService from "../../services/customDataFieldService";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 
 const JOBS_KEY = "ldc_jobs";
-
-const ASBESTOS_REMOVALISTS = [
-  "AGH",
-  "Aztech Services",
-  "Capstone",
-  "Crown Asbestos Removals",
-  "Empire Contracting",
-  "Glade Group",
-  "IAR",
-  "Jesco",
-  "Ozbestos",
-  "Spec Services",
-];
 
 const emptyForm = {
   projectId: "",
@@ -84,7 +71,7 @@ const AirMonitoring = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
-  const [showCompleted, setShowCompleted] = useState(false);
+
   const [openDialog, setOpenDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState(null);
@@ -110,8 +97,29 @@ const AirMonitoring = () => {
   const [showExistingJobsDialog, setShowExistingJobsDialog] = useState(false);
   const [existingJobsInfo, setExistingJobsInfo] = useState([]);
   const [confirmingJobCreation, setConfirmingJobCreation] = useState(false);
+  const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
 
+  // Fetch asbestos removalists from CustomDataFields
+  const fetchAsbestosRemovalists = async () => {
+    try {
+      const data = await customDataFieldService.getByType(
+        "asbestos_removalist"
+      );
+      setAsbestosRemovalists(data || []);
+    } catch (error) {
+      console.error("Error fetching asbestos removalists:", error);
+      setAsbestosRemovalists([]);
+    }
+  };
+
+  // Load data on component mount
   useEffect(() => {
+    fetchJobs();
+    fetchProjects();
+    fetchAsbestosRemovalists();
+  }, []);
+
+  const fetchJobs = useCallback(async () => {
     let isMounted = true;
     let isFetching = false;
 
@@ -440,11 +448,6 @@ const AirMonitoring = () => {
       (j.status || "").toLowerCase().includes(q) ||
       (j.startDate || "").toLowerCase().includes(q);
 
-    // If showCompleted is false, filter out completed jobs
-    if (!showCompleted && j.status === "completed") {
-      return false;
-    }
-
     return matchesSearch;
   });
 
@@ -753,22 +756,6 @@ const AirMonitoring = () => {
         alignItems="center"
         mb="20px"
       >
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showCompleted}
-              onChange={(e) => setShowCompleted(e.target.checked)}
-              color="primary"
-            />
-          }
-          label="Show Completed Jobs"
-          sx={{
-            color: theme.palette.text.primary,
-            "& .MuiFormControlLabel-label": {
-              fontSize: "0.9rem",
-            },
-          }}
-        />
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -971,9 +958,9 @@ const AirMonitoring = () => {
                 }}
                 label="Asbestos Removalist"
               >
-                {ASBESTOS_REMOVALISTS.map((removalist) => (
-                  <MenuItem key={removalist} value={removalist}>
-                    {removalist}
+                {asbestosRemovalists.map((removalist) => (
+                  <MenuItem key={removalist._id} value={removalist.text}>
+                    {removalist.text}
                   </MenuItem>
                 ))}
               </Select>

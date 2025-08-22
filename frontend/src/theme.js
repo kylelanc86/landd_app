@@ -25,7 +25,7 @@ export const useMode = () => {
 export const themeSettings = (mode) => {
   return {
     palette: {
-      mode: "light",
+      mode: mode,
       primary: {
         main: tokens.primary[500],
         light: tokens.primary[400],

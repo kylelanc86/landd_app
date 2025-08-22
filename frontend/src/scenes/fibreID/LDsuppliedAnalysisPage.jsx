@@ -28,6 +28,8 @@ import {
   FormLabel,
   Chip,
   Checkbox,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
@@ -60,6 +62,11 @@ const LDsuppliedAnalysisPage = () => {
   const [finalResult, setFinalResult] = useState("");
   const [noFibreDetected, setNoFibreDetected] = useState(false);
   const [analysisDate, setAnalysisDate] = useState(new Date());
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   useEffect(() => {
     if (assessmentId && itemNumber) {
@@ -317,13 +324,21 @@ const LDsuppliedAnalysisPage = () => {
       }));
 
       // Show success message and navigate to assessment items page
-      alert("Analysis saved successfully!");
+      setSnackbar({
+        open: true,
+        message: "Analysis saved successfully!",
+        severity: "success",
+      });
       navigate(`/fibre-id/assessment/${assessmentId}/items`);
     } catch (error) {
       console.error("Error saving analysis:", error);
       console.error("Error details:", error.response?.data);
       // You could add an error notification here
-      alert(`Error saving analysis: ${error.message}`);
+      setSnackbar({
+        open: true,
+        message: `Error saving analysis: ${error.message}`,
+        severity: "error",
+      });
     }
   };
 
@@ -337,7 +352,12 @@ const LDsuppliedAnalysisPage = () => {
         fibres.every((fibre) => fibre.result && fibre.result.trim() !== "");
 
       if (!isAnalysisComplete) {
-        alert("Cannot mark as analysed: All fibres must have results first.");
+        setSnackbar({
+          open: true,
+          message:
+            "Cannot mark as analysed: All fibres must have results first.",
+          severity: "warning",
+        });
         return;
       }
 
@@ -375,12 +395,20 @@ const LDsuppliedAnalysisPage = () => {
       }));
 
       // You could add a success notification here
-      alert("Item marked as analysed successfully!");
+      setSnackbar({
+        open: true,
+        message: "Item marked as analysed successfully!",
+        severity: "success",
+      });
     } catch (error) {
       console.error("Error marking item as analysed:", error);
       console.error("Error details:", error.response?.data);
       // You could add an error notification here
-      alert(`Error marking item as analysed: ${error.message}`);
+      setSnackbar({
+        open: true,
+        message: `Error marking item as analysed: ${error.message}`,
+        severity: "error",
+      });
     }
   };
 
@@ -421,11 +449,19 @@ const LDsuppliedAnalysisPage = () => {
         },
       }));
 
-      alert("Analysis is now editable!");
+      setSnackbar({
+        open: true,
+        message: "Analysis is now editable!",
+        severity: "success",
+      });
     } catch (error) {
       console.error("Error setting item to editable mode:", error);
       console.error("Error details:", error.response?.data);
-      alert(`Error setting item to editable mode: ${error.message}`);
+      setSnackbar({
+        open: true,
+        message: `Error setting item to editable mode: ${error.message}`,
+        severity: "error",
+      });
     }
   };
 
@@ -1383,6 +1419,22 @@ const LDsuppliedAnalysisPage = () => {
           Save Analysis
         </Button>
       </Box>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

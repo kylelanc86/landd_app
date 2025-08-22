@@ -100,10 +100,6 @@ export const generateAssessmentPDF = async (assessmentData) => {
  */
 export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
   try {
-    console.log(`Starting ${type} PDF generation with data:`, data);
-    console.log('Environment:', process.env.NODE_ENV);
-    console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-    
     // Determine which endpoint to use
     const useDocRaptor = true; // Use DocRaptor for better complex document support
     
@@ -131,7 +127,6 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     }
     
     const url = `${process.env.REACT_APP_API_URL}${endpoint}?t=${Date.now()}`;
-    console.log('Calling backend URL:', url);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -146,13 +141,15 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       }),
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.log('Response error text:', errorText);
-      throw new Error(`Failed to generate ${type} PDF`);
+      throw new Error(`Failed to generate ${type} PDF: ${response.status} ${response.statusText}`);
+    }
+
+    // Check if response is actually a PDF
+    const contentType = response.headers.get('Content-Type');
+    if (!contentType || !contentType.includes('application/pdf')) {
+      console.warn('Warning: Response may not be a PDF. Content-Type:', contentType);
     }
 
     const pdfBlob = await response.blob();
@@ -168,15 +165,35 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       }
     }
 
-    // Create download link
+    // Create download link and trigger download
     const url2 = window.URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = url2;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url2);
+    
+    try {
+      // Create and click download link
+      const link = document.createElement('a');
+      link.href = url2;
+      link.download = filename;
+      link.style.display = 'none';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up the blob URL
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url2);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      
+      // Fallback: open in new window
+      try {
+        window.open(url2, '_blank');
+      } catch (fallbackError) {
+        console.error('Fallback method also failed:', fallbackError);
+      }
+    }
 
     return { success: true, filename };
 

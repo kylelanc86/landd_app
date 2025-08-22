@@ -326,7 +326,7 @@ router.get("/:id/items", auth, checkPermission("asbestos.view"), async (req, res
 // Add clearance item
 router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { locationDescription, materialDescription, asbestosType, photograph, notes } = req.body;
+    const { locationDescription, levelFloor, roomArea, materialDescription, asbestosType, photograph, notes } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -335,6 +335,8 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
 
     const newItem = {
       locationDescription,
+      levelFloor,
+      roomArea,
       materialDescription,
       asbestosType,
       photograph,
@@ -368,7 +370,7 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
 // Update clearance item
 router.put("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { locationDescription, materialDescription, asbestosType, photograph, notes } = req.body;
+    const { locationDescription, levelFloor, roomArea, materialDescription, asbestosType, photograph, notes } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -383,6 +385,8 @@ router.put("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), async (
     clearance.items[itemIndex] = {
       ...clearance.items[itemIndex],
       locationDescription,
+      levelFloor,
+      roomArea,
       materialDescription,
       asbestosType,
       photograph,

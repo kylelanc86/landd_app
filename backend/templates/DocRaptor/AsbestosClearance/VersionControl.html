@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .page {
@@ -133,12 +145,18 @@
         margin: 20px 0 0 0;
         letter-spacing: 0.01em;
         padding-top: 40px;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .address {
         font-size: 1.46rem;
         margin: 8px 0 32px 0;
         color: #222;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .section-label {
@@ -148,11 +166,17 @@
         margin-bottom: 4px;
         font-size: 1.1rem;
         letter-spacing: 0.01em;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .section-content {
         margin-bottom: 12px;
         font-size: 0.9rem;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .details-list {
@@ -199,7 +223,7 @@
         width: 100%;
         border-collapse: collapse;
         margin: 12px 0;
-        font-size: 0.795rem;
+        font-size: 0.7rem;
       }
 
       .document-details-table td {
@@ -209,8 +233,18 @@
       }
 
       .document-details-table td:first-child {
-        width: 30%;
-        font-weight: 600;
+        width: 20%;
+        font-weight: 700;
+        background: #f5f5f5;
+        padding: 8px 12px;
+        border: 1px solid #888;
+        border-right: none;
+      }
+
+      .document-details-table td:last-child {
+        border: 1px solid #888;
+        border-left: none;
+        padding: 8px 12px;
       }
 
       .footer {
@@ -223,14 +257,29 @@
         text-align: justify;
         font-size: 0.75rem;
         color: #222;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .footer-content {
+        flex: 1;
+        width: 100%;
       }
 
       .footer-line {
-        width: 100%;
+        width: 100% !important;
         height: 4px;
         background: #16b12b;
         margin-bottom: 6px;
         border-radius: 2px;
+      }
+
+      .page-number {
+        font-size: 0.75rem;
+        color: #222;
+        font-weight: 500;
+        margin-left: 20px;
       }
     </style>
   </head>
@@ -245,7 +294,7 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="green-line"></div>
@@ -254,7 +303,7 @@
         style="justify-content: flex-start; align-items: flex-start"
       >
         <div class="title" style="margin-top: 8px">
-          [REPORT_TYPE] REMOVAL CLEARANCE CERTIFICATE
+          ASBESTOS REMOVAL CLEARANCE CERTIFICATE
         </div>
         <div class="address">[SITE_ADDRESS]</div>
 
@@ -268,11 +317,7 @@
         </div>
 
         <div class="section-label">Document Details</div>
-        <table class="revision-table">
-          <tr>
-            <th>Field</th>
-            <th>Value</th>
-          </tr>
+        <table class="document-details-table">
           <tr>
             <td>File Name</td>
             <td>[FILENAME]</td>
@@ -310,8 +355,9 @@
       <div class="footer">
         <div class="footer-content">
           <div class="footer-line"></div>
-          [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+          Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
         </div>
+        <span class="page-number">Page 1 of 1</span>
       </div>
     </div>
   </body>

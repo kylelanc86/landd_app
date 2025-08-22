@@ -15,6 +15,8 @@ import {
   InputAdornment,
   CircularProgress,
   IconButton,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -43,6 +45,11 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Color palette for users
   const userColors = {
@@ -257,7 +264,11 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
         console.error("Error details:", error.response.data);
       }
       // Show error to user
-      alert("Failed to delete calendar entry. Please try again.");
+      setSnackbar({
+        open: true,
+        message: "Failed to delete calendar entry. Please try again.",
+        severity: "error",
+      });
     }
   };
 
@@ -724,6 +735,22 @@ const CalendarPage = ({ toggleColorMode, mode }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

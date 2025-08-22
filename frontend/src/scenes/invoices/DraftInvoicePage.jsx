@@ -138,7 +138,7 @@ const DraftInvoicePage = () => {
 
   const fetchClients = async () => {
     try {
-      const response = await clientService.getAll();
+      const response = await clientService.getAll({ limit: 100 });
       setClients(response.data || []);
     } catch (error) {
       console.error("Error fetching clients:", error);

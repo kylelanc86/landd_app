@@ -12,6 +12,8 @@ import {
   TextField,
   Breadcrumbs,
   Link,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../theme/tokens";
@@ -49,6 +51,11 @@ const Shifts = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetShiftId, setResetShiftId] = useState(null);
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Reusable function to fetch shifts and their sampleNumbers
   const fetchShiftsWithSamples = async () => {
@@ -248,7 +255,11 @@ const Shifts = () => {
       setResetShiftId(null);
     } catch (err) {
       console.error("Error resetting shift status:", err);
-      alert("Failed to reset shift status.");
+      setSnackbar({
+        open: true,
+        message: "Failed to reset shift status.",
+        severity: "error",
+      });
       setResetDialogOpen(false);
       setResetShiftId(null);
     }
@@ -265,7 +276,11 @@ const Shifts = () => {
       await jobService.update(jobId, { status: "completed" });
 
       // Show success message
-      alert("Job marked as completed successfully");
+      setSnackbar({
+        open: true,
+        message: "Job marked as completed successfully",
+        severity: "success",
+      });
 
       // Navigate back to jobs page
       navigate("/air-monitoring");
@@ -376,9 +391,12 @@ const Shifts = () => {
         const handleSamplesClick = () => {
           // Don't allow access to samples if report is authorized
           if (row.reportApprovedBy) {
-            alert(
-              "Cannot access samples while report is authorized. Please reset the shift status to access samples."
-            );
+            setSnackbar({
+              open: true,
+              message:
+                "Cannot access samples while report is authorized. Please reset the shift status to access samples.",
+              severity: "warning",
+            });
             return;
           }
           console.log("Samples button clicked for shift:", row._id);
@@ -446,7 +464,11 @@ const Shifts = () => {
             setReportViewedShiftIds((prev) => new Set(prev).add(row._id));
           } catch (err) {
             console.error("Error generating report:", err);
-            alert("Failed to generate report.");
+            setSnackbar({
+              open: true,
+              message: "Failed to generate report.",
+              severity: "error",
+            });
           }
         };
 
@@ -551,11 +573,13 @@ const Shifts = () => {
               err.message ||
               "Failed to authorise report.";
             const errorDetails = err.response?.data?.details || "";
-            alert(
-              `${errorMessage}${
+            setSnackbar({
+              open: true,
+              message: `${errorMessage}${
                 errorDetails ? `\n\nDetails: ${errorDetails}` : ""
-              }`
-            );
+              }`,
+              severity: "error",
+            });
           }
         };
 
@@ -843,6 +867,22 @@ const Shifts = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

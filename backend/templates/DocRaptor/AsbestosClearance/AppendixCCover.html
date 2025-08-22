@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .page {
@@ -133,15 +145,24 @@
         text-align: center;
         letter-spacing: 0.02em;
         margin-top: 400px;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .appendix-title {
         font-weight: 700;
         color: #16b12b;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
-      .air-monitoring-text {
+      .photographs-text {
         font-weight: 400;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .footer {
@@ -176,20 +197,20 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="green-line"></div>
       <div class="content">
         <div class="centered-text">
           <span class="appendix-title">APPENDIX C</span><br />
-          <span class="air-monitoring-text">AIR MONITORING REPORT</span>
+          <span class="photographs-text">AIR MONITORING REPORT</span>
         </div>
       </div>
       <div class="footer">
         <div class="footer-content">
           <div class="footer-line"></div>
-          [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+          Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
         </div>
       </div>
     </div>

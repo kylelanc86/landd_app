@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .page {
@@ -118,6 +130,9 @@
         letter-spacing: 0.01em;
         color: #222;
         text-align: left;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .section-header.first-section {
@@ -125,22 +140,11 @@
       }
 
       .section-header:not(.first-section) {
-        margin-top: 4px;
-      }
-
-      .paragraph {
-        font-size: 0.8rem;
-        margin-bottom: 12px;
-        color: #222;
-        line-height: 1.5;
-        text-align: justify;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        hyphens: auto;
+        margin-top: 8px;
       }
 
       .bullets {
-        margin: 16px 0 16px 24px;
+        margin: 8px 0 8px 24px;
         padding: 0;
         font-size: 0.8rem;
         color: #222;
@@ -148,12 +152,31 @@
       }
 
       .bullets li {
-        margin-bottom: 8px;
-        margin-top: 4px;
+        margin-bottom: 4px;
+        margin-top: 2px;
         line-height: 1.4;
         word-break: keep-all;
         overflow-wrap: normal;
         hyphens: none;
+      }
+
+      .bullets li:last-child {
+        margin-bottom: 2px;
+      }
+
+      .paragraph {
+        font-size: 0.8rem;
+        margin-bottom: 8px;
+        color: #222;
+        line-height: 1.5;
+        text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: none;
+      }
+
+      .paragraph:first-of-type {
+        margin-top: 4px;
       }
 
       .footer {
@@ -173,10 +196,11 @@
 
       .footer-content {
         flex: 1;
+        width: 100%;
       }
 
-      .footer-line {
-        width: 100%;
+      .footer-border-line {
+        width: 100% !important;
         height: 4px;
         background: #16b12b;
         margin-bottom: 6px;
@@ -199,7 +223,7 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="header-line"></div>
@@ -219,8 +243,8 @@
       </div>
       <div class="footer has-page-number">
         <div class="footer-content">
-          <div class="footer-line"></div>
-          [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+          <div class="footer-border-line"></div>
+          Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
         </div>
         <div class="page-number">2</div>
       </div>

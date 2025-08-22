@@ -18,18 +18,6 @@ const asbestosRemovalJobSchema = new mongoose.Schema(
     asbestosRemovalist: {
       type: String,
       required: true,
-      enum: [
-        "AGH",
-        "Aztech Services",
-        "Capstone",
-        "Crown Asbestos Removals",
-        "Empire Contracting",
-        "Glade Group",
-        "IAR",
-        "Jesco",
-        "Ozbestos",
-        "Spec Services",
-      ],
     },
     airMonitoring: {
       type: Boolean,
@@ -62,6 +50,5 @@ const asbestosRemovalJobSchema = new mongoose.Schema(
 // Index for better query performance
 asbestosRemovalJobSchema.index({ projectId: 1, status: 1 });
 asbestosRemovalJobSchema.index({ createdBy: 1 });
-asbestosRemovalJobSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("AsbestosRemovalJob", asbestosRemovalJobSchema); 

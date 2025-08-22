@@ -21,6 +21,7 @@ import {
   Link,
   Alert,
   Snackbar,
+  MenuItem,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -54,9 +55,12 @@ const CustomDataFields = () => {
   const [locationDescriptions, setLocationDescriptions] = useState([]);
   const [materialsDescriptions, setMaterialsDescriptions] = useState([]);
   const [roomAreas, setRoomAreas] = useState([]);
+  const [legislation, setLegislation] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItemText, setNewItemText] = useState("");
+  const [newLegislationTitle, setNewLegislationTitle] = useState("");
+  const [newJurisdiction, setNewJurisdiction] = useState("ACT");
   const [currentTab, setCurrentTab] = useState("");
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -77,18 +81,25 @@ const CustomDataFields = () => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const [asbestosData, locationData, materialsData, roomAreaData] =
-        await Promise.all([
-          customDataFieldService.getByType("asbestos_removalist"),
-          customDataFieldService.getByType("location_description"),
-          customDataFieldService.getByType("materials_description"),
-          customDataFieldService.getByType("room_area"),
-        ]);
+      const [
+        asbestosData,
+        locationData,
+        materialsData,
+        roomAreaData,
+        legislationData,
+      ] = await Promise.all([
+        customDataFieldService.getByType("asbestos_removalist"),
+        customDataFieldService.getByType("location_description"),
+        customDataFieldService.getByType("materials_description"),
+        customDataFieldService.getByType("room_area"),
+        customDataFieldService.getByType("legislation"),
+      ]);
 
       setAsbestosRemovalists(asbestosData || []);
       setLocationDescriptions(locationData || []);
       setMaterialsDescriptions(materialsData || []);
       setRoomAreas(roomAreaData || []);
+      setLegislation(legislationData || []);
     } catch (error) {
       console.error("Error fetching custom data fields:", error);
       showSnackbar("Failed to load custom data fields", "error");
@@ -153,6 +164,12 @@ const CustomDataFields = () => {
             setter: setMaterialsDescriptions,
             title: "Materials Descriptions",
           };
+        case 4:
+          return {
+            data: legislation,
+            setter: setLegislation,
+            title: "Legislation",
+          };
         default:
           return { data: [], setter: () => {}, title: "" };
       }
@@ -166,6 +183,8 @@ const CustomDataFields = () => {
     setCurrentTab(title);
     setEditingItem(null);
     setNewItemText("");
+    setNewLegislationTitle("");
+    setNewJurisdiction("ACT"); // Reset jurisdiction on add
     setDialogOpen(true);
   };
 
@@ -174,6 +193,8 @@ const CustomDataFields = () => {
     setCurrentTab(title);
     setEditingItem(item);
     setNewItemText(item.text);
+    setNewLegislationTitle(item.legislationTitle || "");
+    setNewJurisdiction(item.jurisdiction || "ACT"); // Set jurisdiction on edit
     setDialogOpen(true);
   };
 
@@ -193,6 +214,10 @@ const CustomDataFields = () => {
   const handleSaveItem = async () => {
     if (!newItemText.trim()) return;
 
+    // For legislation, both fields are required
+    if (currentTab === "Legislation" && !newLegislationTitle.trim()) return;
+    if (currentTab === "Legislation" && !newJurisdiction.trim()) return;
+
     const { data, setter, title } = getCurrentData();
 
     // Map title to API type
@@ -206,6 +231,8 @@ const CustomDataFields = () => {
           return "location_description";
         case "Materials Descriptions":
           return "materials_description";
+        case "Legislation":
+          return "legislation";
         default:
           return "asbestos_removalist";
       }
@@ -214,9 +241,17 @@ const CustomDataFields = () => {
     if (editingItem) {
       // Edit existing item
       try {
+        const updateData = { text: newItemText.trim() };
+
+        // For legislation, include the title field and ensure jurisdiction is always set
+        if (title === "Legislation") {
+          updateData.legislationTitle = newLegislationTitle.trim();
+          updateData.jurisdiction = newJurisdiction.trim();
+        }
+
         const updatedItem = await customDataFieldService.update(
           editingItem._id,
-          { text: newItemText.trim() }
+          updateData
         );
         const updatedData = data.map((item) =>
           item._id === editingItem._id ? updatedItem : item
@@ -232,10 +267,18 @@ const CustomDataFields = () => {
       // Add new item
       try {
         const type = getTypeFromTitle(title);
-        const newItem = await customDataFieldService.create({
+        const newItemData = {
           text: newItemText.trim(),
           type: type,
-        });
+        };
+
+        // For legislation, include the title field and ensure jurisdiction is always set
+        if (title === "Legislation") {
+          newItemData.legislationTitle = newLegislationTitle.trim();
+          newItemData.jurisdiction = newJurisdiction.trim();
+        }
+
+        const newItem = await customDataFieldService.create(newItemData);
         const updatedData = [...data, newItem];
         setter(updatedData);
         showSnackbar(`${title} added successfully`);
@@ -249,15 +292,24 @@ const CustomDataFields = () => {
     setDialogOpen(false);
     setEditingItem(null);
     setNewItemText("");
+    setNewLegislationTitle("");
+    setNewJurisdiction("ACT"); // Reset jurisdiction on save
   };
 
   const handleDialogClose = () => {
     setDialogOpen(false);
     setEditingItem(null);
     setNewItemText("");
+    setNewLegislationTitle("");
+    setNewJurisdiction("ACT"); // Reset jurisdiction on close
   };
 
   const renderTabContent = (data, title) => {
+    // Special handling for legislation tab
+    if (title === "Legislation") {
+      return renderLegislationContent(data, title);
+    }
+
     return (
       <Box>
         <Box
@@ -332,10 +384,165 @@ const CustomDataFields = () => {
     );
   };
 
+  const renderLegislationContent = (data, title) => {
+    // Group legislation by jurisdiction
+    const groupedLegislation = data.reduce((acc, item) => {
+      const jurisdiction = item.jurisdiction || "Unknown";
+      if (!acc[jurisdiction]) {
+        acc[jurisdiction] = [];
+      }
+      acc[jurisdiction].push(item);
+      return acc;
+    }, {});
+
+    // Sort jurisdictions alphabetically
+    const sortedJurisdictions = Object.keys(groupedLegislation).sort();
+
+    return (
+      <Box>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={2}
+        >
+          <Typography variant="h6">{title}</Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddItem}
+            size="small"
+          >
+            Add {title}
+          </Button>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ textAlign: "center", py: 4 }}>
+            <Typography variant="body1">Loading {title}...</Typography>
+          </Box>
+        ) : data.length === 0 ? (
+          <Paper
+            sx={{
+              p: 3,
+              textAlign: "center",
+              backgroundColor: theme.palette.grey[50],
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              No {title.toLowerCase()} added yet. Click "Add {title}" to get
+              started.
+            </Typography>
+          </Paper>
+        ) : (
+          <Box>
+            {sortedJurisdictions.map((jurisdiction) => (
+              <Paper key={jurisdiction} sx={{ mb: 2, overflow: "hidden" }}>
+                <Box
+                  sx={{
+                    p: 2,
+                    backgroundColor: theme.palette.primary.main,
+                    color: theme.palette.primary.contrastText,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                    {jurisdiction}
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    {groupedLegislation[jurisdiction].length} item
+                    {groupedLegislation[jurisdiction].length !== 1 ? "s" : ""}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ overflow: "auto" }}>
+                  <Box sx={{ minWidth: 800 }}>
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: "120px 1fr 1fr auto",
+                        gap: 1,
+                        p: 2,
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        backgroundColor: theme.palette.grey[50],
+                        fontWeight: "bold",
+                      }}
+                    >
+                      <Typography variant="subtitle2">Jurisdiction</Typography>
+                      <Typography variant="subtitle2">
+                        Legislation Type
+                      </Typography>
+                      <Typography variant="subtitle2">
+                        Legislation Title
+                      </Typography>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ width: 100, textAlign: "center" }}
+                      >
+                        Actions
+                      </Typography>
+                    </Box>
+
+                    {getSortedData(groupedLegislation[jurisdiction]).map(
+                      (item) => (
+                        <Box
+                          key={item._id}
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: "120px 1fr 1fr auto",
+                            gap: 1,
+                            p: 2,
+                            borderBottom: `1px solid ${theme.palette.divider}`,
+                            alignItems: "center",
+                            "&:hover": {
+                              backgroundColor: theme.palette.action.hover,
+                            },
+                          }}
+                        >
+                          <Typography variant="body2">
+                            {item.jurisdiction || "N/A"}
+                          </Typography>
+                          <Typography variant="body2">{item.text}</Typography>
+                          <Typography variant="body2">
+                            {item.legislationTitle || "N/A"}
+                          </Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "center",
+                              width: 100,
+                            }}
+                          >
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditItem(item)}
+                              sx={{ mr: 1 }}
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteItem(item._id)}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      )
+                    )}
+                  </Box>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
   return (
     <Box m="20px">
       <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Custom Data Fields Management
+        Custom Data Fields
       </Typography>
 
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -363,6 +570,7 @@ const CustomDataFields = () => {
             <Tab label="Room/Area" />
             <Tab label="Location Descriptions" />
             <Tab label="Materials Descriptions" />
+            <Tab label="Legislation" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -380,6 +588,10 @@ const CustomDataFields = () => {
           <TabPanel value={tabValue} index={3}>
             {renderTabContent(materialsDescriptions, "Materials Descriptions")}
           </TabPanel>
+
+          <TabPanel value={tabValue} index={4}>
+            {renderTabContent(legislation, "Legislation")}
+          </TabPanel>
         </Paper>
 
         {/* Add/Edit Dialog */}
@@ -393,16 +605,55 @@ const CustomDataFields = () => {
             {editingItem ? `Edit ${currentTab}` : `Add ${currentTab}`}
           </DialogTitle>
           <DialogContent>
+            {currentTab === "Legislation" && (
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ mr: 1 }}>
+                  Jurisdiction:
+                </Typography>
+                <TextField
+                  select
+                  fullWidth
+                  variant="outlined"
+                  value={newJurisdiction}
+                  onChange={(e) => setNewJurisdiction(e.target.value)}
+                  sx={{ minWidth: 120 }}
+                >
+                  <MenuItem value="ACT">ACT</MenuItem>
+                  <MenuItem value="NSW">NSW</MenuItem>
+                  <MenuItem value="VIC">VIC</MenuItem>
+                  <MenuItem value="QLD">QLD</MenuItem>
+                  <MenuItem value="SA">SA</MenuItem>
+                  <MenuItem value="TAS">TAS</MenuItem>
+                  <MenuItem value="WA">WA</MenuItem>
+                </TextField>
+              </Box>
+            )}
             <TextField
               autoFocus
               margin="dense"
-              label={`${currentTab} Name`}
+              label={
+                currentTab === "Legislation"
+                  ? "Legislation Type"
+                  : `${currentTab} Name`
+              }
               fullWidth
               variant="outlined"
               value={newItemText}
               onChange={(e) => setNewItemText(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
+              sx={{ mb: currentTab === "Legislation" ? 2 : 0 }}
             />
+            {currentTab === "Legislation" && (
+              <TextField
+                margin="dense"
+                label="Legislation Title"
+                fullWidth
+                variant="outlined"
+                value={newLegislationTitle}
+                onChange={(e) => setNewLegislationTitle(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
+              />
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={handleDialogClose}>Cancel</Button>
@@ -417,7 +668,7 @@ const CustomDataFields = () => {
           open={snackbar.open}
           autoHideDuration={6000}
           onClose={closeSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         >
           <Alert
             onClose={closeSnackbar}

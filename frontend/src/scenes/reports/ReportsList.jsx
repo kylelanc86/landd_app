@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Paper,
@@ -33,6 +34,48 @@ const ReportsList = ({
   onPrint,
   onRevise,
 }) => {
+  const navigate = useNavigate();
+
+  // Function to handle row clicks based on report type and status
+  const handleRowClick = (report) => {
+    // Only make clickable if not closed
+    if (report.status === "closed") {
+      return;
+    }
+
+    // Navigate based on report type
+    switch (report.type) {
+      case "clearance":
+        navigate(`/clearances/${report.id}/items`);
+        break;
+      case "asbestos_assessment":
+        // Navigate to asbestos assessment items page
+        navigate(`/surveys/asbestos/${report.id}/items`);
+        break;
+      case "shift":
+        // Navigate to air monitoring shift details
+        navigate(`/air-monitoring/jobs/${report.data?.job?._id}/shifts`);
+        break;
+      case "fibre_id":
+        // Check if it's client-supplied or L&D fibre ID based on the data structure
+        // For now, we'll check if there's a specific field or use the description
+        if (
+          report.data?.jobType === "client-supplied" ||
+          report.description?.toLowerCase().includes("client supplied") ||
+          report.additionalInfo?.toLowerCase().includes("client supplied")
+        ) {
+          // Navigate to client-supplied fibre ID samples page
+          navigate(`/fibre-id/client-supplied/${report.id}/samples`);
+        } else {
+          // Navigate to L&D fibre ID analysis page
+          navigate(`/fibre-id/analysis/${report.id}`);
+        }
+        break;
+      default:
+        // For other types, don't navigate
+        break;
+    }
+  };
   const getCategoryTitle = () => {
     switch (category) {
       case "asbestos-assessment":
@@ -151,86 +194,103 @@ const ReportsList = ({
           <TableHead>
             <TableRow>
               <TableCell>Date</TableCell>
-              {category !== "fibre-id" && category !== "air-monitoring" && (
-                <TableCell>Reference</TableCell>
-              )}
               <TableCell>Description</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="center">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {reports.map((report) => (
-              <TableRow key={report.id}>
-                <TableCell>
-                  {format(new Date(report.date), "dd/MM/yyyy")}
-                </TableCell>
-                {category !== "fibre-id" && category !== "air-monitoring" && (
-                  <TableCell>{report.reference}</TableCell>
-                )}
-                <TableCell>
-                  <Typography variant="body2">{report.description}</Typography>
-                  {report.additionalInfo && (
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      display="block"
-                    >
-                      {report.additionalInfo}
+            {reports.map((report) => {
+              const isClickable = report.status !== "closed";
+              return (
+                <TableRow
+                  key={report.id}
+                  onClick={() => handleRowClick(report)}
+                  sx={{
+                    cursor: isClickable ? "pointer" : "default",
+                    transition: "background-color 0.2s ease",
+                    "&:hover": isClickable
+                      ? {
+                          backgroundColor: "action.hover",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                        }
+                      : {},
+                    "&:active": isClickable
+                      ? {
+                          backgroundColor: "action.selected",
+                        }
+                      : {},
+                  }}
+                >
+                  <TableCell>
+                    {format(new Date(report.date), "dd/MM/yyyy")}
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">
+                      {report.description}
                     </Typography>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={formatStatus(report.status)}
-                    color={getStatusColor(report.status)}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  <Box
-                    sx={{ display: "flex", gap: 1, justifyContent: "center" }}
-                  >
-                    <Tooltip title="View Report">
-                      <IconButton
-                        size="small"
-                        onClick={() => onView(report)}
-                        color="primary"
+                    {report.additionalInfo && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
                       >
-                        <VisibilityIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Download Report">
-                      <IconButton
-                        size="small"
-                        onClick={() => onDownload(report)}
-                        color="secondary"
-                      >
-                        <DownloadIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Print Report">
-                      <IconButton
-                        size="small"
-                        onClick={() => onPrint(report)}
-                        color="info"
-                      >
-                        <PrintIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Button
+                        {report.additionalInfo}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={formatStatus(report.status)}
+                      color={getStatusColor(report.status)}
                       size="small"
-                      onClick={() => onRevise(report)}
-                      color="warning"
-                      variant="outlined"
-                      sx={{ minWidth: "auto", px: 1 }}
+                    />
+                  </TableCell>
+                  <TableCell align="center">
+                    <Box
+                      sx={{ display: "flex", gap: 1, justifyContent: "center" }}
                     >
-                      Revise Report
-                    </Button>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            ))}
+                      <Tooltip title="View Report">
+                        <IconButton
+                          size="small"
+                          onClick={() => onView(report)}
+                          color="primary"
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Download Report">
+                        <IconButton
+                          size="small"
+                          onClick={() => onDownload(report)}
+                          color="secondary"
+                        >
+                          <DownloadIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Print Report">
+                        <IconButton
+                          size="small"
+                          onClick={() => onPrint(report)}
+                          color="info"
+                        >
+                          <PrintIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Button
+                        size="small"
+                        onClick={() => onRevise(report)}
+                        color="warning"
+                        variant="outlined"
+                        sx={{ minWidth: "auto", px: 1 }}
+                      >
+                        Revise Report
+                      </Button>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>

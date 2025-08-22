@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .page {
@@ -119,14 +131,13 @@
         color: #222;
         text-align: left !important;
         width: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .section-header.first-section {
         margin-top: 18px;
-      }
-
-      .section-header:not(.first-section) {
-        margin-top: 10px;
       }
 
       .paragraph {
@@ -137,10 +148,11 @@
         text-align: justify;
         word-wrap: break-word;
         overflow-wrap: break-word;
-        hyphens: auto;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
         width: 100%;
         max-width: 100%;
-        box-sizing: border-box;
       }
 
       .bullets {
@@ -165,6 +177,9 @@
         page-break-inside: avoid;
         width: 100%;
         align-self: stretch;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .clearance-table {
@@ -273,10 +288,11 @@
 
       .footer-content {
         flex: 1;
+        width: 100%;
       }
 
-      .footer-line {
-        width: 100%;
+      .footer-border-line {
+        width: 100% !important;
         height: 4px;
         background: #16b12b;
         margin-bottom: 6px;
@@ -299,7 +315,7 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="header-line"></div>
@@ -314,10 +330,7 @@
           <table class="clearance-table">
             <thead>
               <tr>
-                <th>Item</th>
-                <th>Location</th>
-                <th>Material Description</th>
-                <th>Asbestos Type</th>
+                [CLEARANCE_ITEMS_HEADERS]
               </tr>
             </thead>
             <tbody>
@@ -336,8 +349,8 @@
       </div>
       <div class="footer has-page-number">
         <div class="footer-content">
-          <div class="footer-line"></div>
-          [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+          <div class="footer-border-line"></div>
+          Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
         </div>
         <div class="page-number">1</div>
       </div>

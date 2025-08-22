@@ -5,7 +5,7 @@
       Lancaster & Dickenson Consulting Pty Ltd<br />
       4/6 Dacre Street<br />
       Mitchell ACT 2911<br />
-      W: <span class="website">www.landd.com.au</span>
+      <span class="website">www.landd.com.au</span>
     </div>
   </div>
   <div class="header-line"></div>
@@ -13,12 +13,33 @@
   <div class="footer">
     <div class="footer-content">
       <div class="footer-line"></div>
-      [REPORT_TYPE] Clearance Certificate: [SITE_ADDRESS]
+      Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
     </div>
   </div>
 </div>
 
 <style>
+  /* Prevent word hyphenation globally */
+  body,
+  div,
+  p,
+  span,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  td,
+  th,
+  li {
+    hyphens: none !important;
+    -webkit-hyphens: none !important;
+    -ms-hyphens: none !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+  }
+
   .photo {
     height: 375px !important;
     background: #f5f5f5;
@@ -48,6 +69,9 @@
     color: #222;
     line-height: 1.4;
     text-align: justify;
+    hyphens: none;
+    -webkit-hyphens: none;
+    -ms-hyphens: none;
   }
 
   .photo-number {
@@ -55,14 +79,26 @@
     color: #16b12b;
     margin-bottom: 4px;
     margin-top: 4px;
+    hyphens: none;
+    -webkit-hyphens: none;
+    -ms-hyphens: none;
+  }
+
+  .photo-level-floor {
+    font-weight: 500;
+    margin-bottom: 2px;
+    color: #666;
+    hyphens: none;
+    -webkit-hyphens: none;
+    -ms-hyphens: none;
   }
 
   .photo-location {
     font-weight: 600;
     margin-bottom: 2px;
-  }
-
-  .photo-materials {
-    font-weight: 400;
+    color: #222;
+    hyphens: none;
+    -webkit-hyphens: none;
+    -ms-hyphens: none;
   }
 </style>

@@ -144,9 +144,27 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}_${clearanceData.clearanceType || 'Non-Friable'}_Clearance_${clearanceData.projectId?.name || 'Unknown'}.pdf`)
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: Asbestos Clearance Report - ${clearanceData.projectId?.name || 'Unknown'} (${clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
+
+    // Generate clearance items table headers
+    const generateClearanceItemsHeaders = () => {
+      const items = clearanceData.items || [];
+      
+      // If no items, show basic headers without Level/Floor
+      if (items.length === 0) {
+        return '<th>Item Description</th><th>Material Type</th><th>Asbestos Type</th>';
+      }
+      
+      const hasLevelFloor = items.some(item => item.levelFloor && item.levelFloor.trim() !== '');
+      
+      if (hasLevelFloor) {
+        return '<th>Level/Floor</th><th>Item Description</th><th>Material Type</th><th>Asbestos Type</th>';
+      } else {
+        return '<th>Item Description</th><th>Material Type</th><th>Asbestos Type</th>';
+      }
+    };
 
     // Generate clearance items table
     const generateClearanceItemsTable = () => {
@@ -154,8 +172,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       console.log('Clearance items for table:', items);
       
       if (items.length === 0) {
+        const colspan = items.some(item => item.levelFloor && item.levelFloor.trim() !== '') ? 4 : 3;
         console.log('No clearance items found, showing placeholder');
-        return '<tr><td colspan="4" style="text-align: center; font-style: italic;">No clearance items found</td></tr>';
+        return `<tr><td colspan="${colspan}" style="text-align: center; font-style: italic;">No clearance items found</td></tr>`;
       }
       
       const tableRows = items.map((item, index) => {
@@ -164,12 +183,33 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
           ? item.asbestosType.charAt(0).toUpperCase() + item.asbestosType.slice(1).replace('-', '-')
           : 'Non-friable';
         
-        return `<tr>
-            <td>${index + 1}</td>
-          <td>${item.locationDescription || 'Unknown Location'}</td>
-          <td>${item.materialDescription || 'Unknown Material'}</td>
-          <td>${formattedAsbestosType}</td>
-        </tr>`;
+        // Get material type from the materialDescription field (e.g., fibre cement, vinyl tiles)
+        const materialType = item.materialDescription || 'Unknown Material';
+        
+        // Combine room/area and location description into item description
+        // roomArea: Kitchen, Bedroom, etc.
+        // locationDescription: wall sheet, ceiling sheet, pipe insulation, etc.
+        const roomArea = item.roomArea || 'Unknown Room/Area';
+        const locationDescription = item.locationDescription || 'Unknown Location';
+        const itemDescription = `${roomArea} - ${locationDescription}`;
+        
+        // Only show Level/Floor column if at least one item has it
+        const hasLevelFloor = items.some(item => item.levelFloor && item.levelFloor.trim() !== '');
+        
+        if (hasLevelFloor) {
+          return `<tr>
+            <td>${item.levelFloor || 'Not specified'}</td>
+            <td>${itemDescription}</td>
+            <td>${materialType}</td>
+            <td>${formattedAsbestosType}</td>
+          </tr>`;
+        } else {
+          return `<tr>
+            <td>${itemDescription}</td>
+            <td>${materialType}</td>
+            <td>${formattedAsbestosType}</td>
+          </tr>`;
+        }
       }).join('');
       
       console.log('Generated table rows:', tableRows);
@@ -202,8 +242,10 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
           return photoItemTemplate
             .replace(/\[PHOTO_URL\]/g, item.photograph)
             .replace(/\[PHOTO_NUMBER\]/g, photoNumber.toString())
-            .replace(/\[LOCATION_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location')
-            .replace(/\[MATERIAL_DESCRIPTION\]/g, item.materialDescription || 'Unknown Material');
+            .replace(/\[LEVEL_FLOOR\]/g, item.levelFloor || 'Not specified')
+            .replace(/\[LEVEL_FLOOR_DISPLAY\]/g, item.levelFloor ? 'block' : 'none')
+            .replace(/\[ROOM_AREA\]/g, item.roomArea || 'Unknown Room/Area')
+            .replace(/\[MATERIAL_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location');
         }).join('');
         
         // Use the photo page template and replace all placeholders
@@ -244,6 +286,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[INSPECTION_TIME\]/g, clearanceData.inspectionTime || 'Unknown Time')
       .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[SIGNATURE_IMAGE\]/g, '') // Will be handled by replacePlaceholders in template content
+      .replace(/\[CLEARANCE_ITEMS_HEADERS\]/g, generateClearanceItemsHeaders())
       .replace(/\[CLEARANCE_ITEMS_TABLE\]/g, generateClearanceItemsTable())
       // Template content placeholders
       .replace(/\[INSPECTION_DETAILS_TITLE\]/g, templateContent?.standardSections?.inspectionDetailsTitle || 'INSPECTION DETAILS')
@@ -397,6 +440,15 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
             padding: 0;
           }
 
+          /* Prevent word hyphenation globally */
+          body, div, p, span, h1, h2, h3, h4, h5, h6, td, th, li {
+            hyphens: none !important;
+            -webkit-hyphens: none !important;
+            -ms-hyphens: none !important;
+            word-break: keep-all !important;
+            overflow-wrap: normal !important;
+          }
+
           /* Appendix cover page styles */
           .centered-text {
             font-size: 1.8rem;
@@ -487,10 +539,6 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
           .photo-location {
             font-weight: 600;
             margin-bottom: 2px;
-          }
-
-          .photo-materials {
-            font-weight: 400;
           }
 
           .header {
@@ -640,7 +688,7 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
               Lancaster & Dickenson Consulting Pty Ltd<br />
               4/6 Dacre Street<br />
               Mitchell ACT 2911<br />
-              W: <span class="website">www.landd.com.au</span>
+              <span class="website">www.landd.com.au</span>
             </div>
           </div>
           <div class="green-line"></div>
@@ -800,8 +848,7 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     const projectId = clearanceData.projectId?.projectID || clearanceData.project?.projectID || clearanceData.projectId || 'Unknown';
     const siteName = clearanceData.projectId?.name || clearanceData.project?.name || clearanceData.siteName || 'Unknown';
     const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
-    const clearanceType = clearanceData.clearanceType || 'Non-friable';
-    const filename = `${projectId}: ${clearanceType} Asbestos Clearance Certificate - ${siteName} (${clearanceDate}).pdf`;
+    const filename = `${projectId}: Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
 
     console.log(`[${pdfId}] Generating PDF with DocRaptor V2...`);
     
@@ -1663,7 +1710,7 @@ const generateAssessmentHTML = async (assessmentData) => {
                 Lancaster & Dickenson Consulting Pty Ltd<br />
                 4/6 Dacre Street<br />
                 Mitchell ACT 2911<br />
-                W: <span class="website">www.landd.com.au</span>
+                <span class="website">www.landd.com.au</span>
               </div>
             </div>
             <div class="green-line"></div>
@@ -1712,7 +1759,7 @@ const generateAssessmentHTML = async (assessmentData) => {
                 Lancaster & Dickenson Consulting Pty Ltd<br />
                 4/6 Dacre Street<br />
                 Mitchell ACT 2911<br />
-                W: <span class="website">www.landd.com.au</span>
+                <span class="website">www.landd.com.au</span>
               </div>
             </div>
             <div class="green-line"></div>
@@ -2008,7 +2055,7 @@ const generateAssessmentPhotographsContent = (items) => {
             Lancaster & Dickenson Consulting Pty Ltd<br />
             4/6 Dacre Street<br />
             Mitchell ACT 2911<br />
-            W: <span class="website">www.landd.com.au</span>
+            <span class="website">www.landd.com.au</span>
           </div>
         </div>
         <div class="green-line"></div>

@@ -79,7 +79,6 @@ const ProjectReports = () => {
               reportsData = assessmentReports.map((report) => ({
                 id: report.id || report._id,
                 date: report.date || report.assessmentDate || report.createdAt,
-                reference: report.reference || report.assessmentNumber || "N/A",
                 description: report.description || "Asbestos Assessment Report",
                 additionalInfo: report.assessorName || "N/A",
                 status: report.status || "Unknown",
@@ -156,7 +155,6 @@ const ProjectReports = () => {
             reportsData = projectClearances.map((clearance) => ({
               id: clearance._id,
               date: clearance.clearanceDate || clearance.createdAt,
-              reference: clearance.projectId?.projectID || "N/A",
               description: `${clearance.clearanceType} Asbestos Clearance`,
               additionalInfo: `${clearance.asbestosRemovalist || "N/A"}`,
               status: clearance.status || "Unknown",
@@ -172,7 +170,6 @@ const ProjectReports = () => {
             reportsData = fibreIdReports.map((report) => ({
               id: report.id,
               date: report.date,
-              reference: report.reference,
               description: report.description,
               status: report.status,
               type: "fibre_id",
@@ -201,7 +198,6 @@ const ProjectReports = () => {
             reportsData = invoicesData.map((invoice) => ({
               id: invoice.id || invoice._id,
               date: invoice.date || invoice.invoiceDate || invoice.createdAt,
-              reference: invoice.reference || invoice.invoiceNumber || "N/A",
               description: invoice.description || "Project Invoice",
               additionalInfo:
                 invoice.additionalInfo || invoice.projectName || "N/A",
@@ -445,10 +441,7 @@ const ProjectReports = () => {
         >
           <Box>
             <Typography variant="h4" gutterBottom>
-              Reports for {project?.name || "Loading..."}
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary">
-              Project ID: {project?.projectID}
+              Reports for {project?.projectID}: {project?.name || "Loading..."}
             </Typography>
           </Box>
           <Button

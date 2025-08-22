@@ -148,7 +148,7 @@ const ProjectInformation = () => {
 
         // Fetch clients and users
         const [clientsRes, usersRes] = await Promise.all([
-          clientService.getAll(),
+          clientService.getAll({ limit: 100 }),
           userService.getAll(),
         ]);
 

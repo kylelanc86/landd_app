@@ -20,6 +20,8 @@ import {
   Breadcrumbs,
   Link,
   Checkbox,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
@@ -68,6 +70,11 @@ const EditUserPage = () => {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Fetch user data on mount
   useEffect(() => {
@@ -175,7 +182,11 @@ const EditUserPage = () => {
       // Validate the file
       const validationResult = await validateSignatureFile(file);
       if (!validationResult.isValid) {
-        alert(validationResult.error);
+        setSnackbar({
+          open: true,
+          message: validationResult.error,
+          severity: "error",
+        });
         return;
       }
 
@@ -184,7 +195,11 @@ const EditUserPage = () => {
       setForm({ ...form, signature: compressedImage });
     } catch (error) {
       console.error("Error processing signature:", error);
-      alert("Error processing signature image");
+      setSnackbar({
+        open: true,
+        message: "Error processing signature image",
+        severity: "error",
+      });
     }
   };
 
@@ -215,10 +230,13 @@ const EditUserPage = () => {
       navigate("/users");
     } catch (error) {
       console.error("Error updating user:", error);
-      alert(
-        "Failed to update user: " +
-          (error.response?.data?.message || error.message)
-      );
+      setSnackbar({
+        open: true,
+        message:
+          "Failed to update user: " +
+          (error.response?.data?.message || error.message),
+        severity: "error",
+      });
     } finally {
       setSaving(false);
     }
@@ -232,13 +250,20 @@ const EditUserPage = () => {
     try {
       setSendingReset(true);
       await userService.sendPasswordResetEmail(form.email);
-      alert("Password reset email sent successfully!");
+      setSnackbar({
+        open: true,
+        message: "Password reset email sent successfully!",
+        severity: "success",
+      });
     } catch (error) {
       console.error("Error sending password reset email:", error);
-      alert(
-        "Failed to send password reset email: " +
-          (error.response?.data?.message || error.message)
-      );
+      setSnackbar({
+        open: true,
+        message:
+          "Failed to send password reset email: " +
+          (error.response?.data?.message || error.message),
+        severity: "error",
+      });
     } finally {
       setSendingReset(false);
     }
@@ -669,6 +694,22 @@ const EditUserPage = () => {
           </Box>
         </form>
       </Paper>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

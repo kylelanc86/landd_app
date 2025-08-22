@@ -10,7 +10,7 @@ router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => 
     const { type } = req.params;
     
     // Validate type
-    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area'];
+    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ message: 'Invalid type parameter' });
     }
@@ -32,37 +32,33 @@ router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => 
 // Create new custom data field
 router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
   try {
-    const { type, text } = req.body;
+    const { type, text, legislationTitle, jurisdiction } = req.body;
+    
+    console.log('Creating custom data field:', { type, text, legislationTitle, jurisdiction });
     
     if (!type || !text) {
       return res.status(400).json({ message: 'Type and text are required' });
     }
 
     // Validate type
-    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area'];
+    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ message: 'Invalid type parameter' });
     }
 
-    // Check if field already exists
-    const existingField = await CustomDataField.findOne({ type, text });
-    if (existingField) {
-      if (existingField.isActive) {
-        return res.status(409).json({ message: 'This field already exists' });
-      } else {
-        // Reactivate existing field
-        existingField.isActive = true;
-        existingField.createdBy = req.user.id;
-        await existingField.save();
-        return res.json(existingField);
-      }
-    }
+    // No duplicate checking - just create the field
 
-    const newField = new CustomDataField({
+    const newFieldData = {
       type,
       text: text.trim(),
       createdBy: req.user.id
-    });
+    };
+
+    // Add legislation fields if they exist
+    if (legislationTitle) newFieldData.legislationTitle = legislationTitle.trim();
+    if (jurisdiction) newFieldData.jurisdiction = jurisdiction.trim();
+
+    const newField = new CustomDataField(newFieldData);
 
     const savedField = await newField.save();
     await savedField.populate('createdBy', 'firstName lastName');
@@ -82,7 +78,9 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
 router.put('/:id', auth, checkPermission(['admin.edit']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { text } = req.body;
+    const { text, legislationTitle, jurisdiction } = req.body;
+    
+    console.log('Updating custom data field:', { id, text, legislationTitle, jurisdiction });
     
     if (!text) {
       return res.status(400).json({ message: 'Text is required' });
@@ -93,18 +91,26 @@ router.put('/:id', auth, checkPermission(['admin.edit']), async (req, res) => {
       return res.status(404).json({ message: 'Field not found' });
     }
 
-    // Check if new text already exists for this type
-    const existingField = await CustomDataField.findOne({ 
-      type: field.type, 
-      text: text.trim(),
-      _id: { $ne: id }
-    });
-    
-    if (existingField) {
-      return res.status(409).json({ message: 'This field already exists' });
+    // For legislation, ensure all required fields are provided
+    if (field.type === 'legislation') {
+      if (!legislationTitle || !jurisdiction) {
+        return res.status(400).json({ 
+          message: 'Legislation Title and Jurisdiction are required for legislation items' 
+        });
+      }
+    }
+    if (!field) {
+      return res.status(404).json({ message: 'Field not found' });
     }
 
+    // No need for manual duplicate checking - the database indexes handle this automatically
+
     field.text = text.trim();
+    
+    // Update legislation fields if they exist
+    if (legislationTitle !== undefined) field.legislationTitle = legislationTitle.trim();
+    if (jurisdiction !== undefined) field.jurisdiction = jurisdiction.trim();
+    
     field.updatedAt = new Date();
     await field.save();
     
@@ -112,6 +118,14 @@ router.put('/:id', auth, checkPermission(['admin.edit']), async (req, res) => {
     res.json(field);
   } catch (error) {
     console.error('Error updating custom data field:', error);
+    console.error('Error details:', {
+      id: req.params.id,
+      text: req.body.text,
+      legislationTitle: req.body.legislationTitle,
+      jurisdiction: req.body.jurisdiction,
+      errorMessage: error.message,
+      errorStack: error.stack
+    });
     res.status(500).json({ message: 'Failed to update custom data field' });
   }
 });

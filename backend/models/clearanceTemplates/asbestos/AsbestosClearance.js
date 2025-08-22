@@ -17,7 +17,7 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["in progress", "complete", "Site Work Complete"],
+      enum: ["in progress", "complete", "Site Work Complete", "closed"],
       default: "in progress",
     },
     clearanceType: {
@@ -56,6 +56,14 @@ const asbestosClearanceSchema = new mongoose.Schema(
     // Array of clearance items embedded directly in the clearance job
     items: [{
       locationDescription: {
+        type: String,
+        required: true,
+      },
+      levelFloor: {
+        type: String,
+        required: false,
+      },
+      roomArea: {
         type: String,
         required: true,
       },

@@ -571,13 +571,11 @@ const Projects = ({ initialFilters = {} }) => {
   // Update individual filter functions to use the combined state
   const updateFilter = useCallback(
     (filterType, value) => {
-      console.log("🔍 updateFilter called with:", filterType, value);
       setFilters((prev) => {
         const newFilters = {
           ...prev,
           [filterType]: value,
         };
-        console.log("🔍 New filters state:", newFilters);
         // Save filters whenever they change
         saveFilters(newFilters);
         return newFilters;
@@ -594,15 +592,8 @@ const Projects = ({ initialFilters = {} }) => {
       isSearch = false,
       currentFilters = null
     ) => {
-      console.log("🔍 fetchProjectsWithPagination called with:");
-      console.log("  - searchValue:", searchValue);
-      console.log("  - isSearch:", isSearch);
-      console.log("  - currentFilters:", currentFilters);
-      console.log("  - current filters state:", filtersRef.current);
-
       // Use current filters state if currentFilters is null (for search operations)
       const filtersToUse = currentFilters || filtersRef.current;
-      console.log("🔍 filtersToUse:", filtersToUse);
       try {
         if (isSearch) {
           setSearchLoading(true);
@@ -620,7 +611,6 @@ const Projects = ({ initialFilters = {} }) => {
         // Add search term if provided
         if (searchValue) {
           params.search = searchValue;
-          console.log("🔍 Added search param:", searchValue);
         }
 
         // Add department filter
@@ -633,14 +623,11 @@ const Projects = ({ initialFilters = {} }) => {
           params.status = filtersToUse.statusFilter;
         }
 
-        console.log("🔍 API call params:", params);
         const response = await projectService.getAll(params);
-        console.log("🔍 API response:", response);
 
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
-        console.log("🔍 Processed projectsData length:", projectsData.length);
 
         setProjects(projectsData);
         setPagination({
@@ -678,9 +665,6 @@ const Projects = ({ initialFilters = {} }) => {
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value) => {
-      console.log("🔍 debouncedSearch triggered with value:", value);
-      console.log("🔍 Current paginationModel:", paginationModel);
-
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
       // Use the new function with reset pagination
       fetchProjectsWithPagination(
@@ -781,14 +765,9 @@ const Projects = ({ initialFilters = {} }) => {
   const handleSearchChange = useCallback(
     (event) => {
       const value = event.target.value;
-      console.log("🔍 handleSearchChange called with value:", value);
 
       // Immediately update the search term in state for better UX
       updateFilter("searchTerm", value);
-      console.log(
-        "🔍 After updateFilter, calling debouncedSearch with:",
-        value
-      );
 
       // Then trigger the debounced search with the current value
       debouncedSearch(value);
@@ -871,13 +850,11 @@ const Projects = ({ initialFilters = {} }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const clientsResponse = await clientService.getAll();
-        console.log("Clients response:", clientsResponse);
-        console.log("Clients data:", clientsResponse.data);
+        // Only fetch clients if we need them for dropdowns/forms
+        // Limit to first 100 clients to avoid performance issues
+        const clientsResponse = await clientService.getAll({ limit: 100 });
         const clientsData =
           clientsResponse.data.clients || clientsResponse.data;
-        console.log("Final clients array:", clientsData);
-        console.log("Number of clients fetched:", clientsData.length);
         setClients(clientsData);
       } catch (err) {
         console.error("Error fetching clients:", err);
@@ -927,14 +904,6 @@ const Projects = ({ initialFilters = {} }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      console.log("=== SUBMITTING PROJECT FORM ===");
-      console.log("Form data being sent:", form);
-      console.log("Form data type:", typeof form);
-      console.log("Client value:", form.client);
-      console.log("Department value:", form.department);
-      console.log("Users value:", form.users);
-      console.log("===============================");
-
       const response = await projectService.create(form);
       setProjects([...projects, response.data]);
       setDialogOpen(false);

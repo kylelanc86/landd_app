@@ -68,7 +68,9 @@ const TemplateTestPage = () => {
         sectionKey
       );
       console.log(`Section ${sectionKey}:`, content);
-      alert(`${sectionKey}: ${content}`);
+      // Show content in console for testing purposes
+      console.log(`${sectionKey}:`, content);
+      // You could also set this to display in the UI if needed
     } catch (err) {
       console.error("Error getting section:", err);
       setError("Failed to get section content");

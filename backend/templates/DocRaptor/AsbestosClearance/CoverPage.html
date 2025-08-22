@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       /* Make cover page styles more specific */
@@ -139,6 +151,9 @@
         color: #222;
         width: 100%;
         text-align: left;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .cover-page .address {
@@ -147,6 +162,9 @@
         color: #222;
         width: 100%;
         text-align: left;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .cover-page .cover-content p {
@@ -155,6 +173,9 @@
         color: #222;
         width: 100%;
         text-align: left;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .cover-page .cover-content b {
@@ -173,6 +194,9 @@
         text-align: left !important;
         margin-left: 0;
         padding-left: 0;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       .cover-page .cover-logo {
@@ -238,7 +262,7 @@
         />
       </svg>
       <div class="cover-content">
-        <h1>[REPORT_TYPE] REMOVAL<br />CLEARANCE<br />CERTIFICATE</h1>
+        <h1>ASBESTOS REMOVAL<br />CLEARANCE<br />CERTIFICATE</h1>
         <div class="address">[SITE_ADDRESS]</div>
         <p><b>Job Reference</b><br />[JOB_REFERENCE]</p>
         <p><b>Clearance Date</b><br />[CLEARANCE_DATE]</p>

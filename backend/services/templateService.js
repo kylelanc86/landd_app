@@ -512,7 +512,7 @@ const replacePlaceholders = async (content, data) => {
     const bulletItems = currentBulletList.map(content => `<li>${content}</li>`).join('');
     processedLines.push(`<ul class="bullets">${bulletItems}</ul>`);
   }
-  result = processedLines.join('<br>');
+  result = processedLines.join('');
   
   // Convert **text** to bold
   result = result.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');

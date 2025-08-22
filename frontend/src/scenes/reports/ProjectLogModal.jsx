@@ -183,19 +183,48 @@ const ProjectLogModal = ({ open, onClose, project }) => {
       // Get clearance reports
       try {
         console.log("Loading clearance reports for project:", project._id);
-        const clearanceReports = await asbestosClearanceReportService.getAll({
-          projectId: project._id,
-        });
-        console.log("Clearance reports response:", clearanceReports);
-        if (clearanceReports.reports) {
-          allReports.push(
-            ...clearanceReports.reports.map((report) => ({
-              ...report,
-              type: "Asbestos Clearance",
-              category: "clearance",
-            }))
+        // Import asbestosClearanceService dynamically to match ProjectReports
+        const { default: asbestosClearanceService } = await import(
+          "../../services/asbestosClearanceService"
+        );
+
+        const allClearances = await asbestosClearanceService.getAll();
+
+        // Filter clearances by projectId
+        let projectClearances = [];
+        if (allClearances && Array.isArray(allClearances)) {
+          projectClearances = allClearances.filter(
+            (clearance) =>
+              clearance.projectId === project._id ||
+              clearance.projectId?._id === project._id
+          );
+        } else if (
+          allClearances.clearances &&
+          Array.isArray(allClearances.clearances)
+        ) {
+          projectClearances = allClearances.clearances.filter(
+            (clearance) =>
+              clearance.projectId === project._id ||
+              clearance.projectId?._id === project._id
           );
         }
+
+        console.log("Project clearances found:", projectClearances);
+
+        // Map to report format
+        const clearanceReports = projectClearances.map((clearance) => ({
+          id: clearance._id,
+          date: clearance.clearanceDate || clearance.createdAt,
+          reference: clearance.projectId?.projectID || "N/A",
+          description: `${clearance.clearanceType} Asbestos Clearance`,
+          additionalInfo: `${clearance.asbestosRemovalist || "N/A"}`,
+          status: clearance.status || "Unknown",
+          type: "Asbestos Clearance",
+          category: "clearance",
+          data: clearance,
+        }));
+
+        allReports.push(...clearanceReports);
       } catch (error) {
         console.error("Error loading clearance reports:", error);
       }
@@ -214,6 +243,53 @@ const ProjectLogModal = ({ open, onClose, project }) => {
         );
       } catch (error) {
         console.error("Error loading fibre ID reports:", error);
+      }
+
+      // Get air monitoring shift reports
+      try {
+        console.log("Loading air monitoring reports for project:", project._id);
+        // Import services dynamically
+        const { default: jobService } = await import("../../services/api");
+        const { default: shiftService } = await import("../../services/api");
+
+        // Get all jobs for this project
+        const jobsResponse = await jobService.getAll();
+        const projectJobs =
+          jobsResponse.data?.filter(
+            (job) =>
+              job.projectId === project._id ||
+              job.projectId?._id === project._id
+          ) || [];
+
+        console.log("Project jobs found:", projectJobs);
+
+        // Get shifts for each job
+        for (const job of projectJobs) {
+          const shiftsResponse = await shiftService.getByJob(job._id);
+          const shifts = shiftsResponse.data || [];
+
+          // Map shifts to report format
+          const shiftReports = shifts.map((shift) => ({
+            id: shift._id,
+            date: shift.date,
+            reference: `${job.jobID}-${shift.name}`,
+            description: "Air Monitoring Report",
+            additionalInfo: `${shift.name}`,
+            status: shift.status,
+            type: "Air Monitoring Shift",
+            category: "air_monitoring",
+            data: { shift, job },
+          }));
+
+          allReports.push(...shiftReports);
+        }
+
+        console.log(
+          "Air monitoring reports added:",
+          allReports.filter((r) => r.category === "air_monitoring").length
+        );
+      } catch (error) {
+        console.error("Error loading air monitoring reports:", error);
       }
 
       // Get invoices

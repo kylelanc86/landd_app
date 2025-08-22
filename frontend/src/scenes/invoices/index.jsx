@@ -91,7 +91,7 @@ const Invoices = () => {
             page: 1,
             status: "all_active",
           }), // Get all active projects
-          clientService.getAll(),
+          clientService.getAll({ limit: 100 }),
         ]);
 
         if (!Array.isArray(invoicesRes.data)) {

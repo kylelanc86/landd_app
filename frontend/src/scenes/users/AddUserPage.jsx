@@ -20,6 +20,8 @@ import {
   Breadcrumbs,
   Link,
   Checkbox,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
@@ -64,6 +66,11 @@ const AddUserPage = () => {
   const { currentUser } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -128,7 +135,11 @@ const AddUserPage = () => {
       // Validate the file
       const validationResult = await validateSignatureFile(file);
       if (!validationResult.isValid) {
-        alert(validationResult.error);
+        setSnackbar({
+          open: true,
+          message: validationResult.error,
+          severity: "error",
+        });
         return;
       }
 
@@ -137,14 +148,22 @@ const AddUserPage = () => {
       setForm({ ...form, signature: compressedImage });
     } catch (error) {
       console.error("Error processing signature:", error);
-      alert("Error processing signature image");
+      setSnackbar({
+        open: true,
+        message: "Error processing signature image",
+        severity: "error",
+      });
     }
   };
 
   const handleAddUser = async (e) => {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
-      alert("Please fill in all required fields");
+      setSnackbar({
+        open: true,
+        message: "Please fill in all required fields",
+        severity: "warning",
+      });
       return;
     }
 
@@ -165,16 +184,22 @@ const AddUserPage = () => {
       await userService.create(userData);
 
       // Show success message and navigate back to users list
-      alert(
-        "User created successfully! A welcome email with password setup instructions has been sent to the user's email address."
-      );
+      setSnackbar({
+        open: true,
+        message:
+          "User created successfully! A welcome email with password setup instructions has been sent to the user's email address.",
+        severity: "success",
+      });
       navigate("/users");
     } catch (error) {
       console.error("Error creating user:", error);
-      alert(
-        "Failed to create user: " +
-          (error.response?.data?.message || error.message)
-      );
+      setSnackbar({
+        open: true,
+        message:
+          "Failed to create user: " +
+          (error.response?.data?.message || error.message),
+        severity: "error",
+      });
     } finally {
       setSaving(false);
     }
@@ -577,6 +602,22 @@ const AddUserPage = () => {
           </Box>
         </form>
       </Paper>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

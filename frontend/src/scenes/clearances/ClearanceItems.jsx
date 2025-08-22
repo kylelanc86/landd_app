@@ -29,6 +29,7 @@ import {
   Chip,
   Breadcrumbs,
   Link,
+  Autocomplete,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -40,11 +41,13 @@ import {
   Delete as DeletePhotoIcon,
   Description as DescriptionIcon,
 } from "@mui/icons-material";
+import { Checkbox, FormControlLabel } from "@mui/material";
 
 import { useNavigate, useParams } from "react-router-dom";
 import { tokens } from "../../theme/tokens";
 import PermissionGate from "../../components/PermissionGate";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
+import customDataFieldService from "../../services/customDataFieldService";
 import { compressImage, needsCompression } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
@@ -68,8 +71,10 @@ const ClearanceItems = () => {
 
   const [form, setForm] = useState({
     locationDescription: "",
+    levelFloor: "",
+    roomArea: "",
     materialDescription: "",
-    asbestosType: "Non-friable",
+    asbestosType: "non-friable",
     photograph: "",
     notes: "",
   });
@@ -94,11 +99,40 @@ const ClearanceItems = () => {
     useState(false);
   const [attachmentsModalOpen, setAttachmentsModalOpen] = useState(false);
   const [jobCompleted, setJobCompleted] = useState(false);
+  const [showLevelFloor, setShowLevelFloor] = useState(false);
+  const [customDataFields, setCustomDataFields] = useState({
+    roomAreas: [],
+    locationDescriptions: [],
+    materialsDescriptions: [],
+  });
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
     fetchData();
+    fetchCustomDataFields();
   }, [clearanceId]);
+
+  const fetchCustomDataFields = async () => {
+    try {
+      const [
+        roomAreasData,
+        locationDescriptionsData,
+        materialsDescriptionsData,
+      ] = await Promise.all([
+        customDataFieldService.getByType("room_area"),
+        customDataFieldService.getByType("location_description"),
+        customDataFieldService.getByType("materials_description"),
+      ]);
+
+      setCustomDataFields({
+        roomAreas: roomAreasData || [],
+        locationDescriptions: locationDescriptionsData || [],
+        materialsDescriptions: materialsDescriptionsData || [],
+      });
+    } catch (err) {
+      console.error("Error fetching custom data fields:", err);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -125,12 +159,16 @@ const ClearanceItems = () => {
     e.preventDefault();
     try {
       const itemData = {
-        locationDescription: form.locationDescription,
-        materialDescription: form.materialDescription,
-        asbestosType: form.asbestosType,
+        locationDescription: form.locationDescription, // Location Description
+        levelFloor: showLevelFloor ? form.levelFloor : "",
+        roomArea: form.roomArea,
+        materialDescription: form.materialDescription, // Materials Description
+        asbestosType: form.asbestosType, // Material Type
         photograph: form.photograph,
         notes: form.notes,
       };
+
+      console.log("Submitting item data:", itemData);
 
       if (editingItem) {
         await asbestosClearanceService.updateItem(
@@ -174,11 +212,14 @@ const ClearanceItems = () => {
     setEditingItem(item);
     setForm({
       locationDescription: item.locationDescription,
+      levelFloor: item.levelFloor || "",
+      roomArea: item.roomArea || "",
       materialDescription: item.materialDescription,
       asbestosType: item.asbestosType,
       photograph: item.photograph || "",
       notes: item.notes || "",
     });
+    setShowLevelFloor(!!item.levelFloor);
     setPhotoPreview(item.photograph || null);
     setPhotoFile(null);
     setDialogOpen(true);
@@ -214,11 +255,14 @@ const ClearanceItems = () => {
   const resetForm = () => {
     setForm({
       locationDescription: "",
+      levelFloor: "",
+      roomArea: "",
       materialDescription: "",
-      asbestosType: "Non-friable",
+      asbestosType: "non-friable",
       photograph: "",
       notes: "",
     });
+    setShowLevelFloor(false);
     setPhotoPreview(null);
     setPhotoFile(null);
     setCompressionStatus(null);
@@ -230,9 +274,9 @@ const ClearanceItems = () => {
       return;
     }
 
-    const hasFriable = items.some((item) => item.asbestosType === "Friable");
+    const hasFriable = items.some((item) => item.asbestosType === "friable");
     const hasNonFriable = items.some(
-      (item) => item.asbestosType === "Non-friable"
+      (item) => item.asbestosType === "non-friable"
     );
 
     let newClearanceType;
@@ -923,64 +967,101 @@ const ClearanceItems = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Location</TableCell>
-                    <TableCell>Material Description</TableCell>
+                    {items &&
+                      items.length > 0 &&
+                      items.some(
+                        (item) =>
+                          item.levelFloor && item.levelFloor.trim() !== ""
+                      ) && <TableCell>Level/Floor</TableCell>}
+                    <TableCell>Room/Area</TableCell>
+                    <TableCell>Location Description</TableCell>
+                    <TableCell>Materials Description</TableCell>
                     <TableCell>Asbestos Type</TableCell>
                     <TableCell>Photograph</TableCell>
-                    <TableCell>Notes</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(items || []).map((item) => (
-                    <TableRow key={item._id}>
-                      <TableCell>{item.locationDescription}</TableCell>
-                      <TableCell>{item.materialDescription}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={formatAsbestosType(item.asbestosType)}
-                          color={getAsbestosTypeColor(item.asbestosType)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {item.photograph ? (
-                          <Chip label="Yes" color="success" size="small" />
-                        ) : (
-                          <Chip label="No" color="default" size="small" />
+                  {(items || []).map((item) => {
+                    const hasLevelFloor =
+                      items &&
+                      items.length > 0 &&
+                      items.some(
+                        (item) =>
+                          item.levelFloor && item.levelFloor.trim() !== ""
+                      );
+                    return (
+                      <TableRow key={item._id}>
+                        {hasLevelFloor && (
+                          <TableCell>
+                            {item.levelFloor ? (
+                              <Typography variant="body2">
+                                {item.levelFloor}
+                              </Typography>
+                            ) : (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                fontStyle="italic"
+                              >
+                                Not specified
+                              </Typography>
+                            )}
+                          </TableCell>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {item.notes ? (
-                          <Typography variant="body2" noWrap>
-                            {item.notes}
-                          </Typography>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            No notes
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <IconButton
-                          onClick={() => handleEdit(item)}
-                          color="primary"
-                          size="small"
-                          title="Edit"
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleDelete(item)}
-                          color="error"
-                          size="small"
-                          title="Delete"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableCell>
+                          {item.roomArea ? (
+                            <Typography variant="body2">
+                              {item.roomArea}
+                            </Typography>
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              fontStyle="italic"
+                            >
+                              Not specified
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>{item.locationDescription}</TableCell>
+                        <TableCell>{item.materialDescription}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={formatAsbestosType(item.asbestosType)}
+                            color={getAsbestosTypeColor(item.asbestosType)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {item.photograph ? (
+                            <Chip label="Yes" color="success" size="small" />
+                          ) : (
+                            <Chip label="No" color="default" size="small" />
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          <IconButton
+                            onClick={() => handleEdit(item)}
+                            color="primary"
+                            size="small"
+                            title="Edit"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            onClick={() => handleDelete(item)}
+                            color="error"
+                            size="small"
+                            title="Delete"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -1000,26 +1081,83 @@ const ClearanceItems = () => {
           <form onSubmit={handleSubmit}>
             <DialogContent>
               <Grid container spacing={2}>
+                <Grid item xs={12} container spacing={2} alignItems="center">
+                  <Grid item>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={showLevelFloor}
+                          onChange={(e) => setShowLevelFloor(e.target.checked)}
+                        />
+                      }
+                      label="Include Level/Floor"
+                    />
+                  </Grid>
+                  {showLevelFloor && (
+                    <Grid item xs={6}>
+                      <TextField
+                        fullWidth
+                        label="Level/Floor"
+                        value={form.levelFloor}
+                        onChange={(e) =>
+                          setForm({ ...form, levelFloor: e.target.value })
+                        }
+                        placeholder="e.g., Ground Floor, Level 1, Basement"
+                      />
+                    </Grid>
+                  )}
+                </Grid>
                 <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Location Description"
-                    value={form.locationDescription}
-                    onChange={(e) =>
-                      setForm({ ...form, locationDescription: e.target.value })
+                  <Autocomplete
+                    value={form.roomArea}
+                    onChange={(event, newValue) =>
+                      setForm({ ...form, roomArea: newValue || "" })
                     }
-                    required
+                    options={customDataFields.roomAreas.map(
+                      (item) => item.text
+                    )}
+                    freeSolo
+                    renderInput={(params) => (
+                      <TextField {...params} label="Room/Area" required />
+                    )}
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Material Description"
-                    value={form.materialDescription}
-                    onChange={(e) =>
-                      setForm({ ...form, materialDescription: e.target.value })
+                  <Autocomplete
+                    value={form.locationDescription}
+                    onChange={(event, newValue) =>
+                      setForm({ ...form, locationDescription: newValue || "" })
                     }
-                    required
+                    options={customDataFields.locationDescriptions.map(
+                      (item) => item.text
+                    )}
+                    freeSolo
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Location Description"
+                        required
+                      />
+                    )}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Autocomplete
+                    value={form.materialDescription}
+                    onChange={(event, newValue) =>
+                      setForm({ ...form, materialDescription: newValue || "" })
+                    }
+                    options={customDataFields.materialsDescriptions.map(
+                      (item) => item.text
+                    )}
+                    freeSolo
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Materials Description"
+                        required
+                      />
+                    )}
                   />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -1032,8 +1170,8 @@ const ClearanceItems = () => {
                       }
                       label="Asbestos Type"
                     >
-                      <MenuItem value="Non-friable">Non-friable</MenuItem>
-                      <MenuItem value="Friable">Friable</MenuItem>
+                      <MenuItem value="non-friable">Non-friable</MenuItem>
+                      <MenuItem value="friable">Friable</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -1421,6 +1559,7 @@ const ClearanceItems = () => {
           open={snackbar.open}
           autoHideDuration={6000}
           onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         >
           <Alert
             onClose={() => setSnackbar({ ...snackbar, open: false })}

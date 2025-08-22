@@ -28,6 +28,8 @@ import {
   FormControlLabel,
   Radio,
   FormControl,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
@@ -35,6 +37,7 @@ import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
+import { useMemo } from "react";
 
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
@@ -63,8 +66,6 @@ const emptyForm = {
 };
 
 const Clients = () => {
-  console.log("Clients component rendering");
-
   const theme = useTheme();
   const navigate = useNavigate();
   const { can } = usePermissions();
@@ -85,12 +86,13 @@ const Clients = () => {
     pageSize: 25,
   });
   const [rowCount, setRowCount] = useState(0);
-
-  console.log("Current state:", {
-    paginationModel,
-    rowCount,
-    clients: clients.length,
+  const [isFetching, setIsFetching] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
   });
+
   const searchInputRef = useRef(null);
 
   // Column visibility state
@@ -100,10 +102,13 @@ const Clients = () => {
     contact1Name: true,
     contact1Number: true,
     address: false, // Hide address column by default
-    written_off: can("clients.write_off"),
+    written_off: false, // Will be updated in useEffect
     actions: true,
   });
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
+
+  // Extract permission check to avoid recreating functions
+  const canWriteOff = can("clients.write_off");
 
   // Load user preferences from database
   useEffect(() => {
@@ -115,8 +120,7 @@ const Clients = () => {
           // Ensure written_off column visibility respects permissions
           setColumnVisibilityModel({
             ...savedVisibility,
-            written_off:
-              can("clients.write_off") && savedVisibility.written_off,
+            written_off: canWriteOff && savedVisibility.written_off,
           });
         }
       } catch (error) {
@@ -131,7 +135,7 @@ const Clients = () => {
             // Ensure written_off column visibility respects permissions
             setColumnVisibilityModel({
               ...parsed,
-              written_off: can("clients.write_off") && parsed.written_off,
+              written_off: canWriteOff && parsed.written_off,
             });
           } catch (parseError) {
             console.error("Error parsing saved column visibility:", parseError);
@@ -142,29 +146,12 @@ const Clients = () => {
     };
 
     loadUserPreferences();
-  }, [can]);
-
-  // Debug mount/unmount
-  useEffect(() => {
-    console.log("Clients component mounted");
-    return () => console.log("Clients component unmounted");
-  }, []);
-
-  // Debug search state changes
-  useEffect(() => {
-    console.log("Search state changed:", { searchInput, search });
-  }, [searchInput, search]);
-
-  // Debug pagination changes
-  useEffect(() => {
-    console.log("Pagination model changed:", paginationModel);
-  }, [paginationModel]);
+  }, [canWriteOff]);
 
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value) => {
       setSearch(value);
-      setPaginationModel((prev) => ({ ...prev, page: 0 }));
     }, 300),
     []
   );
@@ -186,53 +173,42 @@ const Clients = () => {
   }, []);
 
   // Fetch clients with search and pagination
-  const fetchClients = useCallback(async () => {
+  const fetchClients = useCallback(async (page, pageSize, searchTerm) => {
+    if (isFetching) return; // Prevent duplicate calls
+
     try {
+      setIsFetching(true);
       setLoading(true);
-      console.log("Fetching clients with:", {
-        page: paginationModel.page + 1,
-        limit: paginationModel.pageSize,
-        search: search,
-      });
 
       const response = await clientService.getAll({
-        page: paginationModel.page + 1, // Backend uses 1-based pagination
-        limit: paginationModel.pageSize,
-        search: search,
-      });
-
-      console.log("Clients response:", {
-        clientsCount: response.data.clients?.length || 0,
-        total: response.data.pagination?.total || 0,
-        page: response.data.pagination?.page || 0,
-        fullResponse: response.data,
+        page: page + 1, // Backend uses 1-based pagination
+        limit: pageSize,
+        search: searchTerm,
       });
 
       setClients(response.data.clients || []);
       const totalCount = response.data.pagination?.total || 0;
-      console.log("Setting rowCount to:", totalCount);
       setRowCount(totalCount);
     } catch (err) {
       console.error("Error fetching clients:", err);
       setError(err.message);
     } finally {
       setLoading(false);
+      setIsFetching(false);
     }
-  }, [paginationModel.page, paginationModel.pageSize, search]);
+  }, []);
 
   // Fetch clients when search or pagination changes, including initial load
   useEffect(() => {
-    console.log("useEffect triggered - fetching clients");
-    console.log("Current state:", { paginationModel, search });
-    fetchClients();
+    fetchClients(paginationModel.page, paginationModel.pageSize, search);
   }, [paginationModel.page, paginationModel.pageSize, search]);
 
   // Reset to first page when search changes
   useEffect(() => {
-    console.log("Search changed, resetting to page 0");
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
-    // Note: The main useEffect will automatically fetch due to paginationModel.page change
-  }, [search]);
+    if (search !== searchInput) {
+      setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    }
+  }, [search, searchInput]);
 
   // Maintain focus on search bar after results are loaded
   useEffect(() => {
@@ -241,244 +217,267 @@ const Clients = () => {
     }
   }, [loading]);
 
-  // Handle pagination model change
-  const handlePaginationModelChange = useCallback(
-    (newModel) => {
-      console.log("Pagination model changed:", newModel);
-      console.log("Current paginationModel:", paginationModel);
-      setPaginationModel(newModel);
-    },
-    [paginationModel]
-  );
+  // Cleanup function to prevent delays when navigating away
+  useEffect(() => {
+    return () => {
+      // Clear any pending state updates when component unmounts
+      setLoading(false);
+      setSearchLoading(false);
+      setIsFetching(false);
+    };
+  }, []);
 
-  const handleChange = (e) => {
+  // Handle pagination model change
+  const handlePaginationModelChange = useCallback((newModel) => {
+    setPaginationModel(newModel);
+  }, []);
+
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     if (name === "contact1Number" || name === "contact2Number") {
-      setForm({ ...form, [name]: formatPhoneNumber(value) });
+      setForm((prevForm) => ({
+        ...prevForm,
+        [name]: formatPhoneNumber(value),
+      }));
     } else {
-      setForm({ ...form, [name]: value });
+      setForm((prevForm) => ({ ...prevForm, [name]: value }));
     }
-  };
+  }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await clientService.create(form);
-      setClients([response.data, ...clients]);
-      setDialogOpen(false);
-      setForm(emptyForm);
-    } catch (err) {
-      if (err.response) {
-        alert(
-          `Error creating client: ${
-            err.response.data.message || "Unknown error"
-          }`
-        );
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      try {
+        const response = await clientService.create(form);
+        setClients((prevClients) => [response.data, ...prevClients]);
+        setDialogOpen(false);
+        setForm(emptyForm);
+      } catch (err) {
+        if (err.response) {
+          setSnackbar({
+            open: true,
+            message: `Error creating client: ${
+              err.response.data.message || "Unknown error"
+            }`,
+            severity: "error",
+          });
+        }
       }
-    }
-  };
+    },
+    [form]
+  );
 
-  const handleDeleteClick = (client) => {
+  const handleDeleteClick = useCallback((client) => {
     setClientToDelete(client);
     setDeleteDialogOpen(true);
-  };
+  }, []);
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = useCallback(async () => {
     try {
       await clientService.delete(clientToDelete._id);
-      setClients(clients.filter((client) => client._id !== clientToDelete._id));
+      setClients((prevClients) =>
+        prevClients.filter((client) => client._id !== clientToDelete._id)
+      );
       setDeleteDialogOpen(false);
       setClientToDelete(null);
     } catch (err) {
       if (err.response) {
-        alert(
-          `Error deleting client: ${
+        setSnackbar({
+          open: true,
+          message: `Error deleting client: ${
             err.response.data.message || "Unknown error"
-          }`
-        );
+          }`,
+          severity: "error",
+        });
       }
     }
-  };
+  }, [clientToDelete]);
 
   // Column visibility handlers
-  const handleColumnVisibilityClick = (event) => {
+  const handleColumnVisibilityClick = useCallback((event) => {
     setColumnVisibilityAnchor(event.currentTarget);
-  };
+  }, []);
 
-  const handleColumnVisibilityClose = () => {
+  const handleColumnVisibilityClose = useCallback(() => {
     setColumnVisibilityAnchor(null);
-  };
+  }, []);
 
-  const handleColumnToggle = async (field) => {
-    const newModel = {
-      ...columnVisibilityModel,
-      [field]: !columnVisibilityModel[field],
-    };
+  const handleColumnToggle = useCallback(
+    async (field) => {
+      const newModel = {
+        ...columnVisibilityModel,
+        [field]: !columnVisibilityModel[field],
+      };
 
-    setColumnVisibilityModel(newModel);
+      setColumnVisibilityModel(newModel);
 
-    try {
-      // Save to database
-      await userPreferencesService.updatePreferences({
-        columnVisibility: {
-          clients: newModel,
-        },
-      });
-    } catch (error) {
-      console.error("Error saving column visibility preferences:", error);
-      // Fallback to localStorage if API fails
-      localStorage.setItem(
-        "clients-column-visibility",
-        JSON.stringify(newModel)
-      );
-    }
-  };
-
-  const columns = [
-    {
-      field: "name",
-      headerName: "Client Name",
-      flex: 1,
-      renderCell: (params) => (
-        <Typography
-          sx={{
-            color: params.row.written_off ? "red" : "inherit",
-            fontWeight: params.row.written_off ? "bold" : "normal",
-            fontSize: "0.875rem",
-          }}
-        >
-          {params.row.name}
-        </Typography>
-      ),
-    },
-    {
-      field: "invoiceEmail",
-      headerName: "Invoice Email",
-      flex: 1,
-      renderCell: (params) => (
-        <Typography
-          sx={{
-            color: params.row.written_off ? "red" : "inherit",
-            fontWeight: params.row.written_off ? "bold" : "normal",
-            fontSize: "0.875rem",
-          }}
-        >
-          {params.row.invoiceEmail}
-        </Typography>
-      ),
-    },
-    {
-      field: "contact1Name",
-      headerName: "Primary Contact",
-      flex: 1,
-      renderCell: (params) => (
-        <Typography
-          sx={{
-            color: params.row.written_off ? "red" : "inherit",
-            fontWeight: params.row.written_off ? "bold" : "normal",
-            fontSize: "0.875rem",
-          }}
-        >
-          {params.row.contact1Name}
-        </Typography>
-      ),
-    },
-    {
-      field: "contact1Number",
-      headerName: "Primary Phone",
-      flex: 1,
-      valueGetter: (params) => formatPhoneNumber(params.row.contact1Number),
-      renderCell: (params) => (
-        <Typography
-          sx={{
-            color: params.row.written_off ? "red" : "inherit",
-            fontWeight: params.row.written_off ? "bold" : "normal",
-            fontSize: "0.875rem",
-          }}
-        >
-          {formatPhoneNumber(params.row.contact1Number)}
-        </Typography>
-      ),
-    },
-    {
-      field: "address",
-      headerName: "Address",
-      flex: 1,
-      renderCell: (params) => (
-        <Typography
-          sx={{
-            color: params.row.written_off ? "red" : "inherit",
-            fontWeight: params.row.written_off ? "bold" : "normal",
-            fontSize: "0.875rem",
-          }}
-        >
-          {params.row.address}
-        </Typography>
-      ),
-    },
-    ...(can("clients.write_off")
-      ? [
-          {
-            field: "written_off",
-            headerName: "Written Off",
-            flex: 0.5,
-            renderCell: (params) => (
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                {params.row.written_off && (
-                  <CheckCircleIcon
-                    sx={{
-                      color: "red",
-                      fontSize: 20,
-                    }}
-                  />
-                )}
-              </Box>
-            ),
+      try {
+        // Save to database
+        await userPreferencesService.updatePreferences({
+          columnVisibility: {
+            clients: newModel,
           },
-        ]
-      : []),
-    {
-      field: "actions",
-      headerName: "Actions",
-      flex: 1,
-      renderCell: (params) => (
-        <Box>
-          <IconButton
-            onClick={() =>
-              navigate(
-                `/invoices?client=${encodeURIComponent(params.row.name)}`
-              )
-            }
-            title="View Invoices"
-          >
-            <AttachMoneyIcon />
-          </IconButton>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => navigate(`/clients/${params.row._id}`)}
-            title="View Details"
-            sx={{ mr: 1 }}
-          >
-            Details
-          </Button>
-          <IconButton
-            onClick={() => handleDeleteClick(params.row)}
-            title="Delete Client"
-            color="error"
-          >
-            <DeleteIcon />
-          </IconButton>
-        </Box>
-      ),
+        });
+      } catch (error) {
+        console.error("Error saving column visibility preferences:", error);
+        // Fallback to localStorage if API fails
+        localStorage.setItem(
+          "clients-column-visibility",
+          JSON.stringify(newModel)
+        );
+      }
     },
-  ];
+    [columnVisibilityModel]
+  );
+
+  const columns = useMemo(
+    () => [
+      {
+        field: "name",
+        headerName: "Client Name",
+        flex: 1,
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              color: params.row.written_off ? "red" : "inherit",
+              fontWeight: params.row.written_off ? "bold" : "normal",
+              fontSize: "0.875rem",
+            }}
+          >
+            {params.row.name}
+          </Typography>
+        ),
+      },
+      {
+        field: "invoiceEmail",
+        headerName: "Invoice Email",
+        flex: 1,
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              color: params.row.written_off ? "red" : "inherit",
+              fontWeight: params.row.written_off ? "bold" : "normal",
+              fontSize: "0.875rem",
+            }}
+          >
+            {params.row.invoiceEmail}
+          </Typography>
+        ),
+      },
+      {
+        field: "contact1Name",
+        headerName: "Primary Contact",
+        flex: 1,
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              color: params.row.written_off ? "red" : "inherit",
+              fontWeight: params.row.written_off ? "bold" : "normal",
+              fontSize: "0.875rem",
+            }}
+          >
+            {params.row.contact1Name}
+          </Typography>
+        ),
+      },
+      {
+        field: "contact1Number",
+        headerName: "Primary Phone",
+        flex: 1,
+        valueGetter: (params) => formatPhoneNumber(params.row.contact1Number),
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              color: params.row.written_off ? "red" : "inherit",
+              fontWeight: params.row.written_off ? "bold" : "normal",
+              fontSize: "0.875rem",
+            }}
+          >
+            {formatPhoneNumber(params.row.contact1Number)}
+          </Typography>
+        ),
+      },
+      {
+        field: "address",
+        headerName: "Address",
+        flex: 1,
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              color: params.row.written_off ? "red" : "inherit",
+              fontWeight: params.row.written_off ? "bold" : "normal",
+              fontSize: "0.875rem",
+            }}
+          >
+            {params.row.address}
+          </Typography>
+        ),
+      },
+      ...(canWriteOff
+        ? [
+            {
+              field: "written_off",
+              headerName: "Written Off",
+              flex: 0.5,
+              renderCell: (params) => (
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  {params.row.written_off && (
+                    <CheckCircleIcon
+                      sx={{
+                        color: "red",
+                        fontSize: 20,
+                      }}
+                    />
+                  )}
+                </Box>
+              ),
+            },
+          ]
+        : []),
+      {
+        field: "actions",
+        headerName: "Actions",
+        flex: 1,
+        renderCell: (params) => (
+          <Box>
+            <IconButton
+              onClick={() =>
+                navigate(
+                  `/invoices?client=${encodeURIComponent(params.row.name)}`
+                )
+              }
+              title="View Invoices"
+            >
+              <AttachMoneyIcon />
+            </IconButton>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => navigate(`/clients/${params.row._id}`)}
+              title="View Details"
+              sx={{ mr: 1 }}
+            >
+              Details
+            </Button>
+            <IconButton
+              onClick={() => handleDeleteClick(params.row)}
+              title="Delete Client"
+              color="error"
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Box>
+        ),
+      },
+    ],
+    [canWriteOff]
+  );
 
   if (loading) return <Typography>Loading clients...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
@@ -852,7 +851,7 @@ const Clients = () => {
                   />
                 </RadioGroup>
               </FormControl>
-              {can("clients.write_off") && (
+              {canWriteOff && (
                 <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
                   <Checkbox
                     name="written_off"
@@ -913,6 +912,22 @@ const Clients = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
