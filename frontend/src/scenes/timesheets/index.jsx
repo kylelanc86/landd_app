@@ -19,6 +19,13 @@ import {
   Chip,
   Autocomplete,
   InputAdornment,
+  Divider,
+  Card,
+  CardContent,
+  Stack,
+  Avatar,
+  Tooltip,
+  Fade,
 } from "@mui/material";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
@@ -30,6 +37,10 @@ import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
 import SearchIcon from "@mui/icons-material/Search";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import WorkIcon from "@mui/icons-material/Work";
+import CoffeeIcon from "@mui/icons-material/Coffee";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import {
   format,
   addDays,
@@ -590,253 +601,329 @@ const Timesheets = () => {
 
   return (
     <Box m="20px">
-      {/* Header and Monthly View button OUTSIDE of styled container */}
+      {/* Custom CSS for FullCalendar styling */}
+      <style>
+        {`
+           /* Time column styling - target the actual rendered elements */
+           .fc .fc-timegrid-axis {
+             background: linear-gradient(135deg, ${theme.palette.success.dark}, ${theme.palette.success.main}) !important;
+             color: ${theme.palette.success.contrastText} !important;
+           }
+           
+           .fc .fc-timegrid-axis-frame {
+             background: linear-gradient(135deg, ${theme.palette.success.dark}, ${theme.palette.success.main}) !important;
+           }
+           
+           .fc .fc-timegrid-axis-cushion {
+             color: ${theme.palette.success.contrastText} !important;
+             font-size: 0.8rem !important;
+             line-height: 1.2 !important;
+             padding: 2px 4px !important;
+           }
+           
+                       /* Aggressive row height reduction - target everything */
+            .fc .fc-timegrid-slot,
+            .fc .fc-timegrid-slot-lane,
+            .fc .fc-timegrid-slot-minor,
+            .fc .fc-timegrid-slot td,
+            .fc .fc-timegrid-slot-lane td,
+            .fc .fc-timegrid-slot-minor td,
+            .fc .fc-timegrid tbody tr,
+            .fc .fc-timegrid tbody tr td {
+              height: 60% !important;
+              min-height: 60% !important;
+              max-height: 60% !important;
+              line-height: 1.3 !important;
+            }
+            
+            /* Force the entire timegrid to respect our height */
+            .fc .fc-timegrid-body {
+              height: auto !important;
+            }
+            
+            /* Target the actual rendered elements with higher specificity */
+            .fc .fc-timegrid-slot-label {
+              height: 60% !important;
+              min-height: 60% !important;
+              max-height: 60% !important;
+              line-height: 1.2 !important;
+              padding: 1px 4px !important;
+            }
+            
+            /* Override any inline styles */
+            .fc .fc-timegrid-slot *,
+            .fc .fc-timegrid-slot-lane *,
+            .fc .fc-timegrid-slot-minor * {
+              height: 60% !important;
+              min-height: 60% !important;
+              max-height: 60% !important;
+            }
+           
+                       /* Custom classes for alternating colors */
+           .fc-slot-green {
+             background-color: ${theme.palette.success.light}80 !important;
+           }
+           
+           .fc-slot-white {
+             background-color: ${theme.palette.background.paper} !important;
+           }
+            
+            /* Ensure the custom classes override FullCalendar's defaults */
+            .fc .fc-timegrid-slot.fc-slot-green,
+            .fc .fc-timegrid-slot-lane.fc-slot-green {
+              background-color: ${theme.palette.success.light}80 !important;
+            }
+            
+            .fc .fc-timegrid-slot.fc-slot-white,
+            .fc .fc-timegrid-slot-lane.fc-slot-white {
+              background-color: ${theme.palette.background.paper} !important;
+            }
+         `}
+      </style>
+      {/* Standard Page Header */}
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
         mb={3}
       >
-        <Typography variant="h4" component="h1" gutterBottom>
+        <Typography variant="h3" component="h1">
           Daily Timesheet
         </Typography>
         <Button
           variant="contained"
           onClick={() => navigate("/timesheets/monthly")}
-          sx={{
-            backgroundColor: theme.palette.primary.dark,
-            color: theme.palette.primary.contrastText,
-            borderRadius: "12px",
-            fontWeight: 600,
-            textTransform: "none",
-            px: 3,
-            py: 1.5,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            "&:hover": {
-              backgroundColor: theme.palette.primary.main,
-              boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
-              transform: "translateY(-1px)",
-            },
-          }}
+          startIcon={<WorkIcon />}
         >
           Monthly View
         </Button>
       </Box>
 
-      {/* Main content in Paper */}
+      {/* Enhanced Main content with alternating shading */}
       <Paper
-        elevation={3}
+        elevation={0}
         sx={{
-          p: 3,
-          backgroundColor: theme.palette.background.alt,
-          borderRadius: 3,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
+          background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
+          borderRadius: 4,
+          boxShadow: "0 16px 48px rgba(0,0,0,0.08)",
           border: `1px solid ${theme.palette.divider}`,
+          overflow: "hidden",
+          position: "relative",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "6px",
+            background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main}, ${theme.palette.success.main})`,
+          },
         }}
       >
+        {/* Enhanced Date Navigation and Status Controls */}
         <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={3}
+          sx={{
+            background: `linear-gradient(135deg, ${theme.palette.primary.main}08 0%, ${theme.palette.primary.light}05 100%)`,
+            p: 4,
+            borderBottom: `2px solid ${theme.palette.divider}`,
+          }}
         >
-          <Box display="flex" alignItems="center" gap={2}>
-            <IconButton
-              onClick={() => handleDayChange("prev")}
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            gap={3}
+          >
+            {/* Date Navigation */}
+            <Box
+              display="flex"
+              alignItems="center"
+              gap={2}
               sx={{
-                backgroundColor: theme.palette.primary.main,
-                color: theme.palette.primary.contrastText,
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.dark,
-                },
-                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                background: theme.palette.background.paper,
+                p: 2,
+                borderRadius: 3,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+                border: `1px solid ${theme.palette.divider}`,
               }}
             >
-              <ArrowBackIosNewIcon />
-            </IconButton>
-            <Typography
-              variant="h5"
-              sx={{
-                fontWeight: 600,
-                color: theme.palette.primary.main,
-                textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                minWidth: "300px",
-                textAlign: "center",
-              }}
-            >
-              {format(selectedDate, "EEEE, MMMM d, yyyy")}
-            </Typography>
-            <IconButton
-              onClick={() => handleDayChange("next")}
-              sx={{
-                backgroundColor: theme.palette.primary.main,
-                color: theme.palette.primary.contrastText,
-                "&:hover": {
-                  backgroundColor: theme.palette.primary.dark,
-                },
-                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-              }}
-            >
-              <ArrowForwardIosIcon />
-            </IconButton>
-          </Box>
-          <Box display="flex" gap={2}>
-            <Button
-              variant={
-                timesheetStatus === "finalised" ? "contained" : "outlined"
-              }
-              color="success"
-              startIcon={<CheckCircleIcon />}
-              onClick={() =>
-                handleStatusUpdate(
-                  timesheetStatus === "finalised" ? "incomplete" : "finalised"
-                )
-              }
-              sx={{
-                borderRadius: "12px",
-                fontWeight: 600,
-                textTransform: "none",
-                px: 3,
-                py: 1,
-                boxShadow:
-                  timesheetStatus === "finalised"
-                    ? "0 4px 12px rgba(76, 175, 80, 0.3)"
-                    : "none",
-                "&:hover": {
+              <IconButton
+                onClick={() => handleDayChange("prev")}
+                sx={{
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                  color: theme.palette.primary.contrastText,
+                  "&:hover": {
+                    background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
+                    transform: "scale(1.05)",
+                  },
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <ArrowBackIosNewIcon />
+              </IconButton>
+              <Box textAlign="center" minWidth="280px">
+                <Typography
+                  variant="h4"
+                  sx={{
+                    fontWeight: 700,
+                    color: theme.palette.primary.main,
+                    textShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                    mb: 0.5,
+                  }}
+                >
+                  {format(selectedDate, "EEEE")}
+                </Typography>
+                <Typography
+                  variant="h5"
+                  sx={{
+                    fontWeight: 600,
+                    color: theme.palette.text.secondary,
+                  }}
+                >
+                  {format(selectedDate, "d MMMM yyyy")}
+                </Typography>
+              </Box>
+              <IconButton
+                onClick={() => handleDayChange("next")}
+                sx={{
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                  color: theme.palette.primary.contrastText,
+                  "&:hover": {
+                    background: `linear-gradient(135deg, ${theme.palette.primary.dark}, ${theme.palette.primary.main})`,
+                    transform: "scale(1.05)",
+                  },
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <ArrowForwardIosIcon />
+              </IconButton>
+            </Box>
+
+            {/* Status Controls */}
+            <Stack direction="row" spacing={2} flexWrap="wrap">
+              <Button
+                variant={
+                  timesheetStatus === "finalised" ? "contained" : "outlined"
+                }
+                color="success"
+                startIcon={<CheckCircleIcon />}
+                onClick={() =>
+                  handleStatusUpdate(
+                    timesheetStatus === "finalised" ? "incomplete" : "finalised"
+                  )
+                }
+                sx={{
+                  borderRadius: "16px",
+                  fontWeight: 600,
+                  textTransform: "none",
+                  px: 4,
+                  py: 1.5,
+                  fontSize: "1rem",
                   boxShadow:
                     timesheetStatus === "finalised"
-                      ? "0 6px 16px rgba(76, 175, 80, 0.4)"
-                      : "0 2px 8px rgba(0,0,0,0.1)",
-                },
-              }}
-            >
-              {timesheetStatus === "finalised" ? "Unfinalise" : "Finalise"}
-            </Button>
-            <Button
-              variant={timesheetStatus === "absent" ? "contained" : "outlined"}
-              color="error"
-              startIcon={<EventBusyIcon />}
-              onClick={() =>
-                handleStatusUpdate(
-                  timesheetStatus === "absent" ? "incomplete" : "absent"
-                )
-              }
-              sx={{
-                borderRadius: "12px",
-                fontWeight: 600,
-                textTransform: "none",
-                px: 3,
-                py: 1,
-                boxShadow:
-                  timesheetStatus === "absent"
-                    ? "0 4px 12px rgba(244, 67, 54, 0.3)"
-                    : "none",
-                "&:hover": {
+                      ? "0 8px 24px rgba(76, 175, 80, 0.3)"
+                      : "0 4px 12px rgba(0,0,0,0.1)",
+                  "&:hover": {
+                    boxShadow:
+                      timesheetStatus === "finalised"
+                        ? "0 12px 32px rgba(76, 175, 80, 0.4)"
+                        : "0 6px 16px rgba(0,0,0,0.15)",
+                    transform: "translateY(-1px)",
+                  },
+                  transition: "all 0.3s ease",
+                }}
+              >
+                {timesheetStatus === "finalised" ? "Unfinalise" : "Finalise"}
+              </Button>
+              <Button
+                variant={
+                  timesheetStatus === "absent" ? "contained" : "outlined"
+                }
+                color="error"
+                startIcon={<EventBusyIcon />}
+                onClick={() =>
+                  handleStatusUpdate(
+                    timesheetStatus === "absent" ? "incomplete" : "absent"
+                  )
+                }
+                sx={{
+                  borderRadius: "16px",
+                  fontWeight: 600,
+                  textTransform: "none",
+                  px: 4,
+                  py: 1.5,
+                  fontSize: "1rem",
                   boxShadow:
                     timesheetStatus === "absent"
-                      ? "0 6px 16px rgba(244, 67, 54, 0.4)"
-                      : "0 2px 8px rgba(0,0,0,0.1)",
-                },
-              }}
-            >
-              {timesheetStatus === "absent" ? "Mark Present" : "Mark Absent"}
-            </Button>
+                      ? "0 8px 24px rgba(244, 67, 54, 0.3)"
+                      : "0 4px 12px rgba(0,0,0,0.1)",
+                  "&:hover": {
+                    boxShadow:
+                      timesheetStatus === "absent"
+                        ? "0 12px 32px rgba(244, 67, 54, 0.4)"
+                        : "0 6px 16px rgba(0,0,0,0.15)",
+                    transform: "translateY(-1px)",
+                  },
+                  transition: "all 0.3s ease",
+                }}
+              >
+                {timesheetStatus === "absent" ? "Mark Present" : "Mark Absent"}
+              </Button>
+            </Stack>
           </Box>
         </Box>
 
+        {/* Enhanced Calendar Container with alternating shading */}
         <Box
           sx={{
-            height: "850px",
+            height: "765px", // Reduced by 10% from 850px
+            p: 3,
+            background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
             "& .fc": {
               fontFamily: theme.typography.fontFamily,
-              backgroundColor: theme.palette.background.paper,
-              borderRadius: 2,
+              backgroundColor: "transparent",
+              borderRadius: 3,
               overflow: "hidden",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              border: `2px solid ${theme.palette.divider}`,
             },
             "& .fc-toolbar": {
-              backgroundColor: theme.palette.primary.main,
+              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
               color: theme.palette.primary.contrastText,
-              padding: "12px 16px",
-              borderBottom: `2px solid ${theme.palette.primary.dark}`,
+              padding: "16px 20px",
+              borderBottom: `3px solid ${theme.palette.primary.dark}`,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
             },
             "& .fc-toolbar-title": {
-              fontSize: "1.25rem",
-              fontWeight: 600,
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              textShadow: "0 1px 2px rgba(0,0,0,0.2)",
             },
             "& .fc-button": {
-              backgroundColor: theme.palette.secondary.main,
+              background: `linear-gradient(135deg, ${theme.palette.secondary.main}, ${theme.palette.secondary.dark})`,
               borderColor: theme.palette.secondary.main,
               color: theme.palette.secondary.contrastText,
-              fontWeight: 500,
+              fontWeight: 600,
               textTransform: "none",
-              borderRadius: "8px",
-              padding: "8px 16px",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
               "&:hover": {
-                backgroundColor: theme.palette.secondary.dark,
-                borderColor: theme.palette.secondary.dark,
+                background: `linear-gradient(135deg, ${theme.palette.secondary.dark}, ${theme.palette.secondary.main})`,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                transform: "translateY(-1px)",
               },
-              "&:focus": {
-                boxShadow: `0 0 0 2px ${theme.palette.secondary.light}`,
-              },
+              transition: "all 0.3s ease",
             },
             "& .fc-timegrid-slot": {
               borderColor: theme.palette.divider,
-              backgroundColor: theme.palette.background.default,
-            },
-            "& .fc-timegrid-slot-label": {
-              backgroundColor: theme.palette.primary.light,
-              color: theme.palette.primary.contrastText,
-              fontWeight: 600,
-              fontSize: "0.875rem",
-              borderColor: theme.palette.primary.main,
-            },
-            "& .fc-timegrid-axis": {
-              backgroundColor: theme.palette.primary.main,
-              color: theme.palette.primary.contrastText,
-              fontWeight: 600,
-              borderColor: theme.palette.primary.dark,
-            },
-            "& .fc-timegrid-col-events": {
               backgroundColor: theme.palette.background.paper,
             },
-            "& .fc-event": {
-              borderRadius: "6px",
-              border: "none",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-              transition: "all 0.2s ease-in-out",
-              "&:hover": {
-                boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
-                transform: "translateY(-1px)",
-              },
-            },
-            "& .fc-event-main": {
-              padding: "4px 8px",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-            },
-            "& .fc-event-time": {
-              fontWeight: 600,
-              fontSize: "0.75rem",
-            },
-            "& .fc-event-title": {
-              fontSize: "0.875rem",
-            },
-            "& .fc-now-indicator-line": {
-              borderColor: theme.palette.error.main,
-              borderWidth: "2px",
-            },
-            "& .fc-now-indicator-arrow": {
-              borderColor: theme.palette.error.main,
-              borderWidth: "4px",
-            },
-            "& .fc-highlight": {
-              backgroundColor: theme.palette.primary.light,
-              opacity: 0.3,
-              borderRadius: "4px",
-            },
-            "& .weekend-day": {
-              backgroundColor: theme.palette.grey[50],
+            "& .fc-timegrid-slot-lane": {
+              borderColor: theme.palette.divider,
             },
             "& .fc-timegrid-slot-minor": {
               borderColor: theme.palette.divider,
@@ -844,22 +931,98 @@ const Timesheets = () => {
             "& .fc-timegrid-slot-minor .fc-timegrid-slot-label": {
               backgroundColor: theme.palette.grey[100],
               color: theme.palette.text.secondary,
-              fontSize: "0.75rem",
+              fontSize: "0.8rem",
+              fontWeight: 500,
+            },
+            "& .fc-timegrid-slot-label": {
+              background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+              color: theme.palette.primary.contrastText,
+              fontWeight: 700,
+              fontSize: "1rem",
+              borderColor: theme.palette.primary.dark,
+              textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+              padding: "8px 12px",
+            },
+            "& .fc-timegrid-axis": {
+              fontWeight: 700,
+              borderColor: theme.palette.success.dark,
+              textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+              padding: "8px 12px",
+            },
+            "& .fc-timegrid-col-events": {
+              backgroundColor: "transparent",
+            },
+            "& .fc-event": {
+              borderRadius: "12px",
+              border: "none",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              "&:hover": {
+                boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                transform: "translateY(-2px) scale(1.02)",
+              },
+            },
+            "& .fc-event-main": {
+              padding: "8px 12px",
+              fontSize: "0.9rem",
+              fontWeight: 600,
+            },
+            "& .fc-event-time": {
+              fontWeight: 700,
+              fontSize: "0.8rem",
+            },
+            "& .fc-event-title": {
+              fontSize: "0.9rem",
+              fontWeight: 600,
+            },
+            "& .fc-now-indicator-line": {
+              borderColor: theme.palette.error.main,
+              borderWidth: "3px",
+              boxShadow: `0 0 8px ${theme.palette.error.main}40`,
+            },
+            "& .fc-now-indicator-arrow": {
+              borderColor: theme.palette.error.main,
+              borderWidth: "6px",
+              boxShadow: `0 0 8px ${theme.palette.error.main}40`,
+            },
+            "& .fc-highlight": {
+              background: `linear-gradient(135deg, ${theme.palette.primary.light}40, ${theme.palette.primary.main}20)`,
+              borderRadius: "8px",
+              border: `2px dashed ${theme.palette.primary.main}`,
+            },
+            "& .weekend-day": {
+              background: `linear-gradient(135deg, ${theme.palette.grey[100]}, ${theme.palette.grey[50]})`,
+            },
+            "& .fc-timegrid-slot-minor": {
+              borderColor: theme.palette.divider,
+              backgroundColor: theme.palette.grey[25],
+            },
+            "& .fc-timegrid-slot-minor .fc-timegrid-slot-label": {
+              backgroundColor: theme.palette.grey[100],
+              color: theme.palette.text.secondary,
+              fontSize: "0.8rem",
+              fontWeight: 500,
+            },
+            "& .fc-col-header": {
+              display: "none !important", // Hide the day header
             },
             "& .break-event": {
               background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%) !important`,
-              borderLeft: `4px solid ${theme.palette.warning.dark} !important`,
-              boxShadow: `0 2px 8px ${theme.palette.warning.main}40 !important`,
+              borderLeft: `6px solid ${theme.palette.warning.dark} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.warning.main}40 !important`,
+              borderRadius: "12px !important",
             },
             "& .admin-event": {
               background: `linear-gradient(135deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%) !important`,
-              borderLeft: `4px solid ${theme.palette.info.dark} !important`,
-              boxShadow: `0 2px 8px ${theme.palette.info.main}40 !important`,
+              borderLeft: `6px solid ${theme.palette.info.dark} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.info.main}40 !important`,
+              borderRadius: "12px !important",
             },
             "& .project-event": {
               background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%) !important`,
-              borderLeft: `4px solid ${theme.palette.primary.dark} !important`,
-              boxShadow: `0 2px 8px ${theme.palette.primary.main}40 !important`,
+              borderLeft: `6px solid ${theme.palette.primary.dark} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.primary.main}40 !important`,
+              borderRadius: "12px !important",
             },
           }}
         >
@@ -886,6 +1049,16 @@ const Timesheets = () => {
             firstDay={1}
             headerToolbar={false}
             allDaySlot={false}
+            slotLaneClassNames={(arg) => {
+              // Use FullCalendar's built-in class naming system
+              const slotIndex = Math.floor(
+                (arg.date.getHours() - 6) * 4 + arg.date.getMinutes() / 15
+              );
+              if (slotIndex % 4 === 0 || slotIndex % 4 === 1) {
+                return "fc-slot-green";
+              }
+              return "fc-slot-white";
+            }}
             dayCellClassNames={(arg) => {
               return arg.date.getDay() === 0 || arg.date.getDay() === 6
                 ? "weekend-day"
@@ -1004,40 +1177,38 @@ const Timesheets = () => {
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Work Type</InputLabel>
-                  <Select
-                    value={
-                      formData.isBreak
-                        ? "break"
-                        : formData.isAdminWork
-                        ? "admin"
-                        : "project"
-                    }
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        isAdminWork: e.target.value === "admin",
-                        isBreak: e.target.value === "break",
-                        projectId:
-                          e.target.value === "admin" ||
-                          e.target.value === "break"
-                            ? ""
-                            : formData.projectId,
-                        projectInputType:
-                          e.target.value === "admin" ||
-                          e.target.value === "break"
-                            ? ""
-                            : formData.projectInputType,
-                      })
-                    }
-                    required
-                  >
-                    <MenuItem value="project">Project Work</MenuItem>
-                    <MenuItem value="admin">Admin Work</MenuItem>
-                    <MenuItem value="break">Break</MenuItem>
-                  </Select>
-                </FormControl>
+                <TextField
+                  select
+                  fullWidth
+                  label="Work Type"
+                  value={
+                    formData.isBreak
+                      ? "break"
+                      : formData.isAdminWork
+                      ? "admin"
+                      : "project"
+                  }
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      isAdminWork: e.target.value === "admin",
+                      isBreak: e.target.value === "break",
+                      projectId:
+                        e.target.value === "admin" || e.target.value === "break"
+                          ? ""
+                          : formData.projectId,
+                      projectInputType:
+                        e.target.value === "admin" || e.target.value === "break"
+                          ? ""
+                          : formData.projectInputType,
+                    })
+                  }
+                  required
+                >
+                  <MenuItem value="project">Project Work</MenuItem>
+                  <MenuItem value="admin">Admin Work</MenuItem>
+                  <MenuItem value="break">Break</MenuItem>
+                </TextField>
               </Grid>
               {!formData.isAdminWork && !formData.isBreak && (
                 <>
@@ -1085,23 +1256,22 @@ const Timesheets = () => {
                     />
                   </Grid>
                   <Grid item xs={12}>
-                    <FormControl fullWidth>
-                      <InputLabel>Project Input Type</InputLabel>
-                      <Select
-                        value={formData.projectInputType}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            projectInputType: e.target.value,
-                          })
-                        }
-                        required
-                      >
-                        <MenuItem value="site_work">Site Work/Travel</MenuItem>
-                        <MenuItem value="reporting">Reporting</MenuItem>
-                        <MenuItem value="project_admin">Project Admin</MenuItem>
-                      </Select>
-                    </FormControl>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Project Input Type"
+                      value={formData.projectInputType}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          projectInputType: e.target.value,
+                        })
+                      }
+                    >
+                      <MenuItem value="site_work">Site Work/Travel</MenuItem>
+                      <MenuItem value="reporting">Reporting</MenuItem>
+                      <MenuItem value="project_admin">Project Admin</MenuItem>
+                    </TextField>
                   </Grid>
                 </>
               )}

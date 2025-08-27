@@ -300,7 +300,7 @@ const TimesheetReview = () => {
         return (
           <Typography
             sx={{
-              color: colors.grey[100],
+              color: isWeekend ? colors.grey[100] : colors.grey[700],
               fontStyle: isWeekend ? "italic" : "normal",
               fontSize: "0.875rem",
             }}

@@ -78,6 +78,7 @@ const Topbar = () => {
           <Typography
             variant="body2"
             sx={{
+              fontStyle: "bold",
               color: "black",
               textTransform: "capitalize",
             }}
