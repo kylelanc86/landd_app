@@ -100,7 +100,7 @@ const TemplateTestPage = () => {
                   backgroundColor: "white",
                   color: "black",
                   minHeight: "300px",
-                  fontFamily: "Arial, sans-serif",
+                  fontFamily: "Roboto, sans-serif",
                 }}
               >
                 <Typography
@@ -142,7 +142,7 @@ const TemplateTestPage = () => {
                   backgroundColor: "white",
                   color: "black",
                   minHeight: "300px",
-                  fontFamily: "Arial, sans-serif",
+                  fontFamily: "Roboto, sans-serif",
                 }}
               >
                 <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
@@ -154,10 +154,7 @@ const TemplateTestPage = () => {
                 >
                   {templateData.standardSections.inspectionIntroduction}
                 </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{ mb: 2, textAlign: "justify" }}
-                >
+                <Typography variant="body1" sx={{ mb: 2, textAlign: "bold" }}>
                   {templateData.standardSections.inspectionSpecifics}
                 </Typography>
                 <Typography
@@ -184,7 +181,7 @@ const TemplateTestPage = () => {
                   backgroundColor: "white",
                   color: "black",
                   minHeight: "300px",
-                  fontFamily: "Arial, sans-serif",
+                  fontFamily: "Roboto, sans-serif",
                 }}
               >
                 <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
@@ -235,7 +232,7 @@ const TemplateTestPage = () => {
                   backgroundColor: "white",
                   color: "black",
                   minHeight: "300px",
-                  fontFamily: "Arial, sans-serif",
+                  fontFamily: "Roboto, sans-serif",
                 }}
               >
                 <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>

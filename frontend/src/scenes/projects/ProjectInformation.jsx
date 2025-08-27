@@ -19,23 +19,32 @@ import {
   Autocomplete,
   CircularProgress,
   Alert,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Stack,
+  Checkbox,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Snackbar,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import DownloadIcon from "@mui/icons-material/Download";
+
+import DeleteIcon from "@mui/icons-material/Delete";
 import { projectService, clientService, userService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+import { hasPermission } from "../../config/permissions";
+import { usePermissions } from "../../hooks/usePermissions";
 import {
   ACTIVE_STATUSES,
   INACTIVE_STATUSES,
   StatusChip,
 } from "../../components/JobStatus";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
+import {
+  formatPhoneNumber,
+  isValidAustralianMobile,
+  isValidEmailOrDash,
+} from "../../utils/formatters";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -63,6 +72,9 @@ const CATEGORIES = [
 const ProjectInformation = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const { can } = usePermissions();
+  const canWriteOff = can("clients.write_off");
   const isEditMode = id !== "new";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -70,10 +82,25 @@ const ProjectInformation = () => {
   const [users, setUsers] = useState([]);
   const [newClientDialogOpen, setNewClientDialogOpen] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
   const [newClientForm, setNewClientForm] = useState({
     name: "",
-    email: "",
-    phone: "",
+    invoiceEmail: "",
+    address: "",
+    contact1Name: "",
+    contact1Number: "",
+    contact1Email: "",
+    contact2Name: "",
+    contact2Number: "",
+    contact2Email: "",
+    paymentTerms: "Standard (30 days)",
+    written_off: false,
   });
 
   const [form, setForm] = useState({
@@ -105,11 +132,9 @@ const ProjectInformation = () => {
   const [googleMaps, setGoogleMaps] = useState(null);
   const [googleMapsError, setGoogleMapsError] = useState(null);
 
-  const [timeLogsOpen, setTimeLogsOpen] = useState(false);
-  const [timeLogs, setTimeLogs] = useState([]);
-  const [loadingTimeLogs, setLoadingTimeLogs] = useState(false);
-
   const [clientInputValue, setClientInputValue] = useState("");
+  const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [isClientSearching, setIsClientSearching] = useState(false);
 
   const generateNextProjectId = async () => {
     try {
@@ -248,6 +273,13 @@ const ProjectInformation = () => {
     initializeGoogleMaps();
   }, []);
 
+  // Sync addressInput with form address when editing
+  useEffect(() => {
+    if (form.address && !addressInput) {
+      setAddressInput(form.address);
+    }
+  }, [form.address, addressInput]);
+
   const handleAddressInputChange = async (value) => {
     console.log("handleAddressInputChange called with:", value);
     console.log("autocompleteService:", autocompleteService);
@@ -385,6 +417,30 @@ const ProjectInformation = () => {
     }));
   };
 
+  const searchClients = async (searchTerm) => {
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      setClientSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsClientSearching(true);
+      // Search the entire client database
+      const response = await clientService.getAll({
+        search: searchTerm.trim(),
+        limit: 10,
+      });
+
+      const searchResults = response.data.clients || response.data;
+      setClientSearchResults(searchResults);
+    } catch (error) {
+      console.error("Error searching clients:", error);
+      setClientSearchResults([]);
+    } finally {
+      setIsClientSearching(false);
+    }
+  };
+
   const handleUsersChange = (event, newValue) => {
     setForm((prev) => ({
       ...prev,
@@ -408,7 +464,15 @@ const ProjectInformation = () => {
   };
 
   const handleNewClientChange = (e) => {
-    setNewClientForm({ ...newClientForm, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === "contact1Number" || name === "contact2Number") {
+      setNewClientForm((prevForm) => ({
+        ...prevForm,
+        [name]: formatPhoneNumber(value),
+      }));
+    } else {
+      setNewClientForm((prevForm) => ({ ...prevForm, [name]: value }));
+    }
   };
 
   const handleNewClientSubmit = async (e) => {
@@ -421,14 +485,47 @@ const ProjectInformation = () => {
       setNewClientDialogOpen(false);
       setNewClientForm({
         name: "",
-        email: "",
-        phone: "",
+        invoiceEmail: "",
+        address: "",
+        contact1Name: "",
+        contact1Number: "",
+        contact1Email: "",
+        contact2Name: "",
+        contact2Number: "",
+        contact2Email: "",
+        paymentTerms: "Standard (30 days)",
+        written_off: false,
+      });
+      setSnackbar({
+        open: true,
+        message: "Client created successfully!",
+        severity: "success",
       });
     } catch (err) {
       console.error("Error creating client:", err);
-      setError("Failed to create client");
+      setSnackbar({
+        open: true,
+        message: `Error creating client: ${
+          err.response?.data?.message || "Unknown error"
+        }`,
+        severity: "error",
+      });
     } finally {
       setCreatingClient(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    try {
+      setDeleting(true);
+      await projectService.delete(id);
+      navigate("/projects");
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      setError("Failed to delete project. Please try again.");
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -437,85 +534,6 @@ const ProjectInformation = () => {
       <StatusChip status={status} />
     </MenuItem>
   );
-
-  // Add function to fetch time logs
-  const fetchTimeLogs = async () => {
-    try {
-      setLoadingTimeLogs(true);
-      const response = await projectService.getTimeLogs(id);
-      setTimeLogs(response.data);
-    } catch (error) {
-      console.error("Error fetching time logs:", error);
-      setError("Failed to fetch time logs");
-    } finally {
-      setLoadingTimeLogs(false);
-    }
-  };
-
-  // Add function to handle time logs button click
-  const handleTimeLogsClick = () => {
-    setTimeLogsOpen(true);
-    fetchTimeLogs();
-  };
-
-  // Function to convert time logs to CSV
-  const downloadTimeLogsCSV = () => {
-    if (!timeLogs.length) return;
-
-    // Define CSV headers
-    const headers = [
-      "Date",
-      "User",
-      "Start Time",
-      "End Time",
-      "Duration",
-      "Description",
-    ];
-
-    // Convert time logs to CSV rows
-    const rows = timeLogs.map((log) => {
-      const [startHours, startMinutes] = log.startTime.split(":").map(Number);
-      const [endHours, endMinutes] = log.endTime.split(":").map(Number);
-      const startTotalMinutes = startHours * 60 + startMinutes;
-      const endTotalMinutes = endHours * 60 + endMinutes;
-      let duration = endTotalMinutes - startTotalMinutes;
-      if (duration < 0) duration += 24 * 60;
-      const hours = Math.floor(duration / 60);
-      const minutes = duration % 60;
-      const durationStr = `${hours}h ${minutes}m`;
-
-      return [
-        new Date(log.date).toLocaleDateString(),
-        `${log.userId.firstName} ${log.userId.lastName}`,
-        log.startTime,
-        log.endTime,
-        durationStr,
-        log.description || "",
-      ];
-    });
-
-    // Combine headers and rows
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
-    ].join("\n");
-
-    // Create and trigger download
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `time_logs_${form.projectID}_${
-        new Date().toISOString().split("T")[0]
-      }.csv`
-    );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   if (loading) return <Typography>Loading...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
@@ -527,13 +545,6 @@ const ProjectInformation = () => {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h4">Project Details</Typography>
-        <Button
-          variant="outlined"
-          onClick={handleTimeLogsClick}
-          sx={{ ml: "auto" }}
-        >
-          Time Logs
-        </Button>
       </Box>
 
       {loading ? (
@@ -554,9 +565,32 @@ const ProjectInformation = () => {
           <form onSubmit={handleSubmit}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  Project ID: {form.projectID}
-                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Typography variant="h6" color="text.secondary">
+                    Project ID: {form.projectID}
+                  </Typography>
+                  {form.createdAt && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontStyle: "italic" }}
+                    >
+                      (Entered on{" "}
+                      {new Date(form.createdAt).toLocaleDateString("en-AU", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}{" "}
+                      at{" "}
+                      {new Date(form.createdAt).toLocaleTimeString("en-AU", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                      )
+                    </Typography>
+                  )}
+                </Box>
               </Grid>
 
               {form.d_Date && (
@@ -627,37 +661,45 @@ const ProjectInformation = () => {
               <Grid item xs={12} md={6}>
                 <Box display="flex" gap={1} sx={{ width: "100%" }}>
                   <Autocomplete
-                    options={clients}
+                    options={clientSearchResults}
                     getOptionLabel={(option) => option.name}
                     value={form.client}
                     onChange={handleClientChange}
                     inputValue={clientInputValue}
-                    onInputChange={(event, newInputValue) =>
-                      setClientInputValue(newInputValue)
-                    }
-                    filterOptions={(options, { inputValue }) => {
-                      if (inputValue.length < 3) return [];
-                      const filterValue = inputValue.toLowerCase();
-                      return options.filter((option) =>
-                        option.name.toLowerCase().includes(filterValue)
-                      );
+                    onInputChange={(event, newInputValue) => {
+                      setClientInputValue(newInputValue);
+                      // Debounce the search to avoid too many API calls
+                      const timeoutId = setTimeout(() => {
+                        searchClients(newInputValue);
+                      }, 300);
+                      return () => clearTimeout(timeoutId);
                     }}
-                    includeInputInList
-                    filterSelectedOptions
+                    filterOptions={(options, { inputValue }) => {
+                      // Don't filter locally since we're searching the database
+                      return options;
+                    }}
                     isOptionEqualToValue={(option, value) =>
                       option._id === value._id
                     }
+                    loading={isClientSearching}
                     sx={{ flex: 1 }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
                         label="Client"
                         required
-                        helperText={
-                          clientInputValue.length < 3
-                            ? "Type at least 3 characters to search clients"
-                            : ""
-                        }
+                        placeholder="Start typing to search clients..."
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {isClientSearching ? (
+                                <CircularProgress color="inherit" size={20} />
+                              ) : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
                       />
                     )}
                   />
@@ -683,6 +725,7 @@ const ProjectInformation = () => {
                   getOptionLabel={(option) =>
                     typeof option === "string" ? option : option.description
                   }
+                  value={form.address || ""}
                   inputValue={addressInput}
                   onInputChange={(_, value) => handleAddressInputChange(value)}
                   onChange={(_, value) => {
@@ -918,16 +961,37 @@ const ProjectInformation = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Box display="flex" justifyContent="flex-end" gap={2}>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate("/projects")}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="contained" color="primary">
-                    {isEditMode ? "Update Project" : "Create Project"}
-                  </Button>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                >
+                  {/* Delete button for admin and manager users */}
+                  {isEditMode &&
+                    currentUser &&
+                    hasPermission(currentUser, "projects.delete") && (
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={() => setDeleteDialogOpen(true)}
+                      >
+                        Delete Project
+                      </Button>
+                    )}
+
+                  {/* Action buttons */}
+                  <Box display="flex" gap={2}>
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate("/projects")}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" variant="contained" color="primary">
+                      {isEditMode ? "Update Project" : "Create Project"}
+                    </Button>
+                  </Box>
                 </Box>
               </Grid>
             </Grid>
@@ -939,146 +1003,260 @@ const ProjectInformation = () => {
       <Dialog
         open={newClientDialogOpen}
         onClose={() => setNewClientDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Create New Client</DialogTitle>
+        <form onSubmit={handleNewClientSubmit}>
+          <DialogContent>
+            <Stack spacing={2}>
+              <TextField
+                label="Client Name"
+                name="name"
+                value={newClientForm.name}
+                onChange={handleNewClientChange}
+                required
+                fullWidth
+              />
+              <TextField
+                label="Invoice Email"
+                name="invoiceEmail"
+                type="email"
+                value={newClientForm.invoiceEmail}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="email@example.com or '-' for no email"
+                error={
+                  newClientForm.invoiceEmail &&
+                  !isValidEmailOrDash(newClientForm.invoiceEmail)
+                }
+                helperText={
+                  newClientForm.invoiceEmail &&
+                  !isValidEmailOrDash(newClientForm.invoiceEmail)
+                    ? "Please enter a valid email address or use '-' for no email"
+                    : ""
+                }
+              />
+              <TextField
+                label="Address"
+                name="address"
+                value={newClientForm.address}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="Address or '-' for no address"
+              />
+              <Typography variant="h6" sx={{ mt: 2 }}>
+                Primary Contact
+              </Typography>
+              <TextField
+                label="Contact Name"
+                name="contact1Name"
+                value={newClientForm.contact1Name}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="Contact name or '-' for no contact"
+              />
+              <TextField
+                label="Contact Phone"
+                name="contact1Number"
+                value={newClientForm.contact1Number}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="04xx xxx xxx or '-' for no phone"
+                error={
+                  newClientForm.contact1Number &&
+                  !isValidAustralianMobile(newClientForm.contact1Number)
+                }
+                helperText={
+                  newClientForm.contact1Number &&
+                  !isValidAustralianMobile(newClientForm.contact1Number)
+                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
+                    : ""
+                }
+              />
+              <TextField
+                label="Contact Email"
+                name="contact1Email"
+                value={newClientForm.contact1Email}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="email@example.com or '-' for no email"
+                error={
+                  newClientForm.contact1Email &&
+                  !isValidEmailOrDash(newClientForm.contact1Email)
+                }
+                helperText={
+                  newClientForm.contact1Email &&
+                  !isValidEmailOrDash(newClientForm.contact1Email)
+                    ? "Please enter a valid email address or use '-' for no email"
+                    : ""
+                }
+              />
+              <Typography variant="h6" sx={{ mt: 2 }}>
+                Secondary Contact (Optional)
+              </Typography>
+              <TextField
+                label="Contact Name"
+                name="contact2Name"
+                value={newClientForm.contact2Name}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="Contact name or '-' for no contact"
+              />
+              <TextField
+                label="Contact Phone"
+                name="contact2Number"
+                value={newClientForm.contact2Number}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="04xx xxx xxx or '-' for no phone"
+                error={
+                  newClientForm.contact2Number &&
+                  !isValidAustralianMobile(newClientForm.contact2Number)
+                }
+                helperText={
+                  newClientForm.contact2Number &&
+                  !isValidAustralianMobile(newClientForm.contact2Number)
+                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
+                    : ""
+                }
+              />
+              <TextField
+                label="Contact Email"
+                name="contact2Email"
+                value={newClientForm.contact2Email}
+                onChange={handleNewClientChange}
+                fullWidth
+                placeholder="email@example.com or '-' for no email"
+                error={
+                  newClientForm.contact2Email &&
+                  !isValidEmailOrDash(newClientForm.contact2Email)
+                }
+                helperText={
+                  newClientForm.contact2Email &&
+                  !isValidEmailOrDash(newClientForm.contact2Email)
+                    ? "Please enter a valid email address or use '-' for no email"
+                    : ""
+                }
+              />
+              <Typography variant="h6" sx={{ mt: 2 }}>
+                Payment Terms
+              </Typography>
+              <FormControl component="fieldset">
+                <RadioGroup
+                  name="paymentTerms"
+                  value={newClientForm.paymentTerms}
+                  onChange={handleNewClientChange}
+                  row
+                >
+                  <FormControlLabel
+                    value="Standard (30 days)"
+                    control={<Radio />}
+                    label="Standard (30 days)"
+                  />
+                  <FormControlLabel
+                    value="Payment before Report (7 days)"
+                    control={<Radio />}
+                    label="Payment before Report (7 days)"
+                  />
+                </RadioGroup>
+              </FormControl>
+              {canWriteOff && (
+                <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    name="written_off"
+                    checked={newClientForm.written_off}
+                    onChange={(e) =>
+                      setNewClientForm({
+                        ...newClientForm,
+                        written_off: e.target.checked,
+                      })
+                    }
+                    sx={{
+                      color: "red",
+                      "&.Mui-checked": {
+                        color: "red",
+                      },
+                    }}
+                  />
+                  <Typography
+                    variant="body1"
+                    sx={{ color: "red", fontWeight: "bold" }}
+                  >
+                    WRITTEN OFF?
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setNewClientDialogOpen(false)}
+              color="secondary"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={creatingClient}
+            >
+              {creatingClient ? "Creating..." : "Create Client"}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Add New Client</DialogTitle>
-        <DialogContent>
-          <Box component="form" sx={{ mt: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Client Name"
-                  name="name"
-                  value={newClientForm.name}
-                  onChange={handleNewClientChange}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Email"
-                  name="email"
-                  value={newClientForm.email}
-                  onChange={handleNewClientChange}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Phone"
-                  name="phone"
-                  value={newClientForm.phone}
-                  onChange={handleNewClientChange}
-                  required
-                />
-              </Grid>
-            </Grid>
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <DeleteIcon color="error" />
+            <Typography variant="h6">Delete Project</Typography>
           </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this project? This action cannot be
+            undone.
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+            Project: <strong>{form.name}</strong>
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setNewClientDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
           <Button
-            onClick={handleNewClientSubmit}
+            onClick={handleDeleteProject}
             variant="contained"
-            disabled={creatingClient}
+            color="error"
+            disabled={deleting}
           >
-            {creatingClient ? "Creating..." : "Create Client"}
+            {deleting ? "Deleting..." : "Delete Project"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Time Logs Dialog */}
-      <Dialog
-        open={timeLogsOpen}
-        onClose={() => setTimeLogsOpen(false)}
-        maxWidth="md"
-        fullWidth
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
       >
-        <DialogTitle>
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-          >
-            <Typography variant="h6">Time Logs</Typography>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={downloadTimeLogsCSV}
-              disabled={!timeLogs.length}
-            >
-              Download CSV
-            </Button>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {loadingTimeLogs ? (
-            <Box display="flex" justifyContent="center" p={3}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>User</TableCell>
-                    <TableCell>Start Time</TableCell>
-                    <TableCell>End Time</TableCell>
-                    <TableCell>Duration</TableCell>
-                    <TableCell>Description</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {timeLogs.map((log) => (
-                    <TableRow key={log._id}>
-                      <TableCell>
-                        {new Date(log.date).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>{`${log.userId.firstName} ${log.userId.lastName}`}</TableCell>
-                      <TableCell>{log.startTime}</TableCell>
-                      <TableCell>{log.endTime}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const [startHours, startMinutes] = log.startTime
-                            .split(":")
-                            .map(Number);
-                          const [endHours, endMinutes] = log.endTime
-                            .split(":")
-                            .map(Number);
-                          const startTotalMinutes =
-                            startHours * 60 + startMinutes;
-                          const endTotalMinutes = endHours * 60 + endMinutes;
-                          let duration = endTotalMinutes - startTotalMinutes;
-                          if (duration < 0) duration += 24 * 60;
-                          const hours = Math.floor(duration / 60);
-                          const minutes = duration % 60;
-                          return `${hours}h ${minutes}m`;
-                        })()}
-                      </TableCell>
-                      <TableCell>{log.description}</TableCell>
-                    </TableRow>
-                  ))}
-                  {timeLogs.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} align="center">
-                        No time logs found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTimeLogsOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

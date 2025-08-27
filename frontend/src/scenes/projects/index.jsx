@@ -380,6 +380,8 @@ const Projects = ({ initialFilters = {} }) => {
   const [googleMaps, setGoogleMaps] = useState(null);
 
   const [clientInputValue, setClientInputValue] = useState("");
+  const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [isClientSearching, setIsClientSearching] = useState(false);
 
   // Editable status state
   const [statusDropdownAnchor, setStatusDropdownAnchor] = useState(null);
@@ -411,6 +413,13 @@ const Projects = ({ initialFilters = {} }) => {
         console.error("Error loading Google Maps script:", error);
       });
   }, []);
+
+  // Sync addressInput with form address when editing
+  useEffect(() => {
+    if (form.address && !addressInput) {
+      setAddressInput(form.address);
+    }
+  }, [form.address, addressInput]);
 
   // Re-initialize Google Maps services when dialog opens
   useEffect(() => {
@@ -949,6 +958,30 @@ const Projects = ({ initialFilters = {} }) => {
     }));
   };
 
+  const searchClients = async (searchTerm) => {
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      setClientSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsClientSearching(true);
+      // Search the entire client database
+      const response = await clientService.getAll({
+        search: searchTerm.trim(),
+        limit: 10,
+      });
+
+      const searchResults = response.data.clients || response.data;
+      setClientSearchResults(searchResults);
+    } catch (error) {
+      console.error("Error searching clients:", error);
+      setClientSearchResults([]);
+    } finally {
+      setIsClientSearching(false);
+    }
+  };
+
   const handleDeleteProject = async () => {
     try {
       console.log("=== DELETING PROJECT ===");
@@ -1456,7 +1489,6 @@ const Projects = ({ initialFilters = {} }) => {
             <Button
               variant="contained"
               size="small"
-              startIcon={<VisibilityIcon />}
               onClick={(e) => {
                 e.stopPropagation();
                 navigate(`/projects/${params.row._id}`);
@@ -2019,37 +2051,46 @@ const Projects = ({ initialFilters = {} }) => {
                 <Grid item xs={12}>
                   <Box>
                     <Autocomplete
-                      options={clients}
+                      options={clientSearchResults}
                       getOptionLabel={(option) => option.name || ""}
                       value={
-                        clients.find((client) => client._id === form.client) ||
-                        null
+                        clientSearchResults.find(
+                          (client) => client._id === form.client
+                        ) || null
                       }
                       onChange={handleClientChange}
                       inputValue={clientInputValue}
-                      onInputChange={(event, newInputValue) =>
-                        setClientInputValue(newInputValue)
-                      }
-                      filterOptions={(options, { inputValue }) => {
-                        if (inputValue.length < 3) return [];
-                        const filterValue = inputValue.toLowerCase();
-                        return options.filter((option) =>
-                          option.name.toLowerCase().includes(filterValue)
-                        );
+                      onInputChange={(event, newInputValue) => {
+                        setClientInputValue(newInputValue);
+                        // Debounce the search to avoid too many API calls
+                        const timeoutId = setTimeout(() => {
+                          searchClients(newInputValue);
+                        }, 300);
+                        return () => clearTimeout(timeoutId);
                       }}
-                      includeInputInList
-                      filterSelectedOptions
+                      filterOptions={(options, { inputValue }) => {
+                        // Don't filter locally since we're searching the database
+                        return options;
+                      }}
+                      loading={isClientSearching}
                       renderInput={(params) => (
                         <TextField
                           {...params}
                           label="Client"
                           required
                           fullWidth
-                          helperText={
-                            clientInputValue.length < 3
-                              ? "Type at least 3 characters to search clients"
-                              : ""
-                          }
+                          placeholder="Start typing to search clients..."
+                          InputProps={{
+                            ...params.InputProps,
+                            endAdornment: (
+                              <>
+                                {isClientSearching ? (
+                                  <CircularProgress color="inherit" size={20} />
+                                ) : null}
+                                {params.InputProps.endAdornment}
+                              </>
+                            ),
+                          }}
                         />
                       )}
                       isOptionEqualToValue={(option, value) =>
@@ -2118,6 +2159,7 @@ const Projects = ({ initialFilters = {} }) => {
                     getOptionLabel={(option) =>
                       typeof option === "string" ? option : option.description
                     }
+                    value={form.address || ""}
                     inputValue={addressInput}
                     onInputChange={(_, value) =>
                       handleAddressInputChange(value)

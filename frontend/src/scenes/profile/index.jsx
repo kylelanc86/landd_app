@@ -12,12 +12,19 @@ import {
 } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import {
+  validateSignatureFile,
+  compressSignatureImage,
+} from "../../utils/signatureUtils";
+import userService from "../../services/userService";
 
 const Profile = () => {
-  const { currentUser, updateUser, logout } = useAuth();
+  const { currentUser, updateUser, logout, refreshCurrentUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [signatureLoading, setSignatureLoading] = useState(false);
   const [success, setSuccess] = useState("");
+  const [signatureSuccess, setSignatureSuccess] = useState("");
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     phone: "",
@@ -25,15 +32,22 @@ const Profile = () => {
     confirmPassword: "",
   });
 
-  // Initialize form data when currentUser changes
+  // Initialize form data when currentUser first loads
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentUser.phone !== undefined) {
       setFormData((prev) => ({
         ...prev,
         phone: currentUser.phone || "",
       }));
     }
-  }, [currentUser]);
+  }, [currentUser?.phone]);
+
+  // Refresh current user data when profile page loads to ensure latest signature is displayed
+  useEffect(() => {
+    if (currentUser?._id) {
+      refreshCurrentUser();
+    }
+  }, [currentUser?._id, refreshCurrentUser]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -43,11 +57,62 @@ const Profile = () => {
     }));
   };
 
+  const handleSignatureUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      setSignatureLoading(true);
+      setError("");
+      setSignatureSuccess("");
+
+      // Validate the file
+      const validationResult = await validateSignatureFile(file);
+      if (!validationResult.isValid) {
+        setError(validationResult.error);
+        return;
+      }
+
+      // Convert file to data URL first
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Compress the image
+      const compressedImage = await compressSignatureImage(dataUrl);
+
+      // Update user signature using userService to ensure consistency with user management pages
+      await userService.update(currentUser._id, { signature: compressedImage });
+
+      // Refresh the current user data to ensure consistency across the application
+      await refreshCurrentUser();
+
+      setSignatureSuccess("Signature updated successfully");
+
+      // Clear the file input
+      e.target.value = "";
+
+      // Clear success message after 5 seconds
+      setTimeout(() => {
+        setSignatureSuccess("");
+      }, 5000);
+    } catch (error) {
+      console.error("Error processing signature:", error);
+      setError("Error processing signature image");
+    } finally {
+      setSignatureLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     setSuccess("");
+    setSignatureSuccess("");
 
     try {
       // Validate password if it's being changed
@@ -74,7 +139,7 @@ const Profile = () => {
       // Update user data
       const updatedUser = {
         ...currentUser,
-        phone: formData.phone,
+        phone: formData.phone.trim() || "",
       };
 
       if (formData.password) {
@@ -128,6 +193,12 @@ const Profile = () => {
           </Alert>
         )}
 
+        {signatureSuccess && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {signatureSuccess}
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit}>
           <Grid container spacing={3}>
             {/* Profile Information Section */}
@@ -150,12 +221,12 @@ const Profile = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Phone Number"
+                label="Phone"
                 name="phone"
-                value={formData.phone}
+                value={formData.phone || ""}
                 onChange={handleChange}
                 variant="outlined"
-                autoComplete="off"
+                autoComplete="tel"
               />
             </Grid>
             <Divider sx={{ my: 3 }} />
@@ -202,6 +273,63 @@ const Profile = () => {
               >
                 {loading ? <CircularProgress size={24} /> : "Save Changes"}
               </Button>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Divider sx={{ my: 3 }} />
+            </Grid>
+
+            {/* Signature Upload Section */}
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom color="black">
+                Signature
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                Upload your signature for use in reports and documents
+              </Typography>
+
+              <input
+                accept="image/*"
+                style={{ display: "none" }}
+                id="signature-upload"
+                type="file"
+                onChange={handleSignatureUpload}
+              />
+              <label htmlFor="signature-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  disabled={signatureLoading}
+                  sx={{ mb: 2 }}
+                >
+                  {signatureLoading ? (
+                    <CircularProgress size={20} />
+                  ) : currentUser?.signature ? (
+                    "Replace Signature"
+                  ) : (
+                    "Upload Signature"
+                  )}
+                </Button>
+              </label>
+
+              {currentUser?.signature && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Current Signature:
+                  </Typography>
+                  <Box
+                    component="img"
+                    src={currentUser.signature}
+                    alt="Signature preview"
+                    sx={{
+                      maxWidth: 200,
+                      maxHeight: 100,
+                      border: "1px solid #ddd",
+                      borderRadius: 1,
+                    }}
+                  />
+                </Box>
+              )}
             </Grid>
 
             <Grid item xs={12}>

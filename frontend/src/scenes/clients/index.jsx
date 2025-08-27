@@ -337,13 +337,7 @@ const Clients = () => {
         headerName: "Client Name",
         flex: 1,
         renderCell: (params) => (
-          <Typography
-            sx={{
-              color: params.row.written_off ? "red" : "inherit",
-              fontWeight: params.row.written_off ? "bold" : "normal",
-              fontSize: "0.875rem",
-            }}
-          >
+          <Typography sx={{ fontSize: "0.875rem" }}>
             {params.row.name}
           </Typography>
         ),
@@ -353,13 +347,7 @@ const Clients = () => {
         headerName: "Invoice Email",
         flex: 1,
         renderCell: (params) => (
-          <Typography
-            sx={{
-              color: params.row.written_off ? "red" : "inherit",
-              fontWeight: params.row.written_off ? "bold" : "normal",
-              fontSize: "0.875rem",
-            }}
-          >
+          <Typography sx={{ fontSize: "0.875rem" }}>
             {params.row.invoiceEmail}
           </Typography>
         ),
@@ -369,13 +357,7 @@ const Clients = () => {
         headerName: "Primary Contact",
         flex: 1,
         renderCell: (params) => (
-          <Typography
-            sx={{
-              color: params.row.written_off ? "red" : "inherit",
-              fontWeight: params.row.written_off ? "bold" : "normal",
-              fontSize: "0.875rem",
-            }}
-          >
+          <Typography sx={{ fontSize: "0.875rem" }}>
             {params.row.contact1Name}
           </Typography>
         ),
@@ -386,13 +368,7 @@ const Clients = () => {
         flex: 1,
         valueGetter: (params) => formatPhoneNumber(params.row.contact1Number),
         renderCell: (params) => (
-          <Typography
-            sx={{
-              color: params.row.written_off ? "red" : "inherit",
-              fontWeight: params.row.written_off ? "bold" : "normal",
-              fontSize: "0.875rem",
-            }}
-          >
+          <Typography sx={{ fontSize: "0.875rem" }}>
             {formatPhoneNumber(params.row.contact1Number)}
           </Typography>
         ),
@@ -402,13 +378,7 @@ const Clients = () => {
         headerName: "Address",
         flex: 1,
         renderCell: (params) => (
-          <Typography
-            sx={{
-              color: params.row.written_off ? "red" : "inherit",
-              fontWeight: params.row.written_off ? "bold" : "normal",
-              fontSize: "0.875rem",
-            }}
-          >
+          <Typography sx={{ fontSize: "0.875rem" }}>
             {params.row.address}
           </Typography>
         ),
@@ -670,6 +640,12 @@ const Clients = () => {
           "& .MuiDataGrid-row:hover": {
             backgroundColor: "#e3f2fd",
           },
+          "& .written-off-row": {
+            backgroundColor: "#ffebee !important",
+          },
+          "& .written-off-row:hover": {
+            backgroundColor: "#ffcdd2 !important",
+          },
         }}
       >
         <DataGrid
@@ -692,6 +668,9 @@ const Clients = () => {
           disableDensitySelector
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={setColumnVisibilityModel}
+          getRowClassName={(params) =>
+            params.row.written_off ? "written-off-row" : ""
+          }
         />
       </Box>
 

@@ -112,11 +112,50 @@ export const AuthProvider = ({ children }) => {
     restoreAttempted.current = false; // Reset the restore attempt flag
   };
 
+  const updateUser = async (userData) => {
+    try {
+      const response = await authService.updateUser(userData);
+      const updatedUser = { ...currentUser, ...response.data };
+
+      // Update local storage and state
+      localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+      setCurrentUser(updatedUser);
+
+      return updatedUser;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const refreshCurrentUser = async () => {
+    try {
+      const response = await authService.getCurrentUser();
+      const user = response.data;
+
+      if (user && user._id) {
+        const normalizedUser = {
+          ...user,
+          _id: user._id || user.id,
+          id: user._id || user.id,
+          token: localStorage.getItem("token"),
+        };
+
+        localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
+        setCurrentUser(normalizedUser);
+        return normalizedUser;
+      }
+    } catch (error) {
+      console.error("Error refreshing current user:", error);
+    }
+  };
+
   const value = {
     currentUser,
     login,
     logout,
     restoreUserState,
+    updateUser,
+    refreshCurrentUser,
     loading,
     setLoading,
   };

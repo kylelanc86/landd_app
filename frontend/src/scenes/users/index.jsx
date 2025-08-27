@@ -118,7 +118,7 @@ const Users = () => {
 
   const columns = [
     {
-      field: "name",
+      field: "firstName",
       headerName: "Name",
       flex: 1.5,
       maxWidth: 180,
@@ -143,7 +143,31 @@ const Users = () => {
       renderCell: (params) => {
         const role = params.row.role || "employee";
         const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
-        return <TruncatedCell value={formattedRole} />;
+
+        // Define colors for different user levels
+        let roleColor;
+        switch (role.toLowerCase()) {
+          case "admin":
+            roleColor = "#d32f2f"; // Red
+            break;
+          case "manager":
+            roleColor = "#ed6c02"; // Orange
+            break;
+          case "employee":
+          default:
+            roleColor = "#1976d2"; // Blue
+            break;
+        }
+
+        return (
+          <Chip
+            label={formattedRole}
+            sx={{
+              backgroundColor: roleColor,
+              color: "white",
+            }}
+          />
+        );
       },
     },
     {
@@ -195,9 +219,12 @@ const Users = () => {
       minWidth: 150,
       renderCell: (params) => (
         <Box>
-          <IconButton onClick={() => handleEditUser(params.row)}>
-            <EditIcon />
-          </IconButton>
+          {/* Only show edit button for admin users */}
+          {currentUser.role === "admin" && (
+            <IconButton onClick={() => handleEditUser(params.row)}>
+              <EditIcon />
+            </IconButton>
+          )}
           <IconButton
             onClick={() =>
               handleStatusChange(params.row._id, !params.row.isActive)
@@ -231,17 +258,20 @@ const Users = () => {
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
           User Management
         </Typography>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={() => navigate("/users/add")}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            "&:hover": { backgroundColor: theme.palette.secondary.dark },
-          }}
-        >
-          Add User
-        </Button>
+        {/* Only show Add User button for admin users */}
+        {currentUser.role === "admin" && (
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => navigate("/users/add")}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": { backgroundColor: theme.palette.secondary.dark },
+            }}
+          >
+            Add User
+          </Button>
+        )}
       </Box>
 
       {/* Users Table with Toggle */}

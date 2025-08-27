@@ -298,6 +298,7 @@ const AddUserPage = () => {
                 name="role"
                 value={form.role}
                 onChange={handleChange}
+                disabled={currentUser.role !== "admin"}
               >
                 {USER_LEVELS.map((level) => (
                   <MenuItem key={level} value={level}>

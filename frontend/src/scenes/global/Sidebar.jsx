@@ -13,7 +13,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScienceIcon from "@mui/icons-material/Science";
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import HomeIcon from "@mui/icons-material/Home";
 import StorageIcon from "@mui/icons-material/Storage";
 import MonitorIcon from "@mui/icons-material/Monitor";
@@ -24,6 +24,7 @@ import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
+import { isFeatureEnabled } from "../../config/featureFlags";
 
 const getRandomColor = (user) => {
   const colors = [
@@ -417,37 +418,47 @@ const Sidebar = () => {
             icon={<AttachMoneyIcon />}
           />
 
-          {/* <CollapsibleSection
-            title="REPORTS"
-            to="/reports"
-            icon={<DescriptionIcon />}
-          /> */}
+          {isFeatureEnabled("ADVANCED.REPORTS") && (
+            <CollapsibleSection
+              title="REPORTS"
+              to="/reports"
+              icon={<DescriptionIcon />}
+            />
+          )}
 
-          <CollapsibleSection
-            title="RECORDS"
-            to="/records"
-            icon={<FolderCopyIcon />}
-          />
+          {isFeatureEnabled("ADVANCED.RECORDS") && (
+            <CollapsibleSection
+              title="RECORDS"
+              to="/records"
+              icon={<FolderCopyIcon />}
+            />
+          )}
 
           <SectionDivider />
 
-          <CollapsibleSection
-            title="SURVEYS"
-            to="/surveys"
-            icon={<SearchIcon />}
-          />
+          {isFeatureEnabled("ADVANCED.SURVEYS") && (
+            <CollapsibleSection
+              title="SURVEYS"
+              to="/surveys"
+              icon={<SearchIcon />}
+            />
+          )}
 
-          <CollapsibleSection
-            title="ASBESTOS REMOVAL"
-            to="/asbestos-removal"
-            icon={<ConstructionIcon />}
-          />
+          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
+            <CollapsibleSection
+              title="ASBESTOS REMOVAL"
+              to="/asbestos-removal"
+              icon={<ConstructionIcon />}
+            />
+          )}
 
-          <CollapsibleSection
-            title="FIBRE ID"
-            to="/fibre-id"
-            icon={<ScienceIcon />}
-          />
+          {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+            <CollapsibleSection
+              title="FIBRE ID"
+              to="/fibre-id"
+              icon={<ScienceIcon />}
+            />
+          )}
         </Box>
 
         <Box
@@ -457,7 +468,10 @@ const Sidebar = () => {
             marginTop: "auto",
           }}
         >
-          <SectionDivider />
+          {/* Only show section divider if at least one advanced feature is enabled */}
+          {(isFeatureEnabled("ADVANCED.SURVEYS") ||
+            isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") ||
+            isFeatureEnabled("ADVANCED.FIBRE_ID")) && <SectionDivider />}
           <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
             <Item title="Admin" to="/admin" icon={<SettingsIcon />} />
           </PermissionGate>

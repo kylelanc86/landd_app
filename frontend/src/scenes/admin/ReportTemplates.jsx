@@ -807,7 +807,7 @@ const ReportTemplates = () => {
                 color: "black",
                 maxHeight: "600px",
                 overflow: "auto",
-                fontFamily: "Arial, sans-serif",
+                fontFamily: "Roboto, sans-serif",
               }}
             >
               <Typography variant="h4" sx={{ mb: 2, color: "#009900" }}>

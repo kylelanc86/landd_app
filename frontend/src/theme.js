@@ -54,69 +54,69 @@ export const themeSettings = (mode) => {
       grey: tokens.grey,
     },
     typography: {
-      fontFamily: '"Poppins", sans-serif',
+      fontFamily: '"Roboto", sans-serif',
       h1: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "2.5rem",
         fontWeight: 600,
         color: "#000000",
       },
       h2: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "2rem",
         fontWeight: 600,
         color: "#000000",
       },
       h3: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "1.75rem",
         fontWeight: 600,
         color: "#000000",
       },
       h4: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "1.5rem",
         fontWeight: 600,
         color: "#000000",
       },
       h5: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "1.25rem",
         fontWeight: 500,
         color: "#000000",
       },
       h6: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "1rem",
         fontWeight: 500,
         color: "#000000",
       },
       subtitle1: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "1rem",
         fontWeight: 500,
         color: tokens.neutral[600],
       },
       subtitle2: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 500,
         color: tokens.neutral[600],
       },
       body1: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "1rem",
         fontWeight: 400,
         color: "#000000",
       },
       body2: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 400,
         color: tokens.neutral[600],
       },
       button: {
-        fontFamily: '"Poppins", sans-serif',
+        fontFamily: '"Roboto", sans-serif',
         fontSize: "0.875rem",
         fontWeight: 500,
         textTransform: "none",
@@ -129,7 +129,7 @@ export const themeSettings = (mode) => {
           root: {
             textTransform: "none",
             borderRadius: 8,
-            fontFamily: '"Poppins", sans-serif',
+            fontFamily: '"Assistant", sans-serif',
             fontWeight: 500,
             padding: "8px 16px",
             boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.1)",
@@ -156,7 +156,7 @@ export const themeSettings = (mode) => {
       MuiPaper: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", sans-serif',
+            fontFamily: '"Assistant", sans-serif',
             borderRadius: 8,
             backgroundColor: "#FFFFFF",
             boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
@@ -166,7 +166,7 @@ export const themeSettings = (mode) => {
       MuiTypography: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", sans-serif',
+            fontFamily: '"Assistant", sans-serif',
           },
         },
       },
@@ -215,7 +215,7 @@ export const themeSettings = (mode) => {
       MuiInputLabel: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", sans-serif',
+            fontFamily: '"Assistant", sans-serif',
             color: tokens.neutral[600],
           },
         },
@@ -239,7 +239,7 @@ export const themeSettings = (mode) => {
       MuiMenuItem: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", sans-serif',
+            fontFamily: '"Assistant", sans-serif',
             color: "#000000",
             "&:hover": {
               backgroundColor: tokens.primary[50],
@@ -268,7 +268,7 @@ export const themeSettings = (mode) => {
       MuiDialogTitle: {
         styleOverrides: {
           root: {
-            fontFamily: '"Poppins", sans-serif',
+            fontFamily: '"Roboto", sans-serif',
             fontWeight: 600,
             color: "#000000",
             borderBottom: "1px solid #EEEEEE",
