@@ -72,6 +72,7 @@ dashboardStatsSchema.statics.getAllStats = async function() {
       // Import models here to avoid circular dependency issues
       const Project = require('./Project');
       const Invoice = require('./Invoice');
+      const CustomDataField = require('./CustomDataField');
       
       // Get all unique statuses that actually exist in the database
       const allProjects = await Project.find({}).select('status');
@@ -83,13 +84,35 @@ dashboardStatsSchema.statics.getAllStats = async function() {
         statusCounts[status] = await Project.countDocuments({ status });
       }
       
+      // Get project status definitions from custom data fields
+      const projectStatusFields = await CustomDataField.find({ 
+        type: 'project_status', 
+        isActive: true 
+      });
+      
+      // Define which statuses are active/inactive based on custom data fields
+      const activeStatuses = projectStatusFields
+        .filter(field => field.isActiveStatus === true)
+        .map(field => field.text);
+      
+      const inactiveStatuses = projectStatusFields
+        .filter(field => field.isActiveStatus === false)
+        .map(field => field.text);
+      
+      // Calculate active and inactive project counts
+      const activeProjects = await Project.countDocuments({ 
+        status: { $in: activeStatuses } 
+      });
+      
+      const inactiveProjects = await Project.countDocuments({ 
+        status: { $in: inactiveStatuses } 
+      });
+      
       // Get outstanding invoices count
       const outstandingInvoices = await Invoice.countDocuments({ status: 'unpaid' });
       
       // Calculate totals
       const totalProjects = allProjects.length;
-      const activeProjects = totalProjects; // You can define active logic later
-      const inactiveProjects = 0; // You can define inactive logic later
       
       // Store the dynamic status counts
       const updatePromises = [

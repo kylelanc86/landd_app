@@ -9,23 +9,30 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
 
-// Define active and inactive statuses at module level
-const activeStatuses = [
-  'Assigned',
-  'In progress', 
-  'Samples submitted',
-  'Lab Analysis Complete',
-  'Report sent for review',
-  'Ready for invoicing',
-  'Invoice sent'
-];
-
-const inactiveStatuses = [
-  'Job complete',
-  'On hold',
-  'Quote sent',
-  'Cancelled'
-];
+// Helper function to get active and inactive statuses from custom data fields
+const getProjectStatuses = async () => {
+  try {
+    const CustomDataField = require('../models/CustomDataField');
+    const statusFields = await CustomDataField.find({ 
+      type: 'project_status', 
+      isActive: true 
+    });
+    
+    const activeStatuses = statusFields
+      .filter(field => field.isActiveStatus === true)
+      .map(field => field.text);
+    
+    const inactiveStatuses = statusFields
+      .filter(field => field.isActiveStatus === false)
+      .map(field => field.text);
+    
+    return { activeStatuses, inactiveStatuses };
+  } catch (error) {
+    console.error('Error fetching project statuses from custom data fields:', error);
+    // Return empty arrays if database query fails
+    return { activeStatuses: [], inactiveStatuses: [] };
+  }
+};
 
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
@@ -40,7 +47,8 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       status
     } = req.query;
 
-
+    // Get status arrays from custom data fields
+    const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
 
     // Build query
     const query = {};
@@ -54,20 +62,20 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     if (status && status !== 'all') {
       try {
         if (status === 'all_active') {
-          // Filter for all active statuses
+          // Filter for all active statuses from custom data fields
           query.status = { $in: activeStatuses };
         } else if (status === 'all_inactive') {
-          // Filter for all inactive statuses
+          // Filter for all inactive statuses from custom data fields
           query.status = { $in: inactiveStatuses };
         } else {
           // Handle specific status or comma-separated list
-        const statusArray = status.includes(',') ? status.split(',') : [status];
-        
-        if (statusArray.includes('unknown')) {
-          const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
-          query.status = { $nin: allKnownStatuses };
-        } else {
-          query.status = { $in: statusArray };
+          const statusArray = status.includes(',') ? status.split(',') : [status];
+          
+          if (statusArray.includes('unknown')) {
+            const allKnownStatuses = [...activeStatuses, ...inactiveStatuses];
+            query.status = { $nin: allKnownStatuses };
+          } else {
+            query.status = { $in: statusArray };
           }
         }
       } catch (error) {
