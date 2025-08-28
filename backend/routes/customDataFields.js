@@ -4,6 +4,23 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const CustomDataField = require('../models/CustomDataField');
 
+// Special route for project statuses - only requires projects.view permission
+router.get('/project-statuses', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const statusFields = await CustomDataField.find({ 
+      type: 'project_status', 
+      isActive: true 
+    })
+    .sort({ text: 1 })
+    .select('text isActiveStatus statusColor'); // Only return necessary fields
+    
+    res.json(statusFields);
+  } catch (error) {
+    console.error('Error fetching project statuses:', error);
+    res.status(500).json({ message: 'Failed to fetch project statuses' });
+  }
+});
+
 // Get all custom data fields by type
 router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => {
   try {

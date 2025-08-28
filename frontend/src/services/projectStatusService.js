@@ -9,7 +9,8 @@ const projectStatusService = {
   // Get all project statuses from custom data fields
   async getAllStatuses() {
     try {
-      const response = await customDataFieldService.getByType('project_status');
+      // Use the new project-statuses route that only requires projects.view permission
+      const response = await customDataFieldService.getProjectStatuses();
       return response || [];
     } catch (error) {
       console.error('Error fetching project statuses:', error);

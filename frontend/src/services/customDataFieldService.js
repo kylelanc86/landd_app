@@ -1,6 +1,12 @@
 import api from './api';
 
 const customDataFieldService = {
+  // Get project statuses (requires only projects.view permission)
+  getProjectStatuses: async () => {
+    const response = await api.get('/custom-data-fields/project-statuses');
+    return response.data;
+  },
+
   // Get all custom data fields by type
   getByType: async (type) => {
     const response = await api.get(`/custom-data-fields/${type}`);
