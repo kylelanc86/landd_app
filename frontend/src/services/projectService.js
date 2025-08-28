@@ -9,6 +9,10 @@ const projectService = {
   create: (data) => axiosInstance.post("/projects", data),
   update: (id, data) => axiosInstance.put(`/projects/${id}`, data),
   delete: (id) => axiosInstance.delete(`/projects/${id}`),
+  getDashboardStats: async () => {
+    const response = await axiosInstance.get("/projects/stats/dashboard");
+    return response.data;
+  },
 };
 
 export default projectService; 

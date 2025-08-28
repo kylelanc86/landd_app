@@ -5,6 +5,7 @@ const AirMonitoringJob = require('../models/Job');
 const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const dashboardStatsService = require('../services/dashboardStatsService');
 
 // Get all air monitoring jobs
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
@@ -188,6 +189,14 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
         `This project already has ${existingActiveJobs.length} active air monitoring job(s)` : null
     };
 
+    // Update dashboard stats after job creation
+    try {
+      await dashboardStatsService.updateStatsOnJobCreate(newJob.status);
+    } catch (statsError) {
+      console.error('Error updating dashboard stats on job creation:', statsError);
+      // Don't fail the job creation if stats update fails
+    }
+
     res.status(201).json(response);
   } catch (error) {
     console.error('Error creating air monitoring job:', error);
@@ -206,6 +215,9 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
       return res.status(404).json({ message: 'Air monitoring job not found' });
     }
 
+    // Store old status for dashboard stats update
+    const oldStatus = job.status;
+    
     // Only update the fields that are provided in the request
     Object.keys(req.body).forEach(key => {
       job[key] = req.body[key];
@@ -224,6 +236,14 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
         console.error('Error updating project status:', projectError);
         // Don't fail the job update if project update fails
       }
+    }
+    
+    // Update dashboard stats after job status change
+    try {
+      await dashboardStatsService.updateStatsOnJobStatusChange(oldStatus, updatedJob.status);
+    } catch (statsError) {
+      console.error('Error updating dashboard stats on job status change:', statsError);
+      // Don't fail the job update if stats update fails
     }
     
     // Populate the project and assignedTo fields before sending response
@@ -245,10 +265,25 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
 // Delete an air monitoring job
 router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
-    const job = await AirMonitoringJob.findByIdAndDelete(req.params.id);
+    const job = await AirMonitoringJob.findById(req.params.id);
     if (!job) {
       return res.status(404).json({ message: 'Air monitoring job not found' });
     }
+    
+    // Store job status for dashboard stats update
+    const jobStatus = job.status;
+    
+    // Delete the job
+    await AirMonitoringJob.findByIdAndDelete(req.params.id);
+    
+    // Update dashboard stats after job deletion
+    try {
+      await dashboardStatsService.updateStatsOnJobDelete(jobStatus);
+    } catch (statsError) {
+      console.error('Error updating dashboard stats on job deletion:', statsError);
+      // Don't fail the job deletion if stats update fails
+    }
+    
     res.json({ message: 'Air monitoring job deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

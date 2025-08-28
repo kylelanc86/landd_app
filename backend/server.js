@@ -106,10 +106,25 @@ app.get('/api/health', (req, res) => {
 
 // Connect to database
 connectDB()
-  .then(() => {
+  .then(async () => {
     // Import middleware first
     const requireAuth = require('./middleware/auth');
     const checkTokenBlacklist = require('./middleware/checkTokenBlacklist');
+    
+    // Initialize dashboard stats
+    try {
+      // Ensure all models are loaded first
+      require('./models/Job');
+      require('./models/Invoice');
+      require('./models/DashboardStats');
+      
+      const dashboardStatsService = require('./services/dashboardStatsService');
+      await dashboardStatsService.initializeStats();
+      console.log('Dashboard stats initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize dashboard stats:', error);
+      // Don't fail server startup if stats initialization fails
+    }
     
     // Routes
     app.use('/api/auth', authRoutes);

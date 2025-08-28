@@ -787,51 +787,50 @@ const Projects = ({ initialFilters = {} }) => {
     [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
   );
 
-  // Function to fetch status counts for the entire database
+  // Function to fetch status counts from cached dashboard stats
   const fetchStatusCounts = useCallback(async () => {
     try {
-      // Get counts for all statuses without pagination
-      const allStatuses = [...activeStatuses, ...inactiveStatuses];
-      const counts = {};
+      // Use the new fast dashboard stats API instead of slow database queries
+      const response = await projectService.getDashboardStats();
+      const stats = response.data || response;
 
-      // Get total count for "All Statuses"
-      const allResponse = await projectService.getAll({ page: 1, limit: 1 });
-      counts.all = allResponse.data.pagination?.total || 0;
+      // Map the dashboard stats to the expected format
+      const counts = {
+        all: stats.totalProjects || 0,
+        all_active: stats.activeProjects || 0,
+        all_inactive: stats.inactiveProjects || 0,
+      };
 
-      // Get counts for active statuses
-      for (const status of activeStatuses) {
-        const response = await projectService.getAll({
-          page: 1,
-          limit: 1,
-          status,
-        });
-        counts[status] = response.data.pagination?.total || 0;
+      // Dynamically add counts for each status that exists in your system
+      // The backend provides these dynamically based on actual status names
+      if (stats.statusCounts) {
+        try {
+          // Parse the JSON string if it's stored as a string
+          const statusCounts =
+            typeof stats.statusCounts === "string"
+              ? JSON.parse(stats.statusCounts)
+              : stats.statusCounts;
+
+          // Map the actual status names from your database to display names
+          // Your database has 'in_progress', but the UI might expect 'In Progress'
+          const statusMapping = {
+            in_progress: "In Progress", // Map database name to display name
+          };
+
+          // Apply the counts with proper mapping
+          Object.keys(statusCounts).forEach((dbStatus) => {
+            const displayStatus = statusMapping[dbStatus] || dbStatus;
+            counts[displayStatus] = statusCounts[dbStatus];
+          });
+        } catch (error) {
+          console.error("Error parsing status counts:", error);
+        }
       }
-
-      // Get counts for inactive statuses
-      for (const status of inactiveStatuses) {
-        const response = await projectService.getAll({
-          page: 1,
-          limit: 1,
-          status,
-        });
-        counts[status] = response.data.pagination?.total || 0;
-      }
-
-      // Calculate active and inactive totals
-      counts.all_active = activeStatuses.reduce(
-        (sum, status) => sum + (counts[status] || 0),
-        0
-      );
-      counts.all_inactive = inactiveStatuses.reduce(
-        (sum, status) => sum + (counts[status] || 0),
-        0
-      );
 
       setStatusCounts(counts);
     } catch (err) {
-      console.error("Error fetching status counts:", err);
-      // Fallback to local counts if API fails
+      console.error("Error fetching status counts from dashboard stats:", err);
+      // Fallback to local counts if dashboard stats fail
       const localCounts = {};
       localCounts.all = projects.length;
       localCounts.all_active = projects.filter((project) =>

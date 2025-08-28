@@ -595,36 +595,14 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 // Get project statistics for dashboard
 router.get('/stats/dashboard', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const stats = await Project.aggregate([
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    // Convert to object format
-    const statsObject = stats.reduce((acc, stat) => {
-      acc[stat._id] = stat.count;
-      return acc;
-    }, {});
-
-    // Calculate active projects count
-    const activeProjects = stats.filter(stat => 
-      activeStatuses.includes(stat._id)
-    ).reduce((sum, stat) => sum + stat.count, 0);
-
-    res.json({
-      activeProjects,
-      reviewProjects: statsObject['Report sent for review'] || 0,
-      invoiceProjects: statsObject['Ready for invoicing'] || 0,
-      labCompleteProjects: statsObject['Lab Analysis Complete'] || 0,
-      samplesSubmittedProjects: statsObject['Samples submitted'] || 0,
-      inProgressProjects: statsObject['In progress'] || 0,
-      totalProjects: Object.values(statsObject).reduce((sum, count) => sum + count, 0)
-    });
+    const dashboardStatsService = require('../services/dashboardStatsService');
+    
+    // Get fast dashboard stats from cache table
+    const stats = await dashboardStatsService.getDashboardStats();
+    
+    res.json(stats);
   } catch (error) {
+    console.error('Error getting dashboard stats:', error);
     res.status(500).json({ message: error.message });
   }
 });
