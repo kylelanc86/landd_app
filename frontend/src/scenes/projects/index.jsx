@@ -43,12 +43,10 @@ import {
   ListItemIcon,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 
-import {
-  ACTIVE_STATUSES,
-  INACTIVE_STATUSES,
-  StatusChip,
-} from "../../components/JobStatus";
+import { StatusChip } from "../../components/JobStatus";
+import useProjectStatuses from "../../hooks/useProjectStatuses";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
@@ -87,24 +85,7 @@ const CATEGORIES = [
   "Other",
 ];
 
-const emptyForm = {
-  name: "",
-  client: "",
-  department: DEPARTMENTS[0],
-  categories: [],
-  address: "",
-  d_Date: "",
-  workOrder: "",
-  users: [],
-  status: ACTIVE_STATUSES[0],
-  notes: "",
-  isLargeProject: false,
-  projectContact: {
-    name: "",
-    number: "",
-    email: "",
-  },
-};
+// This will be defined inside the component to access the hook
 
 // Update the getInitials function
 const getInitials = (user) => {
@@ -174,36 +155,6 @@ const getRandomColor = (user) => {
   return colors[index];
 };
 
-// Helper to get a color for a given status
-const getStatusColor = (status) => {
-  switch (status) {
-    case "Assigned":
-      return "#1976d2"; // Blue
-    case "In progress":
-      return "#ed6c02"; // Orange
-    case "Samples submitted":
-      return "#9c27b0"; // Purple
-    case "Lab Analysis Complete":
-      return "#2e7d32"; // Green
-    case "Report sent for review":
-      return "#d32f2f"; // Red
-    case "Ready for invoicing":
-      return "#7b1fa2"; // Deep Purple
-    case "Invoice sent":
-      return "#388e3c"; // Dark Green
-    case "Job complete":
-      return "#424242"; // Grey
-    case "On hold":
-      return "#f57c00"; // Dark Orange
-    case "Quote sent":
-      return "#1976d2"; // Blue
-    case "Cancelled":
-      return "#d32f2f"; // Red
-    default:
-      return "#757575"; // Default grey
-  }
-};
-
 // Helper function to calculate days difference
 const calculateDaysDifference = (dueDate) => {
   if (!dueDate) return null;
@@ -229,9 +180,75 @@ const Projects = ({ initialFilters = {} }) => {
     useJobStatus() || {};
   const { isAdmin, isManager } = usePermissions();
   const [projects, setProjects] = useState([]);
+  const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Get project statuses from custom data fields
+  const {
+    activeStatuses,
+    inactiveStatuses,
+    statusColors,
+    loading: statusesLoading,
+  } = useProjectStatuses();
+
+  // Helper to get a color for a given status
+  const getStatusColor = (status) => {
+    // Use custom colors from the database if available
+    if (statusColors && statusColors[status]) {
+      return statusColors[status];
+    }
+
+    // Fallback to hardcoded colors for backward compatibility
+    switch (status) {
+      case "Assigned":
+        return "#1976d2"; // Blue
+      case "In progress":
+        return "#ed6c02"; // Orange
+      case "Samples submitted":
+        return "#9c27b0"; // Purple
+      case "Lab Analysis Complete":
+        return "#2e7d32"; // Green
+      case "Report sent for review":
+        return "#d32f2f"; // Red
+      case "Ready for invoicing":
+        return "#7b1fa2"; // Deep Purple
+      case "Invoice sent":
+        return "#388e3c"; // Dark Green
+      case "Job complete":
+        return "#424242"; // Grey
+      case "On hold":
+        return "#f57c00"; // Dark Orange
+      case "Quote sent":
+        return "#1976d2"; // Blue
+      case "Cancelled":
+        return "#d32f2f"; // Red
+      default:
+        return "#1976d2"; // Default Material-UI primary blue
+    }
+  };
+
+  // Define emptyForm inside component to access hook variables
+  const emptyForm = {
+    name: "",
+    client: "",
+    department: DEPARTMENTS[0],
+    categories: [],
+    address: "",
+    d_Date: "",
+    workOrder: "",
+    users: [],
+    status: activeStatuses.length > 0 ? activeStatuses[0] : "In progress",
+    notes: "",
+    isLargeProject: false,
+    projectContact: {
+      name: "",
+      number: "",
+      email: "",
+    },
+  };
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -770,6 +787,75 @@ const Projects = ({ initialFilters = {} }) => {
     [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
   );
 
+  // Function to fetch status counts for the entire database
+  const fetchStatusCounts = useCallback(async () => {
+    try {
+      // Get counts for all statuses without pagination
+      const allStatuses = [...activeStatuses, ...inactiveStatuses];
+      const counts = {};
+
+      // Get total count for "All Statuses"
+      const allResponse = await projectService.getAll({ page: 1, limit: 1 });
+      counts.all = allResponse.data.pagination?.total || 0;
+
+      // Get counts for active statuses
+      for (const status of activeStatuses) {
+        const response = await projectService.getAll({
+          page: 1,
+          limit: 1,
+          status,
+        });
+        counts[status] = response.data.pagination?.total || 0;
+      }
+
+      // Get counts for inactive statuses
+      for (const status of inactiveStatuses) {
+        const response = await projectService.getAll({
+          page: 1,
+          limit: 1,
+          status,
+        });
+        counts[status] = response.data.pagination?.total || 0;
+      }
+
+      // Calculate active and inactive totals
+      counts.all_active = activeStatuses.reduce(
+        (sum, status) => sum + (counts[status] || 0),
+        0
+      );
+      counts.all_inactive = inactiveStatuses.reduce(
+        (sum, status) => sum + (counts[status] || 0),
+        0
+      );
+
+      setStatusCounts(counts);
+    } catch (err) {
+      console.error("Error fetching status counts:", err);
+      // Fallback to local counts if API fails
+      const localCounts = {};
+      localCounts.all = projects.length;
+      localCounts.all_active = projects.filter((project) =>
+        activeStatuses.includes(project.status)
+      ).length;
+      localCounts.all_inactive = projects.filter((project) =>
+        inactiveStatuses.includes(project.status)
+      ).length;
+
+      for (const status of activeStatuses) {
+        localCounts[status] = projects.filter(
+          (project) => project.status === status
+        ).length;
+      }
+      for (const status of inactiveStatuses) {
+        localCounts[status] = projects.filter(
+          (project) => project.status === status
+        ).length;
+      }
+
+      setStatusCounts(localCounts);
+    }
+  }, [activeStatuses, inactiveStatuses, projects]);
+
   // Handle search input change
   const handleSearchChange = useCallback(
     (event) => {
@@ -910,11 +996,20 @@ const Projects = ({ initialFilters = {} }) => {
     fetchProjects(false);
   }, []); // Empty dependency array for initial load only
 
+  // Fetch status counts when component mounts and when statuses change
+  useEffect(() => {
+    if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
+      fetchStatusCounts();
+    }
+  }, [activeStatuses, inactiveStatuses, fetchStatusCounts]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const response = await projectService.create(form);
       setProjects([...projects, response.data]);
+      // Refresh status counts after creating a new project
+      fetchStatusCounts();
       setDialogOpen(false);
       setForm(emptyForm);
     } catch (error) {
@@ -1001,6 +1096,8 @@ const Projects = ({ initialFilters = {} }) => {
 
       await projectService.delete(projectId);
       setProjects(projects.filter((p) => (p._id || p.id) !== projectId));
+      // Refresh status counts after deleting a project
+      fetchStatusCounts();
       setDeleteDialogOpen(false);
       setSelectedProject(null);
     } catch (error) {
@@ -1219,6 +1316,9 @@ const Projects = ({ initialFilters = {} }) => {
         )
       );
 
+      // Refresh status counts after updating project status
+      fetchStatusCounts();
+
       // Close the dropdown
       setStatusDropdownAnchor(null);
     } catch (error) {
@@ -1434,27 +1534,14 @@ const Projects = ({ initialFilters = {} }) => {
         maxWidth: 165,
         renderCell: (params) => (
           <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
-            {/* Status display */}
+            {/* Status display - no click functionality */}
             <Box
-              onClick={(e) => {
-                e.stopPropagation();
-                handleStatusClick(params.row._id, e);
-              }}
               sx={{
                 backgroundColor: getStatusColor(params.value),
                 color: "white",
                 padding: "4px 8px",
                 borderRadius: "4px",
                 fontSize: "0.75rem",
-                cursor: isAdmin || isManager ? "pointer" : "default",
-                "&:hover":
-                  isAdmin || isManager
-                    ? {
-                        opacity: 0.8,
-                        transform: "scale(1.02)",
-                        transition: "all 0.2s ease",
-                      }
-                    : {},
                 userSelect: "none",
                 position: "relative",
               }}
@@ -1480,33 +1567,46 @@ const Projects = ({ initialFilters = {} }) => {
       },
       {
         field: "actions",
-        headerName: "Actions",
+        headerName: "Actions & Status",
         flex: 1,
         minWidth: 120,
         maxWidth: 160,
         renderCell: (params) => (
-          <Box>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/projects/${params.row._id}`);
-              }}
-              sx={{ mr: 1 }}
-            >
-              Details
-            </Button>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteClick(params.row);
-              }}
-              size="small"
-              color="error"
-            >
-              <DeleteIcon />
-            </IconButton>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {/* Delete button */}
+            <Tooltip title="Delete Project">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(params.row);
+                }}
+                size="small"
+                color="error"
+              >
+                <DeleteIcon />
+              </IconButton>
+            </Tooltip>
+
+            {/* 3-dot menu for status updates */}
+            {(isAdmin || isManager) && (
+              <Tooltip title="Update Status">
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStatusClick(params.row._id, e);
+                  }}
+                  size="small"
+                  sx={{
+                    color: "text.secondary",
+                    "&:hover": {
+                      backgroundColor: "rgba(0, 0, 0, 0.04)",
+                    },
+                  }}
+                >
+                  <MoreHorizIcon />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         ),
       },
@@ -1526,7 +1626,7 @@ const Projects = ({ initialFilters = {} }) => {
               Active Jobs
             </Typography>
           </MenuItem>
-          {ACTIVE_STATUSES.map((status) => (
+          {activeStatuses.map((status) => (
             <MenuItem key={status} value={status}>
               {status}
             </MenuItem>
@@ -1537,7 +1637,7 @@ const Projects = ({ initialFilters = {} }) => {
               Inactive Jobs
             </Typography>
           </MenuItem>
-          {INACTIVE_STATUSES.map((status) => (
+          {inactiveStatuses.map((status) => (
             <MenuItem key={status} value={status}>
               {status}
             </MenuItem>
@@ -1645,31 +1745,229 @@ const Projects = ({ initialFilters = {} }) => {
                 label="Status"
                 onChange={(e) => handleFilterChange("status", e.target.value)}
               >
-                <MenuItem value="all">All Statuses</MenuItem>
-                <MenuItem value="all_active">Active</MenuItem>
-                <MenuItem value="all_inactive">Inactive</MenuItem>
+                <MenuItem value="all" sx={{ fontSize: "0.88rem" }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%",
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
+                        marginRight: "8px",
+                      }}
+                    >
+                      All Statuses
+                    </span>
+                    <Box
+                      sx={{
+                        backgroundColor: "#666",
+                        color: "white",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "0.77rem",
+                        fontWeight: "bold",
+                        minWidth: "20px",
+                        textAlign: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {statusCounts.all || 0}
+                    </Box>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="all_active" sx={{ fontSize: "0.88rem" }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%",
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
+                        marginRight: "8px",
+                      }}
+                    >
+                      Active
+                    </span>
+                    <Box
+                      sx={{
+                        backgroundColor: "#2e7d32",
+                        color: "white",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "0.77rem",
+                        fontWeight: "bold",
+                        minWidth: "20px",
+                        textAlign: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {statusCounts.all_active || 0}
+                    </Box>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="all_inactive" sx={{ fontSize: "0.88rem" }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%",
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
+                        marginRight: "8px",
+                      }}
+                    >
+                      Inactive
+                    </span>
+                    <Box
+                      sx={{
+                        backgroundColor: "#666",
+                        color: "white",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "0.77rem",
+                        fontWeight: "bold",
+                        minWidth: "20px",
+                        textAlign: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {statusCounts.all_inactive || 0}
+                    </Box>
+                  </Box>
+                </MenuItem>
                 <Divider />
                 <MenuItem disabled>
-                  <Typography variant="subtitle2" color="text.secondary">
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    sx={{ fontSize: "0.88rem" }}
+                  >
                     Active Statuses
                   </Typography>
                 </MenuItem>
-                {ACTIVE_STATUSES.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status}
-                  </MenuItem>
-                ))}
+                {activeStatuses.map((status) => {
+                  const count = statusCounts[status] || 0;
+                  return (
+                    <MenuItem
+                      key={status}
+                      value={status}
+                      sx={{ fontSize: "0.88rem" }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            flex: 1,
+                            marginRight: "8px",
+                          }}
+                        >
+                          {status}
+                        </span>
+                        <Box
+                          sx={{
+                            backgroundColor: statusColors[status] || "#1976d2",
+                            color: "white",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "0.77rem",
+                            fontWeight: "bold",
+                            minWidth: "20px",
+                            textAlign: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {count}
+                        </Box>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
                 <Divider />
                 <MenuItem disabled>
-                  <Typography variant="subtitle2" color="text.secondary">
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    sx={{ fontSize: "0.88rem" }}
+                  >
                     Inactive Statuses
                   </Typography>
                 </MenuItem>
-                {INACTIVE_STATUSES.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {status}
-                  </MenuItem>
-                ))}
+                {inactiveStatuses.map((status) => {
+                  const count = statusCounts[status] || 0;
+                  return (
+                    <MenuItem
+                      key={status}
+                      value={status}
+                      sx={{ fontSize: "0.88rem" }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                        }}
+                      >
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            flex: 1,
+                            marginRight: "8px",
+                          }}
+                        >
+                          {status}
+                        </span>
+                        <Box
+                          sx={{
+                            backgroundColor: statusColors[status] || "#1976d2",
+                            color: "white",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "0.77rem",
+                            fontWeight: "bold",
+                            minWidth: "20px",
+                            textAlign: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {count}
+                        </Box>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
               </Select>
             </FormControl>
 
@@ -1847,6 +2145,24 @@ const Projects = ({ initialFilters = {} }) => {
             borderTop: "none",
             backgroundColor: theme.palette.primary.main,
             color: "#FFFFFF",
+            "& .MuiTablePagination-root": {
+              color: "#FFFFFF",
+            },
+            "& .MuiTablePagination-selectLabel": {
+              color: "#FFFFFF",
+            },
+            "& .MuiTablePagination-displayedRows": {
+              color: "#FFFFFF",
+            },
+            "& .MuiTablePagination-select": {
+              color: "#FFFFFF",
+            },
+            "& .MuiTablePagination-actions": {
+              color: "#FFFFFF",
+            },
+            "& .MuiIconButton-root": {
+              color: "#FFFFFF",
+            },
           },
           "& .MuiCheckbox-root": {
             color: `${theme.palette.secondary.main} !important`,
@@ -1860,7 +2176,7 @@ const Projects = ({ initialFilters = {} }) => {
           loading={loading && !searchLoading}
           error={error}
           // checkboxSelection
-          disableRowSelectionOnClick
+          onRowClick={(params) => navigate(`/projects/${params.row._id}`)}
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
           paginationMode="server"
@@ -1899,13 +2215,10 @@ const Projects = ({ initialFilters = {} }) => {
               backgroundColor: "#e3f2fd",
             },
           }}
-          onRowClick={(params) =>
-            navigate(`/reports/project/${params.row._id}`)
-          }
         />
       </Box>
 
-      {/* Status Dropdown Menu */}
+      {/* Status Update Menu */}
       <Menu
         anchorEl={statusDropdownAnchor}
         open={Boolean(statusDropdownAnchor)}
@@ -1920,12 +2233,26 @@ const Projects = ({ initialFilters = {} }) => {
         }}
         sx={{
           "& .MuiPaper-root": {
-            minWidth: "200px",
+            minWidth: "220px",
+            padding: "4px",
           },
           zIndex: 9999,
         }}
       >
-        {ACTIVE_STATUSES.map((status) => (
+        <MenuItem
+          disabled
+          sx={{ cursor: "default", padding: "8px 12px", minHeight: "auto" }}
+        >
+          <Typography
+            variant="subtitle2"
+            color="text.secondary"
+            sx={{ fontSize: "0.75rem" }}
+          >
+            Update Project Status
+          </Typography>
+        </MenuItem>
+        <Divider sx={{ margin: "4px 0" }} />
+        {activeStatuses.map((status) => (
           <MenuItem
             key={status}
             onClick={() =>
@@ -1935,23 +2262,38 @@ const Projects = ({ initialFilters = {} }) => {
               )
             }
             sx={{
-              backgroundColor: getStatusColor(status),
-              color: "white",
-              margin: "2px 8px",
-              borderRadius: "4px",
+              padding: "6px 12px",
+              minHeight: "36px",
+              justifyContent: "flex-start",
               "&:hover": {
-                backgroundColor: getStatusColor(status),
-                opacity: 0.8,
-                transform: "scale(1.02)",
-                transition: "all 0.2s ease",
+                backgroundColor: "rgba(0, 0, 0, 0.04)",
+                transition: "all 0.15s ease",
               },
             }}
           >
-            {status}
+            <Box
+              sx={{
+                backgroundColor: getStatusColor(status),
+                color: "white",
+                padding: "6px 12px",
+                borderRadius: "16px",
+                fontSize: "0.67rem",
+                fontWeight: "400",
+                display: "inline-block",
+                whiteSpace: "nowrap",
+                "&:hover": {
+                  opacity: 0.9,
+                  transform: "scale(1.02)",
+                  transition: "all 0.15s ease",
+                },
+              }}
+            >
+              {status}
+            </Box>
           </MenuItem>
         ))}
         <Divider sx={{ margin: "8px 0" }} />
-        {INACTIVE_STATUSES.map((status) => (
+        {inactiveStatuses.map((status) => (
           <MenuItem
             key={status}
             onClick={() =>
@@ -1961,19 +2303,34 @@ const Projects = ({ initialFilters = {} }) => {
               )
             }
             sx={{
-              backgroundColor: getStatusColor(status),
-              color: "white",
-              margin: "2px 8px",
-              borderRadius: "4px",
+              padding: "6px 12px",
+              minHeight: "36px",
+              justifyContent: "flex-start",
               "&:hover": {
-                backgroundColor: getStatusColor(status),
-                opacity: 0.8,
-                transform: "scale(1.02)",
-                transition: "all 0.2s ease",
+                backgroundColor: "rgba(0, 0, 0, 0.04)",
+                transition: "all 0.15s ease",
               },
             }}
           >
-            {status}
+            <Box
+              sx={{
+                backgroundColor: getStatusColor(status),
+                color: "white",
+                padding: "6px 12px",
+                borderRadius: "16px",
+                fontSize: "0.67rem",
+                fontWeight: "400",
+                display: "inline-block",
+                whiteSpace: "nowrap",
+                "&:hover": {
+                  opacity: 0.9,
+                  transform: "scale(1.02)",
+                  transition: "all 0.15s ease",
+                },
+              }}
+            >
+              {status}
+            </Box>
           </MenuItem>
         ))}
       </Menu>

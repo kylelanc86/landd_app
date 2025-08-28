@@ -34,7 +34,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useNavigate } from "react-router-dom";
 import React, { useEffect, useState, useMemo } from "react";
 import { projectService, invoiceService } from "../../services/api";
-import useProjectStatuses from "../../hooks/useProjectStatuses";
+
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import AllocatedJobsTable from "./AllocatedJobsTable";
@@ -56,9 +56,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
-
-  // Get project statuses from custom data fields
-  const { activeStatuses } = useProjectStatuses();
 
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [dailyTimesheetData, setDailyTimesheetData] = useState({

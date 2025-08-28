@@ -4,10 +4,14 @@ import { useNavigate } from "react-router-dom";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { projectService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { StatusChip, ACTIVE_STATUSES } from "../../components/JobStatus";
+import { StatusChip } from "../../components/JobStatus";
+import useProjectStatuses from "../../hooks/useProjectStatuses";
 
 const AllocatedJobsTable = () => {
   const { currentUser, loading: authLoading } = useAuth();
+
+  // Get project statuses from custom data fields
+  const { activeStatuses, statusColors } = useProjectStatuses();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +41,7 @@ const AllocatedJobsTable = () => {
         const response = await projectService.getAssignedToMe({
           page: page + 1, // Backend uses 1-based pagination
           limit: pageSize,
-          status: ACTIVE_STATUSES.join(","),
+          status: activeStatuses.join(","),
           sortBy: "projectID",
           sortOrder: "desc",
         });
@@ -175,7 +179,12 @@ const AllocatedJobsTable = () => {
         flex: 1,
         minWidth: 120,
         maxWidth: 150,
-        renderCell: (params) => <StatusChip status={params.value} />,
+        renderCell: (params) => (
+          <StatusChip
+            status={params.value}
+            customColor={statusColors && statusColors[params.value]}
+          />
+        ),
       },
       {
         field: "overdueInvoice",
@@ -295,6 +304,25 @@ const AllocatedJobsTable = () => {
         "& .MuiDataGrid-footerContainer": {
           borderTop: "none",
           backgroundColor: theme.palette.primary.dark,
+          color: "white",
+          "& .MuiTablePagination-root": {
+            color: "white",
+          },
+          "& .MuiTablePagination-selectLabel": {
+            color: "white",
+          },
+          "& .MuiTablePagination-displayedRows": {
+            color: "white",
+          },
+          "& .MuiTablePagination-select": {
+            color: "white",
+          },
+          "& .MuiTablePagination-actions": {
+            color: "white",
+          },
+          "& .MuiIconButton-root": {
+            color: "white",
+          },
         },
         "& .MuiCheckbox-root": {
           color: `${theme.palette.secondary.main} !important`,
@@ -312,6 +340,25 @@ const AllocatedJobsTable = () => {
         "& .MuiDataGrid-footerContainer": {
           position: "relative",
           borderTop: "1px solid rgba(224, 224, 224, 1)",
+          color: "white",
+          "& .MuiTablePagination-root": {
+            color: "white",
+          },
+          "& .MuiTablePagination-selectLabel": {
+            color: "white",
+          },
+          "& .MuiTablePagination-displayedRows": {
+            color: "white",
+          },
+          "& .MuiTablePagination-select": {
+            color: "white",
+          },
+          "& .MuiTablePagination-actions": {
+            color: "white",
+          },
+          "& .MuiIconButton-root": {
+            color: "white",
+          },
         },
         // Remove any empty row spacing
         "& .MuiDataGrid-virtualScroller": {
@@ -320,7 +367,7 @@ const AllocatedJobsTable = () => {
       }}
     >
       <Typography variant="h5" sx={{ mb: 2 }}>
-        My Allocated Projects
+        MY ACTIVE PROJECTS{" "}
       </Typography>
 
       {/* Virtual Scrolling Optimized DataGrid with Proper Footer Positioning */}
@@ -333,8 +380,7 @@ const AllocatedJobsTable = () => {
         paginationModel={paginationModel}
         onPaginationModelChange={handlePaginationModelChange}
         pageSizeOptions={[10, 25, 50]}
-        checkboxSelection
-        disableSelectionOnClick
+        onRowClick={(params) => navigate(`/projects/${params.row.id}`)}
         autoHeight
         rowBuffer={5}
         rowThreshold={100}
@@ -343,7 +389,6 @@ const AllocatedJobsTable = () => {
         disableDensitySelector
         getRowId={(row) => row.id}
         components={{ Toolbar: GridToolbar }}
-        onRowClick={(params) => navigate(`/reports/project/${params.row.id}`)}
         sx={{
           cursor: "pointer",
           // Ensure proper footer positioning
@@ -351,6 +396,25 @@ const AllocatedJobsTable = () => {
             position: "sticky",
             bottom: 0,
             zIndex: 1,
+            color: "white",
+            "& .MuiTablePagination-root": {
+              color: "white",
+            },
+            "& .MuiTablePagination-selectLabel": {
+              color: "white",
+            },
+            "& .MuiTablePagination-displayedRows": {
+              color: "white",
+            },
+            "& .MuiTablePagination-select": {
+              color: "white",
+            },
+            "& .MuiTablePagination-actions": {
+              color: "white",
+            },
+            "& .MuiIconButton-root": {
+              color: "white",
+            },
           },
           // Remove empty row spacing
           "& .MuiDataGrid-virtualScroller": {

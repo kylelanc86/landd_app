@@ -4,7 +4,7 @@ const CustomDataFieldSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation'],
+    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status'],
     index: true
   },
   text: {
@@ -19,6 +19,15 @@ const CustomDataFieldSchema = new mongoose.Schema({
   jurisdiction: {
     type: String,
     trim: true
+  },
+  isActiveStatus: {
+    type: Boolean,
+    default: true
+  },
+  statusColor: {
+    type: String,
+    trim: true,
+    default: '#1976d2' // Default Material-UI primary blue
   },
   isActive: {
     type: Boolean,

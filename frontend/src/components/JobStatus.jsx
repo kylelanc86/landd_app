@@ -15,6 +15,8 @@ export const JOB_STATUS = {
   CANCELLED: "Cancelled",
 };
 
+// These are now deprecated - use projectStatusService instead
+// Keeping for backward compatibility during transition
 export const ACTIVE_STATUSES = [
   JOB_STATUS.IN_PROGRESS,
   JOB_STATUS.REPORT_SENT_FOR_REVIEW,
@@ -43,8 +45,9 @@ export const getStatusColor = (status) => {
   return statusColors[status] || "#757575"; // Default grey
 };
 
-export const StatusChip = ({ status }) => {
-  const color = getStatusColor(status);
+export const StatusChip = ({ status, customColor }) => {
+  // Use custom color if provided, otherwise fall back to hardcoded colors
+  const color = customColor || getStatusColor(status);
   return (
     <Chip
       label={status}

@@ -22,6 +22,7 @@ import {
   Alert,
   Snackbar,
   MenuItem,
+  Checkbox,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -31,6 +32,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import customDataFieldService from "../../services/customDataFieldService";
+import projectStatusService from "../../services/projectStatusService";
 
 // Tab panel component
 function TabPanel({ children, value, index, ...other }) {
@@ -56,11 +58,14 @@ const CustomDataFields = () => {
   const [materialsDescriptions, setMaterialsDescriptions] = useState([]);
   const [roomAreas, setRoomAreas] = useState([]);
   const [legislation, setLegislation] = useState([]);
+  const [projectStatuses, setProjectStatuses] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItemText, setNewItemText] = useState("");
   const [newLegislationTitle, setNewLegislationTitle] = useState("");
   const [newJurisdiction, setNewJurisdiction] = useState("ACT");
+  const [newIsActiveStatus, setNewIsActiveStatus] = useState(true);
+  const [newStatusColor, setNewStatusColor] = useState("#1976d2");
   const [currentTab, setCurrentTab] = useState("");
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -87,12 +92,14 @@ const CustomDataFields = () => {
         materialsData,
         roomAreaData,
         legislationData,
+        projectStatusesData,
       ] = await Promise.all([
         customDataFieldService.getByType("asbestos_removalist"),
         customDataFieldService.getByType("location_description"),
         customDataFieldService.getByType("materials_description"),
         customDataFieldService.getByType("room_area"),
         customDataFieldService.getByType("legislation"),
+        customDataFieldService.getByType("project_status"),
       ]);
 
       setAsbestosRemovalists(asbestosData || []);
@@ -100,6 +107,7 @@ const CustomDataFields = () => {
       setMaterialsDescriptions(materialsData || []);
       setRoomAreas(roomAreaData || []);
       setLegislation(legislationData || []);
+      setProjectStatuses(projectStatusesData || []);
     } catch (error) {
       console.error("Error fetching custom data fields:", error);
       showSnackbar("Failed to load custom data fields", "error");
@@ -170,6 +178,12 @@ const CustomDataFields = () => {
             setter: setLegislation,
             title: "Legislation",
           };
+        case 5:
+          return {
+            data: projectStatuses,
+            setter: setProjectStatuses,
+            title: "Projects Status",
+          };
         default:
           return { data: [], setter: () => {}, title: "" };
       }
@@ -185,6 +199,7 @@ const CustomDataFields = () => {
     setNewItemText("");
     setNewLegislationTitle("");
     setNewJurisdiction("ACT"); // Reset jurisdiction on add
+    setNewIsActiveStatus(true); // Reset isActiveStatus on add
     setDialogOpen(true);
   };
 
@@ -195,6 +210,10 @@ const CustomDataFields = () => {
     setNewItemText(item.text);
     setNewLegislationTitle(item.legislationTitle || "");
     setNewJurisdiction(item.jurisdiction || "ACT"); // Set jurisdiction on edit
+    setNewIsActiveStatus(
+      item.isActiveStatus !== undefined ? item.isActiveStatus : true
+    ); // Set isActiveStatus on edit
+    setNewStatusColor(item.statusColor || "#1976d2"); // Set status color on edit
     setDialogOpen(true);
   };
 
@@ -204,6 +223,12 @@ const CustomDataFields = () => {
       await customDataFieldService.delete(itemId);
       const updatedData = data.filter((item) => item._id !== itemId);
       setter(updatedData);
+
+      // Clear project status cache if we're deleting a project status
+      if (title === "Projects Status") {
+        projectStatusService.clearCache();
+      }
+
       showSnackbar(`${title} deleted successfully`);
     } catch (error) {
       console.error(`Error deleting ${title}:`, error);
@@ -233,6 +258,8 @@ const CustomDataFields = () => {
           return "materials_description";
         case "Legislation":
           return "legislation";
+        case "Projects Status":
+          return "project_status";
         default:
           return "asbestos_removalist";
       }
@@ -249,6 +276,12 @@ const CustomDataFields = () => {
           updateData.jurisdiction = newJurisdiction.trim();
         }
 
+        // For project status, include the isActiveStatus field
+        if (title === "Projects Status") {
+          updateData.isActiveStatus = newIsActiveStatus;
+          updateData.statusColor = newStatusColor;
+        }
+
         const updatedItem = await customDataFieldService.update(
           editingItem._id,
           updateData
@@ -257,6 +290,12 @@ const CustomDataFields = () => {
           item._id === editingItem._id ? updatedItem : item
         );
         setter(updatedData);
+
+        // Clear project status cache if we're updating a project status
+        if (title === "Projects Status") {
+          projectStatusService.clearCache();
+        }
+
         showSnackbar(`${title} updated successfully`);
       } catch (error) {
         console.error(`Error updating ${title}:`, error);
@@ -278,9 +317,21 @@ const CustomDataFields = () => {
           newItemData.jurisdiction = newJurisdiction.trim();
         }
 
+        // For project status, include the isActiveStatus field
+        if (title === "Projects Status") {
+          newItemData.isActiveStatus = newIsActiveStatus;
+          newItemData.statusColor = newStatusColor;
+        }
+
         const newItem = await customDataFieldService.create(newItemData);
         const updatedData = [...data, newItem];
         setter(updatedData);
+
+        // Clear project status cache if we're adding a project status
+        if (title === "Projects Status") {
+          projectStatusService.clearCache();
+        }
+
         showSnackbar(`${title} added successfully`);
       } catch (error) {
         console.error(`Error adding new ${title}:`, error);
@@ -302,6 +353,8 @@ const CustomDataFields = () => {
     setNewItemText("");
     setNewLegislationTitle("");
     setNewJurisdiction("ACT"); // Reset jurisdiction on close
+    setNewIsActiveStatus(true); // Reset isActiveStatus on close
+    setNewStatusColor("#1976d2"); // Reset status color on close
   };
 
   const renderTabContent = (data, title) => {
@@ -379,6 +432,230 @@ const CustomDataFields = () => {
               </ListItem>
             ))}
           </List>
+        )}
+      </Box>
+    );
+  };
+
+  const renderProjectStatusContent = () => {
+    // Group project statuses by active/inactive using the isActiveStatus field
+    const activeStatuses = projectStatuses.filter(
+      (status) => status.isActiveStatus === true
+    );
+    const inactiveStatuses = projectStatuses.filter(
+      (status) => status.isActiveStatus === false
+    );
+
+    return (
+      <Box>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={2}
+        >
+          <Typography variant="h6">Projects Status</Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddItem}
+            size="small"
+          >
+            Add Project Status
+          </Button>
+        </Box>
+
+        {loading ? (
+          <Box sx={{ textAlign: "center", py: 4 }}>
+            <Typography variant="body1">Loading Project Statuses...</Typography>
+          </Box>
+        ) : projectStatuses.length === 0 ? (
+          <Paper
+            sx={{
+              p: 3,
+              textAlign: "center",
+              backgroundColor: theme.palette.grey[200],
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              No project statuses added yet. Click "Add Project Status" to get
+              started.
+            </Typography>
+          </Paper>
+        ) : (
+          <Box>
+            {/* Active Statuses Section */}
+            <Paper sx={{ mb: 3, overflow: "hidden" }}>
+              <Box
+                sx={{
+                  p: 2,
+                  backgroundColor: theme.palette.primary.main,
+                  color: theme.palette.primary.contrastText,
+                }}
+              >
+                <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                  Active Statuses
+                </Typography>
+                <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                  {activeStatuses.length} status
+                  {activeStatuses.length !== 1 ? "es" : ""}
+                </Typography>
+              </Box>
+
+              <Box sx={{ overflow: "auto" }}>
+                {activeStatuses.length > 0 ? (
+                  <List>
+                    {getSortedData(activeStatuses).map((item) => (
+                      <ListItem
+                        key={item._id}
+                        sx={{
+                          border: `1px solid ${theme.palette.divider}`,
+                          borderRadius: 1,
+                          mb: 1,
+                          backgroundColor: theme.palette.background.paper,
+                        }}
+                      >
+                        <ListItemText
+                          primary={
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  width: "16px",
+                                  height: "16px",
+                                  borderRadius: "50%",
+                                  backgroundColor:
+                                    item.statusColor || "#1976d2",
+                                  border: "1px solid",
+                                  borderColor: theme.palette.divider,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              {item.text}
+                            </Box>
+                          }
+                        />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            aria-label="edit"
+                            onClick={() => handleEditItem(item)}
+                            sx={{ mr: 1 }}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            edge="end"
+                            aria-label="delete"
+                            onClick={() => handleDeleteItem(item._id)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+                ) : (
+                  <Box sx={{ p: 3, textAlign: "center" }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No active statuses found.
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Paper>
+
+            {/* Inactive Statuses Section */}
+            <Paper sx={{ mb: 3, overflow: "hidden" }}>
+              <Box
+                sx={{
+                  p: 2,
+                  backgroundColor: theme.palette.grey[600],
+                  color: theme.palette.grey[100],
+                }}
+              >
+                <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                  Inactive Statuses
+                </Typography>
+                <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                  {inactiveStatuses.length} status
+                  {inactiveStatuses.length !== 1 ? "es" : ""}
+                </Typography>
+              </Box>
+
+              <Box sx={{ overflow: "auto" }}>
+                {inactiveStatuses.length > 0 ? (
+                  <List>
+                    {getSortedData(inactiveStatuses).map((item) => (
+                      <ListItem
+                        key={item._id}
+                        sx={{
+                          border: `1px solid ${theme.palette.divider}`,
+                          borderRadius: 1,
+                          mb: 1,
+                          backgroundColor: theme.palette.background.paper,
+                        }}
+                      >
+                        <ListItemText
+                          primary={
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  width: "16px",
+                                  height: "16px",
+                                  borderRadius: "50%",
+                                  backgroundColor:
+                                    item.statusColor || "#1976d2",
+                                  border: "1px solid",
+                                  borderColor: theme.palette.divider,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              {item.text}
+                            </Box>
+                          }
+                        />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            aria-label="edit"
+                            onClick={() => handleEditItem(item)}
+                            sx={{ mr: 1 }}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                          <IconButton
+                            edge="end"
+                            aria-label="delete"
+                            onClick={() => handleDeleteItem(item._id)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+                ) : (
+                  <Box sx={{ p: 3, textAlign: "center" }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No inactive statuses found.
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Paper>
+          </Box>
         )}
       </Box>
     );
@@ -571,6 +848,7 @@ const CustomDataFields = () => {
             <Tab label="Location Descriptions" />
             <Tab label="Materials Descriptions" />
             <Tab label="Legislation" />
+            <Tab label="Projects Status" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -591,6 +869,10 @@ const CustomDataFields = () => {
 
           <TabPanel value={tabValue} index={4}>
             {renderTabContent(legislation, "Legislation")}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={5}>
+            {renderProjectStatusContent()}
           </TabPanel>
         </Paper>
 
@@ -653,6 +935,67 @@ const CustomDataFields = () => {
                 onChange={(e) => setNewLegislationTitle(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
               />
+            )}
+
+            {currentTab === "Projects Status" && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Status Type:
+                </Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <input
+                      type="radio"
+                      id="active-status"
+                      name="status-type"
+                      value="true"
+                      checked={newIsActiveStatus === true}
+                      onChange={(e) =>
+                        setNewIsActiveStatus(e.target.value === "true")
+                      }
+                      style={{ marginRight: "8px" }}
+                    />
+                    <label htmlFor="active-status">Active Status</label>
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <input
+                      type="radio"
+                      id="inactive-status"
+                      name="status-type"
+                      value="false"
+                      checked={newIsActiveStatus === false}
+                      onChange={(e) =>
+                        setNewIsActiveStatus(e.target.value === "true")
+                      }
+                      style={{ marginRight: "8px" }}
+                    />
+                    <label htmlFor="inactive-status">Inactive Status</label>
+                  </Box>
+                </Box>
+
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Status Color:
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <input
+                      type="color"
+                      value={newStatusColor}
+                      onChange={(e) => setNewStatusColor(e.target.value)}
+                      style={{
+                        width: "40px",
+                        height: "40px",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                      }}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      {newStatusColor}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
             )}
           </DialogContent>
           <DialogActions>

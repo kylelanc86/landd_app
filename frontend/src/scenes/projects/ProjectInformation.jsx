@@ -34,11 +34,8 @@ import { projectService, clientService, userService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { usePermissions } from "../../hooks/usePermissions";
-import {
-  ACTIVE_STATUSES,
-  INACTIVE_STATUSES,
-  StatusChip,
-} from "../../components/JobStatus";
+import { StatusChip } from "../../components/JobStatus";
+import useProjectStatuses from "../../hooks/useProjectStatuses";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 import {
   formatPhoneNumber,
@@ -108,7 +105,7 @@ const ProjectInformation = () => {
     name: "",
     client: null,
     department: "",
-    status: "Pending",
+    status: "",
     address: "",
     d_Date: "",
     workOrder: "",
@@ -135,6 +132,17 @@ const ProjectInformation = () => {
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [isClientSearching, setIsClientSearching] = useState(false);
+
+  // Get project statuses from custom data fields
+  const { activeStatuses, inactiveStatuses, statusColors } =
+    useProjectStatuses();
+
+  // Set default status when statuses are loaded
+  useEffect(() => {
+    if (activeStatuses.length > 0 && !form.status) {
+      setForm((prev) => ({ ...prev, status: activeStatuses[0] }));
+    }
+  }, [activeStatuses, form.status]);
 
   const generateNextProjectId = async () => {
     try {
@@ -531,7 +539,10 @@ const ProjectInformation = () => {
 
   const renderStatusMenuItem = (status) => (
     <MenuItem key={status} value={status}>
-      <StatusChip status={status} />
+      <StatusChip
+        status={status}
+        customColor={statusColors && statusColors[status]}
+      />
     </MenuItem>
   );
 
@@ -596,15 +607,6 @@ const ProjectInformation = () => {
               {form.d_Date && (
                 <Grid item xs={12}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <Typography variant="h6" color="text.secondary">
-                      Due Date:{" "}
-                      {new Date(form.d_Date).toLocaleDateString("en-AU", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </Typography>
                     {(() => {
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
@@ -822,8 +824,26 @@ const ProjectInformation = () => {
                     onChange={handleChange}
                     label="Status"
                   >
-                    {ACTIVE_STATUSES.map(renderStatusMenuItem)}
-                    {INACTIVE_STATUSES.map(renderStatusMenuItem)}
+                    <MenuItem disabled>
+                      <Typography
+                        variant="subtitle2"
+                        color="text.secondary"
+                        sx={{ fontSize: "0.88rem" }}
+                      >
+                        Active Statuses
+                      </Typography>
+                    </MenuItem>
+                    {activeStatuses.map(renderStatusMenuItem)}
+                    <MenuItem disabled>
+                      <Typography
+                        variant="subtitle2"
+                        color="text.secondary"
+                        sx={{ fontSize: "0.88rem" }}
+                      >
+                        Inactive Statuses
+                      </Typography>
+                    </MenuItem>
+                    {inactiveStatuses.map(renderStatusMenuItem)}
                   </Select>
                 </FormControl>
               </Grid>

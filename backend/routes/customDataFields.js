@@ -10,7 +10,7 @@ router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => 
     const { type } = req.params;
     
     // Validate type
-    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation'];
+    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ message: 'Invalid type parameter' });
     }
@@ -32,7 +32,7 @@ router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => 
 // Create new custom data field
 router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
   try {
-    const { type, text, legislationTitle, jurisdiction } = req.body;
+            const { type, text, legislationTitle, jurisdiction, isActiveStatus, statusColor } = req.body;
     
     console.log('Creating custom data field:', { type, text, legislationTitle, jurisdiction });
     
@@ -41,7 +41,7 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
     }
 
     // Validate type
-    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation'];
+    const validTypes = ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ message: 'Invalid type parameter' });
     }
@@ -57,6 +57,14 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
     // Add legislation fields if they exist
     if (legislationTitle) newFieldData.legislationTitle = legislationTitle.trim();
     if (jurisdiction) newFieldData.jurisdiction = jurisdiction.trim();
+    
+    // Add isActiveStatus field for project_status type
+            if (type === 'project_status' && isActiveStatus !== undefined) {
+          newFieldData.isActiveStatus = isActiveStatus;
+        }
+        if (type === 'project_status' && statusColor) {
+          newFieldData.statusColor = statusColor;
+        }
 
     const newField = new CustomDataField(newFieldData);
 
@@ -77,8 +85,8 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
 // Update custom data field
 router.put('/:id', auth, checkPermission(['admin.edit']), async (req, res) => {
   try {
-    const { id } = req.params;
-    const { text, legislationTitle, jurisdiction } = req.body;
+            const { id } = req.params;
+        const { text, legislationTitle, jurisdiction, isActiveStatus, statusColor } = req.body;
     
     console.log('Updating custom data field:', { id, text, legislationTitle, jurisdiction });
     
@@ -110,6 +118,14 @@ router.put('/:id', auth, checkPermission(['admin.edit']), async (req, res) => {
     // Update legislation fields if they exist
     if (legislationTitle !== undefined) field.legislationTitle = legislationTitle.trim();
     if (jurisdiction !== undefined) field.jurisdiction = jurisdiction.trim();
+    
+    // Update isActiveStatus field for project_status type
+            if (field.type === 'project_status' && isActiveStatus !== undefined) {
+          field.isActiveStatus = isActiveStatus;
+        }
+        if (field.type === 'project_status' && statusColor) {
+          field.statusColor = statusColor;
+        }
     
     field.updatedAt = new Date();
     await field.save();

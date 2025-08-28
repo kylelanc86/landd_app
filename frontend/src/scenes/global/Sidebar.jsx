@@ -402,18 +402,18 @@ const Sidebar = () => {
 
           {/* Collapsible Sections */}
           <CollapsibleSection
-            title="PROJECTS"
+            title="Projects"
             to="/projects"
             icon={<StorageIcon />}
           />
 
           <CollapsibleSection
-            title="CLIENTS"
+            title="Clients"
             to="/clients"
             icon={<PeopleOutlinedIcon />}
           />
           <CollapsibleSection
-            title="INVOICES"
+            title="Invoices"
             to="/invoices"
             icon={<AttachMoneyIcon />}
           />

@@ -45,17 +45,34 @@ const projectSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: [
-      'In progress',
-      'Report sent for review',
-      'Ready for invoicing',
-      'Invoice sent',
-      'Job complete',
-      'On hold',
-      'Quote sent',
-      'Cancelled'
-    ],
-    default: 'In progress'
+    default: 'In progress',
+    validate: {
+      validator: async function(value) {
+        if (!value) return true; // Allow empty values
+        
+        try {
+          // Import the CustomDataField model dynamically to avoid circular dependencies
+          const CustomDataField = mongoose.model('CustomDataField');
+          
+          // Check if the status exists in custom data fields
+          const statusExists = await CustomDataField.findOne({
+            type: 'project_status',
+            text: value
+          });
+          
+          if (!statusExists) {
+            return false;
+          }
+          
+          return true;
+        } catch (error) {
+          // If validation fails due to database error, allow the value
+          // This prevents validation from breaking if the database is unavailable
+          return true;
+        }
+      },
+      message: 'Status "{VALUE}" is not a valid project status. Please select from the available options.'
+    }
   },
   address: {
     type: String,
@@ -108,6 +125,29 @@ const projectSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   }
+});
+
+// Pre-save hook to validate status before saving
+projectSchema.pre('save', async function(next) {
+  // Only validate status if it's being modified
+  if (this.isModified('status') && this.status) {
+    try {
+      const CustomDataField = mongoose.model('CustomDataField');
+      const statusExists = await CustomDataField.findOne({
+        type: 'project_status',
+        text: this.status
+      });
+      
+      if (!statusExists) {
+        const error = new Error(`Status "${this.status}" is not a valid project status. Please select from the available options.`);
+        error.name = 'ValidationError';
+        return next(error);
+      }
+    } catch (error) {
+      // Continue with save even if validation fails
+    }
+  }
+  next();
 });
 
 // Essential compound indexes only
