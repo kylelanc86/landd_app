@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -89,6 +89,9 @@ const Timesheets = () => {
   const [entryToDelete, setEntryToDelete] = useState(null);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [processingEntries, setProcessingEntries] = useState(new Set());
+  const [successEntries, setSuccessEntries] = useState(new Set());
+  const calendarRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -290,12 +293,35 @@ const Timesheets = () => {
       console.log("Full timesheet data being sent:", timesheetData);
       console.log("=== END TIMESHEET SUBMIT DEBUG ===");
 
+      // Optimistically update UI immediately
+      const optimisticEntry = {
+        _id: isEditing ? editingEntryId : `temp_${Date.now()}`,
+        ...timesheetData,
+        project:
+          isEditing && editingEntryId
+            ? timeEntries.find((entry) => entry._id === editingEntryId)?.project
+            : projects.find((p) => p._id === formData.projectId),
+        projectInputType: formData.projectInputType || "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Mark entry as processing
+      setProcessingEntries((prev) => new Set(prev).add(optimisticEntry._id));
+
       if (isEditing && editingEntryId) {
-        await api.put(`/timesheets/${editingEntryId}`, timesheetData);
+        // Update existing entry optimistically
+        setTimeEntries((prev) =>
+          prev.map((entry) =>
+            entry._id === editingEntryId ? optimisticEntry : entry
+          )
+        );
       } else {
-        await api.post("/timesheets", timesheetData);
+        // Add new entry optimistically
+        setTimeEntries((prev) => [...prev, optimisticEntry]);
       }
 
+      // Close dialog and reset form immediately
       setOpenDialog(false);
       setFormData({
         startTime: "",
@@ -309,10 +335,65 @@ const Timesheets = () => {
       setIsEditing(false);
       setEditingEntryId(null);
 
-      await fetchTimeEntries();
-      await fetchTimesheetStatus();
+      // Make API call in background
+      try {
+        if (isEditing && editingEntryId) {
+          await api.put(`/timesheets/${editingEntryId}`, timesheetData);
+        } else {
+          const response = await api.post("/timesheets", timesheetData);
+          // Update the temporary ID with the real one from the server
+          setTimeEntries((prev) =>
+            prev.map((entry) =>
+              entry._id === optimisticEntry._id ? response.data : entry
+            )
+          );
+        }
+
+        // Show brief success state
+        setSuccessEntries((prev) => new Set(prev).add(optimisticEntry._id));
+        setTimeout(() => {
+          setSuccessEntries((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(optimisticEntry._id);
+            return newSet;
+          });
+        }, 2000);
+
+        // Refresh data in background to ensure consistency
+        fetchTimeEntries();
+        fetchTimesheetStatus();
+      } catch (apiError) {
+        console.error("Error saving timesheet entry:", apiError);
+
+        // Revert optimistic update on error
+        if (isEditing && editingEntryId) {
+          setTimeEntries((prev) =>
+            prev.map((entry) =>
+              entry._id === editingEntryId
+                ? timeEntries.find((e) => e._id === editingEntryId)
+                : entry
+            )
+          );
+        } else {
+          setTimeEntries((prev) =>
+            prev.filter((entry) => entry._id !== optimisticEntry._id)
+          );
+        }
+
+        setErrorMessage(
+          apiError.response?.data?.message || "Error saving time entry"
+        );
+        setErrorDialogOpen(true);
+      } finally {
+        // Remove processing state
+        setProcessingEntries((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(optimisticEntry._id);
+          return newSet;
+        });
+      }
     } catch (error) {
-      console.error("Error creating/updating timesheet entry:", error);
+      console.error("Error in handleSubmit:", error);
       setErrorMessage(
         error.response?.data?.message || "Error saving time entry"
       );
@@ -322,14 +403,67 @@ const Timesheets = () => {
 
   const handleDelete = async (entryId) => {
     try {
-      await api.delete(`/timesheets/${entryId}`);
-      await fetchTimeEntries();
-      await fetchTimesheetStatus();
+      // Store the entry to restore if deletion fails
+      const entryToRestore = timeEntries.find((entry) => entry._id === entryId);
+
+      // Mark entry as processing
+      setProcessingEntries((prev) => new Set(prev).add(entryId));
+
+      // Optimistically remove from UI immediately
+      setTimeEntries((prev) => prev.filter((entry) => entry._id !== entryId));
       setDeleteConfirmOpen(false);
       setEntryToDelete(null);
+
+      // Make API call in background
+      try {
+        await api.delete(`/timesheets/${entryId}`);
+
+        // Show brief success state
+        setSuccessEntries((prev) => new Set(prev).add(entryId));
+        setTimeout(() => {
+          setSuccessEntries((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(entryId);
+            return newSet;
+          });
+        }, 2000);
+
+        // Refresh data in background to ensure consistency
+        fetchTimeEntries();
+        fetchTimesheetStatus();
+      } catch (apiError) {
+        console.error("Error deleting time entry:", apiError);
+
+        // Revert optimistic update on error
+        if (entryToRestore) {
+          setTimeEntries((prev) => [...prev, entryToRestore]);
+        }
+
+        setErrorMessage(
+          apiError.response?.data?.message || "Error deleting time entry"
+        );
+        setErrorDialogOpen(true);
+      } finally {
+        // Remove processing state
+        setProcessingEntries((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(entryId);
+          return newSet;
+        });
+      }
     } catch (error) {
-      console.error("Error deleting time entry:", error);
-      // You could add a snackbar or toast notification here instead of alert
+      console.error("Error in handleDelete:", error);
+      setErrorMessage(
+        error.response?.data?.message || "Error deleting time entry"
+      );
+      setErrorDialogOpen(true);
+
+      // Remove processing state
+      setProcessingEntries((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(entryId);
+        return newSet;
+      });
     }
   };
 
@@ -449,25 +583,25 @@ const Timesheets = () => {
 
       if (entry.isBreak) {
         title = `Break${entry.description ? ` - ${entry.description}` : ""}`;
-        backgroundColor = `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%)`;
-        borderColor = theme.palette.warning.dark;
-        textColor = theme.palette.warning.contrastText;
+        backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
+        borderColor = theme.palette.grey[700];
+        textColor = theme.palette.grey[50];
         className = "break-event";
       } else if (entry.isAdminWork) {
         title = `Admin Work${
           entry.description ? ` - ${entry.description}` : ""
         }`;
-        backgroundColor = `linear-gradient(135deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%)`;
-        borderColor = theme.palette.info.dark;
-        textColor = theme.palette.info.contrastText;
+        backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
+        borderColor = theme.palette.grey[700];
+        textColor = theme.palette.grey[50];
         className = "admin-event";
       } else {
         title = `${projectName} - ${
           entry.projectInputType?.replace("_", " ") || ""
         }${entry.description ? `, ${entry.description}` : ""}`;
-        backgroundColor = `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`;
-        borderColor = theme.palette.primary.dark;
-        textColor = theme.palette.primary.contrastText;
+        backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
+        borderColor = theme.palette.grey[700];
+        textColor = theme.palette.grey[50];
         className = "project-event";
       }
 
@@ -1015,32 +1149,38 @@ const Timesheets = () => {
               display: "none !important", // Hide the day header
             },
             "& .break-event": {
-              background: `linear-gradient(135deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.dark} 100%) !important`,
-              borderLeft: `6px solid ${theme.palette.warning.dark} !important`,
-              boxShadow: `0 6px 20px ${theme.palette.warning.main}40 !important`,
+              background: `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%) !important`,
+              borderLeft: `6px solid ${theme.palette.grey[700]} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.grey[500]}40 !important`,
               borderRadius: "12px !important",
             },
             "& .admin-event": {
-              background: `linear-gradient(135deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%) !important`,
-              borderLeft: `6px solid ${theme.palette.info.dark} !important`,
-              boxShadow: `0 6px 20px ${theme.palette.info.main}40 !important`,
+              background: `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%) !important`,
+              borderLeft: `6px solid ${theme.palette.grey[700]} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.grey[500]}40 !important`,
               borderRadius: "12px !important",
             },
             "& .project-event": {
-              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%) !important`,
-              borderLeft: `6px solid ${theme.palette.primary.dark} !important`,
-              boxShadow: `0 6px 20px ${theme.palette.primary.main}40 !important`,
+              background: `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%) !important`,
+              borderLeft: `6px solid ${theme.palette.grey[700]} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.grey[500]}40 !important`,
               borderRadius: "12px !important",
+            },
+            "@keyframes spin": {
+              "0%": { transform: "translate(-50%, -50%) rotate(0deg)" },
+              "100%": { transform: "translate(-50%, -50%) rotate(360deg)" },
             },
           }}
         >
           <FullCalendar
+            ref={calendarRef}
             key={format(selectedDate, "yyyy-MM-dd")}
             plugins={[timeGridPlugin, interactionPlugin]}
             initialView="timeGridDay"
             initialDate={selectedDate}
             selectable={true}
             selectMirror={true}
+            unselectAuto={false}
             select={handleSelect}
             eventClick={handleEventClick}
             eventDrop={handleEventDrop}
@@ -1057,6 +1197,7 @@ const Timesheets = () => {
             firstDay={1}
             headerToolbar={false}
             allDaySlot={false}
+            selectMinDistance={15}
             slotLaneClassNames={(arg) => {
               // Use FullCalendar's built-in class naming system
               const slotIndex = Math.floor(
@@ -1074,12 +1215,14 @@ const Timesheets = () => {
             }}
             eventContent={(eventInfo) => {
               const duration = eventInfo.event.end - eventInfo.event.start;
-              const isShortEntry = duration <= 15 * 60 * 1000;
+              const isShortEntry = duration <= 30 * 60 * 1000; // 30 minutes or less
               const project = eventInfo.event.extendedProps.projectId
                 ? projects.find(
                     (p) => p._id === eventInfo.event.extendedProps.projectId
                   )
                 : null;
+              const isProcessing = processingEntries.has(eventInfo.event.id);
+              const isSuccess = successEntries.has(eventInfo.event.id);
 
               const formatEventContent = () => {
                 if (eventInfo.event.extendedProps.isBreak) {
@@ -1111,6 +1254,101 @@ const Timesheets = () => {
                 }`;
               };
 
+              // For short entries, display content and time on one line
+              if (isShortEntry) {
+                return (
+                  <Box
+                    sx={{
+                      p: 1,
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "flex-start",
+                      position: "relative",
+                      opacity: isProcessing ? 0.7 : 1,
+                      transition: "opacity 0.2s ease-in-out",
+                      "& .event-content": {
+                        fontSize: "0.7rem",
+                        fontWeight: 600,
+                        lineHeight: 1.2,
+                        color: theme.palette.common.white,
+                        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      },
+                      "& .event-time": {
+                        fontSize: "0.9rem",
+                        opacity: 0.9,
+                        fontWeight: 500,
+                        color: theme.palette.common.white,
+                        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                        marginLeft: "8px",
+                        flexShrink: 0,
+                      },
+                    }}
+                  >
+                    {isProcessing && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 0,
+                          height: 0,
+                          borderStyle: "solid",
+                          borderWidth: "0 20px 20px 0",
+                          borderColor: `transparent ${theme.palette.warning.main} transparent transparent`,
+                          zIndex: 1,
+                        }}
+                      />
+                    )}
+                    <Typography className="event-content">
+                      {formatEventContent()}
+                    </Typography>
+                    <Typography className="event-time">
+                      {format(eventInfo.event.start, "HH:mm")} -{" "}
+                      {format(eventInfo.event.end, "HH:mm")}
+                    </Typography>
+                    {isProcessing && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          width: "16px",
+                          height: "16px",
+                          border: `2px solid ${theme.palette.warning.main}`,
+                          borderTop: `2px solid transparent`,
+                          borderRadius: "50%",
+                          animation: "spin 1s linear infinite",
+                          zIndex: 2,
+                        }}
+                      />
+                    )}
+                    {isSuccess && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: `${theme.palette.success.main}20`,
+                          border: `2px solid ${theme.palette.success.main}`,
+                          borderRadius: "12px",
+                          zIndex: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
+                  </Box>
+                );
+              }
+
+              // For longer entries, use the original multi-line layout
               return (
                 <Box
                   sx={{
@@ -1119,8 +1357,11 @@ const Timesheets = () => {
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "center",
+                    position: "relative",
+                    opacity: isProcessing ? 0.7 : 1,
+                    transition: "opacity 0.2s ease-in-out",
                     "& .event-title": {
-                      fontSize: "0.8rem",
+                      fontSize: "0.9rem",
                       fontWeight: 600,
                       lineHeight: 1.2,
                       color: theme.palette.common.white,
@@ -1132,13 +1373,28 @@ const Timesheets = () => {
                       marginTop: "2px",
                     },
                     "& .event-time": {
-                      fontSize: "0.65rem",
+                      fontSize: "0.85rem",
                       opacity: 0.8,
                       marginTop: "2px",
                       fontWeight: 500,
                     },
                   }}
                 >
+                  {isProcessing && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: 0,
+                        right: 0,
+                        width: 0,
+                        height: 0,
+                        borderStyle: "solid",
+                        borderWidth: "0 20px 20px 0",
+                        borderColor: `transparent ${theme.palette.warning.main} transparent transparent`,
+                        zIndex: 1,
+                      }}
+                    />
+                  )}
                   <Typography className="event-title" noWrap>
                     {formatEventContent()}
                   </Typography>
@@ -1151,6 +1407,39 @@ const Timesheets = () => {
                     {format(eventInfo.event.start, "HH:mm")} -{" "}
                     {format(eventInfo.event.end, "HH:mm")}
                   </Typography>
+                  {isProcessing && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        width: "16px",
+                        height: "16px",
+                        border: `2px solid ${theme.palette.warning.main}`,
+                        borderTop: `2px solid transparent`,
+                        borderRadius: "50%",
+                        animation: "spin 1s linear infinite",
+                        zIndex: 2,
+                      }}
+                    />
+                  )}
+                  {isSuccess && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: `${theme.palette.success.main}20`,
+                        border: `2px solid ${theme.palette.success.main}`,
+                        borderRadius: "12px",
+                        zIndex: 1,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
                 </Box>
               );
             }}
@@ -1174,6 +1463,11 @@ const Timesheets = () => {
             isBreak: false,
             projectInputType: "",
           });
+          // Clear the FullCalendar selection when closing
+          if (calendarRef.current) {
+            const calendarApi = calendarRef.current.getApi();
+            calendarApi.unselect();
+          }
         }}
         maxWidth="sm"
         fullWidth
@@ -1351,6 +1645,11 @@ const Timesheets = () => {
                 isBreak: false,
                 projectInputType: "",
               });
+              // Clear the FullCalendar selection when cancelling
+              if (calendarRef.current) {
+                const calendarApi = calendarRef.current.getApi();
+                calendarApi.unselect();
+              }
             }}
             variant="outlined"
             sx={{
