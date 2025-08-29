@@ -366,10 +366,9 @@ const AllocatedJobsTable = () => {
         },
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-        <Typography variant="h5">MY ACTIVE PROJECTS </Typography>
-        {loading && <CircularProgress size={20} sx={{ color: "#4CAF50" }} />}
-      </Box>
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        MY ACTIVE PROJECTS{" "}
+      </Typography>
 
       {/* Virtual Scrolling Optimized DataGrid with Proper Footer Positioning */}
       <DataGrid

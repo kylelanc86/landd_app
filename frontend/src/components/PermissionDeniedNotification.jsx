@@ -28,10 +28,21 @@ const PermissionDeniedNotification = ({
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 2,
+      sx={{
+        "& .MuiDialog-paper": {
+          border: "none",
           boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)",
+          borderRadius: 2,
+        },
+        "& .MuiDialogTitle-root": {
+          borderBottom: "none",
+        },
+        "& .MuiDialogContent-root": {
+          borderTop: "none",
+          borderBottom: "none",
+        },
+        "& .MuiDialogActions-root": {
+          borderTop: "none",
         },
       }}
     >
@@ -40,8 +51,6 @@ const PermissionDeniedNotification = ({
           display: "flex",
           alignItems: "center",
           gap: 1,
-          borderBottom: "1px solid",
-          borderColor: "divider",
           pb: 2,
         }}
       >

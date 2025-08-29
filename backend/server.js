@@ -136,7 +136,8 @@ connectDB()
     app.use('/api/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
     app.use('/api/invoices', requireAuth, checkTokenBlacklist, invoiceRoutes);
     app.use('/api/users', requireAuth, checkTokenBlacklist, usersRouter);
-    app.use('/api/xero', requireAuth, checkTokenBlacklist, xeroRoutes);
+    // Mount Xero routes with auth for most endpoints, but allow callback without auth
+app.use('/api/xero', xeroRoutes);
     app.use('/api/air-monitoring-shifts', requireAuth, checkTokenBlacklist, shiftRoutes);
     app.use('/api/timesheets', requireAuth, checkTokenBlacklist, timesheetRoutes);
     app.use('/api/calendar-entries', requireAuth, checkTokenBlacklist, calendarEntriesRouter);

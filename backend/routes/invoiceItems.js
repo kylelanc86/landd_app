@@ -4,8 +4,8 @@ const InvoiceItem = require('../models/InvoiceItem');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
-// Get all invoice items
-router.get('/', auth, checkPermission('admin.view'), async (req, res) => {
+// Get all invoice items - allow all authenticated users to read
+router.get('/', auth, async (req, res) => {
   try {
     const invoiceItems = await InvoiceItem.find({ isActive: true })
       .sort({ itemNo: 1 })

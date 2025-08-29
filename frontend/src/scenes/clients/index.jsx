@@ -24,7 +24,6 @@ import {
   Checkbox,
   Divider,
   LinearProgress,
-  CircularProgress,
   RadioGroup,
   FormControlLabel,
   Radio,
@@ -456,12 +455,9 @@ const Clients = () => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-        <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-          Clients
-        </Typography>
-        {loading && <CircularProgress size={24} sx={{ color: "#4CAF50" }} />}
-      </Box>
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Clients
+      </Typography>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>

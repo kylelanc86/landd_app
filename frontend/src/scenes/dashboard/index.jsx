@@ -58,7 +58,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
 
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [dailyTimesheetData, setDailyTimesheetData] = useState({
@@ -118,38 +118,7 @@ const Dashboard = () => {
     inProgressProjects: 0,
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Only fetch invoices for outstanding count
-        const invoicesRes = await invoiceService.getAll();
-
-        const invoices = Array.isArray(invoicesRes.data)
-          ? invoicesRes.data
-          : invoicesRes.data.data || [];
-
-        const outstandingInvoices = invoices.filter(
-          (inv) => inv.status === "unpaid"
-        ).length;
-
-        setStats({
-          activeProjects: 0,
-          reviewProjects: 0,
-          invoiceProjects: 0,
-          outstandingInvoices,
-          labCompleteProjects: 0,
-          samplesSubmittedProjects: 0,
-          inProgressProjects: 0,
-        });
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setDataLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+  // Removed unnecessary data fetching since dashboard stats aren't needed
 
   // Fetch daily timesheet data
   useEffect(() => {
@@ -218,7 +187,7 @@ const Dashboard = () => {
         id: "dailyTimesheet",
         title: "My Daily Timesheet",
         icon: <AccessTimeIcon />,
-        bgcolor: "#1976d2",
+        bgcolor: "#EA1517",
         onClick: () => navigate("/timesheets"),
         subtitle:
           dailyTimesheetData.status.charAt(0).toUpperCase() +
@@ -259,7 +228,7 @@ const Dashboard = () => {
         id: "inProgress",
         title: "Projects In Progress",
         icon: <PlayArrowIcon />,
-        bgcolor: "#ed6c02",
+        bgcolor: "#CD32BF",
         onClick: () => navigateToProjects(navigate, { status: "In progress" }),
       },
     ],
@@ -384,13 +353,6 @@ const Dashboard = () => {
           Select Widgets
         </Button>
       </Box>
-
-      {/* Data Loading Indicator */}
-      {dataLoading && (
-        <Box sx={{ mb: 2, display: "flex", justifyContent: "center" }}>
-          <CircularProgress size={24} sx={{ color: "#4CAF50" }} />
-        </Box>
-      )}
 
       {/* Widgets Grid */}
       <Box mt="20px">

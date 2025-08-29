@@ -77,8 +77,9 @@ const Invoices = () => {
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Add permission check for Xero sync
+  // Add permission checks for Xero operations
   const canSyncXero = hasPermission(currentUser, "xero.sync");
+  const canManageXero = hasPermission(currentUser, "xero.manage");
 
   useEffect(() => {
     if (authLoading || !currentUser) {
@@ -544,6 +545,14 @@ const Invoices = () => {
     // Apply search filtering first
     let filtered = [...invoices];
 
+    // For employee users, only show draft and awaiting_approval invoices
+    if (currentUser?.role === "employee") {
+      filtered = filtered.filter(
+        (invoice) =>
+          invoice.status === "draft" || invoice.status === "awaiting_approval"
+      );
+    }
+
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
       filtered = filtered.filter((invoice) => {
@@ -615,11 +624,21 @@ const Invoices = () => {
     });
 
     return sorted;
-  }, [invoices, sortBy, sortDir, searchQuery, projects]);
+  }, [invoices, sortBy, sortDir, searchQuery, projects, currentUser]);
 
-  // Sum of unpaid invoice amounts
+  // Sum of unpaid invoice amounts (filtered by user role)
   const totalUnpaid = invoices
-    .filter((inv) => inv.status === "unpaid")
+    .filter((inv) => {
+      // For employees, only include unpaid invoices that are draft or awaiting approval
+      if (currentUser?.role === "employee") {
+        return (
+          inv.status === "unpaid" &&
+          (inv.status === "draft" || inv.status === "awaiting_approval")
+        );
+      }
+      // For other users, include all unpaid invoices
+      return inv.status === "unpaid";
+    })
     .reduce((sum, inv) => sum + parseFloat(inv.amount), 0)
     .toFixed(2);
 
@@ -1375,12 +1394,10 @@ const Invoices = () => {
 
   return (
     <Box m="20px">
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-        <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-          Invoices
-        </Typography>
-        {loading && <CircularProgress size={24} sx={{ color: "#4CAF50" }} />}
-      </Box>
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Invoices
+      </Typography>
+
       {/* Loading overlay for Xero sync */}
       {syncingXero && (
         <Box
@@ -1399,7 +1416,7 @@ const Invoices = () => {
         >
           <CircularProgress size={80} thickness={5} color="primary" />
           <Typography variant="h6" sx={{ ml: 3 }}>
-            Syncing unpaid & awaiting approval invoices from Xero...
+            Syncing awaiting approval invoices from Xero...
           </Typography>
         </Box>
       )}
@@ -1428,7 +1445,7 @@ const Invoices = () => {
 
       <Box display="flex" justifyContent="space-between" alignItems="center">
         <Box display="flex" gap={2}>
-          {canSyncXero && !xeroConnected && (
+          {canManageXero && !xeroConnected && (
             <Button
               variant="outlined"
               color="primary"
@@ -1532,7 +1549,9 @@ const Invoices = () => {
         }}
       >
         <Typography variant="body1" color="text.secondary" fontWeight="bold">
-          {invoices.length} invoices
+          {currentUser?.role === "employee"
+            ? `${getFilteredInvoices().length} invoices`
+            : `${invoices.length} invoices`}
         </Typography>
       </Box>
 
@@ -1576,7 +1595,16 @@ const Invoices = () => {
           },
         }}
       >
-        {validatedInvoices.length > 0 && (
+        {loading ? (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            height="200px"
+          >
+            <CircularProgress sx={{ color: "#4CAF50" }} />
+          </Box>
+        ) : getFilteredInvoices().length > 0 ? (
           <DataGrid
             rows={getFilteredInvoices()}
             columns={columns}
@@ -1585,7 +1613,6 @@ const Invoices = () => {
             rowsPerPageOptions={[10, 25, 50, 100]}
             // checkboxSelection
             disableSelectionOnClick
-            loading={loading}
             autoHeight
             onSelectionModelChange={handleSelectionChange}
             selectionModel={selectedInvoices}
@@ -1606,6 +1633,17 @@ const Invoices = () => {
               },
             }}
           />
+        ) : (
+          <Box
+            display="flex"
+            justifyContent="center"
+            alignItems="center"
+            height="200px"
+          >
+            <Typography variant="h6" color="text.secondary">
+              No draft invoices or invoices awaiting approval
+            </Typography>
+          </Box>
         )}
       </Box>
 

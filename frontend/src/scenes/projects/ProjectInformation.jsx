@@ -71,7 +71,7 @@ const ProjectInformation = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { can } = usePermissions();
+  const { can, isAdmin, isManager } = usePermissions();
   const canWriteOff = can("clients.write_off");
   const isEditMode = id !== "new";
   const [loading, setLoading] = useState(true);
@@ -548,6 +548,15 @@ const ProjectInformation = () => {
     }
   };
 
+  // Function to determine which statuses a user can access
+  const getAccessibleStatuses = () => {
+    if (isAdmin || isManager || can("projects.change_status")) {
+      // All users with permission can access all statuses for now
+      return { active: activeStatuses, inactive: inactiveStatuses };
+    }
+    return { active: [], inactive: [] };
+  };
+
   const renderStatusMenuItem = (status) => (
     <MenuItem key={status} value={status}>
       <StatusChip
@@ -844,17 +853,26 @@ const ProjectInformation = () => {
                         Active Statuses
                       </Typography>
                     </MenuItem>
-                    {activeStatuses.map(renderStatusMenuItem)}
-                    <MenuItem disabled>
-                      <Typography
-                        variant="subtitle2"
-                        color="text.secondary"
-                        sx={{ fontSize: "0.88rem" }}
-                      >
-                        Inactive Statuses
-                      </Typography>
-                    </MenuItem>
-                    {inactiveStatuses.map(renderStatusMenuItem)}
+                    {(() => {
+                      const accessibleStatuses = getAccessibleStatuses();
+                      return (
+                        <>
+                          {accessibleStatuses.active.map(renderStatusMenuItem)}
+                          <MenuItem disabled>
+                            <Typography
+                              variant="subtitle2"
+                              color="text.secondary"
+                              sx={{ fontSize: "0.88rem" }}
+                            >
+                              Inactive Statuses
+                            </Typography>
+                          </MenuItem>
+                          {accessibleStatuses.inactive.map(
+                            renderStatusMenuItem
+                          )}
+                        </>
+                      );
+                    })()}
                   </Select>
                 </FormControl>
               </Grid>

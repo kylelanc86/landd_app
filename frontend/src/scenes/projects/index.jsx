@@ -181,7 +181,7 @@ const Projects = ({ initialFilters = {} }) => {
   const location = useLocation();
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
     useJobStatus() || {};
-  const { isAdmin, isManager } = usePermissions();
+  const { isAdmin, isManager, can } = usePermissions();
   const [projects, setProjects] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1306,9 +1306,18 @@ const Projects = ({ initialFilters = {} }) => {
     [fetchProjectsWithPagination, filters.searchTerm]
   );
 
+  // Function to determine which statuses a user can access
+  const getAccessibleStatuses = () => {
+    if (isAdmin || isManager || can("projects.change_status")) {
+      // All users with permission can access all statuses for now
+      return { active: activeStatuses, inactive: inactiveStatuses };
+    }
+    return { active: [], inactive: [] };
+  };
+
   // Status editing handlers
   const handleStatusClick = (projectId, event) => {
-    if (isAdmin || isManager) {
+    if (isAdmin || isManager || can("projects.change_status")) {
       // Store the project ID in the anchor element's dataset
       event.currentTarget.dataset.projectId = projectId;
       setStatusDropdownAnchor(event.currentTarget);
@@ -1600,7 +1609,7 @@ const Projects = ({ initialFilters = {} }) => {
             </Tooltip>
 
             {/* 3-dot menu for status updates */}
-            {(isAdmin || isManager) && (
+            {(isAdmin || isManager || can("projects.change_status")) && (
               <Tooltip title="Update Status">
                 <IconButton
                   onClick={(e) => {
@@ -1668,12 +1677,9 @@ const Projects = ({ initialFilters = {} }) => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-        <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-          Projects
-        </Typography>
-        {loading && <CircularProgress size={24} sx={{ color: "#4CAF50" }} />}
-      </Box>
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Projects
+      </Typography>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>
@@ -2266,88 +2272,96 @@ const Projects = ({ initialFilters = {} }) => {
             Update Project Status
           </Typography>
         </MenuItem>
+
         <Divider sx={{ margin: "4px 0" }} />
-        {activeStatuses.map((status) => (
-          <MenuItem
-            key={status}
-            onClick={() =>
-              handleStatusChange(
-                statusDropdownAnchor?.dataset?.projectId,
-                status
-              )
-            }
-            sx={{
-              padding: "6px 12px",
-              minHeight: "36px",
-              justifyContent: "flex-start",
-              "&:hover": {
-                backgroundColor: "rgba(0, 0, 0, 0.04)",
-                transition: "all 0.15s ease",
-              },
-            }}
-          >
-            <Box
-              sx={{
-                backgroundColor: getStatusColor(status),
-                color: "white",
-                padding: "6px 12px",
-                borderRadius: "16px",
-                fontSize: "0.67rem",
-                fontWeight: "400",
-                display: "inline-block",
-                whiteSpace: "nowrap",
-                "&:hover": {
-                  opacity: 0.9,
-                  transform: "scale(1.02)",
-                  transition: "all 0.15s ease",
-                },
-              }}
-            >
-              {status}
-            </Box>
-          </MenuItem>
-        ))}
-        <Divider sx={{ margin: "8px 0" }} />
-        {inactiveStatuses.map((status) => (
-          <MenuItem
-            key={status}
-            onClick={() =>
-              handleStatusChange(
-                statusDropdownAnchor?.dataset?.projectId,
-                status
-              )
-            }
-            sx={{
-              padding: "6px 12px",
-              minHeight: "36px",
-              justifyContent: "flex-start",
-              "&:hover": {
-                backgroundColor: "rgba(0, 0, 0, 0.04)",
-                transition: "all 0.15s ease",
-              },
-            }}
-          >
-            <Box
-              sx={{
-                backgroundColor: getStatusColor(status),
-                color: "white",
-                padding: "6px 12px",
-                borderRadius: "16px",
-                fontSize: "0.67rem",
-                fontWeight: "400",
-                display: "inline-block",
-                whiteSpace: "nowrap",
-                "&:hover": {
-                  opacity: 0.9,
-                  transform: "scale(1.02)",
-                  transition: "all 0.15s ease",
-                },
-              }}
-            >
-              {status}
-            </Box>
-          </MenuItem>
-        ))}
+        {(() => {
+          const accessibleStatuses = getAccessibleStatuses();
+          return (
+            <>
+              {accessibleStatuses.active.map((status) => (
+                <MenuItem
+                  key={status}
+                  onClick={() =>
+                    handleStatusChange(
+                      statusDropdownAnchor?.dataset?.projectId,
+                      status
+                    )
+                  }
+                  sx={{
+                    padding: "6px 12px",
+                    minHeight: "36px",
+                    justifyContent: "flex-start",
+                    "&:hover": {
+                      backgroundColor: "rgba(0, 0, 0, 0.04)",
+                      transition: "all 0.15s ease",
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      backgroundColor: getStatusColor(status),
+                      color: "white",
+                      padding: "6px 12px",
+                      borderRadius: "16px",
+                      fontSize: "0.67rem",
+                      fontWeight: "400",
+                      display: "inline-block",
+                      whiteSpace: "nowrap",
+                      "&:hover": {
+                        opacity: 0.9,
+                        transform: "scale(1.02)",
+                        transition: "all 0.15s ease",
+                      },
+                    }}
+                  >
+                    {status}
+                  </Box>
+                </MenuItem>
+              ))}
+              <Divider sx={{ margin: "8px 0" }} />
+              {accessibleStatuses.inactive.map((status) => (
+                <MenuItem
+                  key={status}
+                  onClick={() =>
+                    handleStatusChange(
+                      statusDropdownAnchor?.dataset?.projectId,
+                      status
+                    )
+                  }
+                  sx={{
+                    padding: "6px 12px",
+                    minHeight: "36px",
+                    justifyContent: "flex-start",
+                    "&:hover": {
+                      backgroundColor: "rgba(0, 0, 0, 0.04)",
+                      transition: "all 0.15s ease",
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      backgroundColor: getStatusColor(status),
+                      color: "white",
+                      padding: "6px 12px",
+                      borderRadius: "16px",
+                      fontSize: "0.67rem",
+                      fontWeight: "400",
+                      display: "inline-block",
+                      whiteSpace: "nowrap",
+                      "&:hover": {
+                        opacity: 0.9,
+                        transform: "scale(1.02)",
+                        transition: "all 0.15s ease",
+                      },
+                    }}
+                  >
+                    {status}
+                  </Box>
+                </MenuItem>
+              ))}
+            </>
+          );
+        })()}
       </Menu>
 
       {/* Project Details Dialog */}

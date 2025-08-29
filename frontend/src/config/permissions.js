@@ -58,6 +58,7 @@ export const PERMISSIONS = {
   'invoices.edit': 'Edit invoices',
   'invoices.delete': 'Delete invoices',
   'invoices.approve': 'Approve invoices',
+  'invoice_items.view': 'View invoice items',
   
   // Fibre ID permissions
   'fibre.view': 'View fibre ID data',
@@ -67,6 +68,7 @@ export const PERMISSIONS = {
   
   // Other restricted permissions
   'xero.sync': 'Sync with Xero',
+  'xero.manage': 'Manage Xero connection (connect/disconnect)',
   'clients.write_off': 'Write off client accounts',
 
   // Admin permissions
@@ -118,17 +120,20 @@ export const ROLE_PERMISSIONS = {
     'invoices.edit',
     'invoices.delete',
     'invoices.approve',
+    'invoice_items.view', // Managers can view invoice items
     'fibre.view',
     'fibre.create',
     'fibre.edit',
     'fibre.delete',
     'xero.sync',
+    'xero.manage',
     'clients.write_off',
   ],
   employee: [
     'projects.view',
     'projects.create',
     'projects.edit',
+    'projects.change_status', // Employees can now change project statuses
     'jobs.view',
     'jobs.create',
     'jobs.edit',
@@ -150,9 +155,11 @@ export const ROLE_PERMISSIONS = {
     'invoices.view',
     'invoices.create',
     'invoices.edit',
+    'invoice_items.view', // Employees can view invoice items for dropdown
     'fibre.view',
     'fibre.create',
     'fibre.edit',
+    'xero.sync', // Employees can sync invoices to and from Xero using existing connection
   ], // Employees can view, create and edit most records but not delete or approve
 };
 

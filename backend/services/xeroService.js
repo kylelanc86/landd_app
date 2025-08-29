@@ -6,25 +6,25 @@ const SYNC_CONFIG = {
   // Document types to include
   includeTypes: ['ACCREC'], // Only Accounts Receivable invoices (invoices you send to customers)
   
-  // Statuses to include (only these will be synced)
-  includeStatuses: ['AUTHORISED', 'SUBMITTED'], // Invoices awaiting payment and awaiting approval
+  // Statuses to include (only awaiting approval invoices from Xero)
+  includeStatuses: ['SUBMITTED'], // Only invoices awaiting approval
   
   // Statuses to exclude
-  excludeStatuses: ['DRAFT', 'DELETED', 'VOIDED', 'PAID'], // Skip drafts, deleted, voided, and paid invoices
+  excludeStatuses: ['DRAFT', 'DELETED', 'VOIDED', 'PAID', 'AUTHORISED'], // Skip drafts, deleted, voided, paid, and authorized invoices
   
   // Keywords in reference field to exclude
   excludeReferenceKeywords: ['expense', 'claim', 'bill'],
   
-  // Include draft invoices (set to true if you want drafts)
+  // Include draft invoices (set to false - we keep app-created drafts)
   includeDrafts: false,
   
-  // Include deleted invoices (set to true if you want deleted)
+  // Include deleted invoices (set to false)
   includeDeleted: false,
   
-  // Include voided invoices (set to true if you want voided)
+  // Include voided invoices (set to false)
   includeVoided: false,
   
-  // Include paid invoices (set to false - we only want unpaid)
+  // Include paid invoices (set to false)
   includePaid: false
 };
 
@@ -110,9 +110,9 @@ class XeroService {
       }
       console.log('Tenant ID retrieved:', tenantId);
       
-      // Only fetch unpaid and awaiting approval invoices from Xero
+      // Only fetch awaiting approval invoices from Xero
       // Use the statuses parameter to filter at the API level
-      const statuses = ['AUTHORISED', 'SUBMITTED']; // Only unpaid and awaiting approval
+      const statuses = ['SUBMITTED']; // Only awaiting approval (ignore AUTHORISED/unpaid)
       const tokenSet = await xero.readTokenSet();
       
       console.log('Fetching Xero invoices with statuses:', statuses);
@@ -397,11 +397,11 @@ class XeroService {
       
       // Find invoices in our database that have Xero IDs but are not in current results
       // Only clean up invoices that actually have Xero IDs (i.e., were synced from Xero)
-      // EXCLUDE local draft and awaiting approval invoices to prevent accidental deletion
+      // EXCLUDE local draft, awaiting approval, and unpaid invoices to prevent accidental deletion
       const invoicesToCleanup = await Invoice.find({
         xeroInvoiceId: { $exists: true, $ne: null, $ne: '' },
         xeroInvoiceId: { $nin: currentXeroInvoiceIds },
-        status: { $nin: ['draft', 'awaiting_approval'] }, // Protect local draft and awaiting approval invoices
+        status: { $nin: ['draft', 'awaiting_approval', 'unpaid'] }, // Protect local draft, awaiting approval, and unpaid invoices
         isDeleted: { $ne: true } // Don't process already deleted invoices
       });
       

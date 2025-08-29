@@ -240,9 +240,12 @@ xero.readTokenSet = async () => {
         }
       }
       
-      // Set the token in the Xero client
-      await xero.setTokenSet(tokenSet);
-      isTokenInitialized = true;
+      // Don't call setTokenSet again here as it might overwrite the token
+      // Just ensure the client state is consistent
+      if (tokenSet.access_token) {
+        xero.tokenSet = tokenSet;
+        isTokenInitialized = true;
+      }
       
       return tokenSet;
     }

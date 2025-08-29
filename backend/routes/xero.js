@@ -48,12 +48,29 @@ router.get('/status', auth, async (req, res) => {
     }
     
     const tokenSet = await xero.readTokenSet();
-    console.log('Token set read result:', {
+    console.log('Status endpoint - Token set read result:', {
       exists: !!tokenSet,
       hasAccessToken: !!(tokenSet && tokenSet.access_token),
       hasRefreshToken: !!(tokenSet && tokenSet.refresh_token),
-      expiresAt: tokenSet?.expires_at ? new Date(tokenSet.expires_at).toISOString() : null
+      expiresAt: tokenSet?.expires_at ? new Date(tokenSet.expires_at).toISOString() : null,
+      tokenType: tokenSet?.token_type,
+      scope: tokenSet?.scope
     });
+    
+    // Also check MongoDB directly for debugging
+    try {
+      const XeroToken = require('../models/XeroToken');
+      const directToken = await XeroToken.getToken();
+      console.log('Status endpoint - Direct MongoDB token check:', {
+        exists: !!directToken,
+        hasAccessToken: !!(directToken && directToken.access_token),
+        hasRefreshToken: !!(directToken && directToken.refresh_token),
+        expiresAt: directToken?.expires_at ? new Date(directToken.expires_at).toISOString() : null,
+        tenantId: directToken?.tenantId
+      });
+    } catch (dbError) {
+      console.error('Error checking MongoDB directly:', dbError);
+    }
     
     const tenantId = await xero.getTenantId();
     console.log('Tenant ID:', tenantId);
@@ -123,14 +140,54 @@ router.get('/callback', async (req, res) => {
     const { code, state } = req.query;
     console.log('Received callback with code and state:', { code: !!code, state });
     
+    // Log environment variables for debugging (without exposing secrets)
+    console.log('Xero configuration check:', {
+      hasClientId: !!process.env.XERO_CLIENT_ID,
+      hasClientSecret: !!process.env.XERO_CLIENT_SECRET,
+      hasRedirectUri: !!process.env.XERO_REDIRECT_URI,
+      redirectUri: process.env.XERO_REDIRECT_URI
+    });
+    
+    if (!code) {
+      console.error('No authorization code received from Xero');
+      return res.redirect('http://localhost:3000/invoices?xero_error=No authorization code received');
+    }
+    
+    if (!state) {
+      console.error('No state parameter received from Xero');
+      return res.redirect('http://localhost:3000/invoices?xero_error=No state parameter received');
+    }
+    
     if (!xero.verifyState(state)) {
       console.error('State verification failed:', { received: state, expected: xero.currentState });
       return res.redirect('http://localhost:3000/invoices?xero_error=Invalid state parameter');
     }
 
     console.log('State verified, getting token set...');
-    const tokenSet = await xero.apiCallback(code);
-    console.log('Raw token set received:', JSON.stringify(tokenSet, null, 2));
+    
+    // Check if Xero client is properly initialized
+    console.log('Xero client initialization check:', {
+      isInitialized: xero.isInitialized(),
+      hasTokenSet: !!xero.tokenSet,
+      hasAccessToken: !!(xero.tokenSet && xero.tokenSet.access_token)
+    });
+    
+    // Verify Xero client configuration
+    console.log('Xero client state:', {
+      isInitialized: xero.isInitialized(),
+      hasClientId: !!xero.clientId,
+      hasClientSecret: !!xero.clientSecret,
+      hasRedirectUris: !!(xero.redirectUris && xero.redirectUris.length > 0)
+    });
+    
+    let tokenSet;
+    try {
+      tokenSet = await xero.apiCallback(code);
+      console.log('Raw token set received:', JSON.stringify(tokenSet, null, 2));
+    } catch (apiError) {
+      console.error('Error calling xero.apiCallback:', apiError);
+      throw new Error(`Xero API callback failed: ${apiError.message}`);
+    }
 
     if (!tokenSet) {
       throw new Error('No token set received from Xero');
@@ -163,6 +220,14 @@ router.get('/callback', async (req, res) => {
     
     // Verify token was saved
     const savedToken = await xero.readTokenSet();
+    console.log('Verification - saved token details:', {
+      exists: !!savedToken,
+      hasAccessToken: !!(savedToken && savedToken.access_token),
+      hasRefreshToken: !!(savedToken && savedToken.refresh_token),
+      expiresAt: savedToken?.expires_at ? new Date(savedToken.expires_at).toISOString() : null,
+      tenantId: savedToken?.tenantId
+    });
+    
     if (!savedToken || !savedToken.access_token) {
       console.error('Failed to verify saved token:', savedToken);
       throw new Error('Failed to verify saved token');
@@ -190,11 +255,59 @@ router.get('/callback', async (req, res) => {
 
     // Redirect back to the frontend with success status
     console.log('Redirecting to frontend with success status');
+    console.log('Final callback result:', {
+      hasToken: !!savedToken,
+      hasAccessToken: !!(savedToken && savedToken.access_token),
+      hasTenantId: !!savedTenantId,
+      redirectUrl: 'http://localhost:3000/invoices?xero_connected=true'
+    });
     res.redirect('http://localhost:3000/invoices?xero_connected=true');
   } catch (error) {
     console.error('Error in Xero callback:', error);
     const errorMessage = encodeURIComponent(error.message || 'Failed to complete Xero authentication');
     res.redirect(`http://localhost:3000/invoices?xero_error=${errorMessage}`);
+  }
+});
+
+// Debug endpoint to check token storage directly
+router.get('/debug-token', async (req, res) => {
+  try {
+    console.log('Debug token endpoint called');
+    
+    // Check MongoDB directly
+    const XeroToken = require('../models/XeroToken');
+    const directToken = await XeroToken.getToken();
+    
+    // Check Xero client state
+    const clientState = {
+      isInitialized: xero.isInitialized(),
+      hasTokenSet: !!xero.tokenSet,
+      hasAccessToken: !!(xero.tokenSet && xero.tokenSet.access_token),
+      currentState: xero.currentState
+    };
+    
+    // Check environment variables
+    const envCheck = {
+      hasClientId: !!process.env.XERO_CLIENT_ID,
+      hasClientSecret: !!process.env.XERO_CLIENT_SECRET,
+      hasRedirectUri: !!process.env.XERO_REDIRECT_URI,
+      redirectUri: process.env.XERO_REDIRECT_URI
+    };
+    
+    res.json({
+      mongodb: {
+        exists: !!directToken,
+        hasAccessToken: !!(directToken && directToken.access_token),
+        hasRefreshToken: !!(directToken && directToken.refresh_token),
+        expiresAt: directToken?.expires_at ? new Date(directToken.expires_at).toISOString() : null,
+        tenantId: directToken?.tenantId
+      },
+      client: clientState,
+      environment: envCheck
+    });
+  } catch (error) {
+    console.error('Error in debug token endpoint:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

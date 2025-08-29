@@ -44,7 +44,7 @@ const DraftInvoicePage = () => {
   // Invoice header state with initial due date calculation
   const [invoiceHeader, setInvoiceHeader] = useState({
     invoiceNumber: "",
-    invoiceDate: "",
+    invoiceDate: new Date().toISOString().split("T")[0], // Today's date
     dueDate: "",
     client: "",
     project: "",
@@ -139,7 +139,9 @@ const DraftInvoicePage = () => {
   const fetchClients = async () => {
     try {
       const response = await clientService.getAll({ limit: 100 });
-      setClients(response.data || []);
+      // Ensure we always set an array, handle different response structures
+      const clientsData = response.data?.data || response.data || [];
+      setClients(Array.isArray(clientsData) ? clientsData : []);
     } catch (error) {
       console.error("Error fetching clients:", error);
       setClients([]);
@@ -186,9 +188,9 @@ const DraftInvoicePage = () => {
           const dueDate = new Date(invoiceDate);
 
           // Get payment terms from the selected client
-          const selectedClientObj = clients.find(
-            (client) => client.name === selectedClient?.name
-          );
+          const selectedClientObj = Array.isArray(clients)
+            ? clients.find((client) => client.name === selectedClient?.name)
+            : null;
           let paymentTerms = 30; // Default fallback
 
           if (selectedClientObj?.paymentTerms) {
