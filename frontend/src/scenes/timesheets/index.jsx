@@ -30,6 +30,7 @@ import {
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
+import LoadingSpinner from "../../components/LoadingSpinner";
 import api from "../../services/api";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -86,6 +87,8 @@ const Timesheets = () => {
   const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -219,7 +222,8 @@ const Timesheets = () => {
       setTimesheetStatus(status);
       await fetchTimeEntries();
     } catch (error) {
-      alert("Failed to update timesheet status. Please try again.");
+      setErrorMessage("Failed to update timesheet status. Please try again.");
+      setErrorDialogOpen(true);
     }
   };
 
@@ -232,15 +236,19 @@ const Timesheets = () => {
     console.log("Current selectedDate value:", selectedDate?.toISOString());
 
     if (!targetUserId) {
-      alert("Error: No user ID available. Please try logging in again.");
+      setErrorMessage(
+        "Error: No user ID available. Please try logging in again."
+      );
+      setErrorDialogOpen(true);
       return;
     }
 
     try {
       if (timesheetStatus === "finalised") {
-        alert(
+        setErrorMessage(
           "Cannot modify entries for a finalised timesheet. Please unfinalise first."
         );
+        setErrorDialogOpen(true);
         return;
       }
 
@@ -250,11 +258,13 @@ const Timesheets = () => {
         }
       } else {
         if (!formData.projectId) {
-          alert("Please select a project");
+          setErrorMessage("Please select a project");
+          setErrorDialogOpen(true);
           return;
         }
         if (!formData.projectInputType) {
-          alert("Please select a project input type");
+          setErrorMessage("Please select a project input type");
+          setErrorDialogOpen(true);
           return;
         }
       }
@@ -303,7 +313,10 @@ const Timesheets = () => {
       await fetchTimesheetStatus();
     } catch (error) {
       console.error("Error creating/updating timesheet entry:", error);
-      alert(error.response?.data?.message || "Error saving time entry");
+      setErrorMessage(
+        error.response?.data?.message || "Error saving time entry"
+      );
+      setErrorDialogOpen(true);
     }
   };
 
@@ -483,9 +496,10 @@ const Timesheets = () => {
 
   const handleSelect = (info) => {
     if (timesheetStatus === "finalised") {
-      alert(
+      setErrorMessage(
         "Cannot add entries to a finalised timesheet. Please unfinalise first."
       );
+      setErrorDialogOpen(true);
       return;
     }
 
@@ -528,9 +542,10 @@ const Timesheets = () => {
   const handleEventDrop = async (info) => {
     if (timesheetStatus === "finalised") {
       info.revert();
-      alert(
+      setErrorMessage(
         "Cannot modify entries for a finalised timesheet. Please unfinalise first."
       );
+      setErrorDialogOpen(true);
       return;
     }
 
@@ -551,16 +566,18 @@ const Timesheets = () => {
       await fetchTimeEntries();
     } catch (error) {
       info.revert();
-      alert("Failed to update time entry. Please try again.");
+      setErrorMessage("Failed to update time entry. Please try again.");
+      setErrorDialogOpen(true);
     }
   };
 
   const handleEventResize = async (info) => {
     if (timesheetStatus === "finalised") {
       info.revert();
-      alert(
+      setErrorMessage(
         "Cannot modify entries for a finalised timesheet. Please unfinalise first."
       );
+      setErrorDialogOpen(true);
       return;
     }
 
@@ -581,22 +598,13 @@ const Timesheets = () => {
       await fetchTimeEntries();
     } catch (error) {
       info.revert();
-      alert("Failed to update time entry. Please try again.");
+      setErrorMessage("Failed to update time entry. Please try again.");
+      setErrorDialogOpen(true);
     }
   };
 
   if (authLoading || !targetUserId) {
-    return (
-      <Box
-        m="20px"
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        minHeight="400px"
-      >
-        <Typography variant="h4">Loading...</Typography>
-      </Box>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -1169,11 +1177,47 @@ const Timesheets = () => {
         }}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>
-          {isEditing ? "Edit Time Entry" : "Add Time Entry"}
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: isEditing ? "warning.main" : "primary.main",
+              color: "white",
+            }}
+          >
+            {isEditing ? (
+              <EditIcon sx={{ fontSize: 20 }} />
+            ) : (
+              <AddIcon sx={{ fontSize: 20 }} />
+            )}
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            {isEditing ? "Edit Time Entry" : "Add Time Entry"}
+          </Typography>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
               <Grid item xs={12}>
@@ -1291,7 +1335,7 @@ const Timesheets = () => {
             </Grid>
           </Box>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
           <Button
             onClick={() => {
               setOpenDialog(false);
@@ -1308,6 +1352,13 @@ const Timesheets = () => {
                 projectInputType: "",
               });
             }}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
           >
             Cancel
           </Button>
@@ -1319,12 +1370,30 @@ const Timesheets = () => {
                 setIsEditing(false);
                 setEditingEntryId(null);
               }}
+              variant="outlined"
               color="error"
+              startIcon={<DeleteIcon />}
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               Delete
             </Button>
           )}
-          <Button onClick={handleSubmit} variant="contained">
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            startIcon={isEditing ? <EditIcon /> : <AddIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
             {isEditing ? "Update" : "Save"}
           </Button>
         </DialogActions>
@@ -1339,29 +1408,144 @@ const Timesheets = () => {
         }}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <Typography>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Confirm Delete
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
             Are you sure you want to delete this time entry? This action cannot
             be undone.
           </Typography>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
           <Button
             onClick={() => {
               setDeleteConfirmOpen(false);
               setEntryToDelete(null);
+            }}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
             }}
           >
             Cancel
           </Button>
           <Button
             onClick={() => handleDelete(entryToDelete)}
-            color="error"
             variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(211, 47, 47, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(211, 47, 47, 0.4)",
+              },
+            }}
           >
-            Delete
+            Delete Entry
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Error Dialog */}
+      <Dialog
+        open={errorDialogOpen}
+        onClose={() => setErrorDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Error
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            {errorMessage}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setErrorDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            OK
           </Button>
         </DialogActions>
       </Dialog>

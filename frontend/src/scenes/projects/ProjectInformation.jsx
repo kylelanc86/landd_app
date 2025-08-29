@@ -30,6 +30,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
 import { projectService, clientService, userService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
@@ -526,7 +527,17 @@ const ProjectInformation = () => {
   const handleDeleteProject = async () => {
     try {
       setDeleting(true);
-      await projectService.delete(id);
+      const response = await projectService.delete(id);
+
+      // Check if this was a permission denied response
+      if (response.data?.permissionDenied) {
+        // Permission denied - don't navigate, just close the dialog
+        setDeleting(false);
+        setDeleteDialogOpen(false);
+        return;
+      }
+
+      // Success - navigate to projects list
       navigate("/projects");
     } catch (error) {
       console.error("Error deleting project:", error);
@@ -1025,10 +1036,44 @@ const ProjectInformation = () => {
         onClose={() => setNewClientDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Create New Client</DialogTitle>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <AddIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Create New Client
+          </Typography>
+        </DialogTitle>
         <form onSubmit={handleNewClientSubmit}>
-          <DialogContent>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Stack spacing={2}>
               <TextField
                 label="Client Name"
@@ -1209,10 +1254,16 @@ const ProjectInformation = () => {
               )}
             </Stack>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
               onClick={() => setNewClientDialogOpen(false)}
-              color="secondary"
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               Cancel
             </Button>
@@ -1221,6 +1272,13 @@ const ProjectInformation = () => {
               variant="contained"
               color="primary"
               disabled={creatingClient}
+              startIcon={<AddIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               {creatingClient ? "Creating..." : "Create Client"}
             </Button>
@@ -1234,29 +1292,77 @@ const ProjectInformation = () => {
         onClose={() => setDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <DeleteIcon color="error" />
-            <Typography variant="h6">Delete Project</Typography>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
           </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this project? This action cannot be
-            undone.
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Delete Project
           </Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-            Project: <strong>{form.name}</strong>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            Are you sure you want to delete the project "{form.name}"? This
+            action cannot be undone.
           </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleDeleteProject}
             variant="contained"
             color="error"
             disabled={deleting}
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(211, 47, 47, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(211, 47, 47, 0.4)",
+              },
+            }}
           >
             {deleting ? "Deleting..." : "Delete Project"}
           </Button>

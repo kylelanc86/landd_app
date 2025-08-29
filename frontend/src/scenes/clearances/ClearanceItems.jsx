@@ -1074,12 +1074,48 @@ const ClearanceItems = () => {
           onClose={() => setDialogOpen(false)}
           maxWidth="md"
           fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
         >
-          <DialogTitle>
-            {editingItem ? "Edit Item" : "Add New Item"}
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: editingItem ? "warning.main" : "primary.main",
+                color: "white",
+              }}
+            >
+              {editingItem ? (
+                <EditIcon sx={{ fontSize: 20 }} />
+              ) : (
+                <AddIcon sx={{ fontSize: 20 }} />
+              )}
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              {editingItem ? "Edit Item" : "Add New Item"}
+            </Typography>
           </DialogTitle>
           <form onSubmit={handleSubmit}>
-            <DialogContent>
+            <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
               <Grid container spacing={2}>
                 <Grid item xs={12} container spacing={2} alignItems="center">
                   <Grid item>
@@ -1267,9 +1303,30 @@ const ClearanceItems = () => {
                 </Grid>
               </Grid>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" variant="contained">
+            <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+              <Button
+                onClick={() => setDialogOpen(false)}
+                variant="outlined"
+                sx={{
+                  minWidth: 100,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 500,
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                startIcon={editingItem ? <EditIcon /> : <AddIcon />}
+                sx={{
+                  minWidth: 120,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 500,
+                }}
+              >
                 {editingItem ? "Update" : "Create"}
               </Button>
             </DialogActions>
@@ -1282,9 +1339,43 @@ const ClearanceItems = () => {
           onClose={() => setAirMonitoringReportsDialogOpen(false)}
           maxWidth="md"
           fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
         >
-          <DialogTitle>Select Air Monitoring Report</DialogTitle>
-          <DialogContent>
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "info.main",
+                color: "white",
+              }}
+            >
+              <DescriptionIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Select Air Monitoring Report
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Select an air monitoring report from the list below. This will
@@ -1383,8 +1474,17 @@ const ClearanceItems = () => {
               )}
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setAirMonitoringReportsDialogOpen(false)}>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setAirMonitoringReportsDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
               Cancel
             </Button>
           </DialogActions>
@@ -1396,9 +1496,43 @@ const ClearanceItems = () => {
           onClose={() => setSitePlanDialogOpen(false)}
           maxWidth="sm"
           fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
         >
-          <DialogTitle>Upload Site Plan</DialogTitle>
-          <DialogContent>
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <UploadIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Upload Site Plan
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Upload a site plan file (PDF, JPG, or PNG). This will be
@@ -1433,8 +1567,19 @@ const ClearanceItems = () => {
               )}
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSitePlanDialogOpen(false)}>Cancel</Button>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setSitePlanDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               onClick={handleUploadSitePlan}
               variant="contained"
@@ -1446,6 +1591,12 @@ const ClearanceItems = () => {
                   <UploadIcon />
                 )
               }
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               {uploadingSitePlan ? "Uploading..." : "Upload Site Plan"}
             </Button>
@@ -1458,9 +1609,43 @@ const ClearanceItems = () => {
           onClose={() => setAttachmentsModalOpen(false)}
           maxWidth="md"
           fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
         >
-          <DialogTitle>Manage Attachments</DialogTitle>
-          <DialogContent>
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "info.main",
+                color: "white",
+              }}
+            >
+              <DescriptionIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Manage Attachments
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             {/* Air Monitoring Section */}
             {clearance?.airMonitoring && (
               <Box sx={{ mb: 4 }}>
@@ -1547,8 +1732,17 @@ const ClearanceItems = () => {
               </Typography>
             )}
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setAttachmentsModalOpen(false)}>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setAttachmentsModalOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
               Close
             </Button>
           </DialogActions>

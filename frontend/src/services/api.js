@@ -42,7 +42,7 @@ api.interceptors.response.use(
       const newToken = error.response.data.newToken;
       localStorage.setItem("token", newToken);
       
-      // Retry the original request with the new token
+      // Retry the original request with new token
       error.config.headers.Authorization = `Bearer ${newToken}`;
       return api(error.config);
     }
@@ -72,6 +72,64 @@ api.interceptors.response.use(
       if (!token && !currentUser) {
         window.location.href = "/login";
       }
+    }
+
+    // Handle 403 Forbidden (Permission Denied)
+    if (error.response?.status === 403) {
+      console.log('Permission denied error:', error.response.data);
+      
+      // Try to get current user info for the permission denied message
+      const currentUser = localStorage.getItem("currentUser");
+      let userRole = 'employee';
+      let userPermissions = [];
+      
+      if (currentUser) {
+        try {
+          const user = JSON.parse(currentUser);
+          userRole = user.role || 'employee';
+          
+          // Get user permissions from localStorage if available
+          const storedPermissions = localStorage.getItem("userPermissions");
+          if (storedPermissions) {
+            try {
+              userPermissions = JSON.parse(storedPermissions);
+            } catch (e) {
+              console.error('Error parsing stored permissions:', e);
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing current user:', e);
+        }
+      }
+      
+      // Extract permission information from the error response
+      const { required = [], action = 'perform this action' } = error.response.data;
+      
+      // Show permission denied message using the global context
+      // We'll need to dispatch a custom event since we can't directly access React context here
+      const permissionDeniedEvent = new CustomEvent('permissionDenied', {
+        detail: {
+          requiredPermissions: required,
+          userRole,
+          userPermissions,
+          action
+        }
+      });
+      window.dispatchEvent(permissionDeniedEvent);
+      
+      // Return a special response that indicates permission was denied
+      // This prevents components from updating their state while still allowing the modal to show
+      return Promise.resolve({
+        data: { 
+          permissionDenied: true, 
+          action,
+          message: 'Permission denied'
+        },
+        status: 403,
+        statusText: 'Forbidden',
+        headers: error.response?.headers || {},
+        config: error.config
+      });
     }
 
     return Promise.reject(error);

@@ -52,6 +52,8 @@ const ClientSuppliedJobs = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [generatingPDF, setGeneratingPDF] = useState({});
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState(null);
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [creatingJob, setCreatingJob] = useState(false);
@@ -196,22 +198,28 @@ const ClientSuppliedJobs = () => {
   };
 
   const handleDeleteJob = async (jobId) => {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this client supplied job? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
+    setJobToDelete(jobId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteJob = async () => {
+    if (!jobToDelete) return;
 
     try {
-      await clientSuppliedJobsService.delete(jobId);
+      await clientSuppliedJobsService.delete(jobToDelete);
       // Refresh the jobs list
       await fetchClientSuppliedJobs();
+      setDeleteDialogOpen(false);
+      setJobToDelete(null);
     } catch (error) {
       console.error("Error deleting client supplied job:", error);
       alert("Failed to delete job. Please try again.");
     }
+  };
+
+  const cancelDeleteJob = () => {
+    setDeleteDialogOpen(false);
+    setJobToDelete(null);
   };
 
   const filteredJobs = (Array.isArray(jobs) ? jobs : []).filter(
@@ -468,9 +476,43 @@ const ClientSuppliedJobs = () => {
           }}
           maxWidth="sm"
           fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
         >
-          <DialogTitle>Create New Client Supplied Job</DialogTitle>
-          <DialogContent>
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <AddIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Create New Client Supplied Job
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box sx={{ mt: 2 }}>
               {Array.isArray(projects) && projects.length > 0 ? (
                 <Autocomplete
@@ -549,11 +591,18 @@ const ClientSuppliedJobs = () => {
               )}
             </Box>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
               onClick={() => {
                 setCreateDialogOpen(false);
                 setSelectedProject(null);
+              }}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
               }}
             >
               Cancel
@@ -567,8 +616,97 @@ const ClientSuppliedJobs = () => {
                 !Array.isArray(projects) ||
                 projects.length === 0
               }
+              startIcon={<AddIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               {creatingJob ? "Creating..." : "Create Job"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog
+          open={deleteDialogOpen}
+          onClose={cancelDeleteJob}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "error.main",
+                color: "white",
+              }}
+            >
+              <DeleteIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Confirm Delete
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to delete this client supplied job? This
+              action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={cancelDeleteJob}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDeleteJob}
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                boxShadow: "0 4px 12px rgba(244, 67, 54, 0.3)",
+                "&:hover": {
+                  boxShadow: "0 6px 16px rgba(244, 67, 54, 0.4)",
+                },
+              }}
+            >
+              Delete Job
             </Button>
           </DialogActions>
         </Dialog>

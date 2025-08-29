@@ -9,6 +9,7 @@ import {
   CardMedia,
   Chip,
   CircularProgress,
+  LinearProgress,
   Button,
   Dialog,
   DialogTitle,
@@ -33,11 +34,12 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useNavigate } from "react-router-dom";
 import React, { useEffect, useState, useMemo } from "react";
-import { projectService, invoiceService } from "../../services/api";
+import { invoiceService } from "../../services/api";
 
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import AllocatedJobsTable from "./AllocatedJobsTable";
+import LoadingSpinner from "../../components/LoadingSpinner";
 import ScienceIcon from "@mui/icons-material/Science";
 import SendIcon from "@mui/icons-material/Send";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
@@ -55,7 +57,8 @@ const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
 
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [dailyTimesheetData, setDailyTimesheetData] = useState({
@@ -118,11 +121,8 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch dashboard stats and invoices in parallel
-        const [statsRes, invoicesRes] = await Promise.all([
-          projectService.getDashboardStats(),
-          invoiceService.getAll(),
-        ]);
+        // Only fetch invoices for outstanding count
+        const invoicesRes = await invoiceService.getAll();
 
         const invoices = Array.isArray(invoicesRes.data)
           ? invoicesRes.data
@@ -133,13 +133,18 @@ const Dashboard = () => {
         ).length;
 
         setStats({
-          ...statsRes.data,
+          activeProjects: 0,
+          reviewProjects: 0,
+          invoiceProjects: 0,
           outstandingInvoices,
+          labCompleteProjects: 0,
+          samplesSubmittedProjects: 0,
+          inProgressProjects: 0,
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
-        setLoading(false);
+        setDataLoading(false);
       }
     };
 
@@ -354,20 +359,7 @@ const Dashboard = () => {
 
   const optimalColumns = getOptimalColumns();
 
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
+  // Show UI immediately, data will load in background
 
   return (
     <Box m="20px">
@@ -392,6 +384,13 @@ const Dashboard = () => {
           Select Widgets
         </Button>
       </Box>
+
+      {/* Data Loading Indicator */}
+      {dataLoading && (
+        <Box sx={{ mb: 2, display: "flex", justifyContent: "center" }}>
+          <CircularProgress size={24} sx={{ color: "#4CAF50" }} />
+        </Box>
+      )}
 
       {/* Widgets Grid */}
       <Box mt="20px">

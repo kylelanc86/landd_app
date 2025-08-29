@@ -44,10 +44,13 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import CloseIcon from "@mui/icons-material/Close";
+import EditIcon from "@mui/icons-material/Edit";
 
 import { StatusChip } from "../../components/JobStatus";
 import useProjectStatuses from "../../hooks/useProjectStatuses";
 import { useLocation, useNavigate } from "react-router-dom";
+import LoadingSpinner from "../../components/LoadingSpinner";
 import { useTheme } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -1093,7 +1096,17 @@ const Projects = ({ initialFilters = {} }) => {
         return;
       }
 
-      await projectService.delete(projectId);
+      const response = await projectService.delete(projectId);
+
+      // Check if this was a permission denied response
+      if (response.data?.permissionDenied) {
+        // Permission denied - don't update the state, just close the dialog
+        setDeleteDialogOpen(false);
+        setSelectedProject(null);
+        return;
+      }
+
+      // Success - update the state
       setProjects(projects.filter((p) => (p._id || p.id) !== projectId));
       // Refresh status counts after deleting a project
       fetchStatusCounts();
@@ -1645,7 +1658,7 @@ const Projects = ({ initialFilters = {} }) => {
       </FormControl>
     ));
 
-  if (loading) return <Typography>Loading projects...</Typography>;
+  // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
 
   // Ensure columns are properly defined before rendering
@@ -1655,9 +1668,12 @@ const Projects = ({ initialFilters = {} }) => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Projects
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+        <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+          Projects
+        </Typography>
+        {loading && <CircularProgress size={24} sx={{ color: "#4CAF50" }} />}
+      </Box>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>
@@ -2343,6 +2359,12 @@ const Projects = ({ initialFilters = {} }) => {
         }}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
         sx={{
           "& .MuiAutocomplete-popper": {
             zIndex: 9999,
@@ -2352,11 +2374,41 @@ const Projects = ({ initialFilters = {} }) => {
           },
         }}
       >
-        <DialogTitle>
-          {selectedProject ? "Edit Project" : "Add New Project"}
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: selectedProject ? "warning.main" : "primary.main",
+              color: "white",
+            }}
+          >
+            {selectedProject ? (
+              <EditIcon sx={{ fontSize: 20 }} />
+            ) : (
+              <AddIcon sx={{ fontSize: 20 }} />
+            )}
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            {selectedProject ? "Edit Project" : "Add New Project"}
+          </Typography>
         </DialogTitle>
         <form onSubmit={handleSubmit}>
-          <DialogContent>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box sx={{ mt: 2 }}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
@@ -2673,9 +2725,31 @@ const Projects = ({ initialFilters = {} }) => {
               </Grid>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button type="submit">Save</Button>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Save
+            </Button>
           </DialogActions>
         </form>
       </Dialog>
@@ -2685,22 +2759,83 @@ const Projects = ({ initialFilters = {} }) => {
         onClose={() => setDeleteDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            "& .MuiDialogTitle-root": {
+              border: "none",
+            },
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Confirm Delete
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
             Are you sure you want to delete the project "{selectedProject?.name}
             "? This action cannot be undone.
-          </DialogContentText>
+          </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleDeleteProject}
-            color="error"
             variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(211, 47, 47, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(211, 47, 47, 0.4)",
+              },
+            }}
           >
-            Delete
+            Delete Project
           </Button>
         </DialogActions>
       </Dialog>
@@ -2710,10 +2845,44 @@ const Projects = ({ initialFilters = {} }) => {
         onClose={() => setClientDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Add New Client</DialogTitle>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <AddIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Add New Client
+          </Typography>
+        </DialogTitle>
         <form onSubmit={handleNewClientSubmit}>
-          <DialogContent>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box sx={{ mt: 2 }}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
@@ -2874,9 +3043,29 @@ const Projects = ({ initialFilters = {} }) => {
               </Grid>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setClientDialogOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="contained">
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setClientDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
               Add Client
             </Button>
           </DialogActions>

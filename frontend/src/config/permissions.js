@@ -14,9 +14,58 @@ export const PERMISSIONS = {
   'users.delete': 'Delete users',
   'users.manage': 'Manage user accounts (password resets, etc.)',
   
-  // Other restricted permissions
-  'invoices.approve': 'Approve invoices',
+  // Job permissions
+  'jobs.view': 'View jobs',
+  'jobs.create': 'Create jobs',
+  'jobs.edit': 'Edit jobs',
+  'jobs.delete': 'Delete jobs',
+  'jobs.authorize_reports': 'Authorize job reports',
+  
+  // Calibration permissions
+  'calibrations.view': 'View calibrations',
+  'calibrations.create': 'Create calibrations',
+  'calibrations.edit': 'Edit calibrations',
+  'calibrations.delete': 'Delete calibrations',
+  
+  // Equipment permissions
+  'equipment.view': 'View equipment',
+  'equipment.create': 'Create equipment',
+  'equipment.edit': 'Edit equipment',
+  'equipment.delete': 'Delete equipment',
+  
+  // Asbestos permissions
+  'asbestos.view': 'View asbestos data',
+  'asbestos.create': 'Create asbestos records',
+  'asbestos.edit': 'Edit asbestos records',
+  'asbestos.delete': 'Delete asbestos records',
+  
+  // Client permissions
+  'clients.view': 'View clients',
+  'clients.create': 'Create clients',
+  'clients.edit': 'Edit clients',
+  'clients.delete': 'Delete clients',
+  
+  // Timesheet permissions
+  'timesheets.view': 'View timesheets',
+  'timesheets.create': 'Create timesheets',
+  'timesheets.edit': 'Edit timesheets',
+  'timesheets.review': 'Review timesheets',
   'timesheets.approve': 'Approve timesheets',
+  
+  // Invoice permissions
+  'invoices.view': 'View invoices',
+  'invoices.create': 'Create invoices',
+  'invoices.edit': 'Edit invoices',
+  'invoices.delete': 'Delete invoices',
+  'invoices.approve': 'Approve invoices',
+  
+  // Fibre ID permissions
+  'fibre.view': 'View fibre ID data',
+  'fibre.create': 'Create fibre ID records',
+  'fibre.edit': 'Edit fibre ID records',
+  'fibre.delete': 'Delete fibre ID records',
+  
+  // Other restricted permissions
   'xero.sync': 'Sync with Xero',
   'clients.write_off': 'Write off client accounts',
 
@@ -38,8 +87,41 @@ export const ROLE_PERMISSIONS = {
     'users.view',
     'users.edit',
     'users.manage',
-    'invoices.approve',
+    'jobs.view',
+    'jobs.create',
+    'jobs.edit',
+    'jobs.delete',
+    'jobs.authorize_reports',
+    'calibrations.view',
+    'calibrations.create',
+    'calibrations.edit',
+    'calibrations.delete',
+    'equipment.view',
+    'equipment.create',
+    'equipment.edit',
+    'equipment.delete',
+    'asbestos.view',
+    'asbestos.create',
+    'asbestos.edit',
+    'asbestos.delete',
+    'clients.view',
+    'clients.create',
+    'clients.edit',
+    'clients.delete',
+    'timesheets.view',
+    'timesheets.create',
+    'timesheets.edit',
+    'timesheets.review',
     'timesheets.approve',
+    'invoices.view',
+    'invoices.create',
+    'invoices.edit',
+    'invoices.delete',
+    'invoices.approve',
+    'fibre.view',
+    'fibre.create',
+    'fibre.edit',
+    'fibre.delete',
     'xero.sync',
     'clients.write_off',
   ],
@@ -47,7 +129,31 @@ export const ROLE_PERMISSIONS = {
     'projects.view',
     'projects.create',
     'projects.edit',
-  ], // Employees can view, create and edit projects but not change status
+    'jobs.view',
+    'jobs.create',
+    'jobs.edit',
+    'calibrations.view',
+    'calibrations.create',
+    'calibrations.edit',
+    'equipment.view',
+    'equipment.create',
+    'equipment.edit',
+    'asbestos.view',
+    'asbestos.create',
+    'asbestos.edit',
+    'clients.view',
+    'clients.create',
+    'clients.edit',
+    'timesheets.view',
+    'timesheets.create',
+    'timesheets.edit',
+    'invoices.view',
+    'invoices.create',
+    'invoices.edit',
+    'fibre.view',
+    'fibre.create',
+    'fibre.edit',
+  ], // Employees can view, create and edit most records but not delete or approve
 };
 
 // Helper functions to check permissions

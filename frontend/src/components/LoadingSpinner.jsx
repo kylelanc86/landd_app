@@ -8,7 +8,11 @@ const LoadingSpinner = () => {
       alignItems="center"
       minHeight="100vh"
     >
-      <CircularProgress />
+      <CircularProgress
+        sx={{
+          color: "#4CAF50", // Green color for consistency
+        }}
+      />
     </Box>
   );
 };

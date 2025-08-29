@@ -2,8 +2,12 @@ import React from "react";
 import { Box } from "@mui/material";
 import Topbar from "../scenes/global/Topbar";
 import Sidebar from "../scenes/global/Sidebar";
+import PermissionDeniedNotification from "./PermissionDeniedNotification";
+import { usePermissionDenied } from "../context/PermissionDeniedContext";
 
 const Layout = ({ children }) => {
+  const { permissionDenied, hidePermissionDenied } = usePermissionDenied();
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
@@ -31,6 +35,16 @@ const Layout = ({ children }) => {
             zIndex: 1,
           }}
         >
+          {/* Permission Denied Modal */}
+          <PermissionDeniedNotification
+            open={permissionDenied.open}
+            onClose={hidePermissionDenied}
+            requiredPermissions={permissionDenied.requiredPermissions}
+            userRole={permissionDenied.userRole}
+            userPermissions={permissionDenied.userPermissions}
+            action={permissionDenied.action}
+          />
+
           <Box sx={{ position: "relative", zIndex: 1 }}>{children}</Box>
         </Box>
       </Box>

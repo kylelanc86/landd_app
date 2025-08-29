@@ -345,12 +345,50 @@ const Users = () => {
       <Dialog
         open={statusDialogOpen}
         onClose={() => setStatusDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>
-          {statusChangeType ? "Confirm Restore" : "Confirm Deactivate"}
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: statusChangeType ? "success.main" : "warning.main",
+              color: "white",
+            }}
+          >
+            {statusChangeType ? (
+              <CheckCircleIcon sx={{ fontSize: 20 }} />
+            ) : (
+              <AccessTimeIcon sx={{ fontSize: 20 }} />
+            )}
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            {statusChangeType ? "Confirm Restore" : "Confirm Deactivate"}
+          </Typography>
         </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
             {statusChangeType
               ? "Are you sure you want to restore this user? They will regain access to the system."
               : users.find((u) => u._id === statusChangeId)?.role === "admin" &&
@@ -358,10 +396,19 @@ const Users = () => {
                   1
               ? "Cannot deactivate the last active admin user. Please ensure another admin user is active before deactivating this user."
               : "Are you sure you want to deactivate this user? They will lose access to the system but can be restored later."}
-          </DialogContentText>
+          </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setStatusDialogOpen(false)} color="secondary">
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setStatusDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
             Cancel
           </Button>
           {!(
@@ -370,8 +417,25 @@ const Users = () => {
           ) && (
             <Button
               onClick={confirmStatusChange}
-              color={statusChangeType ? "success" : "error"}
               variant="contained"
+              color={statusChangeType ? "success" : "error"}
+              startIcon={
+                statusChangeType ? <CheckCircleIcon /> : <AccessTimeIcon />
+              }
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                boxShadow: statusChangeType
+                  ? "0 4px 12px rgba(76, 175, 80, 0.3)"
+                  : "0 4px 12px rgba(255, 152, 0, 0.3)",
+                "&:hover": {
+                  boxShadow: statusChangeType
+                    ? "0 6px 16px rgba(76, 175, 80, 0.4)"
+                    : "0 6px 16px rgba(255, 152, 0, 0.4)",
+                },
+              }}
             >
               {statusChangeType ? "Restore" : "Deactivate"}
             </Button>

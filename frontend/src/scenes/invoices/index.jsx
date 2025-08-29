@@ -39,6 +39,7 @@ import { useAuth } from "../../context/AuthContext";
 import SyncIcon from "@mui/icons-material/Sync";
 import { hasPermission } from "../../config/permissions";
 import AddIcon from "@mui/icons-material/Add";
+import LoadingSpinner from "../../components/LoadingSpinner";
 
 const emptyForm = {
   projectID: "",
@@ -73,6 +74,8 @@ const Invoices = () => {
   const [showXeroAlert, setShowXeroAlert] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [syncingXero, setSyncingXero] = useState(false);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Add permission check for Xero sync
   const canSyncXero = hasPermission(currentUser, "xero.sync");
@@ -522,7 +525,8 @@ const Invoices = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error generating invoice PDF:", error);
-      alert("Failed to generate invoice PDF");
+      setErrorMessage("Failed to generate invoice PDF");
+      setErrorDialogOpen(true);
     }
   };
 
@@ -635,29 +639,36 @@ const Invoices = () => {
       try {
         await invoiceService.hardDelete(invoice._id);
         // Show success message
-        alert("Invoice deleted successfully from the app.");
+        setErrorMessage("Invoice deleted successfully from the app.");
+        setErrorDialogOpen(true);
       } catch (error) {
         console.error("Error deleting invoice:", error);
         // Even if the API call fails, the invoice is already removed from the UI
         // This handles cases where the invoice was already deleted or doesn't exist
         if (error.response?.status === 404) {
-          alert("Invoice was already deleted or not found.");
+          setErrorMessage("Invoice was already deleted or not found.");
+          setErrorDialogOpen(true);
         } else {
-          alert(
+          setErrorMessage(
             "Failed to delete invoice: " +
               (error.response?.data?.message || error.message)
           );
+          setErrorDialogOpen(true);
         }
       }
     } catch (error) {
       console.error("Error in handleDeleteInvoice:", error);
-      alert("An unexpected error occurred while deleting the invoice.");
+      setErrorMessage(
+        "An unexpected error occurred while deleting the invoice."
+      );
+      setErrorDialogOpen(true);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedInvoices.length === 0) {
-      alert("Please select invoices to delete");
+      setErrorMessage("Please select invoices to delete");
+      setErrorDialogOpen(true);
       return;
     }
 
@@ -692,18 +703,21 @@ const Invoices = () => {
       ).length;
 
       if (failed === 0) {
-        alert(`Successfully deleted ${successful} invoice(s)`);
+        setErrorMessage(`Successfully deleted ${successful} invoice(s)`);
+        setErrorDialogOpen(true);
       } else {
-        alert(
+        setErrorMessage(
           `Deleted ${successful} invoice(s) successfully. ${failed} invoice(s) were already deleted or not found.`
         );
+        setErrorDialogOpen(true);
       }
     } catch (error) {
       console.error("Error bulk deleting invoices:", error);
-      alert(
+      setErrorMessage(
         "Failed to delete some invoices: " +
           (error.response?.data?.message || error.message)
       );
+      setErrorDialogOpen(true);
     }
   };
 
@@ -725,7 +739,8 @@ const Invoices = () => {
       );
 
       if (draftInvoices.length === 0) {
-        alert("No draft invoices found to sync to Xero");
+        setErrorMessage("No draft invoices found to sync to Xero");
+        setErrorDialogOpen(true);
         return;
       }
 
@@ -751,9 +766,10 @@ const Invoices = () => {
       const invoicesRes = await invoiceService.getAll();
       setInvoices(invoicesRes.data);
 
-      alert(
+      setErrorMessage(
         `Successfully synced ${draftInvoices.length} draft invoices to Xero`
       );
+      setErrorDialogOpen(true);
     } catch (error) {
       console.error("Error syncing drafts to Xero:", error);
       let errorMessage = "Failed to sync drafts to Xero";
@@ -1238,7 +1254,8 @@ const Invoices = () => {
     if (!currentUser) {
       console.log("No user found, redirecting to login");
       setError("Please log in to connect to Xero");
-      alert("Please log in to connect to Xero");
+      setErrorMessage("Please log in to connect to Xero");
+      setErrorDialogOpen(true);
       navigate("/login");
       return;
     }
@@ -1346,18 +1363,7 @@ const Invoices = () => {
     return null; // Will be redirected by the useEffect
   }
 
-  if (loading) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        height="100vh"
-      >
-        <Typography>Loading invoices...</Typography>
-      </Box>
-    );
-  }
+  // Show UI immediately, data will load in background
 
   if (error) {
     return (
@@ -1369,9 +1375,12 @@ const Invoices = () => {
 
   return (
     <Box m="20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Invoices
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+        <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+          Invoices
+        </Typography>
+        {loading && <CircularProgress size={24} sx={{ color: "#4CAF50" }} />}
+      </Box>
       {/* Loading overlay for Xero sync */}
       {syncingXero && (
         <Box
@@ -1610,10 +1619,44 @@ const Invoices = () => {
         }}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Create Invoice</DialogTitle>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <AddIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Create Invoice
+          </Typography>
+        </DialogTitle>
         <form>
-          <DialogContent>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
               <Autocomplete
                 options={filteredProjects || []}
@@ -1765,14 +1808,20 @@ const Invoices = () => {
               placeholder="Project reference will be auto-populated"
             />
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
               onClick={() => {
                 setDialogOpen(false);
                 setForm(emptyForm);
                 setDueDateManuallyChanged(false);
               }}
-              color="secondary"
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               Cancel
             </Button>
@@ -1780,6 +1829,12 @@ const Invoices = () => {
               onClick={handleSaveDraft}
               variant="outlined"
               color="primary"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               Save Draft
             </Button>
@@ -1787,11 +1842,81 @@ const Invoices = () => {
               onClick={handleFinaliseDraft}
               variant="contained"
               color="primary"
+              startIcon={<AddIcon />}
+              sx={{
+                minWidth: 140,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
             >
               Finalise Draft
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Error Dialog */}
+      <Dialog
+        open={errorDialogOpen}
+        onClose={() => setErrorDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Error
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            {errorMessage}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setErrorDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            OK
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

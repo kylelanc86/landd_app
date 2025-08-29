@@ -24,6 +24,7 @@ import {
   Checkbox,
   Divider,
   LinearProgress,
+  CircularProgress,
   RadioGroup,
   FormControlLabel,
   Radio,
@@ -38,6 +39,7 @@ import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
 import { useMemo } from "react";
+import LoadingSpinner from "../../components/LoadingSpinner";
 
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
@@ -449,14 +451,17 @@ const Clients = () => {
     [canWriteOff]
   );
 
-  if (loading) return <Typography>Loading clients...</Typography>;
+  // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Clients
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+        <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+          Clients
+        </Typography>
+        {loading && <CircularProgress size={24} sx={{ color: "#4CAF50" }} />}
+      </Box>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
         <Box sx={{ width: "100%", mb: 2 }}>
@@ -514,7 +519,7 @@ const Clients = () => {
             label="Search by Client Name"
             value={searchInput}
             onChange={handleSearchChange}
-            sx={{ flex: 1 }}
+            sx={{ flex: 0.9 }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -544,6 +549,21 @@ const Clients = () => {
           >
             Columns
           </Button>
+
+          {/* Note about red shading */}
+          <Typography
+            variant="body2"
+            sx={{
+              color: "#ED1212",
+              fontStyle: "italic",
+              fontWeight: "bold",
+              ml: 2,
+              flex: 1,
+              textAlign: "right",
+            }}
+          >
+            Red shading indicates clients with Written-off Invoices
+          </Typography>
         </Stack>
       </Box>
 
@@ -680,10 +700,44 @@ const Clients = () => {
         onClose={() => setDialogOpen(false)}
         maxWidth="md"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Create New Client</DialogTitle>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <AddIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Create New Client
+          </Typography>
+        </DialogTitle>
         <form onSubmit={handleSubmit}>
-          <DialogContent>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Stack spacing={2}>
               <TextField
                 label="Client Name"
@@ -855,11 +909,31 @@ const Clients = () => {
               )}
             </Stack>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDialogOpen(false)} color="secondary">
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="contained" color="primary">
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
               Create Client
             </Button>
           </DialogActions>
@@ -870,24 +944,80 @@ const Clients = () => {
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
       >
-        <DialogTitle>Delete Client</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Delete Client
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
             Are you sure you want to delete {clientToDelete?.name}? This action
             cannot be undone.
-          </DialogContentText>
+          </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} color="primary">
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleDeleteConfirm}
-            color="error"
             variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(211, 47, 47, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(211, 47, 47, 0.4)",
+              },
+            }}
           >
-            Delete
+            Delete Client
           </Button>
         </DialogActions>
       </Dialog>

@@ -6,6 +6,7 @@ import React, {
   useRef,
 } from "react";
 import { authService } from "../services/api";
+import { ROLE_PERMISSIONS } from "../config/permissions";
 
 // Create and export the context
 export const AuthContext = createContext(null);
@@ -17,6 +18,11 @@ export const useAuth = () => {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+};
+
+// Helper function to calculate user permissions based on role
+const calculateUserPermissions = (userRole) => {
+  return ROLE_PERMISSIONS[userRole] || [];
 };
 
 // Export the provider
@@ -51,16 +57,22 @@ export const AuthProvider = ({ children }) => {
           token,
         };
 
+        // Calculate and store user permissions
+        const userPermissions = calculateUserPermissions(normalizedUser.role);
+        localStorage.setItem("userPermissions", JSON.stringify(userPermissions));
+
         localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
         setCurrentUser(normalizedUser);
       } catch (error) {
         // If we can't restore the user state, clear everything
         localStorage.removeItem("token");
         localStorage.removeItem("currentUser");
+        localStorage.removeItem("userPermissions");
         setCurrentUser(null);
       }
     } else {
       localStorage.removeItem("currentUser");
+      localStorage.removeItem("userPermissions");
       setCurrentUser(null);
     }
     setLoading(false);
@@ -94,6 +106,10 @@ export const AuthProvider = ({ children }) => {
         token,
       };
 
+      // Calculate and store user permissions
+      const userPermissions = calculateUserPermissions(normalizedUser.role);
+      localStorage.setItem("userPermissions", JSON.stringify(userPermissions));
+
       localStorage.setItem("token", token);
       localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
       setCurrentUser(normalizedUser);
@@ -108,6 +124,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("currentUser");
+    localStorage.removeItem("userPermissions");
     setCurrentUser(null);
     restoreAttempted.current = false; // Reset the restore attempt flag
   };
@@ -116,6 +133,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authService.updateUser(userData);
       const updatedUser = { ...currentUser, ...response.data };
+
+      // Recalculate and store user permissions if role changed
+      if (updatedUser.role !== currentUser?.role) {
+        const userPermissions = calculateUserPermissions(updatedUser.role);
+        localStorage.setItem("userPermissions", JSON.stringify(userPermissions));
+      }
 
       // Update local storage and state
       localStorage.setItem("currentUser", JSON.stringify(updatedUser));
@@ -139,6 +162,10 @@ export const AuthProvider = ({ children }) => {
           id: user._id || user.id,
           token: localStorage.getItem("token"),
         };
+
+        // Recalculate and store user permissions
+        const userPermissions = calculateUserPermissions(normalizedUser.role);
+        localStorage.setItem("userPermissions", JSON.stringify(userPermissions));
 
         localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
         setCurrentUser(normalizedUser);
