@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   Box,
   Typography,
@@ -233,11 +239,6 @@ const Timesheets = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    console.log("=== TIMESHEET SUBMIT DEBUG ===");
-    console.log("Current selectedDate:", selectedDate);
-    console.log("Current selectedDate type:", typeof selectedDate);
-    console.log("Current selectedDate value:", selectedDate?.toISOString());
-
     if (!targetUserId) {
       setErrorMessage(
         "Error: No user ID available. Please try logging in again."
@@ -273,7 +274,6 @@ const Timesheets = () => {
       }
 
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
-      console.log("Formatted date being sent to backend:", formattedDate);
 
       const timesheetData = {
         date: formattedDate,
@@ -290,17 +290,15 @@ const Timesheets = () => {
         timesheetData.projectInputType = formData.projectInputType;
       }
 
-      console.log("Full timesheet data being sent:", timesheetData);
-      console.log("=== END TIMESHEET SUBMIT DEBUG ===");
-
       // Optimistically update UI immediately
       const optimisticEntry = {
         _id: isEditing ? editingEntryId : `temp_${Date.now()}`,
         ...timesheetData,
-        project:
+        projectId:
           isEditing && editingEntryId
-            ? timeEntries.find((entry) => entry._id === editingEntryId)?.project
-            : projects.find((p) => p._id === formData.projectId),
+            ? timeEntries.find((entry) => entry._id === editingEntryId)
+                ?.projectId
+            : formData.projectId,
         projectInputType: formData.projectInputType || "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -359,8 +357,7 @@ const Timesheets = () => {
           });
         }, 2000);
 
-        // Refresh data in background to ensure consistency
-        fetchTimeEntries();
+        // Only fetch timesheet status, not entries (we already have them)
         fetchTimesheetStatus();
       } catch (apiError) {
         console.error("Error saving timesheet entry:", apiError);
@@ -428,8 +425,7 @@ const Timesheets = () => {
           });
         }, 2000);
 
-        // Refresh data in background to ensure consistency
-        fetchTimeEntries();
+        // Only fetch timesheet status, not entries (we already removed it from state)
         fetchTimesheetStatus();
       } catch (apiError) {
         console.error("Error deleting time entry:", apiError);
@@ -477,12 +473,6 @@ const Timesheets = () => {
       direction === "next"
         ? addDays(selectedDate, 1)
         : subDays(selectedDate, 1);
-    console.log("=== DATE NAVIGATION DEBUG ===");
-    console.log("Direction:", direction);
-    console.log("Old selectedDate:", selectedDate);
-    console.log("New selectedDate:", newDate);
-    console.log("New formatted date:", format(newDate, "yyyy-MM-dd"));
-    console.log("=== END DATE NAVIGATION DEBUG ===");
     setSelectedDate(newDate);
   };
 
@@ -561,7 +551,7 @@ const Timesheets = () => {
     debouncedProjectSearch(newValue);
   };
 
-  const getCalendarEvents = () => {
+  const getCalendarEvents = useCallback(() => {
     return timeEntries.map((entry) => {
       const startDateTime = new Date(entry.date);
       const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
@@ -585,7 +575,7 @@ const Timesheets = () => {
         title = `Break${entry.description ? ` - ${entry.description}` : ""}`;
         backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
         borderColor = theme.palette.grey[700];
-        textColor = theme.palette.grey[50];
+        textColor = theme.palette.grey[500];
         className = "break-event";
       } else if (entry.isAdminWork) {
         title = `Admin Work${
@@ -593,7 +583,7 @@ const Timesheets = () => {
         }`;
         backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
         borderColor = theme.palette.grey[700];
-        textColor = theme.palette.grey[50];
+        textColor = theme.palette.grey[500];
         className = "admin-event";
       } else {
         title = `${projectName} - ${
@@ -601,7 +591,7 @@ const Timesheets = () => {
         }${entry.description ? `, ${entry.description}` : ""}`;
         backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
         borderColor = theme.palette.grey[700];
-        textColor = theme.palette.grey[50];
+        textColor = theme.palette.grey[500];
         className = "project-event";
       }
 
@@ -626,7 +616,20 @@ const Timesheets = () => {
 
       return event;
     });
-  };
+  }, [timeEntries, projects, theme.palette.grey]);
+
+  // Memoize the events array to prevent unnecessary recalculations
+  const calendarEvents = useMemo(
+    () => getCalendarEvents(),
+    [getCalendarEvents]
+  );
+
+  // Generate a key to force FullCalendar re-render when events change
+  const calendarKey = useMemo(() => {
+    return `${format(selectedDate, "yyyy-MM-dd")}-${
+      timeEntries.length
+    }-${Date.now()}`;
+  }, [selectedDate, timeEntries.length]);
 
   const handleSelect = (info) => {
     if (timesheetStatus === "finalised") {
@@ -683,10 +686,10 @@ const Timesheets = () => {
       return;
     }
 
-    try {
-      const entry = timeEntries.find((e) => e._id === info.event.id);
-      if (!entry) return;
+    const entry = timeEntries.find((e) => e._id === info.event.id);
+    if (!entry) return;
 
+    try {
       const startTime = format(info.event.start, "HH:mm");
       const endTime = format(info.event.end, "HH:mm");
 
@@ -696,9 +699,20 @@ const Timesheets = () => {
         endTime,
       };
 
+      // Optimistically update the UI immediately
+      setTimeEntries((prev) =>
+        prev.map((e) =>
+          e._id === entry._id ? { ...e, startTime, endTime } : e
+        )
+      );
+
+      // Make API call in background
       await api.put(`/timesheets/${entry._id}`, timesheetData);
-      await fetchTimeEntries();
     } catch (error) {
+      // Revert the optimistic update on error
+      setTimeEntries((prev) =>
+        prev.map((e) => (e._id === entry._id ? entry : e))
+      );
       info.revert();
       setErrorMessage("Failed to update time entry. Please try again.");
       setErrorDialogOpen(true);
@@ -715,10 +729,10 @@ const Timesheets = () => {
       return;
     }
 
-    try {
-      const entry = timeEntries.find((e) => e._id === info.event.id);
-      if (!entry) return;
+    const entry = timeEntries.find((e) => e._id === info.event.id);
+    if (!entry) return;
 
+    try {
       const startTime = format(info.event.start, "HH:mm");
       const endTime = format(info.event.end, "HH:mm");
 
@@ -728,9 +742,20 @@ const Timesheets = () => {
         endTime,
       };
 
+      // Optimistically update the UI immediately
+      setTimeEntries((prev) =>
+        prev.map((e) =>
+          e._id === entry._id ? { ...e, startTime, endTime } : e
+        )
+      );
+
+      // Make API call in background
       await api.put(`/timesheets/${entry._id}`, timesheetData);
-      await fetchTimeEntries();
     } catch (error) {
+      // Revert the optimistic update on error
+      setTimeEntries((prev) =>
+        prev.map((e) => (e._id === entry._id ? entry : e))
+      );
       info.revert();
       setErrorMessage("Failed to update time entry. Please try again.");
       setErrorDialogOpen(true);
@@ -1174,7 +1199,7 @@ const Timesheets = () => {
         >
           <FullCalendar
             ref={calendarRef}
-            key={format(selectedDate, "yyyy-MM-dd")}
+            key={calendarKey}
             plugins={[timeGridPlugin, interactionPlugin]}
             initialView="timeGridDay"
             initialDate={selectedDate}
@@ -1190,7 +1215,7 @@ const Timesheets = () => {
             slotMaxTime="20:00:00"
             slotDuration="00:15:00"
             height="100%"
-            events={getCalendarEvents()}
+            events={calendarEvents}
             editable={timesheetStatus !== "finalised"}
             droppable={timesheetStatus !== "finalised"}
             eventOverlap={false}
