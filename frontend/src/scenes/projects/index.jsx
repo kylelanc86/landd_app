@@ -14,33 +14,26 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
-  Chip,
   Stack,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  DialogContentText,
   Menu,
   Divider,
   Checkbox,
   ListItemButton,
   ListItemText,
   InputAdornment,
-  Switch,
-  FormControlLabel,
-  Autocomplete,
-  Grid,
-  Avatar,
-  Tooltip,
   Alert,
   LinearProgress,
-  CircularProgress,
   Popover,
   List,
   ListItem,
   ListItemIcon,
+  Tooltip,
+  Avatar,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
@@ -48,7 +41,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 
 import { StatusChip } from "../../components/JobStatus";
-import useProjectStatuses from "../../hooks/useProjectStatuses";
+import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { useTheme } from "@mui/material";
@@ -65,27 +58,13 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { Visibility, Visibility as VisibilityIcon } from "@mui/icons-material";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import AddIcon from "@mui/icons-material/Add";
-import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
+
 import { debounce } from "lodash";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
   "Occupational Hygiene",
   "Client Supplied",
-];
-
-const CATEGORIES = [
-  "Asbestos Materials Assessment",
-  "Asbestos & Lead Paint Assessment",
-  "Lead Paint/Dust Assessment",
-  "Air Monitoring and Clearance",
-  "Clearance Certificate",
-  "Commercial Asbestos Management Plan",
-  "Hazardous Materials Management Plan",
-  "Residential Asbestos Survey",
-  "Silica Air Monitoring",
-  "Mould/Moisture Assessment",
-  "Other",
 ];
 
 // This will be defined inside the component to access the hook
@@ -196,66 +175,86 @@ const Projects = ({ initialFilters = {} }) => {
     loading: statusesLoading,
   } = useProjectStatuses();
 
-  // Helper to get a color for a given status
-  const getStatusColor = (status) => {
-    // Use custom colors from the database if available
-    if (statusColors && statusColors[status]) {
-      return statusColors[status];
+  // Debug logging for status colors
+  useEffect(() => {
+    if (statusColors && Object.keys(statusColors).length > 0) {
+      console.log("Status colors loaded:", statusColors);
+      console.log("Available status keys:", Object.keys(statusColors));
+    } else {
+      console.log("No status colors loaded yet");
     }
+  }, [statusColors]);
 
-    // Fallback to hardcoded colors for backward compatibility
-    switch (status) {
-      case "Assigned":
-        return "#1976d2"; // Blue
-      case "In progress":
-        return "#ed6c02"; // Orange
-      case "Samples submitted":
-        return "#9c27b0"; // Purple
-      case "Lab Analysis Complete":
-        return "#2e7d32"; // Green
-      case "Report sent for review":
-        return "#d32f2f"; // Red
-      case "Ready for invoicing":
-        return "#7b1fa2"; // Deep Purple
-      case "Invoice sent":
-        return "#388e3c"; // Dark Green
-      case "Job complete":
-        return "#424242"; // Grey
-      case "On hold":
-        return "#f57c00"; // Dark Orange
-      case "Quote sent":
-        return "#1976d2"; // Blue
-      case "Cancelled":
-        return "#d32f2f"; // Red
-      default:
-        return "#1976d2"; // Default Material-UI primary blue
+  // Memoize unique statuses to prevent recalculation on every render
+  const uniqueStatuses = useMemo(() => {
+    if (!projects || projects.length === 0) return [];
+    return [...new Set(projects.map((p) => p.status))];
+  }, [projects]);
+
+  // Debug logging for projects to see what status values exist
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      console.log("Unique statuses in projects:", uniqueStatuses);
+      console.log(
+        "Sample project statuses:",
+        projects.slice(0, 5).map((p) => p.status)
+      );
+
+      // Check which statuses have matching colors
+      if (statusColors) {
+        uniqueStatuses.forEach((status) => {
+          const hasColor = statusColors[status];
+          console.log(
+            `Status "${status}" - Has custom color: ${
+              hasColor ? "YES" : "NO"
+            } (${hasColor || "fallback"})`
+          );
+        });
+      }
     }
-  };
+  }, [projects, statusColors, uniqueStatuses]);
 
-  // Define emptyForm inside component to access hook variables
-  const emptyForm = {
-    name: "",
-    client: "",
-    department: DEPARTMENTS[0],
-    categories: [],
-    address: "",
-    d_Date: "",
-    workOrder: "",
-    users: [],
-    status: activeStatuses.length > 0 ? activeStatuses[0] : "In progress",
-    notes: "",
-    isLargeProject: false,
-    projectContact: {
-      name: "",
-      number: "",
-      email: "",
+  // Helper to get a color for a given status - memoized to prevent recreation
+  const getStatusColor = useCallback(
+    (status) => {
+      // Use custom colors from the database if available
+      if (statusColors && statusColors[status]) {
+        return statusColors[status];
+      }
+
+      // Fallback to hardcoded colors for backward compatibility
+      switch (status) {
+        case "Assigned":
+          return "#1976d2"; // Blue
+        case "In progress":
+          return "#ed6c02"; // Orange
+        case "Samples submitted":
+          return "#9c27b0"; // Purple
+        case "Lab Analysis Complete":
+          return "#2e7d32"; // Green
+        case "Report sent for review":
+          return "#d32f2f"; // Red
+        case "Ready for invoicing":
+          return "#7b1fa2"; // Deep Purple
+        case "Invoice sent":
+          return "#388e3c"; // Dark Green
+        case "Job complete":
+          return "#424242"; // Grey
+        case "On hold":
+          return "#f57c00"; // Dark Orange
+        case "Quote sent":
+          return "#1976d2"; // Blue
+        case "Cancelled":
+          return "#d32f2f"; // Red
+        default:
+          return "#1976d2"; // Default Material-UI primary blue
+      }
     },
-  };
+    [statusColors]
+  );
 
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -266,20 +265,6 @@ const Projects = ({ initialFilters = {} }) => {
     pages: 0,
   });
 
-  const [newClient, setNewClient] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    invoiceEmail: "",
-    contact1Name: "",
-    contact1Number: "",
-    contact1Email: "",
-    contact2Name: "",
-    contact2Number: "",
-    contact2Email: "",
-  });
-  const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState({
     projectID: true,
     name: true,
@@ -292,6 +277,12 @@ const Projects = ({ initialFilters = {} }) => {
     createdAt: false, // Hide by default
     updatedAt: false,
   });
+
+  // Memoize column visibility model to prevent unnecessary re-renders
+  const memoizedColumnVisibilityModel = useMemo(
+    () => columnVisibilityModel,
+    [columnVisibilityModel]
+  );
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
     // Load selected department from filters
     const savedFilters = localStorage.getItem("projects-filters");
@@ -380,6 +371,17 @@ const Projects = ({ initialFilters = {} }) => {
     };
   });
 
+  // Memoize filters to prevent unnecessary re-renders
+  const memoizedFilters = useMemo(
+    () => filters,
+    [
+      filters.searchTerm,
+      filters.departmentFilter,
+      filters.statusFilter,
+      filters.sortModel,
+    ]
+  );
+
   // Add state for column visibility dropdown
   const [columnVisibilityAnchor, setColumnVisibilityAnchor] = useState(null);
 
@@ -391,175 +393,12 @@ const Projects = ({ initialFilters = {} }) => {
   const searchInputRef = useRef(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // Google Places Autocomplete state
-  const [addressInput, setAddressInput] = useState("");
-  const [addressOptions, setAddressOptions] = useState([]);
-  const [isAddressLoading, setIsAddressLoading] = useState(false);
-  const [autocompleteService, setAutocompleteService] = useState(null);
-  const [placesService, setPlacesService] = useState(null);
-  const [googleMaps, setGoogleMaps] = useState(null);
-
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [isClientSearching, setIsClientSearching] = useState(false);
 
   // Editable status state
   const [statusDropdownAnchor, setStatusDropdownAnchor] = useState(null);
-
-  // Initialize Google Places Autocomplete
-  useEffect(() => {
-    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
-
-    if (!apiKey) {
-      console.error(
-        "Google Maps API key is missing. Please check your environment configuration."
-      );
-      return;
-    }
-
-    loadGoogleMapsApi(apiKey)
-      .then((google) => {
-        setGoogleMaps(google);
-        // Initialize the autocomplete service
-        const autocompleteService =
-          new google.maps.places.AutocompleteService();
-        const placesService = new google.maps.places.PlacesService(
-          document.createElement("div")
-        );
-        setAutocompleteService(autocompleteService);
-        setPlacesService(placesService);
-      })
-      .catch((error) => {
-        console.error("Error loading Google Maps script:", error);
-      });
-  }, []);
-
-  // Sync addressInput with form address when editing
-  useEffect(() => {
-    if (form.address && !addressInput) {
-      setAddressInput(form.address);
-    }
-  }, [form.address, addressInput]);
-
-  // Re-initialize Google Maps services when dialog opens
-  useEffect(() => {
-    if (dialogOpen && googleMaps) {
-      // Re-initialize services when modal opens to ensure proper DOM context
-      const autocompleteService =
-        new googleMaps.maps.places.AutocompleteService();
-      const placesService = new googleMaps.maps.places.PlacesService(
-        document.createElement("div")
-      );
-      setAutocompleteService(autocompleteService);
-      setPlacesService(placesService);
-    }
-  }, [dialogOpen, googleMaps]);
-
-  // Google Places Autocomplete handlers
-  const handleAddressInputChange = async (value) => {
-    console.log("handleAddressInputChange called with:", value);
-    console.log("autocompleteService:", autocompleteService);
-    console.log("googleMaps:", googleMaps);
-
-    setAddressInput(value);
-
-    if (!value || value.length < 3 || !autocompleteService || !googleMaps) {
-      setAddressOptions([]);
-      return;
-    }
-
-    setIsAddressLoading(true);
-    try {
-      autocompleteService.getPlacePredictions(
-        {
-          input: value,
-          componentRestrictions: { country: "au" },
-          types: ["address"],
-        },
-        (predictions, status) => {
-          console.log(
-            "Projects - Address predictions:",
-            predictions,
-            "Status:",
-            status
-          );
-
-          // Enhanced error handling with specific status messages
-          if (
-            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
-            predictions
-          ) {
-            setAddressOptions(predictions);
-          } else {
-            console.log("Projects - No predictions found or error:", status);
-
-            // Log specific error details
-            switch (status) {
-              case googleMaps.maps.places.PlacesServiceStatus.ZERO_RESULTS:
-                console.log("No address predictions found for the input");
-                break;
-              case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
-                console.error(
-                  "REQUEST_DENIED: API key may be invalid or have restrictions"
-                );
-                console.error("Check Google Cloud Console API key settings");
-                break;
-              case googleMaps.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT:
-                console.error("OVER_QUERY_LIMIT: API quota exceeded");
-                break;
-              case googleMaps.maps.places.PlacesServiceStatus.INVALID_REQUEST:
-                console.error(
-                  "INVALID_REQUEST: Request parameters are invalid"
-                );
-                break;
-              case googleMaps.maps.places.PlacesServiceStatus.UNKNOWN_ERROR:
-                console.error("UNKNOWN_ERROR: An unknown error occurred");
-                break;
-              default:
-                console.error("Unknown status:", status);
-            }
-
-            setAddressOptions([]);
-          }
-          setIsAddressLoading(false);
-        }
-      );
-    } catch (error) {
-      console.error("Projects - Error fetching address predictions:", error);
-      setAddressOptions([]);
-      setIsAddressLoading(false);
-    }
-  };
-
-  const handleAddressSelect = async (placeId) => {
-    if (!placeId || !placesService || !googleMaps) return;
-
-    try {
-      placesService.getDetails(
-        {
-          placeId: placeId,
-          fields: ["formatted_address", "geometry", "address_components"],
-        },
-        (place, status) => {
-          console.log("Projects - Selected place:", place, "Status:", status);
-          if (
-            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
-            place
-          ) {
-            setForm((prev) => ({
-              ...prev,
-              address: place.formatted_address,
-            }));
-            setAddressInput(place.formatted_address);
-          } else {
-            console.error("Projects - Error getting place details:", status);
-          }
-        }
-      );
-    } catch (error) {
-      console.error("Projects - Error getting place details:", error);
-    }
-  };
 
   // Add ref to track current filters state to avoid stale closures
   const filtersRef = useRef(filters);
@@ -665,6 +504,9 @@ const Projects = ({ initialFilters = {} }) => {
           page: paginationModel.page,
           limit: paginationModel.pageSize,
         });
+
+        // Refresh status counts after projects are updated
+        setTimeout(() => refreshStatusCounts(), 100);
       } catch (err) {
         console.error("Error fetching projects:", err);
         setError(err.message);
@@ -715,7 +557,7 @@ const Projects = ({ initialFilters = {} }) => {
           setSearchLoading(true);
 
           // Create updated filters object with the new value
-          const updatedFilters = { ...filters };
+          const updatedFilters = { ...memoizedFilters };
           switch (filterType) {
             case "department":
               updatedFilters.departmentFilter = value;
@@ -761,6 +603,9 @@ const Projects = ({ initialFilters = {} }) => {
             total: response.data.pagination?.total || 0,
             pages: response.data.pagination?.pages || 0,
           }));
+
+          // Refresh status counts after projects are updated
+          setTimeout(() => refreshStatusCounts(), 100);
         } catch (err) {
           console.error("Error fetching projects:", err);
           setError(err.message);
@@ -787,76 +632,117 @@ const Projects = ({ initialFilters = {} }) => {
       // Use the new function with updated filters
       fetchWithUpdatedFilters();
     },
-    [updateFilter, filters, paginationModel, fetchProjectsWithPagination]
+    [updateFilter, memoizedFilters, paginationModel.pageSize]
   );
 
-  // Function to fetch status counts from cached dashboard stats
+  // Function to fetch status counts for ALL projects (not just current page)
   const fetchStatusCounts = useCallback(async () => {
     try {
-      // Use the new fast dashboard stats API instead of slow database queries
-      const response = await projectService.getDashboardStats();
-      const stats = response.data || response;
+      // Get total project count first
+      const totalResponse = await projectService.getAll({
+        page: 1,
+        limit: 1,
+      });
 
-      // Map the dashboard stats to the expected format
+      const totalProjects = totalResponse.data?.pagination?.total || 0;
+
+      // Initialize counts object
       const counts = {
-        all: stats.totalProjects || 0,
-        all_active: stats.activeProjects || 0,
-        all_inactive: stats.inactiveProjects || 0,
+        all: totalProjects,
+        all_active: 0,
+        all_inactive: 0,
       };
 
-      // Dynamically add counts for each status that exists in your system
-      // The backend provides these dynamically based on actual status names
-      if (stats.statusCounts) {
+      // Get counts for each individual status by making targeted queries
+      // This is more efficient than fetching all projects
+      for (const status of activeStatuses) {
         try {
-          // Parse the JSON string if it's stored as a string
-          const statusCounts =
-            typeof stats.statusCounts === "string"
-              ? JSON.parse(stats.statusCounts)
-              : stats.statusCounts;
-
-          // Map the actual status names from your database to display names
-          // Your database has 'in_progress', but the UI might expect 'In Progress'
-          const statusMapping = {
-            in_progress: "In Progress", // Map database name to display name
-          };
-
-          // Apply the counts with proper mapping
-          Object.keys(statusCounts).forEach((dbStatus) => {
-            const displayStatus = statusMapping[dbStatus] || dbStatus;
-            counts[displayStatus] = statusCounts[dbStatus];
+          const statusResponse = await projectService.getAll({
+            status: status,
+            page: 1,
+            limit: 1,
           });
+          const statusCount = statusResponse.data?.pagination?.total || 0;
+          counts[status] = statusCount;
+          counts.all_active += statusCount;
         } catch (error) {
-          console.error("Error parsing status counts:", error);
+          console.warn(`Could not get count for status ${status}:`, error);
+          counts[status] = 0;
         }
       }
 
+      for (const status of inactiveStatuses) {
+        try {
+          const statusResponse = await projectService.getAll({
+            status: status,
+            page: 1,
+            limit: 1,
+          });
+          const statusCount = statusResponse.data?.pagination?.total || 0;
+          counts[status] = statusCount;
+          counts.all_inactive += statusCount;
+        } catch (error) {
+          console.warn(`Could not get count for status ${status}:`, error);
+          counts[status] = 0;
+        }
+      }
+
+      console.log(
+        "Fetched status counts from backend for ALL projects:",
+        counts
+      );
       setStatusCounts(counts);
     } catch (err) {
-      console.error("Error fetching status counts from dashboard stats:", err);
-      // Fallback to local counts if dashboard stats fail
-      const localCounts = {};
-      localCounts.all = projects.length;
-      localCounts.all_active = projects.filter((project) =>
-        activeStatuses.includes(project.status)
-      ).length;
-      localCounts.all_inactive = projects.filter((project) =>
-        inactiveStatuses.includes(project.status)
-      ).length;
+      console.error("Error fetching status counts from backend:", err);
+
+      // Fallback to local calculation if backend fails
+      console.warn(
+        "Falling back to local calculation from current page projects"
+      );
+      const counts = {
+        all: projects.length,
+        all_active: projects.filter((project) =>
+          activeStatuses.includes(project.status)
+        ).length,
+        all_inactive: projects.filter((project) =>
+          inactiveStatuses.includes(project.status)
+        ).length,
+      };
 
       for (const status of activeStatuses) {
-        localCounts[status] = projects.filter(
-          (project) => project.status === status
-        ).length;
-      }
-      for (const status of inactiveStatuses) {
-        localCounts[status] = projects.filter(
+        counts[status] = projects.filter(
           (project) => project.status === status
         ).length;
       }
 
-      setStatusCounts(localCounts);
+      for (const status of inactiveStatuses) {
+        counts[status] = projects.filter(
+          (project) => project.status === status
+        ).length;
+      }
+
+      console.log(
+        "Fallback: Calculated status counts from local projects:",
+        counts
+      );
+      setStatusCounts(counts);
     }
-  }, [activeStatuses, inactiveStatuses, projects]);
+  }, [activeStatuses, inactiveStatuses]);
+
+  // Memoize the status counts calculation to prevent unnecessary recalculations
+  const memoizedStatusCounts = useMemo(() => {
+    if (Object.keys(statusCounts).length === 0) return {};
+
+    return statusCounts;
+  }, [statusCounts]);
+
+  // Function to refresh status counts when projects change (after filtering, searching, etc.)
+  const refreshStatusCounts = useCallback(() => {
+    if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
+      console.log("Refreshing status counts after project changes...");
+      fetchStatusCounts();
+    }
+  }, [activeStatuses, inactiveStatuses, fetchStatusCounts]);
 
   // Handle search input change
   const handleSearchChange = useCallback(
@@ -872,11 +758,17 @@ const Projects = ({ initialFilters = {} }) => {
     [debouncedSearch, updateFilter]
   );
 
+  // Memoize pagination model to prevent unnecessary re-renders
+  const memoizedPaginationModel = useMemo(
+    () => paginationModel,
+    [paginationModel.page, paginationModel.pageSize]
+  );
+
   // Fetch projects when pagination changes only
   useEffect(() => {
     // Removed automatic fetch to prevent double API calls
     // All fetches are now triggered manually in search and filter handlers
-  }, [paginationModel]);
+  }, [memoizedPaginationModel]);
 
   // Clear search term when component unmounts or when navigating away
   useEffect(() => {
@@ -1000,60 +892,18 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Fetch status counts when component mounts and when statuses change
   useEffect(() => {
+    console.log("Status counts useEffect triggered:", {
+      activeStatusesLength: activeStatuses.length,
+      inactiveStatusesLength: inactiveStatuses.length,
+      activeStatuses,
+      inactiveStatuses,
+    });
+
     if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
+      console.log("Calling fetchStatusCounts...");
       fetchStatusCounts();
     }
   }, [activeStatuses, inactiveStatuses, fetchStatusCounts]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await projectService.create(form);
-      setProjects([...projects, response.data]);
-      // Refresh status counts after creating a new project
-      fetchStatusCounts();
-      setDialogOpen(false);
-      setForm(emptyForm);
-    } catch (error) {
-      console.error("Error creating project:", error);
-      console.error("Error response:", error.response?.data);
-      setError("Failed to create project");
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => {
-      if (name.includes("projectContact")) {
-        const [_, field] = name.split(".");
-        return {
-          ...prev,
-          projectContact: {
-            ...prev.projectContact,
-            [field]: value,
-          },
-        };
-      }
-      return {
-        ...prev,
-        [name]: value,
-      };
-    });
-  };
-
-  const handleUsersChange = (event, newValue) => {
-    setForm((prev) => ({
-      ...prev,
-      users: newValue,
-    }));
-  };
-
-  const handleClientChange = (event, newValue) => {
-    setForm((prev) => ({
-      ...prev,
-      client: newValue ? newValue._id : "",
-    }));
-  };
 
   const searchClients = async (searchTerm) => {
     if (!searchTerm || searchTerm.trim().length === 0) {
@@ -1149,38 +999,6 @@ const Projects = ({ initialFilters = {} }) => {
   };
 
   // Update the renderUsersSelect function
-
-  // Add function to handle new client creation
-  const handleNewClientSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await clientService.create(newClient);
-      setClients([...clients, response.data]);
-      setForm({ ...form, client: response.data._id });
-      setClientDialogOpen(false);
-      setNewClient({
-        name: "",
-        email: "",
-        phone: "",
-        address: "",
-        invoiceEmail: "",
-        contact1Name: "",
-        contact1Number: "",
-        contact1Email: "",
-        contact2Name: "",
-        contact2Number: "",
-        contact2Email: "",
-      });
-    } catch (err) {
-      if (err.response) {
-        alert(
-          `Error creating client: ${
-            err.response.data.message || "Unknown error"
-          }`
-        );
-      }
-    }
-  };
 
   // Handler for delete action
   const handleDeleteClick = (project) => {
@@ -1635,38 +1453,6 @@ const Projects = ({ initialFilters = {} }) => {
     [navigate]
   );
 
-  // Fallback renderStatusSelect function in case the hook doesn't return it
-  const safeRenderStatusSelect =
-    renderStatusSelect ||
-    ((value, onChange, label = "Status") => (
-      <FormControl fullWidth required>
-        <InputLabel>{label}</InputLabel>
-        <Select name="status" value={value} onChange={onChange} label={label}>
-          <MenuItem disabled>
-            <Typography variant="subtitle2" color="text.secondary">
-              Active Jobs
-            </Typography>
-          </MenuItem>
-          {activeStatuses.map((status) => (
-            <MenuItem key={status} value={status}>
-              {status}
-            </MenuItem>
-          ))}
-          <Divider />
-          <MenuItem disabled>
-            <Typography variant="subtitle2" color="text.secondary">
-              Inactive Jobs
-            </Typography>
-          </MenuItem>
-          {inactiveStatuses.map((status) => (
-            <MenuItem key={status} value={status}>
-              {status}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    ));
-
   // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -1696,21 +1482,26 @@ const Projects = ({ initialFilters = {} }) => {
         </Box>
       )}
       {/* Search and Filter Section */}
-      {/* Add Project Button - Full Width */}
+      {/* Add Project Buttons */}
       <Box sx={{ mb: 2 }}>
         <Button
-          variant="contained"
-          color="secondary"
-          onClick={() => setDialogOpen(true)}
+          variant="outlined"
+          color="primary"
+          onClick={() => {
+            console.log("=== ADD PROJECT (Full Page) Button Clicked ===");
+            console.log("Current location:", window.location.href);
+            console.log("Current pathname:", window.location.pathname);
+            console.log("About to navigate to /projects/add-new");
+            console.log("=============================================");
+            navigate("/projects/add-new");
+          }}
           fullWidth
           sx={{
-            backgroundColor: theme.palette.primary.main,
-            "&:hover": { backgroundColor: theme.palette.primary.dark },
-            height: 60,
-            fontSize: "1.2rem",
-            fontWeight: "bold",
-            border: "2px solid rgb(83, 84, 85)",
-            py: 2,
+            height: 50,
+            fontSize: "1.1rem",
+            fontWeight: "500",
+            border: "2px solid",
+            py: 1.5,
           }}
         >
           <AddIcon sx={{ mr: 1 }} />
@@ -1766,6 +1557,15 @@ const Projects = ({ initialFilters = {} }) => {
                 label="Status"
                 onChange={(e) => handleFilterChange("status", e.target.value)}
               >
+                {/* Debug info */}
+                {console.log(
+                  "Status filter dropdown render - statusCounts:",
+                  statusCounts,
+                  "activeStatuses:",
+                  activeStatuses,
+                  "inactiveStatuses:",
+                  inactiveStatuses
+                )}
                 <MenuItem value="all" sx={{ fontSize: "0.88rem" }}>
                   <Box
                     sx={{
@@ -2198,7 +1998,7 @@ const Projects = ({ initialFilters = {} }) => {
           error={error}
           // checkboxSelection
           onRowClick={(params) => navigate(`/projects/${params.row._id}`)}
-          columnVisibilityModel={columnVisibilityModel}
+          columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
           paginationMode="server"
           rowCount={pagination.total}
@@ -2299,7 +2099,7 @@ const Projects = ({ initialFilters = {} }) => {
                 >
                   <Box
                     sx={{
-                      backgroundColor: getStatusColor(status),
+                      backgroundColor: statusColors[status],
                       color: "white",
                       padding: "6px 12px",
                       borderRadius: "16px",
@@ -2364,409 +2164,6 @@ const Projects = ({ initialFilters = {} }) => {
         })()}
       </Menu>
 
-      {/* Project Details Dialog */}
-      <Dialog
-        open={dialogOpen}
-        onClose={() => {
-          setDialogOpen(false);
-          setForm(emptyForm);
-        }}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-          },
-        }}
-        sx={{
-          "& .MuiAutocomplete-popper": {
-            zIndex: 9999,
-          },
-          "& .MuiAutocomplete-listbox": {
-            zIndex: 9999,
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            pb: 2,
-            px: 3,
-            pt: 3,
-            border: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              bgcolor: selectedProject ? "warning.main" : "primary.main",
-              color: "white",
-            }}
-          >
-            {selectedProject ? (
-              <EditIcon sx={{ fontSize: 20 }} />
-            ) : (
-              <AddIcon sx={{ fontSize: 20 }} />
-            )}
-          </Box>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            {selectedProject ? "Edit Project" : "Add New Project"}
-          </Typography>
-        </DialogTitle>
-        <form onSubmit={handleSubmit}>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mt: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Project ID"
-                    value={
-                      form.isLargeProject ? "HAZ001" : "Will be auto-generated"
-                    }
-                    disabled
-                    fullWidth
-                    sx={{
-                      "& .MuiInputBase-input.Mui-disabled": {
-                        WebkitTextFillColor: form.isLargeProject
-                          ? "#000"
-                          : "#666",
-                        fontStyle: form.isLargeProject ? "normal" : "italic",
-                      },
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={form.isLargeProject || false}
-                        onChange={(e) => {
-                          setForm((prev) => ({
-                            ...prev,
-                            isLargeProject: e.target.checked,
-                          }));
-                        }}
-                        color="primary"
-                      />
-                    }
-                    label="Large Project (HAZ prefix)"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Project Name"
-                    name="name"
-                    value={form.name}
-                    onChange={handleChange}
-                    required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Box>
-                    <Autocomplete
-                      options={clientSearchResults}
-                      getOptionLabel={(option) => option.name || ""}
-                      value={
-                        clientSearchResults.find(
-                          (client) => client._id === form.client
-                        ) || null
-                      }
-                      onChange={handleClientChange}
-                      inputValue={clientInputValue}
-                      onInputChange={(event, newInputValue) => {
-                        setClientInputValue(newInputValue);
-                        // Debounce the search to avoid too many API calls
-                        const timeoutId = setTimeout(() => {
-                          searchClients(newInputValue);
-                        }, 300);
-                        return () => clearTimeout(timeoutId);
-                      }}
-                      filterOptions={(options, { inputValue }) => {
-                        // Don't filter locally since we're searching the database
-                        return options;
-                      }}
-                      loading={isClientSearching}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Client"
-                          required
-                          fullWidth
-                          placeholder="Start typing to search clients..."
-                          InputProps={{
-                            ...params.InputProps,
-                            endAdornment: (
-                              <>
-                                {isClientSearching ? (
-                                  <CircularProgress color="inherit" size={20} />
-                                ) : null}
-                                {params.InputProps.endAdornment}
-                              </>
-                            ),
-                          }}
-                        />
-                      )}
-                      isOptionEqualToValue={(option, value) =>
-                        option._id === value._id
-                      }
-                    />
-                    <Button
-                      startIcon={<AddIcon />}
-                      onClick={() => setClientDialogOpen(true)}
-                      sx={{ mt: 1 }}
-                    >
-                      Add New Client
-                    </Button>
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth required>
-                    <InputLabel>Department</InputLabel>
-                    <Select
-                      name="department"
-                      value={form.department}
-                      onChange={handleChange}
-                      label="Department"
-                    >
-                      {DEPARTMENTS.map((type) => (
-                        <MenuItem key={type} value={type}>
-                          {type}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <Autocomplete
-                      multiple
-                      options={CATEGORIES}
-                      value={form.categories}
-                      onChange={(event, newValue) => {
-                        setForm((prev) => ({ ...prev, categories: newValue }));
-                      }}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Categories"
-                          placeholder="Select categories"
-                        />
-                      )}
-                      renderTags={(value, getTagProps) =>
-                        value.map((option, index) => (
-                          <Chip label={option} {...getTagProps({ index })} />
-                        ))
-                      }
-                    />
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth required>
-                    {safeRenderStatusSelect(form.status, handleChange)}
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    freeSolo
-                    options={addressOptions}
-                    getOptionLabel={(option) =>
-                      typeof option === "string" ? option : option.description
-                    }
-                    value={form.address || ""}
-                    inputValue={addressInput}
-                    onInputChange={(_, value) =>
-                      handleAddressInputChange(value)
-                    }
-                    onChange={(_, value) => {
-                      if (value && value.place_id) {
-                        handleAddressSelect(value.place_id);
-                      } else if (typeof value === "string") {
-                        // Handle manual text input
-                        setForm((prev) => ({ ...prev, address: value }));
-                        setAddressInput(value);
-                      }
-                    }}
-                    loading={isAddressLoading}
-                    ListboxProps={{
-                      style: {
-                        zIndex: 9999,
-                        maxHeight: "200px",
-                      },
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        fullWidth
-                        label="Address (Optional)"
-                        name="address"
-                        InputProps={{
-                          ...params.InputProps,
-                          endAdornment: (
-                            <>
-                              {isAddressLoading ? (
-                                <CircularProgress color="inherit" size={20} />
-                              ) : null}
-                              {params.InputProps.endAdornment}
-                            </>
-                          ),
-                        }}
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <li {...props}>
-                        <Typography>{option.description}</Typography>
-                      </li>
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Due Date"
-                    name="d_Date"
-                    type="date"
-                    value={form.d_Date || ""}
-                    onChange={handleChange}
-                    fullWidth
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Work Order/Job Reference"
-                    name="workOrder"
-                    value={form.workOrder}
-                    onChange={handleChange}
-                    fullWidth
-                    variant="outlined"
-                    size="small"
-                    placeholder="Enter work order or job reference number"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Notes"
-                    name="notes"
-                    value={form.notes}
-                    onChange={handleChange}
-                    fullWidth
-                    multiline
-                    rows={4}
-                    placeholder="Enter any additional notes about the project"
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
-                  >
-                    Project Contact
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Contact Name"
-                    name="projectContact.name"
-                    value={form.projectContact?.name || ""}
-                    onChange={handleChange}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Contact Number"
-                    name="projectContact.number"
-                    value={form.projectContact?.number || ""}
-                    onChange={handleChange}
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    fullWidth
-                    label="Contact Email"
-                    name="projectContact.email"
-                    type="email"
-                    value={form.projectContact?.email || ""}
-                    onChange={handleChange}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
-                  >
-                    Project Team
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Autocomplete
-                    multiple
-                    options={users}
-                    getOptionLabel={(option) =>
-                      `${option.firstName} ${option.lastName}`
-                    }
-                    value={form.users}
-                    onChange={handleUsersChange}
-                    isOptionEqualToValue={(option, value) =>
-                      option._id === value._id
-                    }
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Users (Optional)"
-                        fullWidth
-                      />
-                    )}
-                  />
-                </Grid>
-              </Grid>
-            </Box>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={() => setDialogOpen(false)}
-              variant="outlined"
-              sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Save
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
@@ -2852,238 +2249,6 @@ const Projects = ({ initialFilters = {} }) => {
             Delete Project
           </Button>
         </DialogActions>
-      </Dialog>
-      {/* New Client Dialog */}
-      <Dialog
-        open={clientDialogOpen}
-        onClose={() => setClientDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            pb: 2,
-            px: 3,
-            pt: 3,
-            border: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              bgcolor: "primary.main",
-              color: "white",
-            }}
-          >
-            <AddIcon sx={{ fontSize: 20 }} />
-          </Box>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            Add New Client
-          </Typography>
-        </DialogTitle>
-        <form onSubmit={handleNewClientSubmit}>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mt: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Client Name"
-                    name="name"
-                    value={newClient.name}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, name: e.target.value })
-                    }
-                    required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Email"
-                    name="email"
-                    value={newClient.email}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, email: e.target.value })
-                    }
-                    required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Phone"
-                    name="phone"
-                    value={newClient.phone}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, phone: e.target.value })
-                    }
-                    required
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Address"
-                    name="address"
-                    value={newClient.address}
-                    onChange={(e) =>
-                      setNewClient({ ...newClient, address: e.target.value })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Invoice Email"
-                    name="invoiceEmail"
-                    value={newClient.invoiceEmail}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        invoiceEmail: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-                    Primary Contact
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Name"
-                    name="contact1Name"
-                    value={newClient.contact1Name}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        contact1Name: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Phone"
-                    name="contact1Number"
-                    value={newClient.contact1Number}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        contact1Number: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Email"
-                    name="contact1Email"
-                    value={newClient.contact1Email}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        contact1Email: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
-                    Secondary Contact (Optional)
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Name"
-                    name="contact2Name"
-                    value={newClient.contact2Name}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        contact2Name: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Phone"
-                    name="contact2Number"
-                    value={newClient.contact2Number}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        contact2Number: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Email"
-                    name="contact2Email"
-                    value={newClient.contact2Email}
-                    onChange={(e) =>
-                      setNewClient({
-                        ...newClient,
-                        contact2Email: e.target.value,
-                      })
-                    }
-                    fullWidth
-                  />
-                </Grid>
-              </Grid>
-            </Box>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={() => setClientDialogOpen(false)}
-              variant="outlined"
-              sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Add Client
-            </Button>
-          </DialogActions>
-        </form>
       </Dialog>
     </Box>
   );

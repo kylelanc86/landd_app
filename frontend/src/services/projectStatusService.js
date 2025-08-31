@@ -1,4 +1,4 @@
-import customDataFieldService from './customDataFieldService';
+import customDataFieldGroupService from './customDataFieldGroupService';
 
 // Cache for project statuses to avoid repeated API calls
 let statusCache = null;
@@ -10,7 +10,7 @@ const projectStatusService = {
   async getAllStatuses() {
     try {
       // Use the new project-statuses route that only requires projects.view permission
-      const response = await customDataFieldService.getProjectStatuses();
+      const response = await customDataFieldGroupService.getProjectStatuses();
       return response || [];
     } catch (error) {
       console.error('Error fetching project statuses:', error);
@@ -21,6 +21,11 @@ const projectStatusService = {
   // Get active statuses (isActiveStatus = true)
   async getActiveStatuses() {
     const allStatuses = await this.getAllStatuses();
+    // Handle new structure where allStatuses is an object with activeStatuses and inactiveStatuses arrays
+    if (allStatuses && typeof allStatuses === 'object' && !Array.isArray(allStatuses)) {
+      return allStatuses.activeStatuses?.map(status => status.text) || [];
+    }
+    // Fallback to old structure
     return allStatuses
       .filter(status => status.isActiveStatus === true)
       .map(status => status.text)
@@ -30,6 +35,11 @@ const projectStatusService = {
   // Get inactive statuses (isActiveStatus = false)
   async getInactiveStatuses() {
     const allStatuses = await this.getAllStatuses();
+    // Handle new structure where allStatuses is an object with activeStatuses and inactiveStatuses arrays
+    if (allStatuses && typeof allStatuses === 'object' && !Array.isArray(allStatuses)) {
+      return allStatuses.inactiveStatuses?.map(status => status.text) || [];
+    }
+    // Fallback to old structure
     return allStatuses
       .filter(status => status.isActiveStatus === false)
       .map(status => status.text)
@@ -39,6 +49,16 @@ const projectStatusService = {
   // Get status with color information
   async getStatusWithColor(statusText) {
     const allStatuses = await this.getAllStatuses();
+    // Handle new structure where allStatuses is an object with activeStatuses and inactiveStatuses arrays
+    if (allStatuses && typeof allStatuses === 'object' && !Array.isArray(allStatuses)) {
+      const combinedStatuses = [
+        ...(allStatuses.activeStatuses || []),
+        ...(allStatuses.inactiveStatuses || [])
+      ];
+      const status = combinedStatuses.find(s => s.text === statusText);
+      return status ? status.statusColor || '#1976d2' : '#1976d2';
+    }
+    // Fallback to old structure
     const status = allStatuses.find(s => s.text === statusText);
     return status ? status.statusColor || '#1976d2' : '#1976d2';
   },
@@ -46,12 +66,29 @@ const projectStatusService = {
   // Get all statuses as a single array
   async getAllStatusesAsArray() {
     const allStatuses = await this.getAllStatuses();
+    // Handle new structure where allStatuses is an object with activeStatuses and inactiveStatuses arrays
+    if (allStatuses && typeof allStatuses === 'object' && !Array.isArray(allStatuses)) {
+      const combinedStatuses = [
+        ...(allStatuses.activeStatuses || []),
+        ...(allStatuses.inactiveStatuses || [])
+      ];
+      return combinedStatuses.map(status => status.text).sort();
+    }
+    // Fallback to old structure
     return allStatuses.map(status => status.text).sort();
   },
 
   // Get all statuses with full object data (including colors)
   async getAllStatusesWithData() {
     const allStatuses = await this.getAllStatuses();
+    
+    // Handle new structure where allStatuses is an object with activeStatuses and inactiveStatuses arrays
+    if (allStatuses && typeof allStatuses === 'object' && !Array.isArray(allStatuses)) {
+      // Return the structured response as-is for the context to process
+      return allStatuses;
+    }
+    
+    // Fallback to old structure
     return allStatuses.sort((a, b) => a.text.localeCompare(b.text));
   },
 
@@ -63,6 +100,12 @@ const projectStatusService = {
       lastFetchTime = now;
     }
     
+    // Handle new structure where statusCache is an object with activeStatuses and inactiveStatuses arrays
+    if (statusCache && typeof statusCache === 'object' && !Array.isArray(statusCache)) {
+      return statusCache.activeStatuses?.map(status => status.text) || [];
+    }
+    
+    // Fallback to old structure
     return statusCache
       .filter(status => status.isActiveStatus === true)
       .map(status => status.text)
@@ -76,6 +119,12 @@ const projectStatusService = {
       lastFetchTime = now;
     }
     
+    // Handle new structure where statusCache is an object with activeStatuses and inactiveStatuses arrays
+    if (statusCache && typeof statusCache === 'object' && !Array.isArray(statusCache)) {
+      return statusCache.inactiveStatuses?.map(status => status.text) || [];
+    }
+    
+    // Fallback to old structure
     return statusCache
       .filter(status => status.isActiveStatus === false)
       .map(status => status.text)

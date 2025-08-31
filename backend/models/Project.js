@@ -51,14 +51,22 @@ const projectSchema = new mongoose.Schema({
         if (!value) return true; // Allow empty values
         
         try {
-          // Import the CustomDataField model dynamically to avoid circular dependencies
-          const CustomDataField = mongoose.model('CustomDataField');
+          // Import the CustomDataFieldGroup model dynamically to avoid circular dependencies
+          const CustomDataFieldGroup = mongoose.model('CustomDataFieldGroup');
           
-          // Check if the status exists in custom data fields
-          const statusExists = await CustomDataField.findOne({
+          // Check if the status exists in the new grouped structure
+          const group = await CustomDataFieldGroup.findOne({
             type: 'project_status',
-            text: value
+            isActive: true
           });
+          
+          if (!group) {
+            return false;
+          }
+          
+          const statusExists = group.fields.some(field => 
+            field.text === value && field.isActive
+          );
           
           if (!statusExists) {
             return false;
@@ -132,11 +140,21 @@ projectSchema.pre('save', async function(next) {
   // Only validate status if it's being modified
   if (this.isModified('status') && this.status) {
     try {
-      const CustomDataField = mongoose.model('CustomDataField');
-      const statusExists = await CustomDataField.findOne({
+      const CustomDataFieldGroup = mongoose.model('CustomDataFieldGroup');
+      const group = await CustomDataFieldGroup.findOne({
         type: 'project_status',
-        text: this.status
+        isActive: true
       });
+      
+      if (!group) {
+        const error = new Error(`No project status group found. Please contact an administrator.`);
+        error.name = 'ValidationError';
+        return next(error);
+      }
+      
+      const statusExists = group.fields.some(field => 
+        field.text === this.status && field.isActive
+      );
       
       if (!statusExists) {
         const error = new Error(`Status "${this.status}" is not a valid project status. Please select from the available options.`);
@@ -146,6 +164,31 @@ projectSchema.pre('save', async function(next) {
     } catch (error) {
       // Continue with save even if validation fails
     }
+  }
+  next();
+});
+
+// Post-save hook to update dashboard stats when status changes
+projectSchema.post('save', async function(doc) {
+  // Only update stats if status was modified
+  if (this.isModified('status')) {
+    try {
+      const dashboardStatsService = require('../services/dashboardStatsService');
+      // Get the old status from the previous version if it exists
+      const oldStatus = this._originalStatus || null;
+      await dashboardStatsService.updateStatsOnProjectStatusChange(oldStatus, doc.status);
+    } catch (error) {
+      console.error('Error updating dashboard stats after project save:', error);
+      // Don't fail the save operation if stats update fails
+    }
+  }
+});
+
+// Pre-save hook to store the original status for comparison
+projectSchema.pre('save', function(next) {
+  // Store the original status before it gets modified
+  if (this.isModified('status')) {
+    this._originalStatus = this.status;
   }
   next();
 });

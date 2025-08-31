@@ -9,26 +9,32 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
 
-// Helper function to get active and inactive statuses from custom data fields
+// Helper function to get active and inactive statuses from custom data field groups
 const getProjectStatuses = async () => {
   try {
-    const CustomDataField = require('../models/CustomDataField');
-    const statusFields = await CustomDataField.find({ 
+    const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
+    const group = await CustomDataFieldGroup.findOne({ 
       type: 'project_status', 
       isActive: true 
     });
     
-    const activeStatuses = statusFields
-      .filter(field => field.isActiveStatus === true)
+    if (!group) {
+      return { activeStatuses: [], inactiveStatuses: [] };
+    }
+    
+    const activeStatuses = group.fields
+      .filter(field => field.isActive && field.isActiveStatus)
+      .sort((a, b) => a.order - b.order)
       .map(field => field.text);
     
-    const inactiveStatuses = statusFields
-      .filter(field => field.isActiveStatus === false)
+    const inactiveStatuses = group.fields
+      .filter(field => field.isActive && !field.isActiveStatus)
+      .sort((a, b) => a.order - b.order)
       .map(field => field.text);
     
     return { activeStatuses, inactiveStatuses };
   } catch (error) {
-    console.error('Error fetching project statuses from custom data fields:', error);
+    console.error('Error fetching project statuses from custom data field groups:', error);
     // Return empty arrays if database query fails
     return { activeStatuses: [], inactiveStatuses: [] };
   }
@@ -274,6 +280,15 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       .populate('client')
       .populate('users');
     
+    // Update dashboard stats after project creation
+    try {
+      const dashboardStatsService = require('../services/dashboardStatsService');
+      await dashboardStatsService.updateStatsOnProjectCreate(newProject.status);
+    } catch (statsError) {
+      console.error('Error updating dashboard stats on project creation:', statsError);
+      // Don't fail the project creation if stats update fails
+    }
+    
     res.status(201).json(populatedProject);
   } catch (err) {
     console.error('Error saving project:', err);
@@ -319,6 +334,17 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
 
     const updatedProject = await project.save();
+    
+    // Update dashboard stats if status changed
+    if (req.body.status && req.body.status !== project.status) {
+      try {
+        const dashboardStatsService = require('../services/dashboardStatsService');
+        await dashboardStatsService.updateStatsOnProjectStatusChange(project.status, req.body.status);
+      } catch (statsError) {
+        console.error('Error updating dashboard stats on project status change:', statsError);
+        // Don't fail the project update if stats update fails
+      }
+    }
     
     // Populate the users before sending response
     const populatedProject = await Project.findById(updatedProject._id)
@@ -399,7 +425,20 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
       });
     }
 
+    // Store project status for dashboard stats update
+    const projectStatus = project.status;
+    
     await project.deleteOne();
+    
+    // Update dashboard stats after project deletion
+    try {
+      const dashboardStatsService = require('../services/dashboardStatsService');
+      await dashboardStatsService.updateStatsOnProjectDelete(projectStatus);
+    } catch (statsError) {
+      console.error('Error updating dashboard stats on project deletion:', statsError);
+      // Don't fail the project deletion if stats update fails
+    }
+    
     res.json({ message: 'Project deleted successfully' });
   } catch (err) {
     console.error('Error deleting project:', err);

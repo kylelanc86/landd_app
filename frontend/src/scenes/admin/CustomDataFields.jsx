@@ -31,7 +31,7 @@ import {
   ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import customDataFieldService from "../../services/customDataFieldService";
+import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import projectStatusService from "../../services/projectStatusService";
 
 // Tab panel component
@@ -94,12 +94,12 @@ const CustomDataFields = () => {
         legislationData,
         projectStatusesData,
       ] = await Promise.all([
-        customDataFieldService.getByType("asbestos_removalist"),
-        customDataFieldService.getByType("location_description"),
-        customDataFieldService.getByType("materials_description"),
-        customDataFieldService.getByType("room_area"),
-        customDataFieldService.getByType("legislation"),
-        customDataFieldService.getByType("project_status"),
+        customDataFieldGroupService.getFieldsByType("asbestos_removalist"),
+        customDataFieldGroupService.getFieldsByType("location_description"),
+        customDataFieldGroupService.getFieldsByType("materials_description"),
+        customDataFieldGroupService.getFieldsByType("room_area"),
+        customDataFieldGroupService.getFieldsByType("legislation"),
+        customDataFieldGroupService.getProjectStatuses(),
       ]);
 
       setAsbestosRemovalists(asbestosData || []);
@@ -107,9 +107,18 @@ const CustomDataFields = () => {
       setMaterialsDescriptions(materialsData || []);
       setRoomAreas(roomAreaData || []);
       setLegislation(legislationData || []);
-      setProjectStatuses(projectStatusesData || []);
+      // Handle project statuses data which might be an object with activeStatuses and inactiveStatuses
+      if (
+        projectStatusesData &&
+        typeof projectStatusesData === "object" &&
+        !Array.isArray(projectStatusesData)
+      ) {
+        setProjectStatuses(projectStatusesData);
+      } else {
+        setProjectStatuses(projectStatusesData || []);
+      }
     } catch (error) {
-      console.error("Error fetching custom data fields:", error);
+      console.error("❌ Error fetching custom data fields:", error);
       showSnackbar("Failed to load custom data fields", "error");
     } finally {
       setLoading(false);
@@ -133,7 +142,11 @@ const CustomDataFields = () => {
 
   // Helper function to sort data alphabetically
   const sortDataAlphabetically = (data) => {
-    return [...data].sort((a, b) => a.text.localeCompare(b.text));
+    return [...data].sort((a, b) => {
+      const textA = a?.text || a?.name || "";
+      const textB = b?.text || b?.name || "";
+      return textA.localeCompare(textB);
+    });
   };
 
   // Get sorted data for display
@@ -180,7 +193,11 @@ const CustomDataFields = () => {
           };
         case 5:
           return {
-            data: projectStatuses,
+            data: Array.isArray(projectStatuses)
+              ? projectStatuses
+              : (projectStatuses?.activeStatuses || []).concat(
+                  projectStatuses?.inactiveStatuses || []
+                ),
             setter: setProjectStatuses,
             title: "Projects Status",
           };
@@ -207,7 +224,7 @@ const CustomDataFields = () => {
     const { title } = getCurrentData();
     setCurrentTab(title);
     setEditingItem(item);
-    setNewItemText(item.text);
+    setNewItemText(item.text || item.name || "");
     setNewLegislationTitle(item.legislationTitle || "");
     setNewJurisdiction(item.jurisdiction || "ACT"); // Set jurisdiction on edit
     setNewIsActiveStatus(
@@ -220,7 +237,8 @@ const CustomDataFields = () => {
   const handleDeleteItem = async (itemId) => {
     const { data, setter, title } = getCurrentData();
     try {
-      await customDataFieldService.delete(itemId);
+      // For now, we'll just remove from local state since the new structure doesn't support individual field deletion
+      // TODO: Implement proper deletion in the new grouped structure
       const updatedData = data.filter((item) => item._id !== itemId);
       setter(updatedData);
 
@@ -229,10 +247,12 @@ const CustomDataFields = () => {
         projectStatusService.clearCache();
       }
 
-      showSnackbar(`${title} deleted successfully`);
+      showSnackbar(
+        `${title} removed from display (deletion not yet implemented in new structure)`
+      );
     } catch (error) {
-      console.error(`Error deleting ${title}:`, error);
-      showSnackbar(`Failed to delete ${title}`, "error");
+      console.error(`Error removing ${title}:`, error);
+      showSnackbar(`Failed to remove ${title}`, "error");
     }
   };
 
@@ -282,10 +302,9 @@ const CustomDataFields = () => {
           updateData.statusColor = newStatusColor;
         }
 
-        const updatedItem = await customDataFieldService.update(
-          editingItem._id,
-          updateData
-        );
+        // For now, we'll just update in local state since the new structure requires different handling
+        // TODO: Implement proper update in the new grouped structure
+        const updatedItem = { ...editingItem, ...updateData };
         const updatedData = data.map((item) =>
           item._id === editingItem._id ? updatedItem : item
         );
@@ -296,10 +315,12 @@ const CustomDataFields = () => {
           projectStatusService.clearCache();
         }
 
-        showSnackbar(`${title} updated successfully`);
+        showSnackbar(
+          `${title} updated in display (backend update not yet implemented in new structure)`
+        );
       } catch (error) {
-        console.error(`Error updating ${title}:`, error);
-        showSnackbar(`Failed to update ${title}`, "error");
+        console.error(`Error updating ${title} in display:`, error);
+        showSnackbar(`Failed to update ${title} in display`, "error");
         return;
       }
     } else {
@@ -323,7 +344,15 @@ const CustomDataFields = () => {
           newItemData.statusColor = newStatusColor;
         }
 
-        const newItem = await customDataFieldService.create(newItemData);
+        // For now, we'll just add to local state since the new structure requires different handling
+        // TODO: Implement proper creation in the new grouped structure
+        const newItem = {
+          _id: Date.now().toString(), // Temporary ID
+          ...newItemData,
+          isActive: true,
+          createdBy: { firstName: "User", lastName: "User" },
+          createdAt: new Date(),
+        };
         const updatedData = [...data, newItem];
         setter(updatedData);
 
@@ -332,10 +361,12 @@ const CustomDataFields = () => {
           projectStatusService.clearCache();
         }
 
-        showSnackbar(`${title} added successfully`);
+        showSnackbar(
+          `${title} added to display (backend creation not yet implemented in new structure)`
+        );
       } catch (error) {
-        console.error(`Error adding new ${title}:`, error);
-        showSnackbar(`Failed to add new ${title}`, "error");
+        console.error(`Error adding new ${title} to display:`, error);
+        showSnackbar(`Failed to add new ${title} to display`, "error");
         return;
       }
     }
@@ -411,7 +442,9 @@ const CustomDataFields = () => {
                   backgroundColor: theme.palette.background.paper,
                 }}
               >
-                <ListItemText primary={item.text} />
+                <ListItemText
+                  primary={item.text || item.name || "Unnamed Item"}
+                />
                 <ListItemSecondaryAction>
                   <IconButton
                     edge="end"
@@ -438,13 +471,13 @@ const CustomDataFields = () => {
   };
 
   const renderProjectStatusContent = () => {
-    // Group project statuses by active/inactive using the isActiveStatus field
-    const activeStatuses = projectStatuses.filter(
-      (status) => status.isActiveStatus === true
-    );
-    const inactiveStatuses = projectStatuses.filter(
-      (status) => status.isActiveStatus === false
-    );
+    // Handle the new structure where projectStatuses is an object with activeStatuses and inactiveStatuses arrays
+    const activeStatuses = Array.isArray(projectStatuses)
+      ? projectStatuses.filter((status) => status.isActiveStatus === true)
+      : projectStatuses?.activeStatuses || [];
+    const inactiveStatuses = Array.isArray(projectStatuses)
+      ? projectStatuses.filter((status) => status.isActiveStatus === false)
+      : projectStatuses?.inactiveStatuses || [];
 
     return (
       <Box>
@@ -536,7 +569,7 @@ const CustomDataFields = () => {
                                   flexShrink: 0,
                                 }}
                               />
-                              {item.text}
+                              {item.text || item.name || "Unnamed Status"}
                             </Box>
                           }
                         />
@@ -622,7 +655,7 @@ const CustomDataFields = () => {
                                   flexShrink: 0,
                                 }}
                               />
-                              {item.text}
+                              {item.text || item.name || "Unnamed Status"}
                             </Box>
                           }
                         />
@@ -778,7 +811,9 @@ const CustomDataFields = () => {
                           <Typography variant="body2">
                             {item.jurisdiction || "N/A"}
                           </Typography>
-                          <Typography variant="body2">{item.text}</Typography>
+                          <Typography variant="body2">
+                            {item.text || item.name || "Unnamed Item"}
+                          </Typography>
                           <Typography variant="body2">
                             {item.legislationTitle || "N/A"}
                           </Typography>

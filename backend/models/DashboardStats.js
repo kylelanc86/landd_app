@@ -72,7 +72,7 @@ dashboardStatsSchema.statics.getAllStats = async function() {
       // Import models here to avoid circular dependency issues
       const Project = require('./Project');
       const Invoice = require('./Invoice');
-      const CustomDataField = require('./CustomDataField');
+      const CustomDataFieldGroup = require('./CustomDataFieldGroup');
       
       // Get all unique statuses that actually exist in the database
       const allProjects = await Project.find({}).select('status');
@@ -84,20 +84,22 @@ dashboardStatsSchema.statics.getAllStats = async function() {
         statusCounts[status] = await Project.countDocuments({ status });
       }
       
-      // Get project status definitions from custom data fields
-      const projectStatusFields = await CustomDataField.find({ 
+      // Get project status definitions from custom data field groups
+      const projectStatusGroup = await CustomDataFieldGroup.findOne({ 
         type: 'project_status', 
         isActive: true 
       });
       
-      // Define which statuses are active/inactive based on custom data fields
-      const activeStatuses = projectStatusFields
-        .filter(field => field.isActiveStatus === true)
-        .map(field => field.text);
+      // Define which statuses are active/inactive based on custom data field groups
+      const activeStatuses = projectStatusGroup ? projectStatusGroup.fields
+        .filter(field => field.isActive && field.isActiveStatus)
+        .sort((a, b) => a.order - b.order)
+        .map(field => field.text) : [];
       
-      const inactiveStatuses = projectStatusFields
-        .filter(field => field.isActiveStatus === false)
-        .map(field => field.text);
+      const inactiveStatuses = projectStatusGroup ? projectStatusGroup.fields
+        .filter(field => field.isActive && !field.isActiveStatus)
+        .sort((a, b) => a.order - b.order)
+        .map(field => field.text) : [];
       
       // Calculate active and inactive project counts
       const activeProjects = await Project.countDocuments({ 

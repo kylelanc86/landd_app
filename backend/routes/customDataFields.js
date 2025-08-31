@@ -7,12 +7,26 @@ const CustomDataField = require('../models/CustomDataField');
 // Special route for project statuses - only requires projects.view permission
 router.get('/project-statuses', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const statusFields = await CustomDataField.find({ 
+    // Use the new CustomDataFieldGroup structure for backward compatibility
+    const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
+    const group = await CustomDataFieldGroup.findOne({ 
       type: 'project_status', 
       isActive: true 
-    })
-    .sort({ text: 1 })
-    .select('text isActiveStatus statusColor'); // Only return necessary fields
+    });
+    
+    if (!group) {
+      return res.json([]);
+    }
+    
+    // Convert to the old format for backward compatibility
+    const statusFields = group.fields
+      .filter(field => field.isActive)
+      .sort((a, b) => a.order - b.order)
+      .map(field => ({
+        text: field.text,
+        isActiveStatus: field.isActiveStatus,
+        statusColor: field.statusColor
+      }));
     
     res.json(statusFields);
   } catch (error) {

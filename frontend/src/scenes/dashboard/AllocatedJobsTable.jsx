@@ -5,7 +5,7 @@ import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { projectService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { StatusChip } from "../../components/JobStatus";
-import useProjectStatuses from "../../hooks/useProjectStatuses";
+import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 
 const AllocatedJobsTable = () => {
   const { currentUser, loading: authLoading } = useAuth();

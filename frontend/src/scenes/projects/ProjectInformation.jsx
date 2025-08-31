@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -36,7 +36,7 @@ import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { usePermissions } from "../../hooks/usePermissions";
 import { StatusChip } from "../../components/JobStatus";
-import useProjectStatuses from "../../hooks/useProjectStatuses";
+import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 import {
   formatPhoneNumber,
@@ -64,6 +64,27 @@ const CATEGORIES = [
   "Other",
 ];
 
+// Move renderStatusMenuItem outside the component to prevent recreation on every render
+const renderStatusMenuItem = (status, statusColors, onStatusSelect) => {
+  // Handle case where status might be an object with text property
+  const statusText = typeof status === "string" ? status : status.text;
+  const statusKey =
+    typeof status === "string" ? status : status._id || status.text;
+
+  return (
+    <MenuItem
+      key={statusKey}
+      value={statusText}
+      onClick={() => onStatusSelect(statusText)}
+    >
+      <StatusChip
+        status={statusText}
+        customColor={statusColors && statusColors[statusText]}
+      />
+    </MenuItem>
+  );
+};
+
 // Remove the hardcoded API key - use environment variable instead
 // const GOOGLE_MAPS_API_KEY = "AIzaSyB41DRubKWUHP7t3vqphB1qVhV6x9x9x9x"; // Replace with your actual API key
 
@@ -73,7 +94,17 @@ const ProjectInformation = () => {
   const { currentUser } = useAuth();
   const { can, isAdmin, isManager } = usePermissions();
   const canWriteOff = can("clients.write_off");
-  const isEditMode = id !== "new";
+  const isEditMode = Boolean(id && id !== "new" && id !== "add-new");
+
+  // Debug: Log the isEditMode calculation
+  useEffect(() => {
+    console.log("🔍 isEditMode calculation:", {
+      id,
+      isEditMode,
+      idType: typeof id,
+      idValue: id,
+    });
+  }, [id, isEditMode]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [clients, setClients] = useState([]);
@@ -113,12 +144,31 @@ const ProjectInformation = () => {
     users: [],
     categories: [],
     notes: "",
+    isLargeProject: false,
     projectContact: {
       name: "",
       number: "",
       email: "",
     },
   });
+
+  // Debug: Log form state changes, especially _id and projectID
+  useEffect(() => {
+    console.log("🔍 Form state changed:", {
+      projectID: form.projectID,
+      hasProjectID: !!form.projectID,
+      projectIDType: typeof form.projectID,
+      _id: form._id,
+      hasId: !!form._id,
+      idType: typeof form._id,
+      isEditMode,
+      formKeys: Object.keys(form),
+      formValues: form,
+    });
+  }, [form, isEditMode]);
+
+  // Add state to control the status dropdown
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
 
   const [addressInput, setAddressInput] = useState("");
   const [addressOptions, setAddressOptions] = useState([]);
@@ -138,34 +188,259 @@ const ProjectInformation = () => {
   const { activeStatuses, inactiveStatuses, statusColors } =
     useProjectStatuses();
 
+  // Debug: Log what we're getting from the hook
+  useEffect(() => {
+    console.log("🔍 ProjectInformation - Status data from hook:", {
+      activeStatuses,
+      inactiveStatuses,
+      statusColors,
+      activeStatusesLength: activeStatuses?.length,
+      inactiveStatusesLength: inactiveStatuses?.length,
+    });
+  }, [activeStatuses, inactiveStatuses, statusColors]);
+
   // Set default status when statuses are loaded
   useEffect(() => {
+    console.log("🔍 Setting default status:", {
+      activeStatusesLength: activeStatuses?.length,
+      currentFormStatus: form.status,
+      firstActiveStatus: activeStatuses?.[0],
+    });
+
     if (activeStatuses.length > 0 && !form.status) {
-      setForm((prev) => ({ ...prev, status: activeStatuses[0] }));
+      // Extract text from status object if it's an object
+      const defaultStatus =
+        typeof activeStatuses[0] === "string"
+          ? activeStatuses[0]
+          : activeStatuses[0].text;
+      console.log("🔍 Setting default status to:", defaultStatus);
+      setForm((prev) => ({ ...prev, status: defaultStatus }));
     }
   }, [activeStatuses, form.status]);
 
-  const generateNextProjectId = async () => {
-    try {
-      const response = await projectService.getAll();
-      const projects = response.data;
+  // Memoize the accessible statuses to prevent recalculation on every render
+  const accessibleStatuses = useMemo(() => {
+    if (isAdmin || isManager || can("projects.change_status")) {
+      // All users with permission can access all statuses for now
+      // Extract text from status objects if they are objects
+      const active = Array.isArray(activeStatuses)
+        ? activeStatuses.map((s) => (typeof s === "string" ? s : s.text))
+        : [];
+      const inactive = Array.isArray(inactiveStatuses)
+        ? inactiveStatuses.map((s) => (typeof s === "string" ? s : s.text))
+        : [];
 
-      // Find the last project with an LDJ prefix
-      const lastProject = projects
-        .filter((p) => p.projectID && p.projectID.startsWith("LDX"))
-        .sort((a, b) => {
+      console.log("🔍 getAccessibleStatuses:", {
+        activeStatuses,
+        inactiveStatuses,
+        extractedActive: active,
+        extractedInactive: inactive,
+      });
+
+      return { active, inactive };
+    }
+    return { active: [], inactive: [] };
+  }, [isAdmin, isManager, can, activeStatuses, inactiveStatuses]);
+
+  // Memoize the status menu items to prevent recreation on every render
+  const statusMenuItems = useMemo(() => {
+    console.log("🔍 Creating status menu items");
+
+    const activeItems = accessibleStatuses.active.map((status) =>
+      renderStatusMenuItem(status, statusColors, (selectedStatus) => {
+        setForm((prev) => ({
+          ...prev,
+          status: selectedStatus,
+        }));
+        // Close the dropdown after selection
+        setStatusDropdownOpen(false);
+      })
+    );
+
+    const inactiveItems = accessibleStatuses.inactive.map((status) =>
+      renderStatusMenuItem(status, statusColors, (selectedStatus) => {
+        setForm((prev) => ({
+          ...prev,
+          status: selectedStatus,
+        }));
+        // Close the dropdown after selection
+        setStatusDropdownOpen(false);
+      })
+    );
+
+    return { activeItems, inactiveItems };
+  }, [accessibleStatuses, statusColors, setForm, setStatusDropdownOpen]);
+
+  // Function to determine which statuses a user can access
+  const getAccessibleStatuses = () => {
+    if (isAdmin || isManager || can("projects.change_status")) {
+      // All users with permission can access all statuses for now
+      // Extract text from status objects if they are objects
+      const active = Array.isArray(activeStatuses)
+        ? activeStatuses.map((s) => (typeof s === "string" ? s : s.text))
+        : [];
+      const inactive = Array.isArray(inactiveStatuses)
+        ? inactiveStatuses.map((s) => (typeof s === "string" ? s : s.text))
+        : [];
+
+      console.log("🔍 getAccessibleStatuses:", {
+        activeStatuses,
+        inactiveStatuses,
+        extractedActive: active,
+        extractedInactive: inactive,
+      });
+
+      return { active, inactive };
+    }
+    return { active: [], inactive: [] };
+  };
+
+  const generateNextProjectId = async () => {
+    console.log("🔍 generateNextProjectId called");
+    console.log("🔍 form.isLargeProject:", form.isLargeProject);
+    console.log("🔍 Current form state:", {
+      projectID: form.projectID,
+      _id: form._id,
+      hasProjectID: !!form.projectID,
+      hasId: !!form._id,
+    });
+
+    try {
+      console.log("🔍 Fetching all projects...");
+      const response = await projectService.getAll();
+      console.log("🔍 Projects response:", {
+        hasData: !!response.data,
+        dataType: typeof response.data,
+        dataLength: response.data?.length,
+        responseKeys: Object.keys(response),
+        fullResponse: response,
+        responseDataKeys: response.data ? Object.keys(response.data) : [],
+        responseDataData: response.data?.data,
+        responseDataDataType: typeof response.data?.data,
+        responseDataDataLength: response.data?.data?.length,
+      });
+
+      // Handle nested response structure where projects might be in response.data.data
+      const projects = response.data?.data || response.data;
+      console.log("🔍 Projects data:", projects);
+      console.log("🔍 Number of projects:", projects?.length);
+      console.log("🔍 Response structure analysis:", {
+        hasData: !!response.data,
+        hasNestedData: !!response.data?.data,
+        responseDataType: typeof response.data,
+        nestedDataType: typeof response.data?.data,
+        isArray: Array.isArray(projects),
+        projectsLength: projects?.length,
+      });
+
+      // Log sample project structure
+      if (projects && Array.isArray(projects) && projects.length > 0) {
+        console.log("🔍 Sample project structure:", {
+          firstProject: projects[0],
+          firstProjectKeys: Object.keys(projects[0]),
+          firstProjectID: projects[0]?.projectID,
+          firstProjectId: projects[0]?._id,
+        });
+      } else {
+        console.log("🔍 No valid projects array found:", {
+          projects,
+          projectsType: typeof projects,
+          isArray: Array.isArray(projects),
+          hasLength: projects?.length !== undefined,
+        });
+      }
+
+      // Ensure we have a valid projects array
+      if (!Array.isArray(projects)) {
+        console.error("🔍 Error: projects is not an array:", {
+          projects,
+          projectsType: typeof projects,
+          responseData: response.data,
+        });
+        throw new Error("Invalid projects data structure received from API");
+      }
+
+      if (form.isLargeProject) {
+        console.log("🔍 Generating HAZ prefix for large project");
+        // Generate HAZ prefix for large projects
+        const largeProjects = projects.filter(
+          (p) => p.projectID && p.projectID.startsWith("HAZ")
+        );
+        console.log("🔍 Large projects found:", largeProjects);
+        console.log(
+          "🔍 Large project IDs:",
+          largeProjects.map((p) => ({ projectID: p.projectID, _id: p._id }))
+        );
+
+        const lastLargeProject = largeProjects.sort((a, b) => {
           const numA = parseInt(a.projectID.slice(3));
           const numB = parseInt(b.projectID.slice(3));
           return numB - numA;
         })[0];
 
-      const nextNum = lastProject
-        ? parseInt(lastProject.projectID.slice(3)) + 1
-        : 1;
+        console.log("🔍 Last large project:", lastLargeProject);
 
-      return `LDX${String(nextNum).padStart(5, "0")}`;
+        const nextNum = lastLargeProject
+          ? parseInt(lastLargeProject.projectID.slice(3)) + 1
+          : 1;
+
+        console.log("🔍 Large project ID calculation:", {
+          lastLargeProject,
+          lastProjectID: lastLargeProject?.projectID,
+          extractedNumber: lastLargeProject
+            ? parseInt(lastLargeProject.projectID.slice(3))
+            : null,
+          nextNum,
+        });
+
+        const nextId = `HAZ${String(nextNum).padStart(3, "0")}`;
+        console.log("🔍 Generated HAZ ID:", nextId);
+        return nextId;
+      } else {
+        console.log("🔍 Generating LDX prefix for regular project");
+        // Generate LDX prefix for regular projects
+        const regularProjects = projects.filter(
+          (p) => p.projectID && p.projectID.startsWith("LDX")
+        );
+        console.log("🔍 Regular projects found:", regularProjects);
+        console.log(
+          "🔍 Regular project IDs:",
+          regularProjects.map((p) => ({ projectID: p.projectID, _id: p._id }))
+        );
+
+        const lastProject = regularProjects.sort((a, b) => {
+          const numA = parseInt(a.projectID.slice(3));
+          const numB = parseInt(b.projectID.slice(3));
+          return numB - numA;
+        })[0];
+
+        console.log("🔍 Last regular project:", lastProject);
+
+        const nextNum = lastProject
+          ? parseInt(lastProject.projectID.slice(3)) + 1
+          : 1;
+
+        console.log("🔍 Regular project ID calculation:", {
+          lastProject,
+          lastProjectID: lastProject?.projectID,
+          extractedNumber: lastProject
+            ? parseInt(lastProject.projectID.slice(3))
+            : null,
+          nextNum,
+        });
+
+        const nextId = `LDX${String(nextNum).padStart(5, "0")}`;
+        console.log("🔍 Generated LDX ID:", nextId);
+        return nextId;
+      }
     } catch (error) {
-      console.error("Error generating project ID:", error);
+      console.error("🔍 Error generating project ID:", error);
+      console.error("🔍 Error details:", {
+        message: error.message,
+        response: error.response,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
       throw new Error("Failed to generate project ID");
     }
   };
@@ -176,6 +451,8 @@ const ProjectInformation = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log("fetchData called with id:", id);
+      console.log("isEditMode:", isEditMode);
       try {
         setLoading(true);
         setError(null);
@@ -190,12 +467,23 @@ const ProjectInformation = () => {
         setUsers(usersRes.data);
 
         // If we're in edit mode, fetch the project data
-        if (id && id !== "new" && id !== "undefined") {
+        if (id && id !== "new" && id !== "add-new" && id !== "undefined") {
           try {
+            console.log("🔍 Fetching project with ID:", id);
             const projectRes = await projectService.getById(id);
+            console.log("🔍 Project API response:", {
+              hasData: !!projectRes.data,
+              dataKeys: projectRes.data ? Object.keys(projectRes.data) : [],
+              projectID: projectRes.data?.projectID,
+              _id: projectRes.data?._id,
+              responseType: typeof projectRes.data,
+              fullResponse: projectRes,
+            });
+
             if (!projectRes.data) {
               throw new Error("No project data received");
             }
+
             // Ensure users is always an array
             const projectData = {
               ...projectRes.data,
@@ -203,6 +491,22 @@ const ProjectInformation = () => {
                 ? projectRes.data.users
                 : [],
             };
+
+            console.log("🔍 Processed project data:", {
+              projectID: projectData.projectID,
+              _id: projectData._id,
+              hasProjectID: !!projectData.projectID,
+              hasId: !!projectData._id,
+              processedKeys: Object.keys(projectData),
+            });
+
+            console.log("🔍 About to setForm with projectData:", {
+              projectID: projectData.projectID,
+              _id: projectData._id,
+              hasProjectID: !!projectData.projectID,
+              hasId: !!projectData._id,
+              dataKeys: Object.keys(projectData),
+            });
             setForm(projectData);
           } catch (projectErr) {
             console.error("Error fetching project:", projectErr);
@@ -213,17 +517,13 @@ const ProjectInformation = () => {
             setError("Failed to load project data. Please try again.");
             navigate("/projects");
           }
-        } else if (id === "new") {
-          // Generate new project ID for new projects
-          try {
-            const nextId = await generateNextProjectId();
-            setForm((prev) => ({ ...prev, projectID: nextId, users: [] }));
-          } catch (idError) {
-            console.error("Error generating project ID:", idError);
-            setError("Failed to generate project ID. Please try again.");
-          }
+        } else if (!id || id === "new" || id === "add-new") {
+          // Don't generate Project ID yet - wait for form submission
+          console.log("🔍 New project mode - setting empty users array");
+          setForm((prev) => ({ ...prev, users: [] }));
         } else {
           // Invalid ID, redirect to projects list
+          console.log("🔍 Invalid ID, redirecting to projects list:", id);
           navigate("/projects");
         }
       } catch (err) {
@@ -402,20 +702,46 @@ const ProjectInformation = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    console.log("🔍 handleChange called:", { name, value, target: e.target });
+
     if (name.includes(".")) {
       const [parent, child] = name.split(".");
-      setForm((prev) => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: value,
-        },
-      }));
+      setForm((prev) => {
+        console.log("🔍 Setting nested form field:", {
+          parent,
+          child,
+          value,
+          previousValue: prev[parent]?.[child],
+          fullParent: prev[parent],
+        });
+        return {
+          ...prev,
+          [parent]: {
+            ...prev[parent],
+            [child]: value,
+          },
+        };
+      });
     } else {
-      setForm((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      setForm((prev) => {
+        console.log("🔍 Setting form field:", {
+          field: name,
+          value,
+          previousValue: prev[name],
+          isProjectID: name === "projectID",
+          isId: name === "_id",
+          formState: {
+            projectID: prev.projectID,
+            _id: prev._id,
+            hasProjectID: !!prev.projectID,
+            hasId: !!prev._id,
+          },
+        });
+        return {
+          ...prev,
+          [name]: value,
+        };
+      });
     }
   };
 
@@ -459,15 +785,87 @@ const ProjectInformation = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("🔍 handleSubmit called");
+    console.log("🔍 Form data:", form);
+    console.log("🔍 Form data details:", {
+      projectID: form.projectID,
+      _id: form._id,
+      hasProjectID: !!form.projectID,
+      hasId: !!form._id,
+      projectIDType: typeof form.projectID,
+      idType: typeof form._id,
+      formKeys: Object.keys(form),
+      formValues: JSON.stringify(form, null, 2),
+    });
+    console.log("🔍 isEditMode:", isEditMode);
+    console.log("🔍 Current user:", currentUser);
+    console.log("🔍 URL params id:", id);
+
     try {
       if (isEditMode) {
-        await projectService.update(id, form);
+        console.log("🔍 Updating existing project with ID:", id);
+        console.log("🔍 Update payload:", {
+          id,
+          form,
+          formProjectID: form.projectID,
+          formId: form._id,
+        });
+        const response = await projectService.update(id, form);
+        console.log("🔍 Update response:", response);
       } else {
-        await projectService.create(form);
+        console.log("🔍 Creating new project");
+        console.log("🔍 Form before Project ID generation:", form);
+        console.log("🔍 Form structure before ID generation:", {
+          projectID: form.projectID,
+          _id: form._id,
+          hasProjectID: !!form.projectID,
+          hasId: !!form._id,
+        });
+
+        // Generate Project ID right before creating
+        console.log("🔍 Generating Project ID...");
+        const nextId = await generateNextProjectId();
+        console.log("🔍 Generated Project ID:", nextId);
+
+        const formWithId = { ...form, projectID: nextId };
+        console.log("🔍 Form with Project ID:", formWithId);
+        console.log("🔍 Form with ID structure:", {
+          projectID: formWithId.projectID,
+          _id: formWithId._id,
+          hasProjectID: !!formWithId.projectID,
+          hasId: !!formWithId._id,
+          allKeys: Object.keys(formWithId),
+        });
+
+        console.log("🔍 Calling projectService.create...");
+        const response = await projectService.create(formWithId);
+        console.log("🔍 Create response:", response);
+        console.log("🔍 Create response details:", {
+          hasData: !!response.data,
+          responseKeys: response.data ? Object.keys(response.data) : [],
+          responseProjectID: response.data?.projectID,
+          responseId: response.data?._id,
+        });
       }
+
+      console.log("🔍 Success! Navigating to /projects");
       navigate("/projects");
     } catch (error) {
-      console.error("Error saving project:", error);
+      console.error("🔍 Error saving project:", error);
+      console.error("🔍 Error details:", {
+        message: error.message,
+        response: error.response,
+        status: error.response?.status,
+        data: error.response?.data,
+        stack: error.stack,
+      });
+      console.error("🔍 Error context:", {
+        isEditMode,
+        formProjectID: form.projectID,
+        formId: form._id,
+        urlId: id,
+        currentUser: currentUser?.email || "unknown",
+      });
       setError("Failed to save project. Please try again.");
     }
   };
@@ -548,24 +946,6 @@ const ProjectInformation = () => {
     }
   };
 
-  // Function to determine which statuses a user can access
-  const getAccessibleStatuses = () => {
-    if (isAdmin || isManager || can("projects.change_status")) {
-      // All users with permission can access all statuses for now
-      return { active: activeStatuses, inactive: inactiveStatuses };
-    }
-    return { active: [], inactive: [] };
-  };
-
-  const renderStatusMenuItem = (status) => (
-    <MenuItem key={status} value={status}>
-      <StatusChip
-        status={status}
-        customColor={statusColors && statusColors[status]}
-      />
-    </MenuItem>
-  );
-
   if (loading) return <Typography>Loading...</Typography>;
   if (error) return <Typography color="error">{error}</Typography>;
 
@@ -575,7 +955,19 @@ const ProjectInformation = () => {
         <IconButton onClick={() => navigate("/projects")} sx={{ mr: 2 }}>
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4">Project Details</Typography>
+        <Typography variant="h4">
+          {isEditMode ? "Project Details" : "Add New Project"}
+        </Typography>
+        {!isEditMode && id === "new" && (
+          <Button
+            variant="outlined"
+            onClick={() => navigate("/projects/add-new")}
+            sx={{ ml: "auto" }}
+            startIcon={<AddIcon />}
+          >
+            Use Full Page Form
+          </Button>
+        )}
       </Box>
 
       {loading ? (
@@ -598,9 +990,23 @@ const ProjectInformation = () => {
               <Grid item xs={12}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                   <Typography variant="h6" color="text.secondary">
-                    Project ID: {form.projectID}
+                    Project ID:{" "}
+                    {isEditMode
+                      ? form.projectID
+                      : form.isLargeProject
+                      ? "HAZ001"
+                      : "Will be auto-generated"}
                   </Typography>
-                  {form.createdAt && (
+                  {!isEditMode && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontStyle: "italic" }}
+                    >
+                      (Auto-generated)
+                    </Typography>
+                  )}
+                  {isEditMode && form.createdAt && (
                     <Typography
                       variant="body2"
                       color="text.secondary"
@@ -623,6 +1029,26 @@ const ProjectInformation = () => {
                   )}
                 </Box>
               </Grid>
+
+              {!isEditMode && (
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.isLargeProject || false}
+                        onChange={(e) => {
+                          setForm((prev) => ({
+                            ...prev,
+                            isLargeProject: e.target.checked,
+                          }));
+                        }}
+                        color="primary"
+                      />
+                    }
+                    label="Large Project (HAZ prefix)"
+                  />
+                </Grid>
+              )}
 
               {form.d_Date && (
                 <Grid item xs={12}>
@@ -840,9 +1266,22 @@ const ProjectInformation = () => {
                   <InputLabel>Status</InputLabel>
                   <Select
                     name="status"
-                    value={form.status}
+                    value={form.status || ""}
                     onChange={handleChange}
                     label="Status"
+                    displayEmpty
+                    open={statusDropdownOpen}
+                    onOpen={() => setStatusDropdownOpen(true)}
+                    onClose={() => setStatusDropdownOpen(false)}
+                    renderValue={(value) => {
+                      if (!value) return <em>Select a status</em>;
+                      return (
+                        <StatusChip
+                          status={value}
+                          customColor={statusColors && statusColors[value]}
+                        />
+                      );
+                    }}
                   >
                     <MenuItem disabled>
                       <Typography
@@ -853,26 +1292,17 @@ const ProjectInformation = () => {
                         Active Statuses
                       </Typography>
                     </MenuItem>
-                    {(() => {
-                      const accessibleStatuses = getAccessibleStatuses();
-                      return (
-                        <>
-                          {accessibleStatuses.active.map(renderStatusMenuItem)}
-                          <MenuItem disabled>
-                            <Typography
-                              variant="subtitle2"
-                              color="text.secondary"
-                              sx={{ fontSize: "0.88rem" }}
-                            >
-                              Inactive Statuses
-                            </Typography>
-                          </MenuItem>
-                          {accessibleStatuses.inactive.map(
-                            renderStatusMenuItem
-                          )}
-                        </>
-                      );
-                    })()}
+                    {statusMenuItems.activeItems}
+                    <MenuItem disabled>
+                      <Typography
+                        variant="subtitle2"
+                        color="text.secondary"
+                        sx={{ fontSize: "0.88rem" }}
+                      >
+                        Inactive Statuses
+                      </Typography>
+                    </MenuItem>
+                    {statusMenuItems.inactiveItems}
                   </Select>
                 </FormControl>
               </Grid>

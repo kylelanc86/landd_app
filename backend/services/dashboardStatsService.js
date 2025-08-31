@@ -1,6 +1,7 @@
 const DashboardStats = require('../models/DashboardStats');
 const Job = require('../models/Job');
 const Invoice = require('../models/Invoice');
+const Project = require('../models/Project'); // Added missing import
 
 class DashboardStatsService {
   // Get all dashboard stats (fast - from cache table)
@@ -198,6 +199,27 @@ class DashboardStatsService {
       console.log('Updated outstanding invoices count');
     } catch (error) {
       console.error('Error updating outstanding invoices count:', error);
+    }
+  }
+
+  // Helper method to update status counts
+  async updateStatusCounts() {
+    try {
+      // Get all unique statuses that actually exist in the database
+      const allProjects = await Project.find({}).select('status');
+      const uniqueStatuses = [...new Set(allProjects.map(p => p.status))];
+      
+      // Get counts for each status that actually exists
+      const statusCounts = {};
+      for (const status of uniqueStatuses) {
+        statusCounts[status] = await Project.countDocuments({ status });
+      }
+      
+      // Store the status counts as a JSON string
+      return DashboardStats.updateStat('statusCounts', JSON.stringify(statusCounts));
+    } catch (error) {
+      console.error('Error updating status counts:', error);
+      throw error;
     }
   }
 
