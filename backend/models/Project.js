@@ -182,6 +182,19 @@ projectSchema.post('save', async function(doc) {
       // Don't fail the save operation if stats update fails
     }
   }
+
+  // Log status changes to audit trail
+  if (this.isModified('status')) {
+    try {
+      const ProjectAuditService = require('../services/projectAuditService');
+      const oldStatus = this._originalStatus || null;
+      // Note: We don't have access to the user who made the change here
+      // This will be handled in the routes where we have access to req.user
+    } catch (error) {
+      console.error('Error logging status change to audit trail:', error);
+      // Don't fail the save operation if audit logging fails
+    }
+  }
 });
 
 // Pre-save hook to store the original status for comparison

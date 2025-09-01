@@ -39,6 +39,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
 
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
@@ -178,8 +179,6 @@ const Projects = ({ initialFilters = {} }) => {
   // Debug logging for status colors
   useEffect(() => {
     if (statusColors && Object.keys(statusColors).length > 0) {
-      console.log("Status colors loaded:", statusColors);
-      console.log("Available status keys:", Object.keys(statusColors));
     } else {
       console.log("No status colors loaded yet");
     }
@@ -194,22 +193,8 @@ const Projects = ({ initialFilters = {} }) => {
   // Debug logging for projects to see what status values exist
   useEffect(() => {
     if (projects && projects.length > 0) {
-      console.log("Unique statuses in projects:", uniqueStatuses);
-      console.log(
-        "Sample project statuses:",
-        projects.slice(0, 5).map((p) => p.status)
-      );
-
       // Check which statuses have matching colors
       if (statusColors) {
-        uniqueStatuses.forEach((status) => {
-          const hasColor = statusColors[status];
-          console.log(
-            `Status "${status}" - Has custom color: ${
-              hasColor ? "YES" : "NO"
-            } (${hasColor || "fallback"})`
-          );
-        });
       }
     }
   }, [projects, statusColors, uniqueStatuses]);
@@ -255,6 +240,7 @@ const Projects = ({ initialFilters = {} }) => {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -452,10 +438,9 @@ const Projects = ({ initialFilters = {} }) => {
     [saveFilters]
   );
 
-  // Function to fetch projects with pagination
-  const fetchProjectsWithPagination = useCallback(
+  // Function to fetch all projects (for client-side sorting and pagination)
+  const fetchAllProjects = useCallback(
     async (
-      paginationModel,
       searchValue = filtersRef.current.searchTerm,
       isSearch = false,
       currentFilters = null
@@ -470,8 +455,8 @@ const Projects = ({ initialFilters = {} }) => {
         }
 
         const params = {
-          page: paginationModel.page + 1,
-          limit: paginationModel.pageSize,
+          page: 1,
+          limit: 100000, // Very large number to fetch ALL projects
           sortBy: filtersToUse.sortModel[0]?.field || "createdAt",
           sortOrder: filtersToUse.sortModel[0]?.sort || "desc",
         };
@@ -499,9 +484,9 @@ const Projects = ({ initialFilters = {} }) => {
 
         setProjects(projectsData);
         setPagination({
-          total: response.data.pagination?.total || 0,
-          pages: response.data.pagination?.pages || 0,
-          page: paginationModel.page,
+          total: projectsData.length,
+          pages: Math.ceil(projectsData.length / paginationModel.pageSize),
+          page: 0,
           limit: paginationModel.pageSize,
         });
 
@@ -519,18 +504,17 @@ const Projects = ({ initialFilters = {} }) => {
     [] // Remove filters dependency since we now use ref to get current state
   );
 
-  // Move fetchProjects here so it is defined after fetchProjectsWithPagination
+  // Move fetchProjects here so it is defined after fetchAllProjects
   const fetchProjects = useCallback(
     async (isSearch = false) => {
-      // Use fetchProjectsWithPagination with current pagination model
-      return fetchProjectsWithPagination(
-        paginationModel,
+      // Use fetchAllProjects with current pagination model
+      return fetchAllProjects(
         filtersRef.current.searchTerm,
         isSearch,
         filtersRef.current
       );
     },
-    [fetchProjectsWithPagination, paginationModel]
+    [fetchAllProjects]
   );
 
   // Debounced search handler
@@ -538,14 +522,13 @@ const Projects = ({ initialFilters = {} }) => {
     debounce((value) => {
       setPaginationModel((prev) => ({ ...prev, page: 0 }));
       // Use the new function with reset pagination
-      fetchProjectsWithPagination(
-        { page: 0, pageSize: paginationModel.pageSize },
+      fetchAllProjects(
         value,
         true,
-        null // Pass null to use current filters state inside fetchProjectsWithPagination
+        null // Pass null to use current filters state inside fetchAllProjects
       );
     }, 150), // Reduced from 300ms to 150ms for better responsiveness
-    [fetchProjectsWithPagination, paginationModel.pageSize]
+    [fetchAllProjects]
   );
 
   // Handle filter changes
@@ -638,59 +621,28 @@ const Projects = ({ initialFilters = {} }) => {
   // Function to fetch status counts for ALL projects (not just current page)
   const fetchStatusCounts = useCallback(async () => {
     try {
-      // Get total project count first
-      const totalResponse = await projectService.getAll({
-        page: 1,
-        limit: 1,
-      });
+      // Use the new efficient status counts endpoint
+      const response = await projectService.getStatusCounts();
+      const statusCounts = response.data?.statusCounts || {};
 
-      const totalProjects = totalResponse.data?.pagination?.total || 0;
+      // Calculate active and inactive totals
+      let all_active = 0;
+      let all_inactive = 0;
 
-      // Initialize counts object
-      const counts = {
-        all: totalProjects,
-        all_active: 0,
-        all_inactive: 0,
-      };
-
-      // Get counts for each individual status by making targeted queries
-      // This is more efficient than fetching all projects
       for (const status of activeStatuses) {
-        try {
-          const statusResponse = await projectService.getAll({
-            status: status,
-            page: 1,
-            limit: 1,
-          });
-          const statusCount = statusResponse.data?.pagination?.total || 0;
-          counts[status] = statusCount;
-          counts.all_active += statusCount;
-        } catch (error) {
-          console.warn(`Could not get count for status ${status}:`, error);
-          counts[status] = 0;
-        }
+        all_active += statusCounts[status] || 0;
       }
 
       for (const status of inactiveStatuses) {
-        try {
-          const statusResponse = await projectService.getAll({
-            status: status,
-            page: 1,
-            limit: 1,
-          });
-          const statusCount = statusResponse.data?.pagination?.total || 0;
-          counts[status] = statusCount;
-          counts.all_inactive += statusCount;
-        } catch (error) {
-          console.warn(`Could not get count for status ${status}:`, error);
-          counts[status] = 0;
-        }
+        all_inactive += statusCounts[status] || 0;
       }
 
-      console.log(
-        "Fetched status counts from backend for ALL projects:",
-        counts
-      );
+      const counts = {
+        ...statusCounts,
+        all_active,
+        all_inactive,
+      };
+
       setStatusCounts(counts);
     } catch (err) {
       console.error("Error fetching status counts from backend:", err);
@@ -721,13 +673,9 @@ const Projects = ({ initialFilters = {} }) => {
         ).length;
       }
 
-      console.log(
-        "Fallback: Calculated status counts from local projects:",
-        counts
-      );
       setStatusCounts(counts);
     }
-  }, [activeStatuses, inactiveStatuses]);
+  }, [activeStatuses, inactiveStatuses, projects]);
 
   // Memoize the status counts calculation to prevent unnecessary recalculations
   const memoizedStatusCounts = useMemo(() => {
@@ -739,7 +687,6 @@ const Projects = ({ initialFilters = {} }) => {
   // Function to refresh status counts when projects change (after filtering, searching, etc.)
   const refreshStatusCounts = useCallback(() => {
     if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
-      console.log("Refreshing status counts after project changes...");
       fetchStatusCounts();
     }
   }, [activeStatuses, inactiveStatuses, fetchStatusCounts]);
@@ -827,14 +774,6 @@ const Projects = ({ initialFilters = {} }) => {
     }
   }, [searchLoading, searchFocused]);
 
-  // Handle sort change
-  const handleSortModelChange = useCallback(
-    (newSortModel) => {
-      updateFilter("sortModel", newSortModel);
-    },
-    [updateFilter]
-  );
-
   // Fetch clients and users when component mounts
   useEffect(() => {
     const fetchData = async () => {
@@ -892,18 +831,10 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Fetch status counts when component mounts and when statuses change
   useEffect(() => {
-    console.log("Status counts useEffect triggered:", {
-      activeStatusesLength: activeStatuses.length,
-      inactiveStatusesLength: inactiveStatuses.length,
-      activeStatuses,
-      inactiveStatuses,
-    });
-
     if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
-      console.log("Calling fetchStatusCounts...");
       fetchStatusCounts();
     }
-  }, [activeStatuses, inactiveStatuses, fetchStatusCounts]);
+  }, [fetchStatusCounts]);
 
   const searchClients = async (searchTerm) => {
     if (!searchTerm || searchTerm.trim().length === 0) {
@@ -1004,6 +935,124 @@ const Projects = ({ initialFilters = {} }) => {
   const handleDeleteClick = (project) => {
     setSelectedProject(project);
     setDeleteDialogOpen(true);
+  };
+
+  // Handler for export action
+  const handleExportClick = () => {
+    setExportDialogOpen(true);
+  };
+
+  const handleExportConfirm = () => {
+    exportProjectsToCSV();
+    setExportDialogOpen(false);
+  };
+
+  const handleExportCancel = () => {
+    setExportDialogOpen(false);
+  };
+
+  // Function to export projects to CSV
+  const exportProjectsToCSV = () => {
+    if (!projects || projects.length === 0) {
+      alert("No projects to export");
+      return;
+    }
+
+    // Define CSV headers with all project fields
+    const headers = [
+      "Project ID",
+      "Project Name",
+      "Client",
+      "Department",
+      "Status",
+      "Address",
+      "Due Date",
+      "Work Order/Job Reference",
+      "Categories",
+      "Description",
+      "Notes",
+      "Project Contact Name",
+      "Project Contact Number",
+      "Project Contact Email",
+      "Assigned Users",
+      "Is Large Project",
+      "Reports Present",
+      "Created Date",
+      "Updated Date",
+    ];
+
+    // Helper function to format users array
+    const formatUsers = (users) => {
+      if (!users || !Array.isArray(users)) return "";
+      return users
+        .map((user) => {
+          if (typeof user === "string") return user;
+          if (user.firstName && user.lastName) {
+            return `${user.firstName} ${user.lastName}`;
+          }
+          if (user.name) return user.name;
+          return user.email || user._id || "";
+        })
+        .join("; ");
+    };
+
+    // Helper function to format categories array
+    const formatCategories = (categories) => {
+      if (!categories || !Array.isArray(categories)) return "";
+      return categories.join("; ");
+    };
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(","),
+      ...projects.map((project) =>
+        [
+          `"${project.projectID || ""}"`,
+          `"${project.name || ""}"`,
+          `"${project.client?.name || project.client || ""}"`,
+          `"${project.department || ""}"`,
+          `"${project.status || ""}"`,
+          `"${project.address || ""}"`,
+          `"${
+            project.d_Date ? new Date(project.d_Date).toLocaleDateString() : ""
+          }"`,
+          `"${project.workOrder || ""}"`,
+          `"${formatCategories(project.categories)}"`,
+          `"${project.description || ""}"`,
+          `"${project.notes || ""}"`,
+          `"${project.projectContact?.name || ""}"`,
+          `"${project.projectContact?.number || ""}"`,
+          `"${project.projectContact?.email || ""}"`,
+          `"${formatUsers(project.users)}"`,
+          `"${project.isLargeProject ? "Yes" : "No"}"`,
+          `"${project.reports_present ? "Yes" : "No"}"`,
+          `"${
+            project.createdAt
+              ? new Date(project.createdAt).toLocaleDateString()
+              : ""
+          }"`,
+          `"${
+            project.updatedAt
+              ? new Date(project.updatedAt).toLocaleDateString()
+              : ""
+          }"`,
+        ].join(",")
+      ),
+    ].join("\n");
+
+    // Create and download the file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `projects_export_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleColumnVisibilityModelChange = useCallback((newModel) => {
@@ -1115,14 +1164,10 @@ const Projects = ({ initialFilters = {} }) => {
   };
 
   // Handle pagination model change
-  const handlePaginationModelChange = useCallback(
-    (newModel) => {
-      setPaginationModel(newModel);
-      // Use the new function with the updated pagination model
-      fetchProjectsWithPagination(newModel, filters.searchTerm, false);
-    },
-    [fetchProjectsWithPagination, filters.searchTerm]
-  );
+  const handlePaginationModelChange = useCallback((newModel) => {
+    setPaginationModel(newModel);
+    // No need to fetch again since we have all projects loaded
+  }, []);
 
   // Function to determine which statuses a user can access
   const getAccessibleStatuses = () => {
@@ -1557,15 +1602,6 @@ const Projects = ({ initialFilters = {} }) => {
                 label="Status"
                 onChange={(e) => handleFilterChange("status", e.target.value)}
               >
-                {/* Debug info */}
-                {console.log(
-                  "Status filter dropdown render - statusCounts:",
-                  statusCounts,
-                  "activeStatuses:",
-                  activeStatuses,
-                  "inactiveStatuses:",
-                  inactiveStatuses
-                )}
                 <MenuItem value="all" sx={{ fontSize: "0.88rem" }}>
                   <Box
                     sx={{
@@ -1940,6 +1976,27 @@ const Projects = ({ initialFilters = {} }) => {
           {error}
         </Alert>
       )}
+
+      {/* Export Button */}
+      <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
+        <Button
+          variant="outlined"
+          startIcon={<FileDownloadIcon />}
+          onClick={handleExportClick}
+          sx={{
+            backgroundColor: "#2e7d32",
+            color: "white",
+            borderColor: "#2e7d32",
+            "&:hover": {
+              backgroundColor: "#1b5e20",
+              borderColor: "#1b5e20",
+            },
+          }}
+        >
+          Export to CSV
+        </Button>
+      </Box>
+
       <Box
         m="40px 0 0 0"
         sx={{
@@ -1992,7 +2049,9 @@ const Projects = ({ initialFilters = {} }) => {
       >
         <DataGrid
           rows={projects}
+          sortingOrder={["desc", "asc"]}
           columns={columns}
+          disableColumnUnsort={true}
           getRowId={(row) => row._id || row.id}
           loading={loading && !searchLoading}
           error={error}
@@ -2000,16 +2059,13 @@ const Projects = ({ initialFilters = {} }) => {
           onRowClick={(params) => navigate(`/projects/${params.row._id}`)}
           columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
-          paginationMode="server"
-          rowCount={pagination.total}
+          paginationMode="client"
+          sortingMode="client"
           paginationModel={paginationModel}
           onPaginationModelChange={(newModel) => {
             setPaginationModel(newModel);
-            fetchProjectsWithPagination(newModel);
           }}
           pageSizeOptions={[25, 50, 100]}
-          onSortModelChange={handleSortModelChange}
-          sortModel={filters.sortModel}
           autoHeight
           disableColumnMenu={false}
           disableSelectionOnClick
@@ -2017,11 +2073,19 @@ const Projects = ({ initialFilters = {} }) => {
           disableMultipleColumnsFiltering={true}
           disableColumnSelector={false}
           disableDensitySelector={false}
-          disableColumnReorder={false}
-          disableMultipleColumnsSorting={true}
+          // disableColumnReorder={false}
+          // disableMultipleColumnsSorting={true}
           initialState={{
             pagination: {
               paginationModel: { pageSize: 50, page: 0 },
+            },
+            sorting: {
+              sortModel: [
+                {
+                  field: "projectID",
+                  sort: "desc",
+                },
+              ],
             },
           }}
           sx={{
@@ -2247,6 +2311,97 @@ const Projects = ({ initialFilters = {} }) => {
             }}
           >
             Delete Project
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Export Confirmation Dialog */}
+      <Dialog
+        open={exportDialogOpen}
+        onClose={handleExportCancel}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            "& .MuiDialogTitle-root": {
+              border: "none",
+            },
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "success.main",
+              color: "white",
+            }}
+          >
+            <FileDownloadIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Export Projects
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
+            Would you like to download a CSV file containing the current
+            filtered projects data?
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            The export will include {projects.length} project
+            {projects.length !== 1 ? "s" : ""}.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={handleExportCancel}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleExportConfirm}
+            variant="contained"
+            color="success"
+            startIcon={<FileDownloadIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(46, 125, 50, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(46, 125, 50, 0.4)",
+              },
+            }}
+          >
+            Download CSV
           </Button>
         </DialogActions>
       </Dialog>

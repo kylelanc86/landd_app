@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -25,6 +25,12 @@ import {
   FormControlLabel,
   Radio,
   Snackbar,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -32,6 +38,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import { projectService, clientService, userService } from "../../services/api";
+import ProjectAuditService from "../../services/projectAuditService";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -85,9 +92,6 @@ const renderStatusMenuItem = (status, statusColors, onStatusSelect) => {
   );
 };
 
-// Remove the hardcoded API key - use environment variable instead
-// const GOOGLE_MAPS_API_KEY = "AIzaSyB41DRubKWUHP7t3vqphB1qVhV6x9x9x9x"; // Replace with your actual API key
-
 const ProjectInformation = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -118,6 +122,20 @@ const ProjectInformation = () => {
     message: "",
     severity: "success",
   });
+
+  // Audit trail state
+  const [auditTrail, setAuditTrail] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState(null);
+
+  // State for tracking form changes and confirmation dialog
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalForm, setOriginalForm] = useState(null);
+  const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] =
+    useState(false);
+  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+
   const [newClientForm, setNewClientForm] = useState({
     name: "",
     invoiceEmail: "",
@@ -136,7 +154,7 @@ const ProjectInformation = () => {
     projectID: "",
     name: "",
     client: null,
-    department: "",
+    department: "Asbestos & HAZMAT",
     status: "",
     address: "",
     d_Date: "",
@@ -166,6 +184,174 @@ const ProjectInformation = () => {
       formValues: form,
     });
   }, [form, isEditMode]);
+
+  // Track form changes and compare with original values
+  useEffect(() => {
+    if (originalForm && isEditMode) {
+      const hasChanges = JSON.stringify(form) !== JSON.stringify(originalForm);
+      setHasUnsavedChanges(hasChanges);
+
+      // Set global variables for sidebar navigation
+      window.hasUnsavedChanges = hasChanges;
+      window.currentProjectPath = window.location.pathname;
+      window.showUnsavedChangesDialog = () => {
+        setUnsavedChangesDialogOpen(true);
+      };
+    } else {
+      // Clean up global variables when not in edit mode
+      window.hasUnsavedChanges = false;
+      window.currentProjectPath = null;
+      window.showUnsavedChangesDialog = null;
+    }
+
+    return () => {
+      // Clean up global variables when component unmounts
+      window.hasUnsavedChanges = false;
+      window.currentProjectPath = null;
+      window.showUnsavedChangesDialog = null;
+    };
+  }, [form, originalForm, isEditMode]);
+
+  // Intercept navigation attempts when there are unsaved changes
+  useEffect(() => {
+    if (!hasUnsavedChanges || !isEditMode) return;
+
+    // Override the navigate function temporarily
+    const originalNavigate = navigate;
+
+    // Create a wrapper function that checks for unsaved changes
+    const navigationWrapper = (to, options) => {
+      // Check if this is an external navigation (not within current project)
+      const targetPath = typeof to === "string" ? to : to.pathname || "/";
+      const currentPath = window.location.pathname;
+
+      if (
+        !targetPath.startsWith("/projects/") ||
+        (targetPath === "/projects" && currentPath.startsWith("/projects/"))
+      ) {
+        console.log(
+          "🚫 Blocking navigation to:",
+          targetPath,
+          "due to unsaved changes"
+        );
+        setPendingNavigation(targetPath);
+        setUnsavedChangesDialogOpen(true);
+        return;
+      }
+
+      // Allow internal navigation
+      originalNavigate(to, options);
+    };
+
+    // Replace the navigate function
+    Object.defineProperty(window, "customNavigate", {
+      value: navigationWrapper,
+      writable: true,
+      configurable: true,
+    });
+
+    return () => {
+      // Restore original navigate function
+      delete window.customNavigate;
+    };
+  }, [hasUnsavedChanges, isEditMode, navigate]);
+
+  // Intercept clicks on navigation links
+  useEffect(() => {
+    if (!hasUnsavedChanges || !isEditMode) return;
+
+    const handleLinkClick = (e) => {
+      const target = e.target.closest("a[href]");
+      if (!target) return;
+
+      const href = target.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:"))
+        return;
+
+      // Check if this is an external navigation
+      const currentPath = window.location.pathname;
+      if (
+        href.startsWith("/") &&
+        !href.startsWith("/projects/") &&
+        href !== "/projects" &&
+        !href.startsWith("/projects")
+      ) {
+        console.log(
+          "🚫 Blocking link navigation to:",
+          href,
+          "due to unsaved changes"
+        );
+        e.preventDefault();
+        e.stopPropagation();
+
+        setPendingNavigation(href);
+        setUnsavedChangesDialogOpen(true);
+        return false;
+      }
+    };
+
+    // Use capture phase to intercept before React Router handles it
+    document.addEventListener("click", handleLinkClick, true);
+
+    return () => {
+      document.removeEventListener("click", handleLinkClick, true);
+    };
+  }, [hasUnsavedChanges, isEditMode]);
+
+  // Handle page refresh and browser navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges && isEditMode) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+        return "You have unsaved changes. Are you sure you want to leave?";
+      }
+    };
+
+    // Handle browser back/forward buttons
+    const handlePopState = (e) => {
+      if (hasUnsavedChanges && isEditMode) {
+        // Prevent the navigation
+        window.history.pushState(null, "", window.location.pathname);
+        setPendingNavigation("/projects");
+        setUnsavedChangesDialogOpen(true);
+      }
+    };
+
+    // Handle refresh button clicks and F5 key
+    const handleRefreshClick = (e) => {
+      // Check if it's a refresh button click or F5 key
+      const isRefreshButton = e.target.closest(
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+      );
+      const isF5Key = e.key === "F5";
+
+      if ((isRefreshButton || isF5Key) && hasUnsavedChanges && isEditMode) {
+        e.preventDefault();
+        e.stopPropagation();
+        setRefreshDialogOpen(true);
+        return false;
+      }
+    };
+
+    // Add a history entry when entering edit mode with unsaved changes
+    if (hasUnsavedChanges && isEditMode) {
+      window.history.pushState(null, "", window.location.pathname);
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+    document.addEventListener("click", handleRefreshClick, true);
+    document.addEventListener("keydown", handleRefreshClick, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleRefreshClick, true);
+      document.removeEventListener("keydown", handleRefreshClick, true);
+    };
+  }, [hasUnsavedChanges, isEditMode]);
 
   // Add state to control the status dropdown
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
@@ -449,6 +635,27 @@ const ProjectInformation = () => {
     console.log("ProjectInformation component mounted");
   }, []);
 
+  // Function to fetch audit trail
+  const fetchAuditTrail = async (projectId) => {
+    if (!projectId) return;
+
+    try {
+      setAuditLoading(true);
+      setAuditError(null);
+      const response = await ProjectAuditService.getAllProjectAuditTrail(
+        projectId
+      );
+      console.log("🔍 Audit trail response:", response);
+      console.log("🔍 Audit trail entries:", response.auditTrail);
+      setAuditTrail(response.auditTrail || []);
+    } catch (error) {
+      console.error("Error fetching audit trail:", error);
+      setAuditError("Failed to load audit trail");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       console.log("fetchData called with id:", id);
@@ -502,12 +709,17 @@ const ProjectInformation = () => {
 
             console.log("🔍 About to setForm with projectData:", {
               projectID: projectData.projectID,
-              _id: projectData._id,
+              _id: projectData.projectID,
               hasProjectID: !!projectData.projectID,
               hasId: !!projectData._id,
               dataKeys: Object.keys(projectData),
             });
             setForm(projectData);
+            // Store original form values for change tracking
+            setOriginalForm(JSON.parse(JSON.stringify(projectData)));
+
+            // Fetch audit trail for existing projects
+            await fetchAuditTrail(projectData._id);
           } catch (projectErr) {
             console.error("Error fetching project:", projectErr);
             if (projectErr.response) {
@@ -783,6 +995,50 @@ const ProjectInformation = () => {
     }));
   };
 
+  // Override navigate function to check for unsaved changes
+  const safeNavigate = (path) => {
+    if (hasUnsavedChanges && isEditMode) {
+      setPendingNavigation(path);
+      setUnsavedChangesDialogOpen(true);
+    } else {
+      navigate(path);
+    }
+  };
+
+  // Confirm navigation and discard changes
+  const confirmNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setHasUnsavedChanges(false);
+
+    // Navigate to the pending location (either local or global)
+    const targetPath = pendingNavigation || window.pendingNavigation;
+    if (targetPath) {
+      navigate(targetPath);
+      setPendingNavigation(null);
+      window.pendingNavigation = null;
+    }
+  };
+
+  // Cancel navigation and stay on page
+  const cancelNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setPendingNavigation(null);
+    window.pendingNavigation = null;
+  };
+
+  // Confirm page refresh and discard changes
+  const confirmRefresh = () => {
+    setRefreshDialogOpen(false);
+    setHasUnsavedChanges(false);
+    window.hasUnsavedChanges = false;
+    window.location.reload();
+  };
+
+  // Cancel page refresh and stay on page
+  const cancelRefresh = () => {
+    setRefreshDialogOpen(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log("🔍 handleSubmit called");
@@ -846,10 +1102,32 @@ const ProjectInformation = () => {
           responseProjectID: response.data?.projectID,
           responseId: response.data?._id,
         });
+
+        // Navigate to the created project to show audit trail
+        navigate(`/projects/${response.data._id}`);
+        return; // Exit early to avoid the navigate("/projects") call
       }
 
-      console.log("🔍 Success! Navigating to /projects");
-      navigate("/projects");
+      console.log("🔍 Success!");
+
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: isEditMode
+          ? "Project updated successfully!"
+          : "Project created successfully!",
+        severity: "success",
+      });
+
+      // Reset unsaved changes flag and update original form
+      setHasUnsavedChanges(false);
+      if (isEditMode) {
+        setOriginalForm(JSON.parse(JSON.stringify(form)));
+        // Refresh audit trail after update
+        await fetchAuditTrail(form._id);
+        // Navigate to projects page after successful update
+        navigate("/projects");
+      }
     } catch (error) {
       console.error("🔍 Error saving project:", error);
       console.error("🔍 Error details:", {
@@ -952,16 +1230,26 @@ const ProjectInformation = () => {
   return (
     <Box m="20px">
       <Box display="flex" alignItems="center" mb={3}>
-        <IconButton onClick={() => navigate("/projects")} sx={{ mr: 2 }}>
+        <IconButton onClick={() => safeNavigate("/projects")} sx={{ mr: 2 }}>
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4">
-          {isEditMode ? "Project Details" : "Add New Project"}
-        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="h4">
+            {isEditMode ? "Project Details" : "Add New Project"}
+          </Typography>
+          {isEditMode && hasUnsavedChanges && (
+            <Chip
+              label="Unsaved Changes"
+              color="warning"
+              size="small"
+              sx={{ fontSize: "0.75rem" }}
+            />
+          )}
+        </Box>
         {!isEditMode && id === "new" && (
           <Button
             variant="outlined"
-            onClick={() => navigate("/projects/add-new")}
+            onClick={() => safeNavigate("/projects/add-new")}
             sx={{ ml: "auto" }}
             startIcon={<AddIcon />}
           >
@@ -1463,7 +1751,7 @@ const ProjectInformation = () => {
                   <Box display="flex" gap={2}>
                     <Button
                       variant="outlined"
-                      onClick={() => navigate("/projects")}
+                      onClick={() => safeNavigate("/projects")}
                     >
                       Cancel
                     </Button>
@@ -1734,6 +2022,172 @@ const ProjectInformation = () => {
         </form>
       </Dialog>
 
+      {/* Unsaved Changes Confirmation Dialog */}
+      <Dialog
+        open={unsavedChangesDialogOpen}
+        onClose={cancelNavigation}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              !
+            </Typography>
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Unsaved Changes
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to leave this page
+            without saving? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelNavigation}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmNavigation}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Leave Without Saving
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Page Refresh Confirmation Dialog */}
+      <Dialog
+        open={refreshDialogOpen}
+        onClose={cancelRefresh}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              !
+            </Typography>
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Unsaved Changes
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to refresh this
+            page? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelRefresh}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmRefresh}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Refresh Page
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Delete Project Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
@@ -1831,6 +2285,124 @@ const ProjectInformation = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Project Audit Trail */}
+      {isEditMode && (
+        <Paper sx={{ p: 3, mt: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Project History
+          </Typography>
+
+          {auditLoading ? (
+            <Box display="flex" justifyContent="center" p={2}>
+              <CircularProgress />
+            </Box>
+          ) : auditError ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {auditError}
+            </Alert>
+          ) : auditTrail.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No history available for this project.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: "bold" }}>Event</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>Details</TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>User Name</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {auditTrail
+                    .sort(
+                      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+                    )
+                    .map((entry, index) => {
+                      // Format the event name
+                      const getEventName = () => {
+                        if (entry.action === "created")
+                          return "Project Created";
+                        if (entry.action === "status_changed")
+                          return "Status Changed";
+                        if (entry.action === "updated")
+                          return `${entry.field} Updated`;
+                        return entry.action || "Unknown Event";
+                      };
+
+                      // Format the details
+                      const getDetails = () => {
+                        if (entry.action === "status_changed") {
+                          return `${entry.oldValue || "Not set"} → ${
+                            entry.newValue
+                          }`;
+                        }
+                        if (entry.action === "updated") {
+                          return `${entry.oldValue || "Not set"} → ${
+                            entry.newValue
+                          }`;
+                        }
+                        if (entry.action === "created") {
+                          return "Project was created";
+                        }
+                        return entry.newValue || "No details available";
+                      };
+
+                      // Format the user name
+                      const getUserName = () => {
+                        if (entry.changedBy) {
+                          return `${entry.changedBy.firstName} ${entry.changedBy.lastName}`;
+                        }
+                        return "System";
+                      };
+
+                      return (
+                        <TableRow key={entry._id || index} hover>
+                          <TableCell>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: "medium" }}
+                            >
+                              {getEventName()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {new Date(entry.timestamp).toLocaleDateString(
+                                "en-AU",
+                                {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                }
+                              )}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {getDetails()}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary">
+                              {getUserName()}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      )}
     </Box>
   );
 };

@@ -337,6 +337,7 @@ const Users = () => {
             rowsPerPageOptions={[10]}
             autoHeight
             disableSelectionOnClick
+            sortingOrder={["desc", "asc"]}
           />
         </Box>
       </Box>

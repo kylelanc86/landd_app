@@ -164,10 +164,6 @@ export const authService = {
 // Client service
 export const clientService = {
   getAll: (params = {}) => {
-    console.log("clientService.getAll called with params:", params);
-    console.log("params type:", typeof params);
-    console.log("params keys:", Object.keys(params));
-    console.log("params length:", Object.keys(params).length);
     
     // If no parameters provided, fetch all clients with high limit
     if (Object.keys(params).length === 0) {
@@ -211,7 +207,6 @@ export const clientService = {
 // Project service
 export const projectService = {
   getAll: (params = {}) => {
-    console.log("projectService.getAll called with params:", params);
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
@@ -223,7 +218,6 @@ export const projectService = {
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
     const url = `/projects?${queryParams.toString()}`;
-    console.log("Making API call to:", url);
     return api.get(url);
   },
   getAssignedToMe: (params = {}) => {
@@ -237,6 +231,7 @@ export const projectService = {
     return api.get(`/projects/assigned/me?${queryParams.toString()}`);
   },
   getDashboardStats: () => api.get('/projects/stats/dashboard'),
+  getStatusCounts: () => api.get('/projects/status-counts'),
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => {

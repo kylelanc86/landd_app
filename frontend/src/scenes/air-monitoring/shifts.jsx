@@ -801,6 +801,7 @@ const Shifts = () => {
           loading={loading}
           disableRowSelectionOnClick
           error={error}
+          sortingOrder={["desc", "asc"]}
           components={{
             NoRowsOverlay: () => (
               <Box sx={{ p: 2, textAlign: "center" }}>No shifts found</Box>

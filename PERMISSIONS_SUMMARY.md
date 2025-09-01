@@ -1,194 +1,255 @@
-# L&D Consulting App - Permissions System Summary
+# Air Monitoring Application - Permissions Summary
 
 ## Overview
-This document provides a comprehensive overview of the permissions system implemented in the L&D Consulting App. The system uses role-based access control (RBAC) with granular permissions for different features and operations.
 
-## Permission Structure
+The Air Monitoring Application uses a role-based access control (RBAC) system with three main roles: **Admin**, **Manager**, and **Employee**. Each role has specific permissions that determine what actions users can perform within the application.
 
-### Core Permission Categories
+## Role Hierarchy
 
-#### 1. Project Permissions
-- `projects.view` - View projects
-- `projects.create` - Create new projects
-- `projects.edit` - Edit existing projects
-- `projects.delete` - Delete projects
-- `projects.change_status` - Change project status
+1. **Admin** - Full system access with all permissions
+2. **Manager** - Extended permissions for managing projects, users, and business operations
+3. **Employee** - Basic permissions for day-to-day work activities
 
-#### 2. User Management Permissions
-- `users.view` - View user list and details
-- `users.create` - Create new users
-- `users.edit` - Edit existing users
-- `users.delete` - Delete users
-- `users.manage` - Manage user accounts (password resets, etc.)
-
-#### 3. Job Permissions
-- `jobs.view` - View jobs
-- `jobs.create` - Create new jobs
-- `jobs.edit` - Edit existing jobs
-- `jobs.delete` - Delete jobs
-- `jobs.authorize_reports` - Authorize job reports
-
-#### 4. Calibration Permissions
-- `calibrations.view` - View calibrations
-- `calibrations.create` - Create calibrations
-- `calibrations.edit` - Edit calibrations
-- `calibrations.delete` - Delete calibrations
-
-#### 5. Equipment Permissions
-- `equipment.view` - View equipment
-- `equipment.create` - Create equipment
-- `equipment.edit` - Edit equipment
-- `equipment.delete` - Delete equipment
-
-#### 6. Administrative Permissions
-- `admin.view` - Access admin features
-- `admin.create` - Create admin resources
-- `admin.update` - Update admin resources
-- `admin.delete` - Delete admin resources
-
-#### 7. Business Process Permissions
-- `invoices.approve` - Approve invoices
-- `timesheets.approve` - Approve timesheets
-- `xero.sync` - Sync with Xero accounting system
-
-## Role-Based Access Control
-
-### Admin Role
-**Full Access**: Admins have access to ALL permissions in the system, including:
-- Complete project management
-- Full user management capabilities
-- All job operations
-- Equipment and calibration management
-- Administrative functions
-- Business process approvals
-- Xero integration
-
-### Manager Role
-**Elevated Access**: Managers have significant permissions but with some restrictions:
-- **Projects**: View, create, edit, and change status (no delete)
-- **Users**: View, edit, and manage (no create/delete)
-- **Jobs**: Full access including report authorization
-- **Calibrations**: Full access
-- **Equipment**: Full access
-- **Business Processes**: Can approve invoices and timesheets
-- **Integration**: Can sync with Xero
-
-### Employee Role
-**Limited Access**: Employees have basic operational permissions:
-- **Projects**: View, create, and edit (no delete or status change)
-- **Jobs**: View, create, and edit (no delete or report authorization)
-- **Calibrations**: View, create, and edit (no delete)
-- **Equipment**: View, create, and edit (no delete)
-- **No Administrative Access**
-- **No Business Process Approvals**
-
-## Missing Permissions (Identified Issues)
-
-### Asbestos-Related Permissions
-The following permissions are referenced in the codebase but **NOT DEFINED** in the permissions configuration:
-
-- `asbestos.view` - Used in asbestos clearance reports, removal jobs, and clearances
-- `asbestos.create` - Used in asbestos clearance reports, removal jobs, and clearances  
-- `asbestos.edit` - Used in asbestos clearance reports, removal jobs, and clearances
-- `asbestos.delete` - Used in asbestos clearance reports, removal jobs, and clearances
-
-**Impact**: These routes are currently accessible to all authenticated users since the permissions don't exist in the restricted permissions list.
-
-## Implementation Details
+## Permission System Architecture
 
 ### Backend Implementation
-- **Middleware**: `checkPermission` middleware validates permissions on protected routes
-- **Configuration**: Permissions defined in `backend/config/permissions.js`
-- **Usage**: Applied to route handlers using `checkPermission(['permission.name'])`
+- **File**: `backend/config/permissions.js`
+- **Middleware**: `backend/middleware/checkPermission.js`
+- **User Model**: `backend/models/User.js`
 
 ### Frontend Implementation
-- **Hook**: `usePermissions` hook provides permission checking utilities
-- **Configuration**: Permissions defined in `frontend/src/config/permissions.js`
-- **Direct Usage**: `hasPermission()`, `hasAnyPermission()`, `hasAllPermissions()` functions
-- **Components**: `PermissionGate` and `PermissionRoute` components for conditional rendering
+- **File**: `frontend/src/config/permissions.js`
+- **Hook**: `frontend/src/hooks/usePermissions.js`
 
-### Permission Checking Functions
-- `hasPermission(user, permission)` - Check if user has specific permission
-- `hasAnyPermission(user, permissions)` - Check if user has any of the given permissions
-- `hasAllPermissions(user, permissions)` - Check if user has all of the given permissions
+## Permission Categories
 
-## Security Features
+### 1. Project Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `projects.view` | View projects | ✅ | ✅ | ✅ |
+| `projects.create` | Create projects | ✅ | ✅ | ✅ |
+| `projects.edit` | Edit projects | ✅ | ✅ | ✅ |
+| `projects.delete` | Delete projects | ✅ | ❌ | ❌ |
+| `projects.change_status` | Change project status | ✅ | ✅ | ✅ |
 
-### Permission Validation
-- **Backend**: All protected routes require authentication and permission validation
-- **Frontend**: UI elements are conditionally rendered based on user permissions
-- **Middleware**: Centralized permission checking prevents unauthorized access
+### 2. User Management Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `users.view` | View users | ✅ | ✅ | ❌ |
+| `users.create` | Create new users | ✅ | ❌ | ❌ |
+| `users.edit` | Edit users | ✅ | ✅ | ❌ |
+| `users.delete` | Delete users | ✅ | ✅ | ❌ |
+| `users.manage` | Manage user accounts (password resets, etc.) | ✅ | ✅ | ❌ |
 
-### Role Hierarchy
-- **Admin** > **Manager** > **Employee**
-- Higher roles inherit permissions from lower roles
-- Granular control over specific operations
+### 3. Job Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `jobs.view` | View jobs | ✅ | ✅ | ✅ |
+| `jobs.create` | Create jobs | ✅ | ✅ | ✅ |
+| `jobs.edit` | Edit jobs | ✅ | ✅ | ✅ |
+| `jobs.delete` | Delete jobs | ✅ | ✅ | ❌ |
+| `jobs.authorize_reports` | Authorize job reports | ✅ | ✅ | ❌ |
 
-### Token-Based Security
-- JWT tokens for authentication
-- Permission checks on every protected request
-- Secure password reset system with admin controls
+### 4. Calibration Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `calibrations.view` | View calibrations | ✅ | ✅ | ✅ |
+| `calibrations.create` | Create calibrations | ✅ | ✅ | ✅ |
+| `calibrations.edit` | Edit calibrations | ✅ | ✅ | ✅ |
+| `calibrations.delete` | Delete calibrations | ✅ | ✅ | ❌ |
 
-## Current Usage Examples
+### 5. Equipment Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `equipment.view` | View equipment | ✅ | ✅ | ✅ |
+| `equipment.create` | Create equipment | ✅ | ✅ | ✅ |
+| `equipment.edit` | Edit equipment | ✅ | ✅ | ✅ |
+| `equipment.delete` | Delete equipment | ✅ | ✅ | ❌ |
 
-### Backend Route Protection
+### 6. Asbestos Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `asbestos.view` | View asbestos data | ✅ | ✅ | ✅ |
+| `asbestos.create` | Create asbestos records | ✅ | ✅ | ✅ |
+| `asbestos.edit` | Edit asbestos records | ✅ | ✅ | ✅ |
+| `asbestos.delete` | Delete asbestos records | ✅ | ✅ | ❌ |
+
+### 7. Client Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `clients.view` | View clients | ✅ | ✅ | ✅ |
+| `clients.create` | Create clients | ✅ | ✅ | ✅ |
+| `clients.edit` | Edit clients | ✅ | ✅ | ✅ |
+| `clients.delete` | Delete clients | ✅ | ✅ | ❌ |
+| `clients.write_off` | Write off client accounts | ✅ | ✅ | ❌ |
+
+### 8. Timesheet Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `timesheets.view` | View timesheets | ✅ | ✅ | ✅ |
+| `timesheets.create` | Create timesheets | ✅ | ✅ | ✅ |
+| `timesheets.edit` | Edit timesheets | ✅ | ✅ | ✅ |
+| `timesheets.review` | Review timesheets | ✅ | ✅ | ❌ |
+| `timesheets.approve` | Approve timesheets | ✅ | ✅ | ❌ |
+
+### 9. Invoice Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `invoices.view` | View invoices | ✅ | ✅ | ✅ |
+| `invoices.create` | Create invoices | ✅ | ✅ | ✅ |
+| `invoices.edit` | Edit invoices | ✅ | ✅ | ✅ |
+| `invoices.delete` | Delete invoices | ✅ | ✅ | ❌ |
+| `invoices.approve` | Approve invoices | ✅ | ✅ | ❌ |
+| `invoice_items.view` | View invoice items | ✅ | ✅ | ✅ |
+
+### 10. Fibre ID Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `fibre.view` | View fibre ID data | ✅ | ✅ | ✅ |
+| `fibre.create` | Create fibre ID records | ✅ | ✅ | ✅ |
+| `fibre.edit` | Edit fibre ID records | ✅ | ✅ | ✅ |
+| `fibre.delete` | Delete fibre ID records | ✅ | ✅ | ❌ |
+
+### 11. Xero Integration Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `xero.sync` | Sync with Xero | ✅ | ✅ | ✅ |
+| `xero.manage` | Manage Xero connection (connect/disconnect) | ✅ | ✅ | ❌ |
+
+### 12. Admin Permissions
+| Permission | Description | Admin | Manager | Employee |
+|------------|-------------|-------|---------|----------|
+| `admin.view` | Access admin features | ✅ | ❌ | ❌ |
+| `admin.create` | Create admin resources | ✅ | ❌ | ❌ |
+| `admin.update` | Update admin resources | ✅ | ❌ | ❌ |
+| `admin.delete` | Delete admin resources | ✅ | ❌ | ❌ |
+
+## Permission Implementation Details
+
+### Backend Permission Checking
+
+The backend uses middleware to check permissions on API routes:
+
 ```javascript
-// Example: Equipment routes
-router.get("/", auth, checkPermission("equipment.view"), async (req, res) => { ... });
-router.post("/", auth, checkPermission("equipment.create"), async (req, res) => { ... });
-router.put("/:id", auth, checkPermission("equipment.edit"), async (req, res) => { ... });
-router.delete("/:id", auth, checkPermission("equipment.delete"), async (req, res) => { ... });
+// Example usage in routes
+router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
+  // Route handler
+});
+
+router.post('/', auth, checkPermission(['projects.create']), async (req, res) => {
+  // Route handler
+});
 ```
 
 ### Frontend Permission Checking
-```javascript
-// Example: User management
-import { hasPermission } from "../../config/permissions";
 
-const canEditUsers = hasPermission(currentUser, "users.edit");
-const canSyncXero = hasPermission(currentUser, "xero.sync");
-```
-
-## Recommendations
-
-### 1. Fix Missing Permissions
-Add the missing asbestos-related permissions to both backend and frontend configurations:
+The frontend uses a custom hook for permission checking:
 
 ```javascript
-// Add to PERMISSIONS object
-'asbestos.view': 'View asbestos-related data',
-'asbestos.create': 'Create asbestos-related records',
-'asbestos.edit': 'Edit asbestos-related records',
-'asbestos.delete': 'Delete asbestos-related records',
+// Example usage in components
+const { isAdmin, isManager, can } = usePermissions();
 
-// Add to appropriate roles in ROLE_PERMISSIONS
+// Check specific permission
+if (can('projects.delete')) {
+  // Show delete button
+}
+
+// Check role-based access
+if (isAdmin || isManager) {
+  // Show admin/manager features
+}
 ```
 
-### 2. Permission Consistency
-Ensure backend and frontend permission configurations are synchronized to prevent access control inconsistencies.
-
-### 3. Regular Auditing
-Implement regular permission audits to ensure:
-- All protected routes have appropriate permission checks
-- Permission definitions match actual usage
-- Role assignments are appropriate for business needs
-
-### 4. Documentation Updates
-Keep this document updated as new permissions are added or existing ones are modified.
-
-## File Locations
+## Permission Helper Functions
 
 ### Backend
-- **Permissions Config**: `backend/config/permissions.js`
-- **Permission Middleware**: `backend/middleware/checkPermission.js`
-- **Protected Routes**: Various files in `backend/routes/`
+- `checkPermission(permissions, requireAll = false)` - Middleware for route protection
+- `ROLE_PERMISSIONS` - Object defining permissions for each role
+- `PERMISSIONS` - Object defining all available permissions
 
-### Frontend  
-- **Permissions Config**: `frontend/src/config/permissions.js`
-- **Permission Hook**: `frontend/src/hooks/usePermissions.js`
-- **Permission Components**: `frontend/src/components/PermissionGate.jsx`, `frontend/src/components/PermissionRoute.jsx`
+### Frontend
+- `hasPermission(user, permission)` - Check if user has specific permission
+- `hasAnyPermission(user, permissions)` - Check if user has any of the given permissions
+- `hasAllPermissions(user, permissions)` - Check if user has all of the given permissions
+- `usePermissions()` - React hook for permission checking
 
----
+## Key Permission Patterns
 
-*Last Updated: [Current Date]*
-*Version: 1.0*
+### 1. CRUD Operations
+Most entities follow a standard CRUD permission pattern:
+- `*.view` - Read access
+- `*.create` - Create access
+- `*.edit` - Update access
+- `*.delete` - Delete access
+
+### 2. Special Operations
+Some entities have additional permissions for special operations:
+- `*.change_status` - Change status (projects)
+- `*.approve` - Approval workflows (invoices, timesheets)
+- `*.authorize_reports` - Report authorization (jobs)
+- `*.manage` - Account management (users)
+
+### 3. Integration Permissions
+External integrations have specific permissions:
+- `xero.sync` - Data synchronization
+- `xero.manage` - Connection management
+
+## Security Considerations
+
+### 1. Backend Protection
+- All sensitive routes are protected with `auth` middleware
+- Permission checks are performed on every protected route
+- Role-based permissions are enforced at the API level
+
+### 2. Frontend Protection
+- UI elements are conditionally rendered based on permissions
+- Permission checks prevent unauthorized actions
+- Role-based navigation and feature access
+
+### 3. Data Access Control
+- Users can only access data they have permission to view
+- Create/Edit/Delete operations are restricted by role
+- Admin functions are completely restricted to admin users
+
+## Permission Management
+
+### Adding New Permissions
+1. Add permission to `PERMISSIONS` object in both backend and frontend
+2. Assign permission to appropriate roles in `ROLE_PERMISSIONS`
+3. Add permission checks to relevant routes
+4. Update frontend components to use new permission
+
+### Modifying Role Permissions
+1. Update `ROLE_PERMISSIONS` object
+2. Test permission changes thoroughly
+3. Update documentation
+4. Notify users of permission changes
+
+## Common Permission Scenarios
+
+### Admin User
+- Full system access
+- Can manage all users and permissions
+- Can access admin-only features
+- Can perform all CRUD operations
+
+### Manager User
+- Can manage projects and users
+- Can approve invoices and timesheets
+- Can delete most records
+- Cannot access admin-only features
+
+### Employee User
+- Can view and edit most records
+- Cannot delete records
+- Cannot approve invoices/timesheets
+- Cannot manage users
+- Can sync with Xero using existing connection
+
+## Notes
+
+- All permissions are enforced at both backend and frontend levels
+- Permission changes require application restart
+- User roles are stored in the database and cannot be changed by regular users
+- Admin users have access to all permissions automatically
+- Non-restricted permissions (not in PERMISSIONS object) are available to all users

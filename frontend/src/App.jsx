@@ -4,6 +4,7 @@ import { ColorModeContext, useMode } from "./theme";
 import { AuthProvider } from "./context/AuthContext";
 import { PermissionDeniedProvider } from "./context/PermissionDeniedContext";
 import { ProjectStatusesProvider } from "./context/ProjectStatusesContext";
+
 import { Suspense, lazy, useState, useEffect } from "react";
 import LoadingSpinner from "./components/LoadingSpinner";
 import Layout from "./components/Layout";

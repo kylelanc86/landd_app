@@ -389,6 +389,7 @@ const AllocatedJobsTable = () => {
         disableDensitySelector
         getRowId={(row) => row.id}
         components={{ Toolbar: GridToolbar }}
+        sortingOrder={["desc", "asc"]}
         sx={{
           cursor: "pointer",
           // Ensure proper footer positioning

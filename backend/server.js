@@ -160,7 +160,8 @@ app.use('/api/xero', xeroRoutes);
     app.use('/api/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
     app.use('/api/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
     app.use('/api/custom-data-fields', requireAuth, checkTokenBlacklist, require('./routes/customDataFields'));
-    app.use('/api/custom-data-field-groups', requireAuth, checkTokenBlacklist, require('./routes/customDataFieldGroups'));
+app.use('/api/custom-data-field-groups', requireAuth, checkTokenBlacklist, require('./routes/customDataFieldGroups'));
+app.use('/api/project-audits', requireAuth, checkTokenBlacklist, require('./routes/projectAudits'));
 
 
     

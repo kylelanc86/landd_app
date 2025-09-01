@@ -404,6 +404,7 @@ const EquipmentList = () => {
       >
         <DataGrid
           rows={equipment}
+          sortingOrder={["desc", "asc"]}
           columns={[
             {
               field: "equipmentReference",

@@ -40,6 +40,40 @@ const getProjectStatuses = async () => {
   }
 };
 
+// Get status counts for all projects
+router.get('/status-counts', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const counts = await Project.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Transform the results into a more usable format
+    const statusCounts = {};
+    let totalActive = 0;
+    let totalInactive = 0;
+
+    counts.forEach(item => {
+      const status = item._id || 'Unknown';
+      const count = item.count;
+      statusCounts[status] = count;
+    });
+
+    // Get total count
+    const totalCount = await Project.countDocuments();
+    statusCounts.all = totalCount;
+
+    res.json({ statusCounts });
+  } catch (error) {
+    console.error('Error fetching status counts:', error);
+    res.status(500).json({ message: 'Failed to fetch status counts' });
+  }
+});
+
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
@@ -288,6 +322,15 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       console.error('Error updating dashboard stats on project creation:', statsError);
       // Don't fail the project creation if stats update fails
     }
+
+    // Log project creation to audit trail
+    try {
+      const ProjectAuditService = require('../services/projectAuditService');
+      await ProjectAuditService.logProjectCreation(newProject._id, req.user._id, `Project "${newProject.name}" created`);
+    } catch (auditError) {
+      console.error('Error logging project creation to audit trail:', auditError);
+      // Don't fail the project creation if audit logging fails
+    }
     
     res.status(201).json(populatedProject);
   } catch (err) {
@@ -316,6 +359,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       return res.status(404).json({ message: 'Project not found' });
     }
 
+    // Store old status before updating
+    const oldStatus = project.status;
+    
     // Update project fields
     project.name = req.body.name || project.name;
     project.client = req.body.client || project.client;
@@ -336,13 +382,35 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     const updatedProject = await project.save();
     
     // Update dashboard stats if status changed
-    if (req.body.status && req.body.status !== project.status) {
+    if (req.body.status && req.body.status !== oldStatus) {
       try {
         const dashboardStatsService = require('../services/dashboardStatsService');
-        await dashboardStatsService.updateStatsOnProjectStatusChange(project.status, req.body.status);
+        await dashboardStatsService.updateStatsOnProjectStatusChange(oldStatus, req.body.status);
       } catch (statsError) {
         console.error('Error updating dashboard stats on project status change:', statsError);
         // Don't fail the project update if stats update fails
+      }
+
+      // Log status change to audit trail
+      try {
+        console.log('🔍 Logging status change to audit trail:', {
+          projectId: project._id,
+          oldStatus,
+          newStatus: req.body.status,
+          userId: req.user._id
+        });
+        const ProjectAuditService = require('../services/projectAuditService');
+        await ProjectAuditService.logStatusChange(
+          project._id, 
+          oldStatus, 
+          req.body.status, 
+          req.user._id, 
+          `Status changed from "${oldStatus}" to "${req.body.status}"`
+        );
+        console.log('🔍 Status change logged successfully');
+      } catch (auditError) {
+        console.error('Error logging status change to audit trail:', auditError);
+        // Don't fail the project update if audit logging fails
       }
     }
     

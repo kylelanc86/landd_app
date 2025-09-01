@@ -384,33 +384,33 @@ const Clients = () => {
           </Typography>
         ),
       },
-      ...(canWriteOff
-        ? [
-            {
-              field: "written_off",
-              headerName: "Written Off",
-              flex: 0.5,
-              renderCell: (params) => (
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  {params.row.written_off && (
-                    <CheckCircleIcon
-                      sx={{
-                        color: "red",
-                        fontSize: 20,
-                      }}
-                    />
-                  )}
-                </Box>
-              ),
-            },
-          ]
-        : []),
+      // ...(canWriteOff
+      //   ? [
+      //       {
+      //         field: "written_off",
+      //         headerName: "Written Off",
+      //         flex: 0.5,
+      //         renderCell: (params) => (
+      //           <Box
+      //             sx={{
+      //               display: "flex",
+      //               justifyContent: "center",
+      //               alignItems: "center",
+      //             }}
+      //           >
+      //             {params.row.written_off && (
+      //               <CheckCircleIcon
+      //                 sx={{
+      //                   color: "red",
+      //                   fontSize: 20,
+      //                 }}
+      //               />
+      //             )}
+      //           </Box>
+      //         ),
+      //       },
+      //     ]
+      //   : []),
       {
         field: "actions",
         headerName: "Actions",
@@ -684,6 +684,7 @@ const Clients = () => {
           disableDensitySelector
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={setColumnVisibilityModel}
+          sortingOrder={["desc", "asc"]}
           getRowClassName={(params) =>
             params.row.written_off ? "written-off-row" : ""
           }

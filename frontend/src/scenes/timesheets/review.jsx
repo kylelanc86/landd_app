@@ -433,6 +433,7 @@ const TimesheetReview = () => {
           columns={columns}
           loading={isLoading}
           getRowId={(row) => `${row.userId}-${row.date}`}
+          sortingOrder={["desc", "asc"]}
           onRowClick={(params) => {
             // Check if the click was in the actions column
             if (params.field === "actions") {

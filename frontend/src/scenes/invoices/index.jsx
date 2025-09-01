@@ -1621,6 +1621,7 @@ const Invoices = () => {
             disableColumnSelector={true}
             disableDensitySelector={true}
             sortingMode="server"
+            sortingOrder={["desc", "asc"]}
             onSortModelChange={(model) => {
               if (model.length > 0) {
                 const { field } = model[0];

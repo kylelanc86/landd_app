@@ -816,6 +816,7 @@ const AirMonitoring = () => {
             autoHeight
             disableSelectionOnClick
             components={{ Toolbar: GridToolbar }}
+            sortingOrder={["desc", "asc"]}
             initialState={{
               columns: {
                 columnVisibilityModel: {

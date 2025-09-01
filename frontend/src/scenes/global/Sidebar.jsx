@@ -77,8 +77,22 @@ const Item = ({ title, to, icon }) => {
   const isActive =
     location.pathname === to || location.pathname.startsWith(`${to}/`);
 
-  // Handle navigation with refresh
+  // Handle navigation with refresh and unsaved changes check
   const handleNavigation = () => {
+    // Check for unsaved changes
+    if (
+      window.hasUnsavedChanges &&
+      window.currentProjectPath &&
+      location.pathname.startsWith("/projects/") &&
+      !to.startsWith("/projects/")
+    ) {
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
     // If we're already on the exact same page, force a refresh
     if (location.pathname === to) {
       window.location.reload();
@@ -172,8 +186,22 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
   const isActive =
     location.pathname === to || location.pathname.startsWith(`${to}/`);
 
-  // Handle navigation with refresh
+  // Handle navigation with refresh and unsaved changes check
   const handleNavigation = () => {
+    // Check for unsaved changes
+    if (
+      window.hasUnsavedChanges &&
+      window.currentProjectPath &&
+      location.pathname.startsWith("/projects/") &&
+      !to.startsWith("/projects/")
+    ) {
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
     // If we're already on the exact same page, force a refresh
     if (location.pathname === to) {
       window.location.reload();
