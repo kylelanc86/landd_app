@@ -585,10 +585,10 @@ const ProjectInformation = () => {
         console.log("🔍 Generated HAZ ID:", nextId);
         return nextId;
       } else {
-        console.log("🔍 Generating LDX prefix for regular project");
-        // Generate LDX prefix for regular projects
+        console.log("🔍 Generating LDJ prefix for regular project");
+        // Generate LDJ prefix for regular projects
         const regularProjects = projects.filter(
-          (p) => p.projectID && p.projectID.startsWith("LDX")
+          (p) => p.projectID && p.projectID.startsWith("LDJ")
         );
         console.log("🔍 Regular projects found:", regularProjects);
         console.log(
@@ -617,8 +617,8 @@ const ProjectInformation = () => {
           nextNum,
         });
 
-        const nextId = `LDX${String(nextNum).padStart(5, "0")}`;
-        console.log("🔍 Generated LDX ID:", nextId);
+        const nextId = `LDJ${String(nextNum).padStart(5, "0")}`;
+        console.log("🔍 Generated LDJ ID:", nextId);
         return nextId;
       }
     } catch (error) {
