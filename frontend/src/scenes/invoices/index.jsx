@@ -104,6 +104,18 @@ const Invoices = () => {
           return;
         }
 
+        console.log(
+          `Frontend received ${invoicesRes.data.length} invoices from backend`
+        );
+        console.log(
+          `First few invoice IDs:`,
+          invoicesRes.data.slice(0, 5).map((inv) => inv.invoiceID)
+        );
+        console.log(
+          `Last few invoice IDs:`,
+          invoicesRes.data.slice(-5).map((inv) => inv.invoiceID)
+        );
+
         setInvoices(invoicesRes.data);
         setProjects(
           Array.isArray(projectsRes.data?.data) ? projectsRes.data.data : []
@@ -545,13 +557,28 @@ const Invoices = () => {
     // Apply search filtering first
     let filtered = [...invoices];
 
+    console.log(
+      `getFilteredInvoices: Starting with ${filtered.length} invoices`
+    );
+    console.log(`User role: ${currentUser?.role}`);
+
     // For employee users, only show draft and awaiting_approval invoices
+    // Admin and manager users can see all invoices including unpaid ones
     if (currentUser?.role === "employee") {
+      const beforeFilter = filtered.length;
       filtered = filtered.filter(
         (invoice) =>
           invoice.status === "draft" || invoice.status === "awaiting_approval"
       );
+      console.log(
+        `Employee filtering: ${beforeFilter} -> ${filtered.length} invoices`
+      );
+    } else {
+      console.log(
+        `Admin/Manager: No role-based filtering applied, keeping all ${filtered.length} invoices`
+      );
     }
+    // Admin and manager users see all invoices (no additional filtering needed)
 
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
@@ -623,20 +650,20 @@ const Invoices = () => {
       return 0;
     });
 
+    console.log(
+      `getFilteredInvoices: Final result - ${sorted.length} invoices after sorting`
+    );
     return sorted;
   }, [invoices, sortBy, sortDir, searchQuery, projects, currentUser]);
 
   // Sum of unpaid invoice amounts (filtered by user role)
   const totalUnpaid = invoices
     .filter((inv) => {
-      // For employees, only include unpaid invoices that are draft or awaiting approval
+      // For employees, only include draft and awaiting approval invoices (no unpaid invoices)
       if (currentUser?.role === "employee") {
-        return (
-          inv.status === "unpaid" &&
-          (inv.status === "draft" || inv.status === "awaiting_approval")
-        );
+        return inv.status === "draft" || inv.status === "awaiting_approval";
       }
-      // For other users, include all unpaid invoices
+      // For admin and manager users, include all unpaid invoices
       return inv.status === "unpaid";
     })
     .reduce((sum, inv) => sum + parseFloat(inv.amount), 0)

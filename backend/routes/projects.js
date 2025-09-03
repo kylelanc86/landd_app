@@ -426,6 +426,81 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
   }
 });
 
+// Check project dependencies (for deletion)
+router.get('/:id/dependencies', auth, checkPermission(['projects.delete']), async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Check for linked invoices
+    const Invoice = require('../models/Invoice');
+    const linkedInvoices = await Invoice.find({ projectId: req.params.id });
+    
+    // Check for linked jobs
+    const Job = require('../models/Job');
+    const linkedJobs = await Job.find({ projectId: req.params.id });
+   
+    // Check for linked asbestos removal jobs
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+    const linkedAsbestosRemovalJobs = await AsbestosRemovalJob.find({ projectId: req.params.id });
+    
+    // Check for linked client supplied jobs
+    const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+    const linkedClientSuppliedJobs = await ClientSuppliedJob.find({ projectId: req.params.id });
+    
+    // Check for linked timesheets
+    const Timesheet = require('../models/Timesheet');
+    const linkedTimesheets = await Timesheet.find({ projectId: req.params.id });
+    
+    // Check for linked sample items
+    const SampleItem = require('../models/SampleItem');
+    const linkedSampleItems = await SampleItem.find({ projectId: req.params.id });
+    
+    // Check for linked asbestos assessments
+    const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+    const linkedAssessments = await AsbestosAssessment.find({ projectId: req.params.id });
+    
+    // Check for linked asbestos clearances
+    const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+    const linkedClearances = await AsbestosClearance.find({ projectId: req.params.id });
+
+    // Build dependency summary
+    const dependencies = [];
+    if (linkedInvoices.length > 0) dependencies.push(`${linkedInvoices.length} invoice(s)`);
+    if (linkedJobs.length > 0) dependencies.push(`${linkedJobs.length} job(s)`);
+    if (linkedAsbestosRemovalJobs.length > 0) dependencies.push(`${linkedAsbestosRemovalJobs.length} asbestos removal job(s)`);
+    if (linkedClientSuppliedJobs.length > 0) dependencies.push(`${linkedClientSuppliedJobs.length} client supplied job(s)`);
+    if (linkedTimesheets.length > 0) dependencies.push(`${linkedTimesheets.length} timesheet(s)`);
+    if (linkedSampleItems.length > 0) dependencies.push(`${linkedSampleItems.length} sample item(s)`);
+    if (linkedAssessments.length > 0) dependencies.push(`${linkedAssessments.length} assessment(s)`);
+    if (linkedClearances.length > 0) dependencies.push(`${linkedClearances.length} clearance(s)`);
+
+    const dependencyInfo = {
+      canDelete: dependencies.length === 0,
+      dependencies: {
+        invoices: linkedInvoices.length,
+        jobs: linkedJobs.length,
+        asbestosRemovalJobs: linkedAsbestosRemovalJobs.length,
+        clientSuppliedJobs: linkedClientSuppliedJobs.length,
+        timesheets: linkedTimesheets.length,
+        sampleItems: linkedSampleItems.length,
+        assessments: linkedAssessments.length,
+        clearances: linkedClearances.length
+      },
+      message: dependencies.length > 0 
+        ? `Cannot delete project. It has linked records: ${dependencies.join(', ')}. Please remove or reassign these records before deleting the project.`
+        : 'Project can be deleted - no linked records found.'
+    };
+
+    res.json(dependencyInfo);
+  } catch (err) {
+    console.error('Error checking project dependencies:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Delete project
 router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, res) => {
   try {

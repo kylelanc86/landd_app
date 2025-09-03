@@ -184,6 +184,7 @@ export const clientService = {
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.search) queryParams.append('search', params.search);
+    if (params.showInactive) queryParams.append('showInactive', params.showInactive);
 
     const url = `/clients?${queryParams.toString()}`;
     console.log("Calling client service with URL:", url);
@@ -201,7 +202,9 @@ export const clientService = {
   getById: (id) => api.get(`/clients/${id}`),
   create: (data) => api.post('/clients', data),
   update: (id, data) => api.patch(`/clients/${id}`, data),
-  delete: (id) => api.delete(`/clients/${id}`)
+  delete: (id) => api.delete(`/clients/${id}`),
+  archive: (id) => api.patch(`/clients/${id}/archive`),
+  restore: (id) => api.patch(`/clients/${id}/restore`)
 };
 
 // Project service
@@ -243,6 +246,7 @@ export const projectService = {
     return api.put(`/projects/${id}`, updateData);
   },
   delete: (id) => api.delete(`/projects/${id}`),
+  checkDependencies: (id) => api.get(`/projects/${id}/dependencies`),
   getTimeLogs: (projectId) => api.get(`/projects/${projectId}/timelogs`),
 };
 

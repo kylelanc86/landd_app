@@ -7,8 +7,25 @@ const auth = require('../middleware/auth');
 router.get('/', auth, async (req, res) => {
   try {
     console.log('Fetching all invoices from MongoDB...');
+    
+    // First, let's check the total count without any limits
+    const totalCount = await Invoice.countDocuments({ isDeleted: { $ne: true } });
+    console.log(`Total invoices in database (count): ${totalCount}`);
+    
+    // Let's also check the total count including deleted invoices
+    const totalCountIncludingDeleted = await Invoice.countDocuments({});
+    console.log(`Total invoices in database (including deleted): ${totalCountIncludingDeleted}`);
+    
+    // Let's check how many have xeroInvoiceId
+    const xeroInvoicesCount = await Invoice.countDocuments({ 
+      isDeleted: { $ne: true },
+      xeroInvoiceId: { $exists: true, $ne: null }
+    });
+    console.log(`Invoices with xeroInvoiceId: ${xeroInvoicesCount}`);
+    
     const invoices = await Invoice.find({ isDeleted: { $ne: true } })
       .sort({ createdAt: -1 }) // Show newest invoices first
+      .limit(10000) // Explicitly set a high limit to ensure we get all invoices
       .populate({
         path: 'projectId',
         select: 'name projectID',
@@ -21,6 +38,14 @@ router.get('/', auth, async (req, res) => {
         path: 'client',
         select: 'name'
       });
+
+    console.log(`Total invoices found in database (query result): ${invoices.length}`);
+    console.log(`First few invoice IDs:`, invoices.slice(0, 5).map(inv => inv.invoiceID));
+    console.log(`Last few invoice IDs:`, invoices.slice(-5).map(inv => inv.invoiceID));
+    
+    if (totalCount !== invoices.length) {
+      console.warn(`WARNING: Count mismatch! Total count: ${totalCount}, Query result: ${invoices.length}`);
+    }
 
     res.json(invoices);
   } catch (err) {

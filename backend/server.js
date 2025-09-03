@@ -14,7 +14,7 @@ const usersRouter = require('./routes/users');
 const xeroRoutes = require('./routes/xero');
 const shiftRoutes = require('./routes/shifts');
 const timesheetRoutes = require('./routes/timesheets');
-const calendarEntriesRouter = require('./routes/calendarEntries');
+
 const airPumpRoutes = require('./routes/airPumps');
 const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
 const equipmentRoutes = require('./routes/equipment');
@@ -23,9 +23,7 @@ const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports
 const asbestosRemovalJobRoutes = require('./routes/asbestosRemovalJobs');
 const reportsRoutes = require('./routes/reports');
 
-const asbestosClearanceTemplateRoutes = require('./routes/asbestosClearanceTemplates');
-const leadAssessmentTemplateRoutes = require('./routes/leadAssessmentTemplates');
-const asbestosAssessmentTemplateRoutes = require('./routes/asbestosAssessmentTemplates');
+const reportTemplateRoutes = require('./routes/reportTemplates');
 const pdfDocRaptorV2Routes = require('./routes/pdf-docraptor-v2');
 
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
@@ -140,7 +138,7 @@ connectDB()
 app.use('/api/xero', xeroRoutes);
     app.use('/api/air-monitoring-shifts', requireAuth, checkTokenBlacklist, shiftRoutes);
     app.use('/api/timesheets', requireAuth, checkTokenBlacklist, timesheetRoutes);
-    app.use('/api/calendar-entries', requireAuth, checkTokenBlacklist, calendarEntriesRouter);
+
     app.use('/api/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
     app.use('/api/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
     app.use('/api/equipment', requireAuth, checkTokenBlacklist, equipmentRoutes);
@@ -149,9 +147,7 @@ app.use('/api/xero', xeroRoutes);
     app.use('/api/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
     app.use('/api/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
 
-    app.use('/api/asbestos-clearance-templates', requireAuth, checkTokenBlacklist, asbestosClearanceTemplateRoutes);
-    app.use('/api/lead-assessment-templates', requireAuth, checkTokenBlacklist, leadAssessmentTemplateRoutes);
-    app.use('/api/asbestos-assessment-templates', requireAuth, checkTokenBlacklist, asbestosAssessmentTemplateRoutes);
+    app.use('/api/report-templates', requireAuth, checkTokenBlacklist, reportTemplateRoutes);
     app.use('/api/pdf-docraptor-v2', requireAuth, checkTokenBlacklist, pdfDocRaptorV2Routes);
     
     // Additional protected routes with token blacklist checking

@@ -239,7 +239,9 @@ const Projects = ({ initialFilters = {} }) => {
   );
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [dependencyInfo, setDependencyInfo] = useState(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
@@ -896,7 +898,22 @@ const Projects = ({ initialFilters = {} }) => {
     } catch (error) {
       console.error("Error deleting project:", error);
       console.error("Error response:", error.response?.data);
-      setError("Failed to delete project");
+
+      // Check if this is a dependency error (400 with dependencies)
+      if (
+        error.response?.status === 400 &&
+        error.response?.data?.dependencies
+      ) {
+        setDependencyInfo({
+          project: selectedProject,
+          dependencies: error.response.data.dependencies,
+          message: error.response.data.message,
+        });
+        setDeleteDialogOpen(false);
+        setDependencyDialogOpen(true);
+      } else {
+        setError("Failed to delete project");
+      }
     }
   };
 
@@ -932,9 +949,38 @@ const Projects = ({ initialFilters = {} }) => {
   // Update the renderUsersSelect function
 
   // Handler for delete action
-  const handleDeleteClick = (project) => {
+  const handleDeleteClick = async (project) => {
     setSelectedProject(project);
-    setDeleteDialogOpen(true);
+
+    // First check for dependencies before showing confirmation dialog
+    try {
+      const response = await projectService.checkDependencies(
+        project._id || project.id
+      );
+
+      if (response.data.canDelete) {
+        // No dependencies, show confirmation dialog
+        setDeleteDialogOpen(true);
+      } else {
+        // Has dependencies, show dependency dialog
+        setDependencyInfo({
+          project: project,
+          dependencies: response.data.dependencies,
+          message: response.data.message,
+        });
+        setDependencyDialogOpen(true);
+      }
+    } catch (error) {
+      console.error("Error checking project dependencies:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      console.error("Error config:", error.config);
+      setError(
+        `Failed to check project dependencies: ${
+          error.response?.data?.message || error.message
+        }`
+      );
+    }
   };
 
   // Handler for export action
@@ -1569,13 +1615,18 @@ const Projects = ({ initialFilters = {} }) => {
           alignItems="center"
           justifyContent="space-between"
         >
-          <Stack direction="row" spacing={2} alignItems="center">
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="center"
+            sx={{ flex: 1 }}
+          >
             {/* Search Input */}
             <TextField
               label="Search Projects"
               variant="outlined"
               size="small"
-              fullWidth
+              sx={{ flex: 1 }}
               placeholder="Enter search term"
               value={filters.searchTerm}
               onChange={handleSearchChange}
@@ -1849,6 +1900,27 @@ const Projects = ({ initialFilters = {} }) => {
               Columns
             </Button>
           </Stack>
+
+          {/* Export Button */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<FileDownloadIcon />}
+            onClick={handleExportClick}
+            sx={{
+              height: 40, // Match the height of other components
+              minWidth: 140,
+              backgroundColor: "#2e7d32",
+              color: "white",
+              borderColor: "#2e7d32",
+              "&:hover": {
+                backgroundColor: "#1b5e20",
+                borderColor: "#1b5e20",
+              },
+            }}
+          >
+            Export to CSV
+          </Button>
         </Stack>
       </Box>
       {/* Column Visibility Dropdown */}
@@ -1976,26 +2048,6 @@ const Projects = ({ initialFilters = {} }) => {
           {error}
         </Alert>
       )}
-
-      {/* Export Button */}
-      <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
-        <Button
-          variant="outlined"
-          startIcon={<FileDownloadIcon />}
-          onClick={handleExportClick}
-          sx={{
-            backgroundColor: "#2e7d32",
-            color: "white",
-            borderColor: "#2e7d32",
-            "&:hover": {
-              backgroundColor: "#1b5e20",
-              borderColor: "#1b5e20",
-            },
-          }}
-        >
-          Export to CSV
-        </Button>
-      </Box>
 
       <Box
         m="40px 0 0 0"
@@ -2311,6 +2363,227 @@ const Projects = ({ initialFilters = {} }) => {
             }}
           >
             Delete Project
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dependency Error Dialog */}
+      <Dialog
+        open={dependencyDialogOpen}
+        onClose={() => setDependencyDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Cannot Delete Project
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
+            The project "{dependencyInfo?.project?.name}" cannot be deleted
+            because it has linked records:
+          </Typography>
+
+          <Box
+            sx={{
+              bgcolor: "grey.50",
+              borderRadius: 2,
+              p: 2,
+              mb: 2,
+              border: "1px solid",
+              borderColor: "grey.200",
+            }}
+          >
+            {dependencyInfo?.dependencies && (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {dependencyInfo.dependencies.invoices > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "primary.main",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.invoices} Invoice
+                      {dependencyInfo.dependencies.invoices !== 1 ? "s" : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.jobs > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "info.main",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.jobs} Job
+                      {dependencyInfo.dependencies.jobs !== 1 ? "s" : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.asbestosRemovalJobs > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "warning.main",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.asbestosRemovalJobs} Asbestos
+                      Removal Job
+                      {dependencyInfo.dependencies.asbestosRemovalJobs !== 1
+                        ? "s"
+                        : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.clientSuppliedJobs > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "secondary.main",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.clientSuppliedJobs} Client
+                      Supplied Job
+                      {dependencyInfo.dependencies.clientSuppliedJobs !== 1
+                        ? "s"
+                        : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.timesheets > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "success.main",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.timesheets} Timesheet
+                      {dependencyInfo.dependencies.timesheets !== 1 ? "s" : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.sampleItems > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "error.main",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.sampleItems} Sample Item
+                      {dependencyInfo.dependencies.sampleItems !== 1 ? "s" : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.assessments > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "info.dark",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.assessments} Assessment
+                      {dependencyInfo.dependencies.assessments !== 1 ? "s" : ""}
+                    </Typography>
+                  </Box>
+                )}
+                {dependencyInfo.dependencies.clearances > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: "primary.dark",
+                      }}
+                    />
+                    <Typography variant="body2">
+                      {dependencyInfo.dependencies.clearances} Clearance
+                      {dependencyInfo.dependencies.clearances !== 1 ? "s" : ""}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            To delete this project, you must first remove or reassign all linked
+            records above.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setDependencyDialogOpen(false)}
+            variant="contained"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            OK
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,30 +1,13 @@
 import api from './api';
 
 const reportTemplateService = {
-  // Get all report templates from all endpoints
+  // Get all report templates from unified endpoint
   getAllTemplates: async () => {
     try {
-      console.log('Fetching asbestos clearance templates...');
-      const asbestosClearanceTemplates = await api.get('/asbestos-clearance-templates');
-      console.log('Asbestos clearance templates:', asbestosClearanceTemplates.data);
-      
-      console.log('Fetching lead assessment templates...');
-      const leadAssessmentTemplates = await api.get('/lead-assessment-templates');
-      console.log('Lead assessment templates:', leadAssessmentTemplates.data);
-      
-      console.log('Fetching asbestos assessment templates...');
-      const asbestosAssessmentTemplates = await api.get('/asbestos-assessment-templates');
-      console.log('Asbestos assessment templates:', asbestosAssessmentTemplates.data);
-
-      // Combine all templates
-      const allTemplates = [
-        ...asbestosClearanceTemplates.data,
-        ...leadAssessmentTemplates.data,
-        ...asbestosAssessmentTemplates.data
-      ];
-
-      console.log('Combined all templates:', allTemplates);
-      return allTemplates;
+      console.log('Fetching unified report templates...');
+      const response = await api.get('/report-templates');
+      console.log('Unified report templates:', response.data);
+      return response.data;
     } catch (error) {
       console.error('Error fetching report templates:', error);
       throw error;
@@ -34,18 +17,7 @@ const reportTemplateService = {
   // Get a specific template by type
   getTemplateByType: async (templateType) => {
     try {
-      let response;
-      
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable' || templateType === 'asbestosClearanceMixed') {
-        response = await api.get(`/asbestos-clearance-templates/${templateType}`);
-      } else if (templateType === 'leadAssessment') {
-        response = await api.get(`/lead-assessment-templates/${templateType}`);
-      } else if (templateType === 'asbestosAssessment') {
-        response = await api.get(`/asbestos-assessment-templates/${templateType}`);
-      } else {
-        throw new Error(`Unknown template type: ${templateType}`);
-      }
-      
+      const response = await api.get(`/report-templates/${templateType}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching report template:', error);
@@ -56,19 +28,7 @@ const reportTemplateService = {
   // Create a new template
   createTemplate: async (templateData) => {
     try {
-      const { templateType } = templateData;
-      let response;
-      
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable' || templateType === 'asbestosClearanceMixed') {
-        response = await api.post('/asbestos-clearance-templates', templateData);
-      } else if (templateType === 'leadAssessment') {
-        response = await api.post('/lead-assessment-templates', templateData);
-      } else if (templateType === 'asbestosAssessment') {
-        response = await api.post('/asbestos-assessment-templates', templateData);
-      } else {
-        throw new Error(`Unknown template type: ${templateType}`);
-      }
-      
+      const response = await api.post('/report-templates', templateData);
       return response.data;
     } catch (error) {
       console.error('Error creating report template:', error);
@@ -79,18 +39,7 @@ const reportTemplateService = {
   // Update an existing template
   updateTemplate: async (templateType, updateData) => {
     try {
-      let response;
-      
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable' || templateType === 'asbestosClearanceMixed') {
-        response = await api.put(`/asbestos-clearance-templates/${templateType}`, updateData);
-      } else if (templateType === 'leadAssessment') {
-        response = await api.put(`/lead-assessment-templates/${templateType}`, updateData);
-      } else if (templateType === 'asbestosAssessment') {
-        response = await api.put(`/asbestos-assessment-templates/${templateType}`, updateData);
-      } else {
-        throw new Error(`Unknown template type: ${templateType}`);
-      }
-      
+      const response = await api.put(`/report-templates/${templateType}`, updateData);
       return response.data;
     } catch (error) {
       console.error('Error updating report template:', error);
@@ -101,18 +50,7 @@ const reportTemplateService = {
   // Delete a template
   deleteTemplate: async (templateType) => {
     try {
-      let response;
-      
-      if (templateType === 'asbestosClearanceNonFriable' || templateType === 'asbestosClearanceFriable') {
-        response = await api.delete(`/asbestos-clearance-templates/${templateType}`);
-      } else if (templateType === 'leadAssessment') {
-        response = await api.delete(`/lead-assessment-templates/${templateType}`);
-      } else if (templateType === 'asbestosAssessment') {
-        response = await api.delete(`/asbestos-assessment-templates/${templateType}`);
-      } else {
-        throw new Error(`Unknown template type: ${templateType}`);
-      }
-      
+      const response = await api.delete(`/report-templates/${templateType}`);
       return response.data;
     } catch (error) {
       console.error('Error deleting report template:', error);

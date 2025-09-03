@@ -105,6 +105,9 @@ const Dashboard = () => {
       ? JSON.parse(savedPreferences)
       : defaultPreferences;
 
+    // Ensure daily timesheet is always enabled (required widget)
+    result.dailyTimesheet = true;
+
     return result;
   });
 
@@ -222,7 +225,7 @@ const Dashboard = () => {
         icon: <SendIcon />,
         bgcolor: "#2e7d32",
         onClick: () =>
-          navigateToProjects(navigate, { status: "Samples submitted" }),
+          navigateToProjects(navigate, { status: "Samples Submitted to Lab" }),
       },
       {
         id: "inProgress",
@@ -259,6 +262,17 @@ const Dashboard = () => {
     }
   }, [gridItems, visibleWidgets]); // Run when gridItems or visibleWidgets changes
 
+  // Ensure daily timesheet widget is always enabled (required widget)
+  useEffect(() => {
+    if (!visibleWidgets.dailyTimesheet) {
+      setVisibleWidgets((prev) => {
+        const updated = { ...prev, dailyTimesheet: true };
+        localStorage.setItem("dashboardWidgets", JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [visibleWidgets.dailyTimesheet]);
+
   // Get ordered and visible widgets - limit to 4 widgets maximum
   const displayWidgets = useMemo(() => {
     // First, ensure we have valid widget IDs
@@ -291,6 +305,11 @@ const Dashboard = () => {
     setVisibleWidgets((prev) => {
       const isCurrentlyVisible = prev[widgetId];
       const currentVisibleCount = Object.values(prev).filter(Boolean).length;
+
+      // Prevent disabling the daily timesheet widget (it's required)
+      if (widgetId === "dailyTimesheet" && isCurrentlyVisible) {
+        return prev; // Return previous state unchanged - cannot disable required widget
+      }
 
       // If trying to enable a widget and we're already at the limit, prevent it
       if (!isCurrentlyVisible && currentVisibleCount >= 4) {
@@ -728,36 +747,39 @@ const Dashboard = () => {
         <DialogContent>
           <Box sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Select up to 4 widgets to display on your dashboard
+              Select up to 3 additional widgets to display on your dashboard
+              (Daily Timesheet is always included)
             </Typography>
           </Box>
           <FormGroup>
-            {gridItems.map((item) => {
-              const isChecked = visibleWidgets[item.id];
-              const currentCount =
-                Object.values(visibleWidgets).filter(Boolean).length;
-              const canToggle = isChecked || currentCount < 4;
+            {gridItems
+              .filter((item) => item.id !== "dailyTimesheet") // Exclude daily timesheet from selection
+              .map((item) => {
+                const isChecked = visibleWidgets[item.id];
+                const currentCount =
+                  Object.values(visibleWidgets).filter(Boolean).length;
+                const canToggle = isChecked || currentCount < 4;
 
-              return (
-                <FormControlLabel
-                  key={item.id}
-                  control={
-                    <Checkbox
-                      checked={isChecked}
-                      onChange={() => handleWidgetToggle(item.id)}
-                      disabled={!canToggle}
-                    />
-                  }
-                  label={item.title}
-                  sx={{
-                    opacity: canToggle ? 1 : 0.6,
-                    "& .MuiFormControlLabel-label": {
-                      color: canToggle ? "text.primary" : "text.disabled",
-                    },
-                  }}
-                />
-              );
-            })}
+                return (
+                  <FormControlLabel
+                    key={item.id}
+                    control={
+                      <Checkbox
+                        checked={isChecked}
+                        onChange={() => handleWidgetToggle(item.id)}
+                        disabled={!canToggle}
+                      />
+                    }
+                    label={item.title}
+                    sx={{
+                      opacity: canToggle ? 1 : 0.6,
+                      "& .MuiFormControlLabel-label": {
+                        color: canToggle ? "text.primary" : "text.disabled",
+                      },
+                    }}
+                  />
+                );
+              })}
           </FormGroup>
         </DialogContent>
         <DialogActions>

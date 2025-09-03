@@ -63,6 +63,11 @@ const DraftInvoicePage = () => {
   // Available invoice items for dropdown
   const [availableInvoiceItems, setAvailableInvoiceItems] = useState([]);
 
+  // Responsive column visibility state
+  const [showTaxRateColumn, setShowTaxRateColumn] = useState(true);
+  const [showAccountColumn, setShowAccountColumn] = useState(true);
+  const [tableWidth, setTableWidth] = useState(0);
+
   // Default values
   const defaultAccount = "191 - Consulting Fees";
   const defaultTaxRate = "GST on Income";
@@ -85,6 +90,48 @@ const DraftInvoicePage = () => {
       amount: 0,
     };
     setInvoiceItems([defaultItem]);
+  }, []);
+
+  // Monitor table width and adjust column visibility
+  useEffect(() => {
+    const handleResize = () => {
+      const tableContainer = document.querySelector(".invoice-table-container");
+      if (tableContainer) {
+        const width = tableContainer.offsetWidth;
+        setTableWidth(width);
+
+        // Calculate available space for description column
+        // Fixed columns: Item No (80px) + Qty (60px) + Unit Price (100px) + Tax Amount (100px) + Amount (105px) + Actions (50px) = 495px
+        // Variable columns: Account (120px) + Tax Rate (90px) = 210px
+        const fixedColumnsWidth = 495;
+        const availableWidth = width - fixedColumnsWidth;
+
+        if (availableWidth < 240) {
+          // Hide tax rate column first
+          setShowTaxRateColumn(false);
+          if (availableWidth < 150) {
+            // Then hide account column
+            setShowAccountColumn(false);
+          } else {
+            setShowAccountColumn(true);
+          }
+        } else {
+          // Show both columns
+          setShowTaxRateColumn(true);
+          setShowAccountColumn(true);
+        }
+      }
+    };
+
+    // Initial check
+    handleResize();
+
+    // Add resize listener
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   const fetchProjects = async () => {
@@ -612,35 +659,70 @@ const DraftInvoicePage = () => {
 
       {/* Invoice Items */}
       <Paper sx={{ p: 3, mb: 3 }}>
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={2}
-        >
+        <Box mb={2}>
           <Typography variant="h5">Invoice Items</Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddItem}
-          >
-            Add Item
-          </Button>
         </Box>
 
-        <TableContainer>
-          <Table>
+        <TableContainer className="invoice-table-container">
+          <Table sx={{ tableLayout: "fixed" }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: "10%" }}>Item No</TableCell>
-                <TableCell sx={{ width: "30%" }}>Description</TableCell>
-                <TableCell sx={{ width: "5%" }}>Qty</TableCell>
-                <TableCell sx={{ width: "5%" }}>Unit Price (AUD$)</TableCell>
-                <TableCell sx={{ width: "15%" }}>Account</TableCell>
-                <TableCell sx={{ width: "10%" }}>Tax Rate</TableCell>
-                <TableCell sx={{ width: "10%" }}>Tax Amount (AUD$)</TableCell>
-                <TableCell sx={{ width: "10%" }}>Amount (AUD$)</TableCell>
-                <TableCell sx={{ width: "5%" }}> </TableCell>
+                <TableCell sx={{ width: "80px", minWidth: "80px" }}>
+                  Item No
+                </TableCell>
+                <TableCell sx={{ minWidth: "230px" }}>Description</TableCell>
+                <TableCell sx={{ width: "60px", minWidth: "60px" }}>
+                  Qty
+                </TableCell>
+                <TableCell
+                  sx={{ width: "100px", minWidth: "80px", maxWidth: "105px" }}
+                >
+                  Unit Price (AUD$)
+                </TableCell>
+                {showAccountColumn && (
+                  <TableCell
+                    sx={{
+                      width: "120px",
+                      minWidth: "90px",
+                      wordWrap: "break-word",
+                      whiteSpace: "normal",
+                      lineHeight: "1.2",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    Account
+                  </TableCell>
+                )}
+                {showTaxRateColumn && (
+                  <TableCell
+                    sx={{
+                      width: "90px",
+                      minWidth: "85px",
+                      maxWidth: "95px",
+                      wordWrap: "break-word",
+                      whiteSpace: "normal",
+                      lineHeight: "1.2",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    Tax Rate
+                  </TableCell>
+                )}
+                <TableCell
+                  sx={{ width: "100px", minWidth: "85px", maxWidth: "110px" }}
+                >
+                  Tax Amount (AUD$)
+                </TableCell>
+                <TableCell
+                  sx={{ width: "105px", minWidth: "105px", maxWidth: "105px" }}
+                >
+                  Amount (AUD$)
+                </TableCell>
+                <TableCell sx={{ width: "50px", minWidth: "50px" }}>
+                  {" "}
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -649,7 +731,7 @@ const DraftInvoicePage = () => {
                   key={item.id}
                   sx={{ "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.04)" } }}
                 >
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
+                  <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
                     <Autocomplete
                       options={availableInvoiceItems}
                       getOptionLabel={(option) => option.itemNo || ""}
@@ -668,7 +750,7 @@ const DraftInvoicePage = () => {
                           placeholder="Select item"
                           sx={{
                             "& .MuiInputBase-input": {
-                              fontSize: "0.875rem",
+                              fontSize: "0.75rem",
                               padding: "6px 8px",
                             },
                           }}
@@ -695,7 +777,7 @@ const DraftInvoicePage = () => {
                       }}
                     />
                   </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
+                  <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
                     <TextField
                       size="small"
                       value={item.description}
@@ -705,14 +787,14 @@ const DraftInvoicePage = () => {
                       fullWidth
                       sx={{
                         "& .MuiInputBase-input": {
-                          fontSize: "0.875rem",
+                          fontSize: "0.75rem",
                           padding: "6px 8px",
                         },
                       }}
                       variant="standard"
                     />
                   </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
+                  <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
                     <TextField
                       size="small"
                       type="number"
@@ -731,7 +813,7 @@ const DraftInvoicePage = () => {
                       }}
                       sx={{
                         "& .MuiInputBase-input": {
-                          fontSize: "0.875rem",
+                          fontSize: "0.75rem",
                           padding: "6px 8px",
                         },
                         "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button":
@@ -746,7 +828,7 @@ const DraftInvoicePage = () => {
                       variant="standard"
                     />
                   </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
+                  <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
                     <TextField
                       size="small"
                       type="number"
@@ -765,7 +847,7 @@ const DraftInvoicePage = () => {
                       }}
                       sx={{
                         "& .MuiInputBase-input": {
-                          fontSize: "0.875rem",
+                          fontSize: "0.75rem",
                           padding: "6px 8px",
                         },
                         "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button":
@@ -780,45 +862,49 @@ const DraftInvoicePage = () => {
                       variant="standard"
                     />
                   </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
-                    <FormControl size="small" fullWidth>
-                      <Select
-                        value={item.account}
-                        onChange={(e) =>
-                          handleItemChange(item.id, "account", e.target.value)
-                        }
-                        sx={{ fontSize: "0.875rem" }}
-                        variant="standard"
-                      >
-                        <MenuItem
-                          value={defaultAccount}
-                          sx={{ fontSize: "0.875rem" }}
+                  {showAccountColumn && (
+                    <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
+                      <FormControl size="small" fullWidth>
+                        <Select
+                          value={item.account}
+                          onChange={(e) =>
+                            handleItemChange(item.id, "account", e.target.value)
+                          }
+                          sx={{ fontSize: "0.75rem" }}
+                          variant="standard"
                         >
-                          {defaultAccount}
-                        </MenuItem>
-                      </Select>
-                    </FormControl>
-                  </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
-                    <FormControl size="small" fullWidth>
-                      <Select
-                        value={item.taxRate}
-                        onChange={(e) =>
-                          handleItemChange(item.id, "taxRate", e.target.value)
-                        }
-                        sx={{ fontSize: "0.875rem" }}
-                        variant="standard"
-                      >
-                        <MenuItem
-                          value={defaultTaxRate}
-                          sx={{ fontSize: "0.875rem" }}
+                          <MenuItem
+                            value={defaultAccount}
+                            sx={{ fontSize: "0.75rem" }}
+                          >
+                            {defaultAccount}
+                          </MenuItem>
+                        </Select>
+                      </FormControl>
+                    </TableCell>
+                  )}
+                  {showTaxRateColumn && (
+                    <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
+                      <FormControl size="small" fullWidth>
+                        <Select
+                          value={item.taxRate}
+                          onChange={(e) =>
+                            handleItemChange(item.id, "taxRate", e.target.value)
+                          }
+                          sx={{ fontSize: "0.75rem" }}
+                          variant="standard"
                         >
-                          {defaultTaxRate}
-                        </MenuItem>
-                      </Select>
-                    </FormControl>
-                  </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
+                          <MenuItem
+                            value={defaultTaxRate}
+                            sx={{ fontSize: "0.75rem" }}
+                          >
+                            {defaultTaxRate}
+                          </MenuItem>
+                        </Select>
+                      </FormControl>
+                    </TableCell>
+                  )}
+                  <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
                     <TextField
                       size="small"
                       value={item.taxAmount.toFixed(2)}
@@ -826,14 +912,14 @@ const DraftInvoicePage = () => {
                       disabled
                       sx={{
                         "& .MuiInputBase-input": {
-                          fontSize: "0.875rem",
+                          fontSize: "0.75rem",
                           padding: "6px 8px",
                         },
                       }}
                       variant="standard"
                     />
                   </TableCell>
-                  <TableCell sx={{ padding: "8px", fontSize: "0.875rem" }}>
+                  <TableCell sx={{ padding: "8px", fontSize: "0.75rem" }}>
                     <TextField
                       size="small"
                       value={item.amount.toFixed(2)}
@@ -841,7 +927,7 @@ const DraftInvoicePage = () => {
                       disabled
                       sx={{
                         "& .MuiInputBase-input": {
-                          fontSize: "0.875rem",
+                          fontSize: "0.75rem",
                           padding: "6px 8px",
                         },
                       }}
@@ -853,7 +939,7 @@ const DraftInvoicePage = () => {
                       size="small"
                       onClick={() => handleDeleteItem(item.id)}
                       color="error"
-                      sx={{ fontSize: "0.875rem" }}
+                      sx={{ fontSize: "0.75rem" }}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -863,6 +949,17 @@ const DraftInvoicePage = () => {
             </TableBody>
           </Table>
         </TableContainer>
+
+        {/* Add Item Button - moved below the table */}
+        <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-start" }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddItem}
+          >
+            Add Item
+          </Button>
+        </Box>
 
         {/* Invoice Totals */}
         {invoiceItems.length > 0 && (

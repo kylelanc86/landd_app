@@ -6,11 +6,11 @@ const SYNC_CONFIG = {
   // Document types to include
   includeTypes: ['ACCREC'], // Only Accounts Receivable invoices (invoices you send to customers)
   
-  // Statuses to include (only awaiting approval invoices from Xero)
-  includeStatuses: ['SUBMITTED'], // Only invoices awaiting approval
+  // Statuses to include (awaiting approval and unpaid invoices from Xero)
+  includeStatuses: ['SUBMITTED', 'AUTHORISED'], // Invoices awaiting approval and unpaid invoices
   
   // Statuses to exclude
-  excludeStatuses: ['DRAFT', 'DELETED', 'VOIDED', 'PAID', 'AUTHORISED'], // Skip drafts, deleted, voided, paid, and authorized invoices
+  excludeStatuses: ['DRAFT', 'DELETED', 'VOIDED', 'PAID'], // Skip drafts, deleted, voided, and paid invoices
   
   // Keywords in reference field to exclude
   excludeReferenceKeywords: ['expense', 'claim', 'bill'],
@@ -110,9 +110,9 @@ class XeroService {
       }
       console.log('Tenant ID retrieved:', tenantId);
       
-      // Only fetch awaiting approval invoices from Xero
+      // Fetch awaiting approval and unpaid invoices from Xero
       // Use the statuses parameter to filter at the API level
-      const statuses = ['SUBMITTED']; // Only awaiting approval (ignore AUTHORISED/unpaid)
+      const statuses = ['SUBMITTED', 'AUTHORISED']; // Awaiting approval and unpaid invoices
       const tokenSet = await xero.readTokenSet();
       
       console.log('Fetching Xero invoices with statuses:', statuses);
@@ -122,10 +122,12 @@ class XeroService {
       let page = 1;
       const pageSize = 100; // Xero's default page size
       let hasMorePages = true;
+      let totalRetrieved = 0;
       
       while (hasMorePages) {
         const url = `https://api.xero.com/api.xro/2.0/Invoices?statuses=${statuses.join(',')}&page=${page}&pageSize=${pageSize}`;
         console.log(`Fetching page ${page} with ${pageSize} results per page...`);
+        console.log(`Full URL: ${url}`);
         
         const response = await fetch(url, {
           headers: {
@@ -136,6 +138,7 @@ class XeroService {
         });
         
         console.log(`Page ${page} API response status:`, response.status);
+        console.log(`Page ${page} API response headers:`, Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -146,13 +149,26 @@ class XeroService {
         const responseData = await response.json();
         
         if (!responseData || !responseData.Invoices) {
+          console.error('Invalid response structure:', responseData);
           throw new Error('Invalid response from Xero API');
         }
         
         const pageInvoices = responseData.Invoices;
         console.log(`Page ${page} returned ${pageInvoices.length} invoices`);
+        console.log(`Total retrieved so far: ${totalRetrieved + pageInvoices.length}`);
+        
+        // Log some additional debugging information
+        console.log(`Response data keys:`, Object.keys(responseData));
+        if (responseData.Pagination) {
+          console.log(`Pagination info:`, responseData.Pagination);
+        }
+        if (responseData.Invoices && responseData.Invoices.length > 0) {
+          console.log(`First invoice ID:`, responseData.Invoices[0].InvoiceID);
+          console.log(`Last invoice ID:`, responseData.Invoices[responseData.Invoices.length - 1].InvoiceID);
+        }
         
         allInvoices = allInvoices.concat(pageInvoices);
+        totalRetrieved = allInvoices.length;
         
         // Check if there are more pages
         if (pageInvoices.length < pageSize) {
@@ -161,6 +177,18 @@ class XeroService {
         } else {
           page++;
           console.log(`Moving to page ${page}`);
+          
+          // Add a small delay to avoid rate limiting
+          if (page > 1) {
+            console.log('Adding delay to avoid rate limiting...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        
+        // Safety check to prevent infinite loops
+        if (page > 50) {
+          console.warn('Reached maximum page limit (50), stopping pagination');
+          hasMorePages = false;
         }
       }
       
@@ -271,7 +299,7 @@ class XeroService {
       for (const invoice of validInvoices) {
         try {
           console.log(`\n--- Processing invoice ${processedCount + 1}/${validInvoices.length} ---`);
-          await this.processAndSaveInvoice(invoice);
+          const result = await this.processAndSaveInvoice(invoice);
           processedCount++;
           processedInvoices.push(invoice.InvoiceNumber);
           if (processedCount % 10 === 0) {
@@ -280,6 +308,7 @@ class XeroService {
         } catch (error) {
           errorCount++;
           console.error(`Error processing invoice ${invoice.InvoiceID}:`, error.message);
+          console.error(`Full error:`, error);
         }
       }
       
@@ -287,11 +316,12 @@ class XeroService {
       console.log('Successfully processed invoice numbers:', processedInvoices.sort());
       
       // Cleanup: Soft delete invoices that are no longer in Xero results
-      console.log('=== STARTING CLEANUP PROCESS ===');
+      console.log('=== CLEANUP PROCESS DISABLED ===');
       console.log(`Valid invoices from Xero: ${validInvoices.length}`);
+      console.log('Cleanup process has been disabled to prevent accidental deletion of legitimate invoices');
       
-      const cleanupResult = await this.cleanupPaidInvoices(validInvoices);
-      console.log(`Cleanup completed: ${cleanupResult.softDeleted} invoices soft deleted`);
+      // const cleanupResult = await this.cleanupPaidInvoices(validInvoices);
+      // console.log(`Cleanup completed: ${cleanupResult.softDeleted} invoices soft deleted`);
       
       return invoices;
     } catch (error) {
@@ -518,213 +548,7 @@ class XeroService {
         console.log('No client name found in invoice:', xeroInvoice.InvoiceID);
       }
 
-      // Check if invoice already exists in our database
-      const existingInvoice = await Invoice.findOne({ xeroInvoiceId: xeroInvoice.InvoiceID });
-      
-
-      
-      if (existingInvoice) {
-        console.log('Found existing invoice:', existingInvoice.invoiceID);
-        
-        // Check if the invoice number has changed in Xero
-        if (existingInvoice.invoiceID !== xeroInvoice.InvoiceNumber) {
-          console.log('Invoice number changed in Xero:', {
-            oldNumber: existingInvoice.invoiceID,
-            newNumber: xeroInvoice.InvoiceNumber
-          });
-          
-          // Hard delete the old invoice since the invoice number changed
-          await Invoice.findByIdAndDelete(existingInvoice._id);
-          console.log('Hard deleted old invoice with number:', existingInvoice.invoiceID);
-          
-          // Continue to create new invoice below (normal sync process will handle this)
-        } else {
-          console.log('Updating existing invoice:', existingInvoice.invoiceID);
-          
-          // Helper function to parse Xero dates with fallback
-          const parseXeroDate = (dateValue, fallbackDate = new Date()) => {
-          if (!dateValue) {
-            console.log('No date value provided, using fallback');
-            return fallbackDate;
-          }
-          
-          console.log('Parsing date value:', dateValue, 'Type:', typeof dateValue);
-          
-          // If it's already a Date object, return it
-          if (dateValue instanceof Date) {
-            console.log('Date is already a Date object');
-            return dateValue;
-          }
-          
-          // If it's a string, try to parse it
-          if (typeof dateValue === 'string') {
-            // 1. Try parsing Xero's /Date(1234567890000+0000)/ format
-            const xeroDateMatch = dateValue.match(/\/Date\((\d+)([+-]\d{4})?\)\//);
-            if (xeroDateMatch) {
-              const timestamp = parseInt(xeroDateMatch[1]);
-              const dateObj = new Date(timestamp);
-              if (!isNaN(dateObj.getTime())) {
-                console.log('Successfully parsed Xero date format:', dateObj);
-                return dateObj;
-              }
-            }
-            
-            // 2. Try parsing ISO date format (2024-01-15T00:00:00)
-            const isoDateMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (isoDateMatch) {
-              const year = parseInt(isoDateMatch[1]);
-              const month = parseInt(isoDateMatch[2]) - 1; // Month is 0-indexed
-              const day = parseInt(isoDateMatch[3]);
-              const dateObj = new Date(year, month, day);
-              if (!isNaN(dateObj.getTime())) {
-                console.log('Successfully parsed ISO date format:', dateObj);
-                return dateObj;
-              }
-            }
-            
-            // 3. Try standard Date parsing
-            const parsed = new Date(dateValue);
-            if (!isNaN(parsed.getTime())) {
-              console.log('Successfully parsed date:', parsed);
-              return parsed;
-            }
-            
-            // 4. Try parsing as ISO string without timezone
-            const isoParsed = new Date(dateValue + 'T00:00:00');
-            if (!isNaN(isoParsed.getTime())) {
-              console.log('Successfully parsed ISO date:', isoParsed);
-              return isoParsed;
-            }
-            
-            // 5. Try parsing as DD/MM/YYYY format
-            const dateParts = dateValue.split('/');
-            if (dateParts.length === 3) {
-              const day = parseInt(dateParts[0]);
-              const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed
-              const year = parseInt(dateParts[2]);
-              const dateObj = new Date(year, month, day);
-              if (!isNaN(dateObj.getTime())) {
-                console.log('Successfully parsed DD/MM/YYYY date:', dateObj);
-                return dateObj;
-              }
-            }
-            
-            // 6. Try parsing as MM/DD/YYYY format
-            if (dateParts.length === 3) {
-              const month = parseInt(dateParts[0]) - 1; // Month is 0-indexed
-              const day = parseInt(dateParts[1]);
-              const year = parseInt(dateParts[2]);
-              const dateObj = new Date(year, month, day);
-              if (!isNaN(dateObj.getTime())) {
-                console.log('Successfully parsed MM/DD/YYYY date:', dateObj);
-                return dateObj;
-              }
-            }
-          }
-          
-          console.warn('Could not parse date, using fallback:', dateValue);
-          return fallbackDate;
-        };
-        
-        // Helper function to map Xero status to our status
-        const mapXeroStatus = (xeroStatus) => {
-          console.log('Mapping Xero status:', xeroStatus);
-          switch (xeroStatus?.toUpperCase()) {
-            case 'PAID':
-              return 'paid';
-            case 'AUTHORISED':
-              return 'unpaid';
-            case 'SUBMITTED':
-              return 'awaiting_approval';
-            case 'DRAFT':
-              return 'draft';
-            case 'VOIDED':
-            case 'DELETED':
-            default:
-              return 'unpaid';
-          }
-        };
-        
-        // Check for changes and update accordingly
-        let hasChanges = false;
-        
-        // Check if invoice number changed
-        if (existingInvoice.invoiceID !== xeroInvoice.InvoiceNumber) {
-          console.log('Invoice number changed:', {
-            old: existingInvoice.invoiceID,
-            new: xeroInvoice.InvoiceNumber
-          });
-          existingInvoice.invoiceID = xeroInvoice.InvoiceNumber;
-          hasChanges = true;
-        }
-        
-        // Check if amount changed
-        const newAmount = xeroInvoice.Total || 0;
-        if (existingInvoice.amount !== newAmount) {
-          console.log('Amount changed:', {
-            old: existingInvoice.amount,
-            new: newAmount
-          });
-          existingInvoice.amount = newAmount;
-          hasChanges = true;
-        }
-        
-        // Check if status changed
-        const newStatus = mapXeroStatus(xeroInvoice.Status);
-        if (existingInvoice.status !== newStatus) {
-          console.log('Status changed:', {
-            old: existingInvoice.status,
-            new: newStatus
-          });
-          existingInvoice.status = newStatus;
-          hasChanges = true;
-        }
-        
-        // Always update other fields from Xero
-        existingInvoice.date = xeroInvoice.Date ? parseXeroDate(xeroInvoice.Date) : existingInvoice.date;
-        existingInvoice.dueDate = xeroInvoice.DueDate ? parseXeroDate(xeroInvoice.DueDate) : existingInvoice.dueDate;
-        existingInvoice.description = xeroInvoice.LineItems?.[0]?.Description || existingInvoice.description;
-        existingInvoice.xeroStatus = xeroInvoice.Status;
-        existingInvoice.xeroReference = xeroInvoice.Reference || existingInvoice.xeroReference;
-        existingInvoice.lastSynced = new Date();
-        
-        if (hasChanges) {
-          console.log('Invoice updated with changes from Xero');
-        } else {
-          console.log('Invoice synced (no changes detected)');
-        }
-        
-        // Update client name if we have contact data
-        if (xeroClientName) {
-          existingInvoice.xeroClientName = xeroClientName;
-          console.log('Updated existing invoice client name to:', xeroClientName);
-        }
-        
-        await existingInvoice.save();
-        return existingInvoice;
-      }
-    }
-
-      // For new invoices, we need to handle required fields
-      if (!xeroInvoice.Date || !xeroInvoice.DueDate) {
-        console.warn('Missing date fields in Xero invoice, using defaults:', xeroInvoice.InvoiceID);
-        // Don't throw error, we'll use default dates
-      }
-      
-      // Log the date values to debug
-      console.log('Invoice dates:', {
-        id: xeroInvoice.InvoiceID,
-        date: xeroInvoice.Date,
-        dueDate: xeroInvoice.DueDate,
-        dateType: typeof xeroInvoice.Date,
-        dueDateType: typeof xeroInvoice.DueDate,
-        rawDate: JSON.stringify(xeroInvoice.Date),
-        rawDueDate: JSON.stringify(xeroInvoice.DueDate)
-      });
-
-      // Client logic moved to beginning of function
-
-      // Use the same parseXeroDate function defined earlier
+      // Helper function to parse Xero dates with fallback
       const parseXeroDate = (dateValue, fallbackDate = new Date()) => {
         if (!dateValue) {
           console.log('No date value provided, using fallback');
@@ -808,14 +632,7 @@ class XeroService {
         console.warn('Could not parse date, using fallback:', dateValue);
         return fallbackDate;
       };
-      
-      // Generate a proper invoice ID
-      let invoiceID = xeroInvoice.InvoiceNumber;
-      if (!invoiceID || invoiceID === 'Expense Claims' || invoiceID === '') {
-        // Use Xero Invoice ID if InvoiceNumber is not valid
-        invoiceID = `XERO-${xeroInvoice.InvoiceID}`;
-      }
-      
+
       // Helper function to map Xero status to our status
       const mapXeroStatus = (xeroStatus) => {
         console.log('Mapping Xero status:', xeroStatus);
@@ -834,6 +651,119 @@ class XeroService {
             return 'unpaid';
         }
       };
+
+      // Check if invoice already exists in our database
+      const existingInvoice = await Invoice.findOne({ xeroInvoiceId: xeroInvoice.InvoiceID });
+      
+
+      
+      if (existingInvoice) {
+        console.log('Found existing invoice:', existingInvoice.invoiceID);
+        
+        // Check if the invoice number has changed in Xero
+        if (existingInvoice.invoiceID !== xeroInvoice.InvoiceNumber) {
+          console.log('Invoice number changed in Xero:', {
+            oldNumber: existingInvoice.invoiceID,
+            newNumber: xeroInvoice.InvoiceNumber
+          });
+          
+          // Hard delete the old invoice since the invoice number changed
+          await Invoice.findByIdAndDelete(existingInvoice._id);
+          console.log('Hard deleted old invoice with number:', existingInvoice.invoiceID);
+          
+          // Continue to create new invoice below (normal sync process will handle this)
+        } else {
+          console.log('Updating existing invoice:', existingInvoice.invoiceID);
+          
+
+        
+
+        
+        // Check for changes and update accordingly
+        let hasChanges = false;
+        
+        // Check if invoice number changed
+        if (existingInvoice.invoiceID !== xeroInvoice.InvoiceNumber) {
+          console.log('Invoice number changed:', {
+            old: existingInvoice.invoiceID,
+            new: xeroInvoice.InvoiceNumber
+          });
+          existingInvoice.invoiceID = xeroInvoice.InvoiceNumber;
+          hasChanges = true;
+        }
+        
+        // Check if amount changed
+        const newAmount = xeroInvoice.Total || 0;
+        if (existingInvoice.amount !== newAmount) {
+          console.log('Amount changed:', {
+            old: existingInvoice.amount,
+            new: newAmount
+          });
+          existingInvoice.amount = newAmount;
+          hasChanges = true;
+        }
+        
+        // Check if status changed
+        const newStatus = mapXeroStatus(xeroInvoice.Status);
+        if (existingInvoice.status !== newStatus) {
+          console.log('Status changed:', {
+            old: existingInvoice.status,
+            new: newStatus
+          });
+          existingInvoice.status = newStatus;
+          hasChanges = true;
+        }
+        
+        // Always update other fields from Xero
+        existingInvoice.date = xeroInvoice.Date ? parseXeroDate(xeroInvoice.Date) : existingInvoice.date;
+        existingInvoice.dueDate = xeroInvoice.DueDate ? parseXeroDate(xeroInvoice.DueDate) : existingInvoice.dueDate;
+        existingInvoice.description = xeroInvoice.LineItems?.[0]?.Description || existingInvoice.description;
+        existingInvoice.xeroStatus = xeroInvoice.Status;
+        existingInvoice.xeroReference = xeroInvoice.Reference || existingInvoice.xeroReference;
+        existingInvoice.lastSynced = new Date();
+        
+        if (hasChanges) {
+          console.log('Invoice updated with changes from Xero');
+        } else {
+          console.log('Invoice synced (no changes detected)');
+        }
+        
+        // Update client name if we have contact data
+        if (xeroClientName) {
+          existingInvoice.xeroClientName = xeroClientName;
+          console.log('Updated existing invoice client name to:', xeroClientName);
+        }
+        
+        await existingInvoice.save();
+        return existingInvoice;
+        }
+      }
+
+      // For new invoices, we need to handle required fields
+      if (!xeroInvoice.Date || !xeroInvoice.DueDate) {
+        console.warn('Missing date fields in Xero invoice, using defaults:', xeroInvoice.InvoiceID);
+        // Don't throw error, we'll use default dates
+      }
+      
+      // Log the date values to debug
+      console.log('Invoice dates:', {
+        id: xeroInvoice.InvoiceID,
+        date: xeroInvoice.Date,
+        dueDate: xeroInvoice.DueDate,
+        dateType: typeof xeroInvoice.Date,
+        dueDateType: typeof xeroInvoice.DueDate,
+        rawDate: JSON.stringify(xeroInvoice.Date),
+        rawDueDate: JSON.stringify(xeroInvoice.DueDate)
+      });
+
+      // Client logic moved to beginning of function
+      
+      // Generate a proper invoice ID
+      let invoiceID = xeroInvoice.InvoiceNumber;
+      if (!invoiceID || invoiceID === 'Expense Claims' || invoiceID === '') {
+        // Use Xero Invoice ID if InvoiceNumber is not valid
+        invoiceID = `XERO-${xeroInvoice.InvoiceID}`;
+      }
       
       // Create new invoice
       const newInvoice = new Invoice({

@@ -45,6 +45,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ArchiveIcon from "@mui/icons-material/Archive";
 import {
   formatPhoneNumber,
   isValidAustralianMobile,
@@ -79,6 +80,8 @@ const Clients = () => {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [clientToArchive, setClientToArchive] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -101,7 +104,7 @@ const Clients = () => {
     name: true,
     invoiceEmail: true,
     contact1Name: true,
-    contact1Number: true,
+    contact1Number: false, // Hide primary phone column by default
     address: false, // Hide address column by default
     written_off: false, // Will be updated in useEffect
     actions: true,
@@ -294,6 +297,41 @@ const Clients = () => {
     }
   }, [clientToDelete]);
 
+  const handleArchiveClick = useCallback((client) => {
+    setClientToArchive(client);
+    setArchiveDialogOpen(true);
+  }, []);
+
+  const handleArchiveConfirm = useCallback(async () => {
+    try {
+      await clientService.archive(clientToArchive._id);
+      setClients((prevClients) =>
+        prevClients.filter((client) => client._id !== clientToArchive._id)
+      );
+      setArchiveDialogOpen(false);
+      setClientToArchive(null);
+      setSnackbar({
+        open: true,
+        message: `${clientToArchive.name} has been archived successfully`,
+        severity: "success",
+      });
+    } catch (err) {
+      if (err.response) {
+        setSnackbar({
+          open: true,
+          message: err.response.data.message || "Failed to archive client",
+          severity: "error",
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: "Failed to archive client",
+          severity: "error",
+        });
+      }
+    }
+  }, [clientToArchive]);
+
   // Column visibility handlers
   const handleColumnVisibilityClick = useCallback((event) => {
     setColumnVisibilityAnchor(event.currentTarget);
@@ -436,6 +474,14 @@ const Clients = () => {
             >
               Details
             </Button>
+            <IconButton
+              onClick={() => handleArchiveClick(params.row)}
+              title="Archive Client"
+              color="warning"
+              sx={{ mr: 1 }}
+            >
+              <ArchiveIcon />
+            </IconButton>
             <IconButton
               onClick={() => handleDeleteClick(params.row)}
               title="Delete Client"
@@ -1015,6 +1061,89 @@ const Clients = () => {
             }}
           >
             Delete Client
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Archive Confirmation Dialog */}
+      <Dialog
+        open={archiveDialogOpen}
+        onClose={() => setArchiveDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            px: 3,
+            pt: 3,
+            pb: 1,
+            border: "none",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 48,
+              height: 48,
+              borderRadius: "50%",
+              backgroundColor: "warning.light",
+              color: "warning.contrastText",
+            }}
+          >
+            <ArchiveIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Archive Client
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            Are you sure you want to archive {clientToArchive?.name}? This will
+            move the client to the archived data section where it can be
+            restored later.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setArchiveDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleArchiveConfirm}
+            variant="contained"
+            color="warning"
+            startIcon={<ArchiveIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Archive Client
           </Button>
         </DialogActions>
       </Dialog>

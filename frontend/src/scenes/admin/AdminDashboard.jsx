@@ -15,6 +15,7 @@ import {
   ReceiptOutlined as ReceiptIcon,
   ArrowForward as ArrowForwardIcon,
   Storage as StorageIcon,
+  Archive as ArchiveIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { tokens } from "../../theme/tokens";
@@ -38,15 +39,15 @@ const AdminDashboard = () => {
       requiredPermission: "users.view",
       color: "#1976d2",
     },
-    {
-      id: "report-templates",
-      title: "Report Templates",
-      description: "Manage standardized content for different report types",
-      icon: <AssessmentIcon />,
-      path: "/admin/report-templates",
-      requiredPermission: "admin.view",
-      color: "#2e7d32",
-    },
+    // {
+    //   id: "report-templates",
+    //   title: "Report Templates",
+    //   description: "Manage standardized content for different report types",
+    //   icon: <AssessmentIcon />,
+    //   path: "/admin/report-templates",
+    //   requiredPermission: "admin.view",
+    //   color: "#2e7d32",
+    // },
     {
       id: "invoice-items",
       title: "Invoice Items",
@@ -65,6 +66,15 @@ const AdminDashboard = () => {
       path: "/admin/custom-data-fields",
       requiredPermission: "admin.view",
       color: "#9c27b0",
+    },
+    {
+      id: "archived-data",
+      title: "Archived Data",
+      description: "View and manage archived data across the system",
+      icon: <ArchiveIcon />,
+      path: "/admin/archived-data",
+      requiredPermission: "admin.view",
+      color: "#795548",
     },
   ];
 

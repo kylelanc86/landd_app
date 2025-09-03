@@ -80,6 +80,7 @@ const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
 const InvoiceItems = lazy(() => import("./scenes/admin/InvoiceItems"));
 const CustomDataFields = lazy(() => import("./scenes/admin/CustomDataFields"));
+const ArchivedData = lazy(() => import("./scenes/admin/ArchivedData"));
 
 // New lazy loaded components for missing pages
 const LeadAssessment = lazy(() =>
@@ -848,6 +849,18 @@ function App() {
                                 >
                                   <Suspense fallback={<LoadingSpinner />}>
                                     <CustomDataFields />
+                                  </Suspense>
+                                </PermissionRoute>
+                              }
+                            />
+                            <Route
+                              path="/admin/archived-data"
+                              element={
+                                <PermissionRoute
+                                  requiredPermissions={["admin.view"]}
+                                >
+                                  <Suspense fallback={<LoadingSpinner />}>
+                                    <ArchivedData />
                                   </Suspense>
                                 </PermissionRoute>
                               }

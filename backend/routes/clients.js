@@ -15,14 +15,19 @@ router.get('/count', async (req, res) => {
 // Get all clients with search and pagination
 router.get('/', async (req, res) => {
   try {
-    const { search, page = 1, limit = 25 } = req.query;
+    const { search, page = 1, limit = 25, showInactive = false } = req.query;
     console.log('Backend received query params:', req.query);
-    console.log('Backend parsed params:', { search, page, limit });
+    console.log('Backend parsed params:', { search, page, limit, showInactive });
     const query = {};
 
     // Add search condition if search term is provided
     if (search) {
       query.name = { $regex: search, $options: 'i' };
+    }
+
+    // Filter by active status unless showInactive is true
+    if (showInactive !== 'true') {
+      query.isActive = true;
     }
 
     // Calculate pagination
@@ -34,7 +39,7 @@ router.get('/', async (req, res) => {
 
     // Execute query with pagination
     const clients = await Client.find(query)
-      .select('name invoiceEmail contact1Name contact1Number address written_off paymentTerms')
+      .select('name invoiceEmail contact1Name contact1Number address written_off paymentTerms isActive createdAt updatedAt')
       .sort({ name: 1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -114,7 +119,39 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// Delete client
+// Archive client (soft delete)
+router.patch('/:id/archive', async (req, res) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    if (!client) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+
+    client.isActive = false;
+    await client.save();
+    res.json({ message: 'Client archived successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Restore client
+router.patch('/:id/restore', async (req, res) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    if (!client) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+
+    client.isActive = true;
+    await client.save();
+    res.json({ message: 'Client restored successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Delete client (hard delete)
 router.delete('/:id', async (req, res) => {
   try {
     const client = await Client.findById(req.params.id);

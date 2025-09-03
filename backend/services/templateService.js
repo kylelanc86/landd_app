@@ -1,7 +1,4 @@
-const NonFriableClearance = require('../models/clearanceTemplates/asbestos/NonFriableClearance');
-const FriableClearance = require('../models/clearanceTemplates/asbestos/FriableClearance');
-const MixedClearance = require('../models/clearanceTemplates/asbestos/MixedClearance');
-const AsbestosAssessmentTemplate = require('../models/assessmentTemplates/asbestos/AsbestosAssessmentTemplate');
+const ReportTemplate = require('../models/ReportTemplate');
 const mongoose = require('mongoose');
 
 // Simple in-memory cache for user lookups during PDF generation
@@ -31,18 +28,11 @@ const getTemplateByType = async (templateType) => {
     
     // Race between the database query and timeout
     const templateQuery = async () => {
-      if (templateType === "asbestosClearanceNonFriable") {
-        return await NonFriableClearance.findOne();
-      } else if (templateType === "asbestosClearanceFriable") {
-        return await FriableClearance.findOne();
-      } else if (templateType === "asbestosClearanceMixed") {
-        return await MixedClearance.findOne();
-      } else if (templateType === "asbestosClearanceComplex") {
+      if (templateType === "asbestosClearanceComplex") {
         return null; // Complex type doesn't use default templates
-      } else if (templateType === "asbestosAssessment") {
-        return await AsbestosAssessmentTemplate.findOne();
+      } else {
+        return await ReportTemplate.findOne({ templateType });
       }
-      return null;
     };
     
     template = await Promise.race([templateQuery(), timeoutPromise]);
@@ -106,33 +96,14 @@ const getTemplateByType = async (templateType) => {
           footerText: "[DYNAMIC_CONTENT_NOT_LOADED]",
         };
         
-        template = new AsbestosAssessmentTemplate({
+        template = new ReportTemplate({
+          templateType,
           createdBy,
           reportHeaders: {
             title: title,
             subtitle: "Assessment Report"
           },
-          standardSections,
-          // Also add content at root level for backward compatibility
-          introductionTitle: "INTRODUCTION",
-          introductionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          surveyFindingsTitle: "SURVEY FINDINGS",
-          surveyFindingsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          discussionTitle: "DISCUSSION AND CONCLUSIONS",
-          discussionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          riskAssessmentTitle: "RISK ASSESSMENT",
-          riskAssessmentContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          controlMeasuresTitle: "DETERMINING SUITABLE CONTROL MEASURES",
-          controlMeasuresContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          remediationRequirementsTitle: "REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM",
-          remediationRequirementsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          legislationTitle: "LEGISLATION",
-          legislationContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          assessmentLimitationsTitle: "ASSESSMENT LIMITATIONS/CAVEATS",
-          assessmentLimitationsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          signOffContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          signaturePlaceholder: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          footerText: "[DYNAMIC_CONTENT_NOT_LOADED]"
+          standardSections
         });
       } else if (templateType === "asbestosClearanceFriable") {
         // Friable clearance content
@@ -160,7 +131,8 @@ const getTemplateByType = async (templateType) => {
           footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
         };
         
-        template = new FriableClearance({
+        template = new ReportTemplate({
+          templateType,
           createdBy,
           reportHeaders: {
             title: title,
@@ -194,7 +166,8 @@ const getTemplateByType = async (templateType) => {
           footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
         };
         
-        template = new MixedClearance({
+        template = new ReportTemplate({
+          templateType,
           createdBy,
           reportHeaders: {
             title: title,
@@ -215,7 +188,8 @@ const getTemplateByType = async (templateType) => {
           ]
         };
         
-        template = new NonFriableClearance({
+        template = new ReportTemplate({
+          templateType,
           createdBy,
           reportHeaders: {
             title: title,
@@ -249,7 +223,8 @@ const getTemplateByType = async (templateType) => {
           footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
         };
         
-        template = new NonFriableClearance({
+        template = new ReportTemplate({
+          templateType,
           createdBy,
           reportHeaders: {
             title: title,
