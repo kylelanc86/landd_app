@@ -369,6 +369,8 @@ const ProjectInformation = () => {
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [isClientSearching, setIsClientSearching] = useState(false);
+  const [isGeneratingId, setIsGeneratingId] = useState(false);
+  const [idGenerated, setIdGenerated] = useState(false);
 
   // Get project statuses from custom data fields
   const { activeStatuses, inactiveStatuses, statusColors } =
@@ -481,7 +483,7 @@ const ProjectInformation = () => {
     return { active: [], inactive: [] };
   };
 
-  const generateNextProjectId = async () => {
+  const generateNextProjectId = useCallback(async () => {
     console.log("🔍 generateNextProjectId called");
     console.log("🔍 form.isLargeProject:", form.isLargeProject);
     console.log("🔍 Current form state:", {
@@ -629,11 +631,61 @@ const ProjectInformation = () => {
       });
       throw new Error("Failed to generate project ID");
     }
-  };
+  }, [form.isLargeProject]);
+
+  // Pre-generate project ID when form becomes valid
+  const preGenerateProjectId = useCallback(
+    async (forceRegenerate = false) => {
+      if (isEditMode || (idGenerated && !forceRegenerate) || isGeneratingId) {
+        return;
+      }
+
+      // Only generate if we have basic required info
+      if (!form.name || !form.client) {
+        return;
+      }
+
+      try {
+        setIsGeneratingId(true);
+        console.log("🔍 Pre-generating project ID...");
+        const nextId = await generateNextProjectId();
+        console.log("🔍 Pre-generated project ID:", nextId);
+
+        setForm((prev) => ({ ...prev, projectID: nextId }));
+        setIdGenerated(true);
+      } catch (error) {
+        console.error("🔍 Error pre-generating project ID:", error);
+        // Don't show error to user, will fall back to generation on submit
+        setIdGenerated(false);
+      } finally {
+        setIsGeneratingId(false);
+      }
+    },
+    [
+      isEditMode,
+      idGenerated,
+      isGeneratingId,
+      form.name,
+      form.client,
+      generateNextProjectId,
+    ]
+  );
 
   useEffect(() => {
     console.log("ProjectInformation component mounted");
   }, []);
+
+  // Trigger pre-generation when form becomes valid
+  useEffect(() => {
+    preGenerateProjectId();
+  }, [preGenerateProjectId]);
+
+  // Regenerate ID when large project setting changes
+  useEffect(() => {
+    if (form.name && form.client) {
+      preGenerateProjectId(true);
+    }
+  }, [form.isLargeProject, form.name, form.client, preGenerateProjectId]);
 
   // Function to fetch audit trail
   const fetchAuditTrail = async (projectId) => {
@@ -1078,12 +1130,17 @@ const ProjectInformation = () => {
           hasId: !!form._id,
         });
 
-        // Generate Project ID right before creating
-        console.log("🔍 Generating Project ID...");
-        const nextId = await generateNextProjectId();
-        console.log("🔍 Generated Project ID:", nextId);
+        // Use pre-generated ID or generate one as fallback
+        let projectId = form.projectID;
+        if (!projectId) {
+          console.log("🔍 No pre-generated ID, generating now...");
+          projectId = await generateNextProjectId();
+          console.log("🔍 Generated Project ID:", projectId);
+        } else {
+          console.log("🔍 Using pre-generated Project ID:", projectId);
+        }
 
-        const formWithId = { ...form, projectID: nextId };
+        const formWithId = { ...form, projectID: projectId };
         console.log("🔍 Form with Project ID:", formWithId);
         console.log("🔍 Form with ID structure:", {
           projectID: formWithId.projectID,
@@ -1103,8 +1160,8 @@ const ProjectInformation = () => {
           responseId: response.data?._id,
         });
 
-        // Navigate to the created project to show audit trail
-        navigate(`/projects/${response.data._id}`);
+        // Navigate to projects page after successful creation
+        navigate("/projects");
         return; // Exit early to avoid the navigate("/projects") call
       }
 
@@ -1281,8 +1338,10 @@ const ProjectInformation = () => {
                     Project ID:{" "}
                     {isEditMode
                       ? form.projectID
-                      : form.isLargeProject
-                      ? "HAZ001"
+                      : form.projectID
+                      ? form.projectID
+                      : isGeneratingId
+                      ? "Generating..."
                       : "Will be auto-generated"}
                   </Typography>
                   {!isEditMode && (
@@ -1291,7 +1350,11 @@ const ProjectInformation = () => {
                       color="text.secondary"
                       sx={{ fontStyle: "italic" }}
                     >
-                      (Auto-generated)
+                      {form.projectID
+                        ? "(Ready)"
+                        : isGeneratingId
+                        ? "(Generating...)"
+                        : "(Auto-generated)"}
                     </Typography>
                   )}
                   {isEditMode && form.createdAt && (

@@ -26,6 +26,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   invoiceService,
@@ -76,6 +77,7 @@ const Invoices = () => {
   const [syncingXero, setSyncingXero] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSuccessMessage, setIsSuccessMessage] = useState(false);
 
   // Add permission checks for Xero operations
   const canSyncXero = hasPermission(currentUser, "xero.sync");
@@ -686,6 +688,7 @@ const Invoices = () => {
         await invoiceService.hardDelete(invoice._id);
         // Show success message
         setErrorMessage("Invoice deleted successfully from the app.");
+        setIsSuccessMessage(true);
         setErrorDialogOpen(true);
       } catch (error) {
         console.error("Error deleting invoice:", error);
@@ -750,11 +753,13 @@ const Invoices = () => {
 
       if (failed === 0) {
         setErrorMessage(`Successfully deleted ${successful} invoice(s)`);
+        setIsSuccessMessage(true);
         setErrorDialogOpen(true);
       } else {
         setErrorMessage(
           `Deleted ${successful} invoice(s) successfully. ${failed} invoice(s) were already deleted or not found.`
         );
+        setIsSuccessMessage(true);
         setErrorDialogOpen(true);
       }
     } catch (error) {
@@ -815,6 +820,7 @@ const Invoices = () => {
       setErrorMessage(
         `Successfully synced ${draftInvoices.length} draft invoices to Xero`
       );
+      setIsSuccessMessage(true);
       setErrorDialogOpen(true);
     } catch (error) {
       console.error("Error syncing drafts to Xero:", error);
@@ -1922,10 +1928,13 @@ const Invoices = () => {
         </form>
       </Dialog>
 
-      {/* Error Dialog */}
+      {/* Error/Success Dialog */}
       <Dialog
         open={errorDialogOpen}
-        onClose={() => setErrorDialogOpen(false)}
+        onClose={() => {
+          setErrorDialogOpen(false);
+          setIsSuccessMessage(false);
+        }}
         maxWidth="sm"
         fullWidth
         PaperProps={{
@@ -1954,14 +1963,18 @@ const Invoices = () => {
               width: 40,
               height: 40,
               borderRadius: "50%",
-              bgcolor: "error.main",
+              bgcolor: isSuccessMessage ? "success.main" : "error.main",
               color: "white",
             }}
           >
-            <DeleteIcon sx={{ fontSize: 20 }} />
+            {isSuccessMessage ? (
+              <CheckCircleIcon sx={{ fontSize: 20 }} />
+            ) : (
+              <DeleteIcon sx={{ fontSize: 20 }} />
+            )}
           </Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            Error
+            {isSuccessMessage ? "Success" : "Error"}
           </Typography>
         </DialogTitle>
         <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
@@ -1971,7 +1984,10 @@ const Invoices = () => {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
           <Button
-            onClick={() => setErrorDialogOpen(false)}
+            onClick={() => {
+              setErrorDialogOpen(false);
+              setIsSuccessMessage(false);
+            }}
             variant="outlined"
             sx={{
               minWidth: 100,
