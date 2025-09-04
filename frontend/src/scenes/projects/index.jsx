@@ -1019,7 +1019,7 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Function to export projects to CSV
   const exportProjectsToCSV = () => {
-    if (!projects || projects.length === 0) {
+    if (!filteredProjects || filteredProjects.length === 0) {
       alert("No projects to export");
       return;
     }
@@ -1071,7 +1071,7 @@ const Projects = ({ initialFilters = {} }) => {
     // Create CSV content
     const csvContent = [
       headers.join(","),
-      ...projects.map((project) =>
+      ...filteredProjects.map((project) =>
         [
           `"${project.projectID || ""}"`,
           `"${project.name || ""}"`,
@@ -1595,6 +1595,29 @@ const Projects = ({ initialFilters = {} }) => {
     ],
     [navigate]
   );
+
+  // Client-side filtering for live status updates
+  const filteredProjects = useMemo(() => {
+    if (filters.statusFilter === "all") {
+      return projects;
+    }
+
+    return projects.filter((project) => {
+      const projectStatus = project.status;
+
+      // Handle active/inactive filter categories
+      if (filters.statusFilter === "all_active") {
+        return activeStatuses.includes(projectStatus);
+      }
+
+      if (filters.statusFilter === "all_inactive") {
+        return inactiveStatuses.includes(projectStatus);
+      }
+
+      // Handle specific status filters
+      return projectStatus === filters.statusFilter;
+    });
+  }, [projects, filters.statusFilter, activeStatuses, inactiveStatuses]);
 
   // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
@@ -2147,7 +2170,7 @@ const Projects = ({ initialFilters = {} }) => {
         }}
       >
         <DataGrid
-          rows={projects}
+          rows={filteredProjects}
           sortingOrder={["desc", "asc"]}
           columns={columns}
           disableColumnUnsort={true}
@@ -2687,8 +2710,8 @@ const Projects = ({ initialFilters = {} }) => {
             filtered projects data?
           </Typography>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            The export will include {projects.length} project
-            {projects.length !== 1 ? "s" : ""}.
+            The export will include {filteredProjects.length} project
+            {filteredProjects.length !== 1 ? "s" : ""}.
           </Typography>
         </DialogContent>
 
