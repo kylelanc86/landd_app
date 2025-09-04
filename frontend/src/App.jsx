@@ -44,6 +44,7 @@ import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
 import LDsuppliedItems from "./scenes/fibreID/LDsuppliedItems.jsx";
 import AssessmentJobsPage from "./scenes/surveys/asbestos";
+import UserManual from "./scenes/userManual/UserManual";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
@@ -386,6 +387,10 @@ function App() {
                                   <Profile />
                                 </Suspense>
                               }
+                            />
+                            <Route
+                              path="/user-manual"
+                              element={<UserManual />}
                             />
 
                             {isFeatureEnabled("ADVANCED.SURVEYS") && (

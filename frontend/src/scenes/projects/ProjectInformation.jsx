@@ -828,13 +828,25 @@ const ProjectInformation = () => {
     if (!projectId) return;
 
     try {
+      const auditStartTime = performance.now();
       setAuditLoading(true);
       setAuditError(null);
+      console.log("🔄 AUDIT TRAIL FETCH START (background)", {
+        projectId,
+        timestamp: new Date().toISOString(),
+      });
+
       const response = await ProjectAuditService.getAllProjectAuditTrail(
         projectId
       );
-      console.log("🔍 Audit trail response:", response);
-      console.log("🔍 Audit trail entries:", response.auditTrail);
+      const auditTime = performance.now() - auditStartTime;
+
+      console.log("✅ AUDIT TRAIL FETCH COMPLETE (background)", {
+        projectId,
+        apiTime: `${auditTime.toFixed(2)}ms`,
+        entriesCount: response.auditTrail?.length || 0,
+      });
+
       setAuditTrail(response.auditTrail || []);
     } catch (error) {
       console.error("Error fetching audit trail:", error);
@@ -862,7 +874,7 @@ const ProjectInformation = () => {
         // Fetch clients and users
         const clientsUsersStartTime = performance.now();
         const [clientsRes, usersRes] = await Promise.all([
-          clientService.getAll({ limit: 100 }),
+          clientService.getAll({ limit: 20 }),
           userService.getAll(),
         ]);
         const clientsUsersTime = performance.now() - clientsUsersStartTime;
@@ -871,6 +883,7 @@ const ProjectInformation = () => {
             clientsRes.data?.clients?.length || clientsRes.data?.length || 0,
           usersCount: usersRes.data?.length || 0,
           apiTime: `${clientsUsersTime.toFixed(2)}ms`,
+          note: "Reduced from 100 to 20 clients for faster loading",
         });
 
         setClients(clientsRes.data.clients || clientsRes.data);
@@ -928,14 +941,8 @@ const ProjectInformation = () => {
             // Store original form values for change tracking
             setOriginalForm(JSON.parse(JSON.stringify(projectData)));
 
-            // Fetch audit trail for existing projects
-            const auditStartTime = performance.now();
-            await fetchAuditTrail(projectData._id);
-            const auditTime = performance.now() - auditStartTime;
-            console.log("✅ AUDIT TRAIL FETCH COMPLETE", {
-              projectId: projectData._id,
-              apiTime: `${auditTime.toFixed(2)}ms`,
-            });
+            // Fetch audit trail for existing projects (non-blocking)
+            fetchAuditTrail(projectData._id);
           } catch (projectErr) {
             console.error("Error fetching project:", projectErr);
             if (projectErr.response) {

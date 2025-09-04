@@ -1,5 +1,0 @@
-[33m487bae0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Update asbestos assessment functionality and add security review documentation
-[33m46c2a0f[m[33m ([m[1;31morigin/main[m[33m)[m Remove console logs from AuthContext and update various components with new features and improvements
-[33m80d7b20[m Update asbestos clearances table: replace asbestos type column with removalist, add type as subtitle to project name, adjust column widths
-[33m446f0d9[m Fix Fibre ID report formatting issue by replacing canvas lines with table borders
-[33m4df2a74[m Fix fibre analysis report client data and analyst functionality

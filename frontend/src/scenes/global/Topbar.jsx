@@ -37,6 +37,11 @@ const Topbar = () => {
     handleClose();
   };
 
+  const handleUserManualClick = () => {
+    navigate("/user-manual");
+    handleClose();
+  };
+
   return (
     <AppBar
       position="fixed"
@@ -117,6 +122,7 @@ const Topbar = () => {
           onClick={handleClose}
         >
           <MenuItem onClick={handleProfileSettingsClick}>Profile</MenuItem>
+          <MenuItem onClick={handleUserManualClick}>User Manual</MenuItem>
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </Menu>
       </Toolbar>
