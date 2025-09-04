@@ -360,6 +360,12 @@ const ProjectInformation = () => {
   const [addressOptions, setAddressOptions] = useState([]);
   const [isAddressLoading, setIsAddressLoading] = useState(false);
 
+  // New client form address autocomplete state
+  const [newClientAddressInput, setNewClientAddressInput] = useState("");
+  const [newClientAddressOptions, setNewClientAddressOptions] = useState([]);
+  const [isNewClientAddressLoading, setIsNewClientAddressLoading] =
+    useState(false);
+
   // Initialize Google Places Autocomplete
   const [autocompleteService, setAutocompleteService] = useState(null);
   const [placesService, setPlacesService] = useState(null);
@@ -409,7 +415,6 @@ const ProjectInformation = () => {
   // Memoize the accessible statuses to prevent recalculation on every render
   const accessibleStatuses = useMemo(() => {
     if (isAdmin || isManager || can("projects.change_status")) {
-      // All users with permission can access all statuses for now
       // Extract text from status objects if they are objects
       const active = Array.isArray(activeStatuses)
         ? activeStatuses.map((s) => (typeof s === "string" ? s : s.text))
@@ -418,7 +423,31 @@ const ProjectInformation = () => {
         ? inactiveStatuses.map((s) => (typeof s === "string" ? s : s.text))
         : [];
 
-      console.log("🔍 getAccessibleStatuses:", {
+      // Filter out restricted statuses for employee users
+      const restrictedStatuses = ["Job complete", "Cancelled"];
+
+      // If user is employee (not admin or manager), filter out restricted statuses
+      if (!isAdmin && !isManager) {
+        const filteredActive = active.filter(
+          (status) => !restrictedStatuses.includes(status)
+        );
+        const filteredInactive = inactive.filter(
+          (status) => !restrictedStatuses.includes(status)
+        );
+
+        console.log("🔍 getAccessibleStatuses (employee filtered):", {
+          activeStatuses,
+          inactiveStatuses,
+          extractedActive: active,
+          extractedInactive: inactive,
+          filteredActive,
+          filteredInactive,
+        });
+
+        return { active: filteredActive, inactive: filteredInactive };
+      }
+
+      console.log("🔍 getAccessibleStatuses (admin/manager):", {
         activeStatuses,
         inactiveStatuses,
         extractedActive: active,
@@ -462,7 +491,6 @@ const ProjectInformation = () => {
   // Function to determine which statuses a user can access
   const getAccessibleStatuses = () => {
     if (isAdmin || isManager || can("projects.change_status")) {
-      // All users with permission can access all statuses for now
       // Extract text from status objects if they are objects
       const active = Array.isArray(activeStatuses)
         ? activeStatuses.map((s) => (typeof s === "string" ? s : s.text))
@@ -471,7 +499,31 @@ const ProjectInformation = () => {
         ? inactiveStatuses.map((s) => (typeof s === "string" ? s : s.text))
         : [];
 
-      console.log("🔍 getAccessibleStatuses:", {
+      // Filter out restricted statuses for employee users
+      const restrictedStatuses = ["Job complete", "Cancelled"];
+
+      // If user is employee (not admin or manager), filter out restricted statuses
+      if (!isAdmin && !isManager) {
+        const filteredActive = active.filter(
+          (status) => !restrictedStatuses.includes(status)
+        );
+        const filteredInactive = inactive.filter(
+          (status) => !restrictedStatuses.includes(status)
+        );
+
+        console.log("🔍 getAccessibleStatuses (employee filtered):", {
+          activeStatuses,
+          inactiveStatuses,
+          extractedActive: active,
+          extractedInactive: inactive,
+          filteredActive,
+          filteredInactive,
+        });
+
+        return { active: filteredActive, inactive: filteredInactive };
+      }
+
+      console.log("🔍 getAccessibleStatuses (admin/manager):", {
         activeStatuses,
         inactiveStatuses,
         extractedActive: active,
@@ -860,7 +912,10 @@ const ProjectInformation = () => {
 
     setAddressInput(value);
 
-    if (!value || value.length < 3 || !autocompleteService || !googleMaps) {
+    // Always update the form state, even for empty values
+    setForm((prev) => ({ ...prev, address: value }));
+
+    if (!value || value.length < 2 || !autocompleteService || !googleMaps) {
       console.log("Early return - conditions not met:", {
         value,
         valueLength: value?.length,
@@ -878,7 +933,6 @@ const ProjectInformation = () => {
         {
           input: value,
           componentRestrictions: { country: "au" },
-          types: ["address"],
         },
         (predictions, status) => {
           console.log("Address predictions callback received:", {
@@ -962,6 +1016,75 @@ const ProjectInformation = () => {
     } catch (error) {
       console.error("Error getting place details:", error);
     }
+  };
+
+  // Handle new client address input change for autocomplete
+  const handleNewClientAddressInputChange = async (value) => {
+    if (!autocompleteService || !value || value.length < 2) {
+      setNewClientAddressOptions([]);
+      return;
+    }
+
+    console.log("Making API call for new client address:", value);
+    setIsNewClientAddressLoading(true);
+    try {
+      autocompleteService.getPlacePredictions(
+        {
+          input: value,
+          componentRestrictions: { country: "au" },
+        },
+        (predictions, status) => {
+          console.log("New client address predictions callback received:", {
+            predictions,
+            status,
+            statusText: googleMaps.maps.places.PlacesServiceStatus[status],
+          });
+
+          if (
+            status === googleMaps.maps.places.PlacesServiceStatus.OK &&
+            predictions
+          ) {
+            console.log("Setting new client address options:", predictions);
+            setNewClientAddressOptions(predictions);
+          } else {
+            console.log(
+              "No new client address predictions found or error:",
+              status
+            );
+            setNewClientAddressOptions([]);
+          }
+          setIsNewClientAddressLoading(false);
+        }
+      );
+    } catch (error) {
+      console.error("Error fetching new client address predictions:", error);
+      setNewClientAddressOptions([]);
+      setIsNewClientAddressLoading(false);
+    }
+  };
+
+  // Handle new client address selection
+  const handleNewClientAddressSelect = (placeId) => {
+    if (!placesService) return;
+
+    placesService.getDetails(
+      {
+        placeId: placeId,
+        fields: ["formatted_address", "geometry", "address_components"],
+      },
+      (place, status) => {
+        console.log("Selected new client place:", place, "Status:", status);
+        if (status === googleMaps.maps.places.PlacesServiceStatus.OK) {
+          setNewClientForm((prev) => ({
+            ...prev,
+            address: place.formatted_address,
+          }));
+          setNewClientAddressInput(place.formatted_address);
+        } else {
+          console.error("Error getting new client place details:", status);
+        }
+      }
+    );
   };
 
   const handleChange = (e) => {
@@ -1330,7 +1453,18 @@ const ProjectInformation = () => {
         </Alert>
       ) : (
         <Paper sx={{ p: 3 }}>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} autoComplete="off">
+            {/* Hidden fields to prevent autofill */}
+            <input
+              type="text"
+              style={{ display: "none" }}
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              style={{ display: "none" }}
+              autoComplete="new-password"
+            />
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -1454,6 +1588,7 @@ const ProjectInformation = () => {
                   onChange={handleChange}
                   required
                   sx={{ width: "100%" }}
+                  autoComplete="new-password"
                 />
               </Grid>
 
@@ -1550,6 +1685,9 @@ const ProjectInformation = () => {
                       fullWidth
                       label="Address (Optional)"
                       name="address"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-form-type="other"
                       helperText={
                         googleMapsError
                           ? "Address search is disabled due to API issues"
@@ -1569,9 +1707,19 @@ const ProjectInformation = () => {
                     />
                   )}
                   renderOption={(props, option) => (
-                    <li {...props}>
-                      <Typography>{option.description}</Typography>
-                    </li>
+                    <Box component="li" {...props}>
+                      <Box>
+                        <Typography variant="body2">
+                          {option.structured_formatting?.main_text ||
+                            option.description}
+                        </Typography>
+                        {option.structured_formatting?.secondary_text && (
+                          <Typography variant="caption" color="text.secondary">
+                            {option.structured_formatting.secondary_text}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
                   )}
                 />
               </Grid>
@@ -1723,6 +1871,7 @@ const ProjectInformation = () => {
                   name="projectContact.name"
                   value={form.projectContact?.name || ""}
                   onChange={handleChange}
+                  autoComplete="new-password"
                 />
               </Grid>
 
@@ -1733,6 +1882,7 @@ const ProjectInformation = () => {
                   name="projectContact.number"
                   value={form.projectContact?.number || ""}
                   onChange={handleChange}
+                  autoComplete="new-password"
                 />
               </Grid>
 
@@ -1744,6 +1894,7 @@ const ProjectInformation = () => {
                   type="email"
                   value={form.projectContact?.email || ""}
                   onChange={handleChange}
+                  autoComplete="new-password"
                 />
               </Grid>
 
@@ -1871,7 +2022,18 @@ const ProjectInformation = () => {
             Create New Client
           </Typography>
         </DialogTitle>
-        <form onSubmit={handleNewClientSubmit}>
+        <form onSubmit={handleNewClientSubmit} autoComplete="off">
+          {/* Hidden fields to prevent autofill */}
+          <input
+            type="text"
+            style={{ display: "none" }}
+            autoComplete="username"
+          />
+          <input
+            type="password"
+            style={{ display: "none" }}
+            autoComplete="new-password"
+          />
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Stack spacing={2}>
               <TextField
@@ -1881,6 +2043,7 @@ const ProjectInformation = () => {
                 onChange={handleNewClientChange}
                 required
                 fullWidth
+                autoComplete="new-password"
               />
               <TextField
                 label="Invoice Email"
@@ -1889,6 +2052,7 @@ const ProjectInformation = () => {
                 value={newClientForm.invoiceEmail}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="email@example.com or '-' for no email"
                 error={
                   newClientForm.invoiceEmail &&
@@ -1901,13 +2065,60 @@ const ProjectInformation = () => {
                     : ""
                 }
               />
-              <TextField
-                label="Address"
-                name="address"
-                value={newClientForm.address}
-                onChange={handleNewClientChange}
-                fullWidth
-                placeholder="Address or '-' for no address"
+              <Autocomplete
+                freeSolo
+                options={newClientAddressOptions}
+                getOptionLabel={(option) =>
+                  typeof option === "string" ? option : option.description
+                }
+                value={newClientForm.address || ""}
+                inputValue={newClientAddressInput}
+                onInputChange={(_, value) =>
+                  handleNewClientAddressInputChange(value)
+                }
+                onChange={(_, value) => {
+                  if (value && value.place_id) {
+                    handleNewClientAddressSelect(value.place_id);
+                  } else if (typeof value === "string") {
+                    // Handle manual text input
+                    setNewClientForm((prev) => ({ ...prev, address: value }));
+                    setNewClientAddressInput(value);
+                  }
+                }}
+                loading={isNewClientAddressLoading}
+                disabled={!!googleMapsError}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    fullWidth
+                    label="Address (Optional)"
+                    name="address"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    helperText={
+                      googleMapsError
+                        ? "Address search is disabled due to API issues"
+                        : "Start typing to search for addresses, buildings, or establishments"
+                    }
+                    placeholder="Address or '-' for no address"
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props}>
+                    <Box>
+                      <Typography variant="body2">
+                        {option.structured_formatting?.main_text ||
+                          option.description}
+                      </Typography>
+                      {option.structured_formatting?.secondary_text && (
+                        <Typography variant="caption" color="text.secondary">
+                          {option.structured_formatting.secondary_text}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
               />
               <Typography variant="h6" sx={{ mt: 2 }}>
                 Primary Contact
@@ -1918,6 +2129,7 @@ const ProjectInformation = () => {
                 value={newClientForm.contact1Name}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="Contact name or '-' for no contact"
               />
               <TextField
@@ -1926,6 +2138,7 @@ const ProjectInformation = () => {
                 value={newClientForm.contact1Number}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="04xx xxx xxx or '-' for no phone"
                 error={
                   newClientForm.contact1Number &&
@@ -1944,6 +2157,7 @@ const ProjectInformation = () => {
                 value={newClientForm.contact1Email}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="email@example.com or '-' for no email"
                 error={
                   newClientForm.contact1Email &&
@@ -1965,6 +2179,7 @@ const ProjectInformation = () => {
                 value={newClientForm.contact2Name}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="Contact name or '-' for no contact"
               />
               <TextField
@@ -1973,6 +2188,7 @@ const ProjectInformation = () => {
                 value={newClientForm.contact2Number}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="04xx xxx xxx or '-' for no phone"
                 error={
                   newClientForm.contact2Number &&
@@ -1991,6 +2207,7 @@ const ProjectInformation = () => {
                 value={newClientForm.contact2Email}
                 onChange={handleNewClientChange}
                 fullWidth
+                autoComplete="new-password"
                 placeholder="email@example.com or '-' for no email"
                 error={
                   newClientForm.contact2Email &&

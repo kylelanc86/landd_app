@@ -1218,7 +1218,21 @@ const Projects = ({ initialFilters = {} }) => {
   // Function to determine which statuses a user can access
   const getAccessibleStatuses = () => {
     if (isAdmin || isManager || can("projects.change_status")) {
-      // All users with permission can access all statuses for now
+      // Filter out restricted statuses for employee users
+      const restrictedStatuses = ["Job complete", "Cancelled"];
+
+      // If user is employee (not admin or manager), filter out restricted statuses
+      if (!isAdmin && !isManager) {
+        const filteredActive = activeStatuses.filter(
+          (status) => !restrictedStatuses.includes(status)
+        );
+        const filteredInactive = inactiveStatuses.filter(
+          (status) => !restrictedStatuses.includes(status)
+        );
+        return { active: filteredActive, inactive: filteredInactive };
+      }
+
+      // Admin and manager users can access all statuses
       return { active: activeStatuses, inactive: inactiveStatuses };
     }
     return { active: [], inactive: [] };
@@ -1323,13 +1337,7 @@ const Projects = ({ initialFilters = {} }) => {
           </Box>
         ),
       },
-      {
-        field: "workOrder",
-        headerName: "Work Order/Job Reference",
-        flex: 1,
-        minWidth: 150,
-        hide: true, // Hidden by default
-      },
+
       {
         field: "client",
         headerName: "Client",
@@ -1457,6 +1465,13 @@ const Projects = ({ initialFilters = {} }) => {
         flex: 1,
       },
       {
+        field: "workOrder",
+        headerName: "Work Order/Job Reference",
+        flex: 1,
+        minWidth: 150,
+        hide: true, // Hidden by default
+      },
+      {
         field: "status",
         headerName: "Status",
         flex: 1,
@@ -1503,19 +1518,21 @@ const Projects = ({ initialFilters = {} }) => {
         maxWidth: 160,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
-            {/* Delete button */}
-            <Tooltip title="Delete Project">
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(params.row);
-                }}
-                size="small"
-                color="error"
-              >
-                <DeleteIcon />
-              </IconButton>
-            </Tooltip>
+            {/* Delete button - only show for admin and manager users */}
+            {(isAdmin || isManager) && (
+              <Tooltip title="Delete Project">
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteClick(params.row);
+                  }}
+                  size="small"
+                  color="error"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
+            )}
 
             {/* 3-dot menu for status updates */}
             {(isAdmin || isManager || can("projects.change_status")) && (

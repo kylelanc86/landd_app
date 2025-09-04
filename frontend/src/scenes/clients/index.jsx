@@ -3,7 +3,6 @@ import { usePermissions } from "../../hooks/usePermissions";
 import {
   Box,
   Button,
-  Grid,
   Typography,
   useTheme,
   Dialog,
@@ -13,7 +12,6 @@ import {
   TextField,
   Stack,
   IconButton,
-  DialogContentText,
   InputAdornment,
   Popover,
   List,
@@ -24,59 +22,30 @@ import {
   Checkbox,
   Divider,
   LinearProgress,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  FormControl,
   Snackbar,
   Alert,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
 import AddIcon from "@mui/icons-material/Add";
 import { useMemo } from "react";
-import LoadingSpinner from "../../components/LoadingSpinner";
 
 import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ArchiveIcon from "@mui/icons-material/Archive";
-import {
-  formatPhoneNumber,
-  isValidAustralianMobile,
-  isValidEmailOrDash,
-} from "../../utils/formatters";
+import { formatPhoneNumber } from "../../utils/formatters";
 import { debounce } from "lodash";
-
-const emptyForm = {
-  name: "",
-  invoiceEmail: "",
-  address: "",
-  contact1Name: "",
-  contact1Number: "",
-  contact1Email: "",
-  contact2Name: "",
-  contact2Number: "",
-  contact2Email: "",
-  paymentTerms: "Standard (30 days)",
-  written_off: false,
-};
 
 const Clients = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { can, isAdmin, isManager } = usePermissions();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-
-  const [form, setForm] = useState(emptyForm);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
@@ -235,41 +204,6 @@ const Clients = () => {
   const handlePaginationModelChange = useCallback((newModel) => {
     setPaginationModel(newModel);
   }, []);
-
-  const handleChange = useCallback((e) => {
-    const { name, value } = e.target;
-    if (name === "contact1Number" || name === "contact2Number") {
-      setForm((prevForm) => ({
-        ...prevForm,
-        [name]: formatPhoneNumber(value),
-      }));
-    } else {
-      setForm((prevForm) => ({ ...prevForm, [name]: value }));
-    }
-  }, []);
-
-  const handleSubmit = useCallback(
-    async (e) => {
-      e.preventDefault();
-      try {
-        const response = await clientService.create(form);
-        setClients((prevClients) => [response.data, ...prevClients]);
-        setDialogOpen(false);
-        setForm(emptyForm);
-      } catch (err) {
-        if (err.response) {
-          setSnackbar({
-            open: true,
-            message: `Error creating client: ${
-              err.response.data.message || "Unknown error"
-            }`,
-            severity: "error",
-          });
-        }
-      }
-    },
-    [form]
-  );
 
   const handleDeleteClick = useCallback((client) => {
     setClientToDelete(client);
@@ -474,26 +408,32 @@ const Clients = () => {
             >
               Details
             </Button>
-            <IconButton
-              onClick={() => handleArchiveClick(params.row)}
-              title="Archive Client"
-              color="warning"
-              sx={{ mr: 1 }}
-            >
-              <ArchiveIcon />
-            </IconButton>
-            <IconButton
-              onClick={() => handleDeleteClick(params.row)}
-              title="Delete Client"
-              color="error"
-            >
-              <DeleteIcon />
-            </IconButton>
+            {/* Archive button - only show for admin and manager users */}
+            {(isAdmin || isManager) && (
+              <IconButton
+                onClick={() => handleArchiveClick(params.row)}
+                title="Archive Client"
+                color="warning"
+                sx={{ mr: 1 }}
+              >
+                <ArchiveIcon />
+              </IconButton>
+            )}
+            {/* Delete button - only show for admin and manager users */}
+            {(isAdmin || isManager) && (
+              <IconButton
+                onClick={() => handleDeleteClick(params.row)}
+                title="Delete Client"
+                color="error"
+              >
+                <DeleteIcon />
+              </IconButton>
+            )}
           </Box>
         ),
       },
     ],
-    [canWriteOff]
+    [canWriteOff, isAdmin, isManager]
   );
 
   // Show UI immediately, data will load in background
@@ -527,7 +467,7 @@ const Clients = () => {
         <Button
           variant="contained"
           color="secondary"
-          onClick={() => setDialogOpen(true)}
+          onClick={() => navigate("/clients/new")}
           fullWidth
           sx={{
             backgroundColor: theme.palette.primary.main,
@@ -736,252 +676,6 @@ const Clients = () => {
           }
         />
       </Box>
-
-      {/* Add Client Dialog */}
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            pb: 2,
-            px: 3,
-            pt: 3,
-            border: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              bgcolor: "primary.main",
-              color: "white",
-            }}
-          >
-            <AddIcon sx={{ fontSize: 20 }} />
-          </Box>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            Create New Client
-          </Typography>
-        </DialogTitle>
-        <form onSubmit={handleSubmit}>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Stack spacing={2}>
-              <TextField
-                label="Client Name"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-                fullWidth
-              />
-              <TextField
-                label="Invoice Email"
-                name="invoiceEmail"
-                type="email"
-                value={form.invoiceEmail}
-                onChange={handleChange}
-                fullWidth
-                placeholder="email@example.com or '-' for no email"
-                error={
-                  form.invoiceEmail && !isValidEmailOrDash(form.invoiceEmail)
-                }
-                helperText={
-                  form.invoiceEmail && !isValidEmailOrDash(form.invoiceEmail)
-                    ? "Please enter a valid email address or use '-' for no email"
-                    : ""
-                }
-              />
-              <TextField
-                label="Address"
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                fullWidth
-                placeholder="Address or '-' for no address"
-              />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Primary Contact
-              </Typography>
-              <TextField
-                label="Contact Name"
-                name="contact1Name"
-                value={form.contact1Name}
-                onChange={handleChange}
-                fullWidth
-                placeholder="Contact name or '-' for no contact"
-              />
-              <TextField
-                label="Contact Phone"
-                name="contact1Number"
-                value={form.contact1Number}
-                onChange={handleChange}
-                fullWidth
-                placeholder="04xx xxx xxx or '-' for no phone"
-                error={
-                  form.contact1Number &&
-                  !isValidAustralianMobile(form.contact1Number)
-                }
-                helperText={
-                  form.contact1Number &&
-                  !isValidAustralianMobile(form.contact1Number)
-                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
-                    : ""
-                }
-              />
-              <TextField
-                label="Contact Email"
-                name="contact1Email"
-                value={form.contact1Email}
-                onChange={handleChange}
-                fullWidth
-                placeholder="email@example.com or '-' for no email"
-                error={
-                  form.contact1Email && !isValidEmailOrDash(form.contact1Email)
-                }
-                helperText={
-                  form.contact1Email && !isValidEmailOrDash(form.contact1Email)
-                    ? "Please enter a valid email address or use '-' for no email"
-                    : ""
-                }
-              />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Secondary Contact (Optional)
-              </Typography>
-              <TextField
-                label="Contact Name"
-                name="contact2Name"
-                value={form.contact2Name}
-                onChange={handleChange}
-                fullWidth
-                placeholder="Contact name or '-' for no contact"
-              />
-              <TextField
-                label="Contact Phone"
-                name="contact2Number"
-                value={form.contact2Number}
-                onChange={handleChange}
-                fullWidth
-                placeholder="04xx xxx xxx or '-' for no phone"
-                error={
-                  form.contact2Number &&
-                  !isValidAustralianMobile(form.contact2Number)
-                }
-                helperText={
-                  form.contact2Number &&
-                  !isValidAustralianMobile(form.contact2Number)
-                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
-                    : ""
-                }
-              />
-              <TextField
-                label="Contact Email"
-                name="contact2Email"
-                value={form.contact2Email}
-                onChange={handleChange}
-                fullWidth
-                placeholder="email@example.com or '-' for no email"
-                error={
-                  form.contact2Email && !isValidEmailOrDash(form.contact2Email)
-                }
-                helperText={
-                  form.contact2Email && !isValidEmailOrDash(form.contact2Email)
-                    ? "Please enter a valid email address or use '-' for no email"
-                    : ""
-                }
-              />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Payment Terms
-              </Typography>
-              <FormControl component="fieldset">
-                <RadioGroup
-                  name="paymentTerms"
-                  value={form.paymentTerms}
-                  onChange={handleChange}
-                  row
-                >
-                  <FormControlLabel
-                    value="Standard (30 days)"
-                    control={<Radio />}
-                    label="Standard (30 days)"
-                  />
-                  <FormControlLabel
-                    value="Payment before Report (7 days)"
-                    control={<Radio />}
-                    label="Payment before Report (7 days)"
-                  />
-                </RadioGroup>
-              </FormControl>
-              {canWriteOff && (
-                <Box sx={{ mt: 2, display: "flex", alignItems: "center" }}>
-                  <Checkbox
-                    name="written_off"
-                    checked={form.written_off}
-                    onChange={(e) =>
-                      setForm({ ...form, written_off: e.target.checked })
-                    }
-                    sx={{
-                      color: "red",
-                      "&.Mui-checked": {
-                        color: "red",
-                      },
-                    }}
-                  />
-                  <Typography
-                    variant="body1"
-                    sx={{ color: "red", fontWeight: "bold" }}
-                  >
-                    WRITTEN OFF?
-                  </Typography>
-                </Box>
-              )}
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={() => setDialogOpen(false)}
-              variant="outlined"
-              sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Create Client
-            </Button>
-          </DialogActions>
-        </form>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog

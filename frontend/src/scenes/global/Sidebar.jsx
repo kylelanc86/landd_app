@@ -83,8 +83,10 @@ const Item = ({ title, to, icon }) => {
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
-      location.pathname.startsWith("/projects/") &&
-      !to.startsWith("/projects/")
+      (location.pathname.startsWith("/projects/") ||
+        location.pathname.startsWith("/clients/")) &&
+      !to.startsWith("/projects/") &&
+      !to.startsWith("/clients/")
     ) {
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
@@ -192,8 +194,10 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
-      location.pathname.startsWith("/projects/") &&
-      !to.startsWith("/projects/")
+      (location.pathname.startsWith("/projects/") ||
+        location.pathname.startsWith("/clients/")) &&
+      !to.startsWith("/projects/") &&
+      !to.startsWith("/clients/")
     ) {
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {

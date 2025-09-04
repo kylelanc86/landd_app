@@ -18,23 +18,13 @@ import {
   DialogActions,
   TextField,
   MenuItem,
-  FormControl,
-  InputLabel,
-  Select,
   IconButton,
-  Chip,
   Autocomplete,
   InputAdornment,
-  Divider,
-  Card,
-  CardContent,
   Stack,
-  Avatar,
-  Tooltip,
-  Fade,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import api from "../../services/api";
@@ -44,18 +34,8 @@ import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
 import SearchIcon from "@mui/icons-material/Search";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import WorkIcon from "@mui/icons-material/Work";
-import CoffeeIcon from "@mui/icons-material/Coffee";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import {
-  format,
-  addDays,
-  subDays,
-  startOfDay,
-  endOfDay,
-  parseISO,
-} from "date-fns";
+import { format, addDays, subDays, parseISO } from "date-fns";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -97,6 +77,7 @@ const Timesheets = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [processingEntries, setProcessingEntries] = useState(new Set());
   const [successEntries, setSuccessEntries] = useState(new Set());
+  const [show24HourView, setShow24HourView] = useState(false);
   const calendarRef = useRef(null);
   const navigate = useNavigate();
 
@@ -479,9 +460,13 @@ const Timesheets = () => {
   // Helper function to sort projects by projectID descending
   const sortProjectsByID = (projectsList) => {
     return [...projectsList].sort((a, b) => {
+      // Handle cases where projectID might be undefined
+      const aProjectID = a.projectID || "";
+      const bProjectID = b.projectID || "";
+
       // Extract numeric part from projectID (e.g., "LDJ00001" -> 1)
-      const aNum = parseInt(a.projectID.replace(/\D/g, ""), 10);
-      const bNum = parseInt(b.projectID.replace(/\D/g, ""), 10);
+      const aNum = parseInt(aProjectID.replace(/\D/g, ""), 10) || 0;
+      const bNum = parseInt(bProjectID.replace(/\D/g, ""), 10) || 0;
       return bNum - aNum; // Descending order
     });
   };
@@ -538,8 +523,10 @@ const Timesheets = () => {
 
     const filtered = projects.filter(
       (project) =>
-        project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.projectID.toLowerCase().includes(searchTerm.toLowerCase())
+        (project.name &&
+          project.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (project.projectID &&
+          project.projectID.toLowerCase().includes(searchTerm.toLowerCase()))
     );
     const sortedFiltered = sortProjectsByID(filtered);
     setFilteredProjects(sortedFiltered);
@@ -970,7 +957,44 @@ const Timesheets = () => {
             </Box>
 
             {/* Status Controls */}
-            <Stack direction="row" spacing={2} flexWrap="wrap">
+            <Stack
+              direction="row"
+              spacing={2}
+              flexWrap="wrap"
+              alignItems="center"
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={show24HourView}
+                    onChange={(e) => setShow24HourView(e.target.checked)}
+                    sx={{
+                      color: theme.palette.primary.main,
+                      "&.Mui-checked": {
+                        color: theme.palette.primary.main,
+                      },
+                    }}
+                  />
+                }
+                label={
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: theme.palette.text.primary,
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    Show 24 Hours
+                  </Typography>
+                }
+                sx={{
+                  mr: 2,
+                  "& .MuiFormControlLabel-label": {
+                    fontSize: "0.9rem",
+                  },
+                }}
+              />
               <Button
                 variant={
                   timesheetStatus === "finalised" ? "contained" : "outlined"
@@ -1211,8 +1235,8 @@ const Timesheets = () => {
             eventDrop={handleEventDrop}
             eventResize={handleEventResize}
             nowIndicator={true}
-            slotMinTime="06:00:00"
-            slotMaxTime="20:00:00"
+            slotMinTime={show24HourView ? "00:00:00" : "06:00:00"}
+            slotMaxTime={show24HourView ? "24:00:00" : "18:00:00"}
             slotDuration="00:15:00"
             height="100%"
             events={calendarEvents}
@@ -1224,9 +1248,11 @@ const Timesheets = () => {
             allDaySlot={false}
             selectMinDistance={15}
             slotLaneClassNames={(arg) => {
-              // Use FullCalendar's built-in class naming system
+              // Calculate slot index based on the current time range
+              const startHour = show24HourView ? 0 : 6;
               const slotIndex = Math.floor(
-                (arg.date.getHours() - 6) * 4 + arg.date.getMinutes() / 15
+                (arg.date.getHours() - startHour) * 4 +
+                  arg.date.getMinutes() / 15
               );
               if (slotIndex % 4 === 0 || slotIndex % 4 === 1) {
                 return "fc-slot-green";

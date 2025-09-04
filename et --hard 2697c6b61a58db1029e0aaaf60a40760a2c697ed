@@ -1,0 +1,10 @@
+[33m99d7576[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/production[m[33m, [m[1;31morigin/main[m[33m)[m Data import and troubleshoot
+[33m0725a2e[m cache projectid 3 and delete quicken
+[33m6f76358[m cache projectid 3
+[33meefef51[m cache projectid 2
+[33m1b5b966[m cache projectid
+[33mbbc7615[m minor fixes before version 0 deployment
+[33m2697c6b[m fix projectid prefix
+[33m72f0814[m quicken project creation
+[33md50a942[m troubleshoot minor issues before version 1
+[33m0a01b31[m fix project history, table sorting, data export

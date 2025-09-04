@@ -1,0 +1,24 @@
+
+User Name to ID Mapping Summary
+==============================
+
+Total users in database: 9
+Total projects processed: 5099
+Successfully mapped users: 5098
+Unmapped users: 1
+
+Unmapped users:
+  - "Patrick Cerone"
+
+Available users in database:
+  - "Kyle Lancaster" (6840d99a7508992152c7a00f)
+  - "Jordan Smith" (68524b1d20898fb103428b3d)
+  - "Ewan Dickenson" (68524b2e20898fb103428b41)
+  - "Fake User" (68536d8da384e8410c7850ae)
+  - "Zac Calder" (68ae57eaf3fbccfd9cb8eaf4)
+  - "Kelsey Shepherd" (68ae588af3fbccfd9cb8eb26)
+  - "Melanie Campbell" (68ae58b7f3fbccfd9cb8eb5a)
+  - "Luke Nuttall" (68ae58d0f3fbccfd9cb8eb90)
+  - "Ned Brannelly" (68ae58f4f3fbccfd9cb8ebc8)
+
+Generated: 2025-09-03T13:32:20.805Z

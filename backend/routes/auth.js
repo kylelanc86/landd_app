@@ -288,6 +288,55 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
+// Validate Reset Password Token
+router.post('/validate-reset-token', async (req, res) => {
+  const { email, token } = req.body;
+  console.log('Token validation request:');
+  console.log('  Email:', email);
+  console.log('  Token (first 8 chars):', token ? token.substring(0, 8) + '...' : 'NOT PROVIDED');
+  
+  try {
+    if (!email || !token) {
+      console.error('Missing required fields for token validation');
+      return res.status(400).json({ message: 'Email and token are required.' });
+    }
+
+    // Normalize email to prevent case-sensitivity issues
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('Normalized email:', normalizedEmail);
+
+    // Find user with matching email, token, and check if token is not expired
+    const user = await User.findOne({
+      email: normalizedEmail,
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      console.log('Invalid or expired reset token for email:', normalizedEmail);
+      return res.status(400).json({ 
+        message: 'Invalid or expired token.',
+        expired: true 
+      });
+    }
+
+    console.log('Valid reset token found for user:', {
+      id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName
+    });
+
+    res.json({ 
+      message: 'Token is valid.',
+      valid: true 
+    });
+  } catch (err) {
+    console.error('Token validation error:', err);
+    res.status(500).json({ message: 'Error validating token.' });
+  }
+});
+
 // Reset Password
 router.post('/reset-password', async (req, res) => {
   const { email, token, password } = req.body;

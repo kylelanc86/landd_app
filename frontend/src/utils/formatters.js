@@ -4,7 +4,7 @@
  * @returns {string} - The formatted phone number
  */
 export const formatPhoneNumber = (phoneNumber) => {
-  if (!phoneNumber) return '';
+  if (!phoneNumber || typeof phoneNumber !== 'string') return '';
   
   // Remove all non-digit characters
   const cleaned = phoneNumber.replace(/\D/g, '');
