@@ -375,19 +375,97 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
 // Update project
 router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) => {
   try {
+    console.log('🔍 PROJECT UPDATE REQUEST START', {
+      projectId: req.params.id,
+      requestBody: req.body,
+      requestBodyKeys: Object.keys(req.body),
+      timestamp: new Date().toISOString()
+    });
+
     const project = await Project.findById(req.params.id);
     if (!project) {
+      console.log('❌ PROJECT NOT FOUND', { projectId: req.params.id });
       return res.status(404).json({ message: 'Project not found' });
     }
+
+    console.log('🔍 EXISTING PROJECT DATA', {
+      projectId: project._id,
+      projectID: project.projectID,
+      name: project.name,
+      department: project.department,
+      status: project.status,
+      categories: project.categories,
+      categoriesType: typeof project.categories,
+      isCategoriesArray: Array.isArray(project.categories),
+      client: project.client,
+      workOrder: project.workOrder,
+      users: project.users,
+      allFields: Object.keys(project.toObject())
+    });
 
     // Store old status before updating
     const oldStatus = project.status;
     
     // Update project fields
+    console.log('🔍 UPDATING PROJECT FIELDS', {
+      projectId: project._id,
+      fieldUpdates: {
+        name: { from: project.name, to: req.body.name || project.name, changed: req.body.name !== undefined },
+        client: { from: project.client, to: req.body.client || project.client, changed: req.body.client !== undefined },
+        department: { from: project.department, to: req.body.department || project.department, changed: req.body.department !== undefined },
+        status: { from: project.status, to: req.body.status || project.status, changed: req.body.status !== undefined },
+        categories: { from: project.categories, to: req.body.categories, changed: req.body.categories !== undefined },
+        address: { from: project.address, to: req.body.address || project.address, changed: req.body.address !== undefined },
+        workOrder: { from: project.workOrder, to: req.body.workOrder || project.workOrder, changed: req.body.workOrder !== undefined },
+        users: { from: project.users, to: req.body.users || project.users, changed: req.body.users !== undefined }
+      }
+    });
+
     project.name = req.body.name || project.name;
     project.client = req.body.client || project.client;
     project.department = req.body.department || project.department;
-    project.categories = req.body.categories || project.categories;
+    
+    // Handle categories validation - filter out invalid categories
+    if (req.body.categories !== undefined) {
+      const validCategories = [
+        'Asbestos Material Assessment',
+        'Asbestos Materials Assessment',
+        'Asbestos & Lead Paint Assessment',
+        'Lead Paint Assessment',
+        'Lead Paint/Dust Assessment',
+        'Air Monitoring and Clearance',
+        'Clearance Certificate',
+        'Commercial Asbestos Management Plan',
+        'Hazardous Materials Management Plan',
+        'Hazardous Materials Survey',
+        'Residential Asbestos Assessment',
+        'Residential Asbestos Survey',
+        'Silica Air Monitoring',
+        'Mould/Moisture Assessment',
+        'Other'
+      ];
+      
+      console.log('🔍 CATEGORIES VALIDATION', {
+        originalCategories: req.body.categories,
+        categoriesType: typeof req.body.categories,
+        isArray: Array.isArray(req.body.categories)
+      });
+      
+      // Filter out invalid categories and trim whitespace
+      const processedCategories = req.body.categories
+        .filter(category => category && typeof category === 'string')
+        .map(category => category.trim())
+        .filter(category => validCategories.includes(category));
+      
+      console.log('🔍 CATEGORIES AFTER PROCESSING', {
+        processedCategories,
+        validCategoriesCount: processedCategories.length,
+        originalCount: req.body.categories.length
+      });
+      
+      project.categories = processedCategories;
+    }
+    
     project.status = req.body.status || project.status;
     project.address = req.body.address || project.address;
     project.d_Date = req.body.d_Date !== undefined ? req.body.d_Date : project.d_Date;
@@ -400,7 +478,31 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.projectContact = req.body.projectContact || project.projectContact;
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
 
+    // Fix any string dates that might have been sent from frontend
+    if (req.body.updatedAt && typeof req.body.updatedAt === 'string') {
+      console.log('🔍 Converting updatedAt from string to Date:', req.body.updatedAt);
+      project.updatedAt = new Date(req.body.updatedAt);
+    }
+
+    console.log('🔍 PROJECT BEFORE SAVE', {
+      projectId: project._id,
+      projectID: project.projectID,
+      name: project.name,
+      department: project.department,
+      status: project.status,
+      categories: project.categories,
+      categoriesType: typeof project.categories,
+      isCategoriesArray: Array.isArray(project.categories),
+      client: project.client,
+      workOrder: project.workOrder,
+      users: project.users,
+      modifiedPaths: project.modifiedPaths(),
+      isModified: project.isModified()
+    });
+
+    console.log('🔄 ATTEMPTING TO SAVE PROJECT', { projectId: project._id });
     const updatedProject = await project.save();
+    console.log('✅ PROJECT SAVED SUCCESSFULLY', { projectId: project._id });
     
     // Update dashboard stats if status changed
     if (req.body.status && req.body.status !== oldStatus) {
@@ -442,8 +544,35 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     
     res.json(populatedProject);
   } catch (err) {
-    console.error('Error updating project:', err);
-    res.status(400).json({ message: err.message });
+    console.error('❌ PROJECT UPDATE ERROR', {
+      projectId: req.params.id,
+      errorName: err.name,
+      errorMessage: err.message,
+      errorStack: err.stack,
+      validationErrors: err.errors,
+      errorCode: err.code,
+      timestamp: new Date().toISOString()
+    });
+
+    if (err.errors) {
+      console.error('❌ VALIDATION ERRORS DETAILS', {
+        projectId: req.params.id,
+        validationErrors: Object.keys(err.errors).map(key => ({
+          field: key,
+          message: err.errors[key].message,
+          value: err.errors[key].value,
+          kind: err.errors[key].kind,
+          path: err.errors[key].path
+        }))
+      });
+    }
+
+    res.status(400).json({ 
+      message: err.message,
+      validationErrors: err.errors,
+      errorName: err.name,
+      errorCode: err.code
+    });
   }
 });
 

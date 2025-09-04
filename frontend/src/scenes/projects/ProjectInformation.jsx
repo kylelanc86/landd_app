@@ -40,7 +40,7 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-
+import ErrorIcon from "@mui/icons-material/Error";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import { projectService, clientService, userService } from "../../services/api";
@@ -64,13 +64,17 @@ const DEPARTMENTS = [
 ];
 
 const CATEGORIES = [
+  "Asbestos Material Assessment",
   "Asbestos Materials Assessment",
   "Asbestos & Lead Paint Assessment",
+  "Lead Paint Assessment",
   "Lead Paint/Dust Assessment",
   "Air Monitoring and Clearance",
   "Clearance Certificate",
   "Commercial Asbestos Management Plan",
   "Hazardous Materials Management Plan",
+  "Hazardous Materials Survey",
+  "Residential Asbestos Assessment",
   "Residential Asbestos Survey",
   "Silica Air Monitoring",
   "Mould/Moisture Assessment",
@@ -107,14 +111,7 @@ const ProjectInformation = () => {
   const isEditMode = Boolean(id && id !== "new" && id !== "add-new");
 
   // Debug: Log the isEditMode calculation
-  useEffect(() => {
-    console.log("🔍 isEditMode calculation:", {
-      id,
-      isEditMode,
-      idType: typeof id,
-      idValue: id,
-    });
-  }, [id, isEditMode]);
+  useEffect(() => {}, [id, isEditMode]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [clients, setClients] = useState([]);
@@ -128,6 +125,10 @@ const ProjectInformation = () => {
     message: "",
     severity: "success",
   });
+
+  // Error dialog state
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   // Audit trail state
   const [auditTrail, setAuditTrail] = useState([]);
@@ -177,35 +178,15 @@ const ProjectInformation = () => {
     },
   });
 
-  // Debug: Log form state changes, especially _id and projectID
+  // Keep formRef in sync
   useEffect(() => {
-    formRef.current = form; // Keep formRef in sync
-    console.log("🔍 Form state changed:", {
-      projectID: form.projectID,
-      hasProjectID: !!form.projectID,
-      projectIDType: typeof form.projectID,
-      _id: form._id,
-      hasId: !!form._id,
-      idType: typeof form._id,
-      isEditMode,
-      formKeys: Object.keys(form),
-      formValues: form,
-    });
+    formRef.current = form;
   }, [form, isEditMode]);
 
   // Track form changes and compare with original values
   useEffect(() => {
-    console.log("🔍 Unsaved changes check:", {
-      hasOriginalForm: !!originalForm,
-      isEditMode,
-      changeDetectionEnabled,
-      formKeys: Object.keys(form),
-      originalFormKeys: originalForm ? Object.keys(originalForm) : null,
-    });
-
     // Only track changes if change detection is enabled
     if (!changeDetectionEnabled) {
-      console.log("🔍 Change detection disabled - skipping check");
       return;
     }
 
@@ -246,17 +227,8 @@ const ProjectInformation = () => {
             });
           }
         }
-
-        console.log("🔍 Form differences found:", differences);
       }
 
-      console.log("🔍 Form change detection:", {
-        hasChanges,
-        isEditMode,
-        formString: JSON.stringify(formToCompare),
-        originalFormString: JSON.stringify(originalFormToCompare),
-        excludedProjectID: !isEditMode,
-      });
       setHasUnsavedChanges(hasChanges);
 
       // Set global variables for sidebar navigation
@@ -266,7 +238,6 @@ const ProjectInformation = () => {
         setUnsavedChangesDialogOpen(true);
       };
     } else {
-      console.log("🔍 Not tracking changes - no originalForm");
       // Clean up global variables when no original form
       window.hasUnsavedChanges = false;
       window.currentProjectPath = null;
@@ -298,11 +269,6 @@ const ProjectInformation = () => {
         !targetPath.startsWith("/projects/") ||
         (targetPath === "/projects" && currentPath.startsWith("/projects/"))
       ) {
-        console.log(
-          "🚫 Blocking navigation to:",
-          targetPath,
-          "due to unsaved changes"
-        );
         setPendingNavigation(targetPath);
         setUnsavedChangesDialogOpen(true);
         return;
@@ -345,11 +311,6 @@ const ProjectInformation = () => {
         href !== "/projects" &&
         !href.startsWith("/projects")
       ) {
-        console.log(
-          "🚫 Blocking link navigation to:",
-          href,
-          "due to unsaved changes"
-        );
         e.preventDefault();
         e.stopPropagation();
 
@@ -454,31 +415,16 @@ const ProjectInformation = () => {
     useProjectStatuses();
 
   // Debug: Log what we're getting from the hook
-  useEffect(() => {
-    console.log("🔍 ProjectInformation - Status data from hook:", {
-      activeStatuses,
-      inactiveStatuses,
-      statusColors,
-      activeStatusesLength: activeStatuses?.length,
-      inactiveStatusesLength: inactiveStatuses?.length,
-    });
-  }, [activeStatuses, inactiveStatuses, statusColors]);
+  useEffect(() => {}, [activeStatuses, inactiveStatuses, statusColors]);
 
   // Set default status when statuses are loaded
   useEffect(() => {
-    console.log("🔍 Setting default status:", {
-      activeStatusesLength: activeStatuses?.length,
-      currentFormStatus: form.status,
-      firstActiveStatus: activeStatuses?.[0],
-    });
-
     if (activeStatuses.length > 0 && !form.status) {
       // Extract text from status object if it's an object
       const defaultStatus =
         typeof activeStatuses[0] === "string"
           ? activeStatuses[0]
           : activeStatuses[0].text;
-      console.log("🔍 Setting default status to:", defaultStatus);
       setForm((prev) => ({ ...prev, status: defaultStatus }));
     }
   }, [activeStatuses, form.status]);
@@ -506,24 +452,8 @@ const ProjectInformation = () => {
           (status) => !restrictedStatuses.includes(status)
         );
 
-        console.log("🔍 getAccessibleStatuses (employee filtered):", {
-          activeStatuses,
-          inactiveStatuses,
-          extractedActive: active,
-          extractedInactive: inactive,
-          filteredActive,
-          filteredInactive,
-        });
-
         return { active: filteredActive, inactive: filteredInactive };
       }
-
-      console.log("🔍 getAccessibleStatuses (admin/manager):", {
-        activeStatuses,
-        inactiveStatuses,
-        extractedActive: active,
-        extractedInactive: inactive,
-      });
 
       return { active, inactive };
     }
@@ -532,8 +462,6 @@ const ProjectInformation = () => {
 
   // Memoize the status menu items to prevent recreation on every render
   const statusMenuItems = useMemo(() => {
-    console.log("🔍 Creating status menu items");
-
     const activeItems = accessibleStatuses.active.map((status) =>
       renderStatusMenuItem(status, statusColors, (selectedStatus) => {
         setForm((prev) => ({
@@ -582,24 +510,8 @@ const ProjectInformation = () => {
           (status) => !restrictedStatuses.includes(status)
         );
 
-        console.log("🔍 getAccessibleStatuses (employee filtered):", {
-          activeStatuses,
-          inactiveStatuses,
-          extractedActive: active,
-          extractedInactive: inactive,
-          filteredActive,
-          filteredInactive,
-        });
-
         return { active: filteredActive, inactive: filteredInactive };
       }
-
-      console.log("🔍 getAccessibleStatuses (admin/manager):", {
-        activeStatuses,
-        inactiveStatuses,
-        extractedActive: active,
-        extractedInactive: inactive,
-      });
 
       return { active, inactive };
     }
@@ -607,80 +519,26 @@ const ProjectInformation = () => {
   };
 
   const generateNextProjectId = useCallback(async () => {
-    console.log("🔍 generateNextProjectId called");
-    console.log("🔍 form.isLargeProject:", form.isLargeProject);
-    console.log("🔍 Current form state:", {
-      projectID: form.projectID,
-      _id: form._id,
-      hasProjectID: !!form.projectID,
-      hasId: !!form._id,
-    });
-
     try {
-      console.log("🔍 Fetching all projects...");
       const response = await projectService.getAll();
-      console.log("🔍 Projects response:", {
-        hasData: !!response.data,
-        dataType: typeof response.data,
-        dataLength: response.data?.length,
-        responseKeys: Object.keys(response),
-        fullResponse: response,
-        responseDataKeys: response.data ? Object.keys(response.data) : [],
-        responseDataData: response.data?.data,
-        responseDataDataType: typeof response.data?.data,
-        responseDataDataLength: response.data?.data?.length,
-      });
 
       // Handle nested response structure where projects might be in response.data.data
       const projects = response.data?.data || response.data;
-      console.log("🔍 Projects data:", projects);
-      console.log("🔍 Number of projects:", projects?.length);
-      console.log("🔍 Response structure analysis:", {
-        hasData: !!response.data,
-        hasNestedData: !!response.data?.data,
-        responseDataType: typeof response.data,
-        nestedDataType: typeof response.data?.data,
-        isArray: Array.isArray(projects),
-        projectsLength: projects?.length,
-      });
 
       // Log sample project structure
       if (projects && Array.isArray(projects) && projects.length > 0) {
-        console.log("🔍 Sample project structure:", {
-          firstProject: projects[0],
-          firstProjectKeys: Object.keys(projects[0]),
-          firstProjectID: projects[0]?.projectID,
-          firstProjectId: projects[0]?._id,
-        });
       } else {
-        console.log("🔍 No valid projects array found:", {
-          projects,
-          projectsType: typeof projects,
-          isArray: Array.isArray(projects),
-          hasLength: projects?.length !== undefined,
-        });
       }
 
       // Ensure we have a valid projects array
       if (!Array.isArray(projects)) {
-        console.error("🔍 Error: projects is not an array:", {
-          projects,
-          projectsType: typeof projects,
-          responseData: response.data,
-        });
         throw new Error("Invalid projects data structure received from API");
       }
 
       if (form.isLargeProject) {
-        console.log("🔍 Generating HAZ prefix for large project");
         // Generate HAZ prefix for large projects
         const largeProjects = projects.filter(
           (p) => p.projectID && p.projectID.startsWith("HAZ")
-        );
-        console.log("🔍 Large projects found:", largeProjects);
-        console.log(
-          "🔍 Large project IDs:",
-          largeProjects.map((p) => ({ projectID: p.projectID, _id: p._id }))
         );
 
         const lastLargeProject = largeProjects.sort((a, b) => {
@@ -689,34 +547,16 @@ const ProjectInformation = () => {
           return numB - numA;
         })[0];
 
-        console.log("🔍 Last large project:", lastLargeProject);
-
         const nextNum = lastLargeProject
           ? parseInt(lastLargeProject.projectID.slice(3)) + 1
           : 1;
 
-        console.log("🔍 Large project ID calculation:", {
-          lastLargeProject,
-          lastProjectID: lastLargeProject?.projectID,
-          extractedNumber: lastLargeProject
-            ? parseInt(lastLargeProject.projectID.slice(3))
-            : null,
-          nextNum,
-        });
-
         const nextId = `HAZ${String(nextNum).padStart(3, "0")}`;
-        console.log("🔍 Generated HAZ ID:", nextId);
         return nextId;
       } else {
-        console.log("🔍 Generating LDJ prefix for regular project");
         // Generate LDJ prefix for regular projects
         const regularProjects = projects.filter(
           (p) => p.projectID && p.projectID.startsWith("LDJ")
-        );
-        console.log("🔍 Regular projects found:", regularProjects);
-        console.log(
-          "🔍 Regular project IDs:",
-          regularProjects.map((p) => ({ projectID: p.projectID, _id: p._id }))
         );
 
         const lastProject = regularProjects.sort((a, b) => {
@@ -725,33 +565,14 @@ const ProjectInformation = () => {
           return numB - numA;
         })[0];
 
-        console.log("🔍 Last regular project:", lastProject);
-
         const nextNum = lastProject
           ? parseInt(lastProject.projectID.slice(3)) + 1
           : 1;
 
-        console.log("🔍 Regular project ID calculation:", {
-          lastProject,
-          lastProjectID: lastProject?.projectID,
-          extractedNumber: lastProject
-            ? parseInt(lastProject.projectID.slice(3))
-            : null,
-          nextNum,
-        });
-
         const nextId = `LDJ${String(nextNum).padStart(5, "0")}`;
-        console.log("🔍 Generated LDJ ID:", nextId);
         return nextId;
       }
     } catch (error) {
-      console.error("🔍 Error generating project ID:", error);
-      console.error("🔍 Error details:", {
-        message: error.message,
-        response: error.response,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
       throw new Error("Failed to generate project ID");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -771,16 +592,13 @@ const ProjectInformation = () => {
     try {
       isGeneratingRef.current = true;
       setIsGeneratingId(true);
-      console.log("🔍 Generating initial project ID...");
       const nextId = await generateNextProjectId();
-      console.log("🔍 Generated initial project ID:", nextId);
 
       setForm((prev) => ({ ...prev, projectID: nextId }));
       setIdGenerated(true);
 
       // Original form will be set when change detection is enabled
     } catch (error) {
-      console.error("🔍 Error generating initial project ID:", error);
       // Don't show error to user, will fall back to generation on submit
       setIdGenerated(false);
     } finally {
@@ -790,7 +608,6 @@ const ProjectInformation = () => {
   }, [isEditMode, idGenerated, isGeneratingId, generateNextProjectId]);
 
   useEffect(() => {
-    console.log("ProjectInformation component mounted");
     // Generate project ID immediately for add mode
     if (!isEditMode) {
       generateInitialProjectId();
@@ -801,12 +618,10 @@ const ProjectInformation = () => {
   useEffect(() => {
     if (isEditMode) {
       // For edit mode, enable immediately since data is already loaded
-      console.log("🔍 Enabling change detection immediately for edit mode");
       setChangeDetectionEnabled(true);
     } else {
       // For add mode, delay to allow initial setup (project ID generation, default values, etc.)
       const timer = setTimeout(() => {
-        console.log("🔍 Enabling change detection after initial setup");
         // Set original form now that initialization is complete
         setOriginalForm(JSON.parse(JSON.stringify(formRef.current)));
         setChangeDetectionEnabled(true);
@@ -831,25 +646,14 @@ const ProjectInformation = () => {
       const auditStartTime = performance.now();
       setAuditLoading(true);
       setAuditError(null);
-      console.log("🔄 AUDIT TRAIL FETCH START (background)", {
-        projectId,
-        timestamp: new Date().toISOString(),
-      });
 
       const response = await ProjectAuditService.getAllProjectAuditTrail(
         projectId
       );
       const auditTime = performance.now() - auditStartTime;
 
-      console.log("✅ AUDIT TRAIL FETCH COMPLETE (background)", {
-        projectId,
-        apiTime: `${auditTime.toFixed(2)}ms`,
-        entriesCount: response.auditTrail?.length || 0,
-      });
-
       setAuditTrail(response.auditTrail || []);
     } catch (error) {
-      console.error("Error fetching audit trail:", error);
       setAuditError("Failed to load audit trail");
     } finally {
       setAuditLoading(false);
@@ -859,14 +663,7 @@ const ProjectInformation = () => {
   useEffect(() => {
     const fetchData = async () => {
       const pageLoadStartTime = performance.now();
-      console.log("🚀 PROJECT INFO PAGE LOAD START", {
-        operation: isEditMode ? "EDIT" : "ADD",
-        projectId: id,
-        timestamp: new Date().toISOString(),
-      });
 
-      console.log("fetchData called with id:", id);
-      console.log("isEditMode:", isEditMode);
       try {
         setLoading(true);
         setError(null);
@@ -878,13 +675,6 @@ const ProjectInformation = () => {
           userService.getAll(),
         ]);
         const clientsUsersTime = performance.now() - clientsUsersStartTime;
-        console.log("✅ CLIENTS & USERS FETCH COMPLETE", {
-          clientsCount:
-            clientsRes.data?.clients?.length || clientsRes.data?.length || 0,
-          usersCount: usersRes.data?.length || 0,
-          apiTime: `${clientsUsersTime.toFixed(2)}ms`,
-          note: "Reduced from 100 to 20 clients for faster loading",
-        });
 
         setClients(clientsRes.data.clients || clientsRes.data);
         setUsers(usersRes.data);
@@ -893,50 +683,23 @@ const ProjectInformation = () => {
         if (id && id !== "new" && id !== "add-new" && id !== "undefined") {
           try {
             const projectFetchStartTime = performance.now();
-            console.log("🔍 Fetching project with ID:", id);
             const projectRes = await projectService.getById(id);
             const projectFetchTime = performance.now() - projectFetchStartTime;
-            console.log("✅ PROJECT FETCH COMPLETE", {
-              projectId: id,
-              apiTime: `${projectFetchTime.toFixed(2)}ms`,
-              hasData: !!projectRes.data,
-            });
-            console.log("🔍 Project API response:", {
-              hasData: !!projectRes.data,
-              dataKeys: projectRes.data ? Object.keys(projectRes.data) : [],
-              projectID: projectRes.data?.projectID,
-              _id: projectRes.data?._id,
-              responseType: typeof projectRes.data,
-              fullResponse: projectRes,
-            });
 
             if (!projectRes.data) {
               throw new Error("No project data received");
             }
 
-            // Ensure users is always an array
+            // Ensure users is always an array and remove backend-managed fields
+            const { updatedAt, ...projectDataWithoutTimestamps } =
+              projectRes.data;
             const projectData = {
-              ...projectRes.data,
+              ...projectDataWithoutTimestamps,
               users: Array.isArray(projectRes.data.users)
                 ? projectRes.data.users
                 : [],
             };
 
-            console.log("🔍 Processed project data:", {
-              projectID: projectData.projectID,
-              _id: projectData._id,
-              hasProjectID: !!projectData.projectID,
-              hasId: !!projectData._id,
-              processedKeys: Object.keys(projectData),
-            });
-
-            console.log("🔍 About to setForm with projectData:", {
-              projectID: projectData.projectID,
-              _id: projectData.projectID,
-              hasProjectID: !!projectData.projectID,
-              hasId: !!projectData._id,
-              dataKeys: Object.keys(projectData),
-            });
             setForm(projectData);
             // Store original form values for change tracking
             setOriginalForm(JSON.parse(JSON.stringify(projectData)));
@@ -944,40 +707,23 @@ const ProjectInformation = () => {
             // Fetch audit trail for existing projects (non-blocking)
             fetchAuditTrail(projectData._id);
           } catch (projectErr) {
-            console.error("Error fetching project:", projectErr);
-            if (projectErr.response) {
-              console.error("Response data:", projectErr.response.data);
-              console.error("Response status:", projectErr.response.status);
-            }
-            setError("Failed to load project data. Please try again.");
-            navigate("/projects");
+            setErrorMessage("Failed to load project data. Please try again.");
+            setErrorDialogOpen(true);
           }
         } else if (!id || id === "new" || id === "add-new") {
           // Don't generate Project ID yet - wait for form submission
-          console.log("🔍 New project mode - setting empty users array");
           setForm((prev) => ({ ...prev, users: [] }));
           // Don't set original form yet - wait for initialization to complete
           // This will be set after project ID generation and status setting
         } else {
           // Invalid ID, redirect to projects list
-          console.log("🔍 Invalid ID, redirecting to projects list:", id);
           navigate("/projects");
         }
       } catch (err) {
-        console.error("Error in fetchData:", err);
-        if (err.response) {
-          console.error("Response data:", err.response.data);
-          console.error("Response status:", err.response.status);
-        }
-        setError("Failed to load data. Please try again.");
+        setErrorMessage("Failed to load data. Please try again.");
+        setErrorDialogOpen(true);
       } finally {
         const totalPageLoadTime = performance.now() - pageLoadStartTime;
-        console.log("✅ PROJECT INFO PAGE LOAD COMPLETE", {
-          operation: isEditMode ? "EDIT" : "ADD",
-          projectId: id,
-          totalTime: `${totalPageLoadTime.toFixed(2)}ms`,
-          timestamp: new Date().toISOString(),
-        });
         setLoading(false);
       }
     };
@@ -990,9 +736,6 @@ const ProjectInformation = () => {
       const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
       if (!apiKey) {
-        console.error(
-          "Google Maps API key is missing. Please check your environment configuration."
-        );
         setGoogleMapsError(
           "Google Maps API key is missing. Please check your environment configuration."
         );
@@ -1013,10 +756,8 @@ const ProjectInformation = () => {
         setAutocompleteService(autocompleteService);
         setPlacesService(placesService);
 
-        console.log("Google Maps services initialized successfully");
         setGoogleMapsError(null); // Clear any previous errors
       } catch (error) {
-        console.error("Error loading Google Maps script:", error);
         setGoogleMapsError(
           "Error loading Google Maps. Please try refreshing the page."
         );
@@ -1034,27 +775,16 @@ const ProjectInformation = () => {
   }, [form.address, addressInput]);
 
   const handleAddressInputChange = async (value) => {
-    console.log("handleAddressInputChange called with:", value);
-    console.log("autocompleteService:", autocompleteService);
-    console.log("googleMaps:", googleMaps);
-
     setAddressInput(value);
 
     // Always update the form state, even for empty values
     setForm((prev) => ({ ...prev, address: value }));
 
     if (!value || value.length < 2 || !autocompleteService || !googleMaps) {
-      console.log("Early return - conditions not met:", {
-        value,
-        valueLength: value?.length,
-        hasAutocompleteService: !!autocompleteService,
-        hasGoogleMaps: !!googleMaps,
-      });
       setAddressOptions([]);
       return;
     }
 
-    console.log("Making API call for:", value);
     setIsAddressLoading(true);
     try {
       autocompleteService.getPlacePredictions(
@@ -1063,25 +793,15 @@ const ProjectInformation = () => {
           componentRestrictions: { country: "au" },
         },
         (predictions, status) => {
-          console.log("Address predictions callback received:", {
-            predictions,
-            status,
-            statusText: googleMaps.maps.places.PlacesServiceStatus[status],
-          });
-
           if (
             status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             predictions
           ) {
-            console.log("Setting address options:", predictions);
             setAddressOptions(predictions);
           } else {
-            console.log("No predictions found or error:", status);
-
             // Enhanced error handling with specific status messages
             switch (status) {
               case googleMaps.maps.places.PlacesServiceStatus.ZERO_RESULTS:
-                console.log("No address predictions found for the input");
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
                 console.error(
@@ -1372,6 +1092,17 @@ const ProjectInformation = () => {
       formKeys: Object.keys(form),
       formValues: JSON.stringify(form, null, 2),
     });
+
+    console.log("🔍 FORM DATA BEFORE CLEANING", {
+      projectId: id,
+      formKeys: Object.keys(form),
+      hasUpdatedAt: "updatedAt" in form,
+      hasId: "_id" in form,
+      updatedAt: form.updatedAt,
+      _id: form._id,
+      updatedAtType: typeof form.updatedAt,
+      _idType: typeof form._id,
+    });
     console.log("🔍 isEditMode:", isEditMode);
     console.log("🔍 Current user:", currentUser);
     console.log("🔍 URL params id:", id);
@@ -1392,8 +1123,67 @@ const ProjectInformation = () => {
           formId: form._id,
         });
 
+        console.log("🔍 FORM DATA BREAKDOWN", {
+          projectId: id,
+          formKeys: Object.keys(form),
+          formValues: {
+            projectID: form.projectID,
+            name: form.name,
+            department: form.department,
+            status: form.status,
+            categories: form.categories,
+            categoriesType: typeof form.categories,
+            isCategoriesArray: Array.isArray(form.categories),
+            client: form.client,
+            workOrder: form.workOrder,
+            users: form.users,
+            address: form.address,
+            d_Date: form.d_Date,
+            startDate: form.startDate,
+            endDate: form.endDate,
+            description: form.description,
+            notes: form.notes,
+            isLargeProject: form.isLargeProject,
+            reports_present: form.reports_present,
+          },
+        });
+
+        // Remove fields that should not be sent in updates
+        const { updatedAt, _id, ...updateData } = form;
+
+        console.log("🔍 CLEANED UPDATE DATA", {
+          projectId: id,
+          removedFields: ["updatedAt", "_id"],
+          updateDataKeys: Object.keys(updateData),
+          updateData,
+        });
+
+        console.log("🔍 CLEANED UPDATE DATA DETAILS", {
+          projectId: id,
+          updateDataValues: {
+            projectID: updateData.projectID,
+            name: updateData.name,
+            department: updateData.department,
+            status: updateData.status,
+            categories: updateData.categories,
+            categoriesType: typeof updateData.categories,
+            isCategoriesArray: Array.isArray(updateData.categories),
+            client: updateData.client,
+            workOrder: updateData.workOrder,
+            users: updateData.users,
+            address: updateData.address,
+            d_Date: updateData.d_Date,
+            startDate: updateData.startDate,
+            endDate: updateData.endDate,
+            description: updateData.description,
+            notes: updateData.notes,
+            isLargeProject: updateData.isLargeProject,
+            reports_present: updateData.reports_present,
+          },
+        });
+
         const apiStartTime = performance.now();
-        const response = await projectService.update(id, form);
+        const response = await projectService.update(id, updateData);
         const apiEndTime = performance.now();
 
         console.log("✅ PROJECT UPDATE API COMPLETE", {
@@ -1560,7 +1350,8 @@ const ProjectInformation = () => {
         urlId: id,
         currentUser: currentUser?.email || "unknown",
       });
-      setError("Failed to save project. Please try again.");
+      setErrorMessage("Failed to save project. Please try again.");
+      setErrorDialogOpen(true);
     }
   };
 
@@ -1655,7 +1446,8 @@ const ProjectInformation = () => {
         error: error.message,
         totalTime: `${(performance.now() - deleteStartTime).toFixed(2)}ms`,
       });
-      setError("Failed to delete project. Please try again.");
+      setErrorMessage("Failed to delete project. Please try again.");
+      setErrorDialogOpen(true);
     } finally {
       setDeleting(false);
       setDeleteDialogOpen(false);
@@ -1663,7 +1455,6 @@ const ProjectInformation = () => {
   };
 
   if (loading) return <Typography>Loading...</Typography>;
-  if (error) return <Typography color="error">{error}</Typography>;
 
   return (
     <Box m="20px">
@@ -2805,6 +2596,69 @@ const ProjectInformation = () => {
             }}
           >
             {deleting ? "Deleting..." : "Delete Project"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Error Dialog */}
+      <Dialog
+        open={errorDialogOpen}
+        onClose={() => setErrorDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <ErrorIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Error
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            {errorMessage}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => setErrorDialogOpen(false)}
+            variant="contained"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            OK
           </Button>
         </DialogActions>
       </Dialog>

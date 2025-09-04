@@ -30,13 +30,17 @@ const projectSchema = new mongoose.Schema({
   categories: [{
     type: String,
     enum: [
+      'Asbestos Material Assessment',
       'Asbestos Materials Assessment',
       'Asbestos & Lead Paint Assessment',
+      'Lead Paint Assessment',
       'Lead Paint/Dust Assessment',
       'Air Monitoring and Clearance',
       'Clearance Certificate',
       'Commercial Asbestos Management Plan',
       'Hazardous Materials Management Plan',
+      'Hazardous Materials Survey',
+      'Residential Asbestos Assessment',
       'Residential Asbestos Survey',
       'Silica Air Monitoring',
       'Mould/Moisture Assessment',
@@ -117,10 +121,6 @@ const projectSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
   updatedAt: {
     type: Date,
     default: Date.now

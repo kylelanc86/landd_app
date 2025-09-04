@@ -180,7 +180,6 @@ const Projects = ({ initialFilters = {} }) => {
   useEffect(() => {
     if (statusColors && Object.keys(statusColors).length > 0) {
     } else {
-      console.log("No status colors loaded yet");
     }
   }, [statusColors]);
 
@@ -295,9 +294,7 @@ const Projects = ({ initialFilters = {} }) => {
         ) {
           return parsedFilters.departmentFilter;
         }
-      } catch (error) {
-        console.error("Error parsing saved department filter:", error);
-      }
+      } catch (error) {}
     }
     return "All";
   });
@@ -356,7 +353,6 @@ const Projects = ({ initialFilters = {} }) => {
             "all",
         };
       } catch (error) {
-        console.error("Error parsing saved filters:", error);
         return {
           ...appliedFilters,
           statusFilter:
@@ -460,11 +456,6 @@ const Projects = ({ initialFilters = {} }) => {
       currentFilters = null
     ) => {
       const fetchStartTime = performance.now();
-      console.log("📊 PROJECTS PAGE FETCH START", {
-        operation: isSearch ? "SEARCH" : "LOAD",
-        searchTerm: searchValue,
-        timestamp: new Date().toISOString(),
-      });
 
       // Use current filters state if currentFilters is null (for search operations)
       const filtersToUse = currentFilters || filtersRef.current;
@@ -507,15 +498,6 @@ const Projects = ({ initialFilters = {} }) => {
 
         const processingEndTime = performance.now();
 
-        console.log("✅ PROJECTS PAGE FETCH COMPLETE", {
-          operation: isSearch ? "SEARCH" : "LOAD",
-          projectCount: projectsData.length,
-          apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
-          processingTime: `${(processingEndTime - apiEndTime).toFixed(2)}ms`,
-          totalTime: `${(processingEndTime - fetchStartTime).toFixed(2)}ms`,
-          responseSize: JSON.stringify(response).length,
-        });
-
         setProjects(projectsData);
         setPagination({
           total: projectsData.length,
@@ -526,11 +508,6 @@ const Projects = ({ initialFilters = {} }) => {
 
         // Status counts will be updated when the component re-renders with new projects
       } catch (err) {
-        console.error("❌ PROJECTS PAGE FETCH ERROR", {
-          operation: isSearch ? "SEARCH" : "LOAD",
-          error: err.message,
-          totalTime: `${(performance.now() - fetchStartTime).toFixed(2)}ms`,
-        });
         setError(err.message);
         setProjects([]);
       } finally {
@@ -626,7 +603,6 @@ const Projects = ({ initialFilters = {} }) => {
 
           // Status counts will be updated when the component re-renders with new projects
         } catch (err) {
-          console.error("Error fetching projects:", err);
           setError(err.message);
           setProjects([]);
         } finally {
@@ -681,12 +657,7 @@ const Projects = ({ initialFilters = {} }) => {
 
       setStatusCounts(counts);
     } catch (err) {
-      console.error("Error fetching status counts from backend:", err);
-
       // Fallback to local calculation if backend fails
-      console.warn(
-        "Falling back to local calculation from current page projects"
-      );
       const counts = {
         all: projects.length,
         all_active: projects.filter((project) =>
@@ -768,9 +739,7 @@ const Projects = ({ initialFilters = {} }) => {
               JSON.stringify(parsedFilters)
             );
           }
-        } catch (error) {
-          console.error("Error clearing search term:", error);
-        }
+        } catch (error) {}
       }
     };
 
@@ -793,9 +762,7 @@ const Projects = ({ initialFilters = {} }) => {
               JSON.stringify(parsedFilters)
             );
           }
-        } catch (error) {
-          console.error("Error clearing search term on unmount:", error);
-        }
+        } catch (error) {}
       }
     };
   }, []);
@@ -820,9 +787,7 @@ const Projects = ({ initialFilters = {} }) => {
         const clientsData =
           clientsResponse.data.clients || clientsResponse.data;
         setClients(clientsData);
-      } catch (err) {
-        console.error("Error fetching clients:", err);
-      }
+      } catch (err) {}
     };
     fetchData();
   }, []);
@@ -833,7 +798,6 @@ const Projects = ({ initialFilters = {} }) => {
       try {
         const token = localStorage.getItem("token");
         if (!token) {
-          console.error("No authentication token found");
           setLoadingUsers(false);
           return;
         }
@@ -853,7 +817,6 @@ const Projects = ({ initialFilters = {} }) => {
         setUsers(transformedUsers);
         setLoadingUsers(false);
       } catch (err) {
-        console.error("Error fetching users:", err);
         setLoadingUsers(false);
       }
     };
@@ -889,7 +852,6 @@ const Projects = ({ initialFilters = {} }) => {
       const searchResults = response.data.clients || response.data;
       setClientSearchResults(searchResults);
     } catch (error) {
-      console.error("Error searching clients:", error);
       setClientSearchResults([]);
     } finally {
       setIsClientSearching(false);
@@ -898,24 +860,10 @@ const Projects = ({ initialFilters = {} }) => {
 
   const handleDeleteProject = async () => {
     const deleteStartTime = performance.now();
-    console.log("🗑️ PROJECT DELETE START", {
-      projectId: selectedProject?._id || selectedProject?.id,
-      projectName: selectedProject?.name,
-      timestamp: new Date().toISOString(),
-    });
 
     try {
-      console.log("=== DELETING PROJECT ===");
-      console.log("Selected project:", selectedProject);
-      console.log(
-        "Project ID to delete:",
-        selectedProject?._id || selectedProject?.id
-      );
-      console.log("=========================");
-
       const projectId = selectedProject?._id || selectedProject?.id;
       if (!projectId) {
-        console.error("No project ID found for deletion");
         setError("Cannot delete project: No project ID found");
         return;
       }
@@ -929,12 +877,6 @@ const Projects = ({ initialFilters = {} }) => {
         );
         dependencyCheckTime = performance.now() - dependencyStartTime;
 
-        console.log("🔍 DEPENDENCY CHECK COMPLETE", {
-          projectId,
-          canDelete: dependencyResponse.data.canDelete,
-          checkTime: `${dependencyCheckTime.toFixed(2)}ms`,
-        });
-
         if (!dependencyResponse.data.canDelete) {
           // Has dependencies, show dependency dialog instead of deleting
           setDependencyInfo({
@@ -947,11 +889,6 @@ const Projects = ({ initialFilters = {} }) => {
           return;
         }
       } catch (dependencyError) {
-        console.error("❌ DEPENDENCY CHECK ERROR", {
-          projectId,
-          error: dependencyError.message,
-          checkTime: `${dependencyCheckTime.toFixed(2)}ms`,
-        });
         // Continue with deletion attempt - let the backend handle it
       }
 
@@ -960,16 +897,8 @@ const Projects = ({ initialFilters = {} }) => {
       const response = await projectService.delete(projectId);
       const deleteApiEndTime = performance.now();
 
-      console.log("✅ PROJECT DELETE API COMPLETE", {
-        projectId,
-        apiTime: `${(deleteApiEndTime - deleteApiStartTime).toFixed(2)}ms`,
-        totalTime: `${(deleteApiEndTime - deleteStartTime).toFixed(2)}ms`,
-        responseSize: JSON.stringify(response).length,
-      });
-
       // Check if this was a permission denied response
       if (response.data?.permissionDenied) {
-        console.log("❌ PROJECT DELETE PERMISSION DENIED", { projectId });
         // Permission denied - don't update the state, just close the dialog
         setDeleteDialogOpen(false);
         setSelectedProject(null);
@@ -1007,21 +936,9 @@ const Projects = ({ initialFilters = {} }) => {
         });
       }
 
-      console.log("✅ PROJECT DELETE SUCCESS", {
-        projectId,
-        totalTime: `${(performance.now() - deleteStartTime).toFixed(2)}ms`,
-      });
-
       setDeleteDialogOpen(false);
       setSelectedProject(null);
     } catch (error) {
-      console.error("❌ PROJECT DELETE ERROR", {
-        projectId: selectedProject?._id || selectedProject?.id,
-        error: error.message,
-        totalTime: `${(performance.now() - deleteStartTime).toFixed(2)}ms`,
-      });
-      console.error("Error response:", error.response?.data);
-
       // Check if this is a dependency error (400 with dependencies)
       if (
         error.response?.status === 400 &&
@@ -1042,23 +959,13 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Memoized UsersCell component for rendering user avatars
   const UsersCell = React.memo(({ users }) => {
-    console.log("UsersCell render:", {
-      users,
-      usersType: typeof users,
-      usersLength: users?.length,
-    });
-
     if (!users || users.length === 0) {
-      console.log("UsersCell: No users or empty array");
       return <span>-</span>;
     }
-
-    console.log("UsersCell: Rendering users", users);
 
     return (
       <Box sx={{ display: "flex", gap: 0.5 }}>
         {users.map((user, index) => {
-          console.log("UsersCell: Rendering user", { user, index });
           return (
             <Tooltip
               key={user._id || index}
@@ -1086,11 +993,6 @@ const Projects = ({ initialFilters = {} }) => {
   // Handler for delete action - show dialog immediately, check dependencies on confirm
   const handleDeleteClick = (project) => {
     const dialogStartTime = performance.now();
-    console.log("🗑️ DELETE DIALOG OPEN START", {
-      projectId: project._id || project.id,
-      projectName: project.name,
-      timestamp: new Date().toISOString(),
-    });
 
     setSelectedProject(project);
     setDeleteDialogOpen(true); // Show dialog immediately
@@ -1098,10 +1000,6 @@ const Projects = ({ initialFilters = {} }) => {
     // Log dialog open time
     requestAnimationFrame(() => {
       const dialogOpenTime = performance.now() - dialogStartTime;
-      console.log("✅ DELETE DIALOG OPEN COMPLETE", {
-        projectId: project._id || project.id,
-        dialogOpenTime: `${dialogOpenTime.toFixed(2)}ms`,
-      });
     });
   };
 
@@ -1252,7 +1150,6 @@ const Projects = ({ initialFilters = {} }) => {
         },
       });
     } catch (error) {
-      console.error("Error saving column visibility preferences:", error);
       // Fallback to localStorage if API fails
       localStorage.setItem(
         "projects-column-visibility",
@@ -1262,7 +1159,6 @@ const Projects = ({ initialFilters = {} }) => {
   };
 
   const handleDepartmentClick = (department) => {
-    // console.log("Department filter clicked:", department);
     setSelectedDepartment(department);
 
     // Convert department name to filter value
@@ -1319,7 +1215,6 @@ const Projects = ({ initialFilters = {} }) => {
           pages: response.data?.pagination?.pages || 0,
         }));
       } catch (err) {
-        console.error("Error fetching projects:", err);
         setError(err.message);
         setProjects([]);
       } finally {
@@ -1363,10 +1258,6 @@ const Projects = ({ initialFilters = {} }) => {
   // Status editing handlers
   const handleStatusClick = (projectId, event) => {
     const dropdownOpenStartTime = performance.now();
-    console.log("📋 STATUS DROPDOWN OPEN START", {
-      projectId,
-      timestamp: new Date().toISOString(),
-    });
 
     if (isAdmin || isManager || can("projects.change_status")) {
       // Store the project ID in the anchor element's dataset
@@ -1374,40 +1265,19 @@ const Projects = ({ initialFilters = {} }) => {
       setStatusDropdownAnchor(event.currentTarget);
 
       const dropdownOpenTime = performance.now() - dropdownOpenStartTime;
-      console.log("✅ STATUS DROPDOWN OPEN COMPLETE", {
-        projectId,
-        openTime: `${dropdownOpenTime.toFixed(2)}ms`,
-        timestamp: new Date().toISOString(),
-      });
     } else {
-      console.log("❌ STATUS DROPDOWN ACCESS DENIED", {
-        projectId,
-        isAdmin,
-        isManager,
-        canChangeStatus: can("projects.change_status"),
-        timestamp: new Date().toISOString(),
-      });
     }
   };
 
   const handleStatusChange = async (projectId, newStatus) => {
     const statusChangeStartTime = performance.now();
-    console.log("🔄 STATUS CHANGE START", {
-      projectId,
-      newStatus,
-      timestamp: new Date().toISOString(),
-    });
 
     try {
-      const apiStartTime = performance.now();
-      await projectService.update(projectId, { status: newStatus });
-      const apiEndTime = performance.now();
+      const updatePayload = { status: newStatus };
 
-      console.log("✅ STATUS CHANGE API COMPLETE", {
-        projectId,
-        newStatus,
-        apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
-      });
+      const apiStartTime = performance.now();
+      await projectService.update(projectId, updatePayload);
+      const apiEndTime = performance.now();
 
       // Update the local state
       const stateUpdateStartTime = performance.now();
@@ -1419,58 +1289,29 @@ const Projects = ({ initialFilters = {} }) => {
         )
       );
       const stateUpdateTime = performance.now() - stateUpdateStartTime;
-      console.log("✅ STATUS CHANGE STATE UPDATE COMPLETE", {
-        projectId,
-        stateUpdateTime: `${stateUpdateTime.toFixed(2)}ms`,
-      });
 
       // Refresh status counts after updating project status
       const statusCountsStartTime = performance.now();
       fetchStatusCounts();
       const statusCountsTime = performance.now() - statusCountsStartTime;
-      console.log("✅ STATUS COUNTS REFRESH COMPLETE", {
-        projectId,
-        statusCountsTime: `${statusCountsTime.toFixed(2)}ms`,
-      });
 
       // Close the dropdown
       setStatusDropdownAnchor(null);
 
       const totalTime = performance.now() - statusChangeStartTime;
-      console.log("✅ STATUS CHANGE COMPLETE", {
-        projectId,
-        newStatus,
-        totalTime: `${totalTime.toFixed(2)}ms`,
-        timestamp: new Date().toISOString(),
-      });
     } catch (error) {
       const totalTime = performance.now() - statusChangeStartTime;
-      console.log("❌ STATUS CHANGE ERROR", {
-        projectId,
-        newStatus,
-        totalTime: `${totalTime.toFixed(2)}ms`,
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
 
-      console.error("Error updating project status:", error);
       // You might want to show an error message to the user here
     }
   };
 
   const handleStatusClose = () => {
     const dropdownCloseStartTime = performance.now();
-    console.log("📋 STATUS DROPDOWN CLOSE START", {
-      timestamp: new Date().toISOString(),
-    });
 
     setStatusDropdownAnchor(null);
 
     const dropdownCloseTime = performance.now() - dropdownCloseStartTime;
-    console.log("✅ STATUS DROPDOWN CLOSE COMPLETE", {
-      closeTime: `${dropdownCloseTime.toFixed(2)}ms`,
-      timestamp: new Date().toISOString(),
-    });
   };
 
   // Load user preferences from database
@@ -1482,7 +1323,6 @@ const Projects = ({ initialFilters = {} }) => {
           setColumnVisibilityModel(response.data.columnVisibility.projects);
         }
       } catch (error) {
-        console.error("Error loading user preferences:", error);
         // Fallback to localStorage if API fails
         const savedColumnVisibility = localStorage.getItem(
           "projects-column-visibility"
@@ -1491,9 +1331,7 @@ const Projects = ({ initialFilters = {} }) => {
           try {
             const parsed = JSON.parse(savedColumnVisibility);
             setColumnVisibilityModel(parsed);
-          } catch (parseError) {
-            console.error("Error parsing saved column visibility:", parseError);
-          }
+          } catch (parseError) {}
         }
       }
     };
@@ -1665,7 +1503,6 @@ const Projects = ({ initialFilters = {} }) => {
         headerName: "Work Order/Job Reference",
         flex: 1,
         minWidth: 150,
-        hide: true, // Hidden by default
       },
       {
         field: "status",
@@ -1700,17 +1537,9 @@ const Projects = ({ initialFilters = {} }) => {
         maxWidth: 120,
         renderCell: (params) => {
           // Debug logging to see what data we're getting
-          console.log("Users column debug:", {
-            projectId: params.row.projectID,
-            users: params.row.users,
-            usersType: typeof params.row.users,
-            usersLength: params.row.users?.length,
-            usersArray: Array.isArray(params.row.users),
-          });
 
           // Safety check to ensure UsersCell component is available
           if (!UsersCell) {
-            console.log("UsersCell component not available");
             return <span>-</span>;
           }
           return <UsersCell users={params.row.users} />;
@@ -1802,11 +1631,6 @@ const Projects = ({ initialFilters = {} }) => {
           variant="outlined"
           color="primary"
           onClick={() => {
-            console.log("=== ADD PROJECT (Full Page) Button Clicked ===");
-            console.log("Current location:", window.location.href);
-            console.log("Current pathname:", window.location.pathname);
-            console.log("About to navigate to /projects/add-new");
-            console.log("=============================================");
             navigate("/projects/add-new");
           }}
           fullWidth
