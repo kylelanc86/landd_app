@@ -152,24 +152,24 @@ function App() {
         <CssBaseline />
         <AuthProvider>
           <PermissionDeniedProvider>
-            <ProjectStatusesProvider>
-              <BrowserRouter
-                future={{
-                  v7_startTransition: true,
-                  v7_relativeSplatPath: true,
-                }}
-              >
-                <Routes>
-                  {/* Public routes */}
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/reset-password" element={<ResetPassword />} />
-                  <Route path="/setup-password" element={<SetupPassword />} />
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/setup-password" element={<SetupPassword />} />
 
-                  {/* Protected routes */}
-                  <Route
-                    path="/*"
-                    element={
-                      <ProtectedRoute>
+                {/* Protected routes */}
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <ProjectStatusesProvider>
                         <Layout>
                           <Routes>
                             <Route path="/" element={<Dashboard />} />
@@ -1142,12 +1142,12 @@ function App() {
                             )}
                           </Routes>
                         </Layout>
-                      </ProtectedRoute>
-                    }
-                  />
-                </Routes>
-              </BrowserRouter>
-            </ProjectStatusesProvider>
+                      </ProjectStatusesProvider>
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </BrowserRouter>
           </PermissionDeniedProvider>
         </AuthProvider>
       </ThemeProvider>
