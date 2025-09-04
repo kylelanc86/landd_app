@@ -269,7 +269,6 @@ const Projects = ({ initialFilters = {} }) => {
   const [columnVisibilityModel, setColumnVisibilityModel] = useState({
     projectID: true,
     name: true,
-    client: true,
     d_Date: true,
     status: true,
     department: false, // Hide department column by default
@@ -1043,29 +1042,41 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Memoized UsersCell component for rendering user avatars
   const UsersCell = React.memo(({ users }) => {
+    console.log("UsersCell render:", {
+      users,
+      usersType: typeof users,
+      usersLength: users?.length,
+    });
+
     if (!users || users.length === 0) {
+      console.log("UsersCell: No users or empty array");
       return <span>-</span>;
     }
 
+    console.log("UsersCell: Rendering users", users);
+
     return (
       <Box sx={{ display: "flex", gap: 0.5 }}>
-        {users.map((user, index) => (
-          <Tooltip
-            key={user._id || index}
-            title={`${user.firstName} ${user.lastName}`}
-          >
-            <Avatar
-              sx={{
-                width: 24,
-                height: 24,
-                fontSize: "0.75rem",
-                bgcolor: getRandomColor(user),
-              }}
+        {users.map((user, index) => {
+          console.log("UsersCell: Rendering user", { user, index });
+          return (
+            <Tooltip
+              key={user._id || index}
+              title={`${user.firstName} ${user.lastName}`}
             >
-              {getInitials(user)}
-            </Avatar>
-          </Tooltip>
-        ))}
+              <Avatar
+                sx={{
+                  width: 24,
+                  height: 24,
+                  fontSize: "0.75rem",
+                  bgcolor: getRandomColor(user),
+                }}
+              >
+                {getInitials(user)}
+              </Avatar>
+            </Tooltip>
+          );
+        })}
       </Box>
     );
   });
@@ -1504,51 +1515,49 @@ const Projects = ({ initialFilters = {} }) => {
       },
       {
         field: "name",
-        headerName: "Project Name",
-        flex: 2,
-        minWidth: 190,
-        maxWidth: 400,
+        headerName: "Project",
+        flex: 3,
+        minWidth: 250,
+        maxWidth: 500,
+        renderCell: ({ row }) => {
+          const clientName = row.client?.name || row.client || "";
+          const projectName = row.name || "";
+          const displayText = clientName
+            ? `${clientName} - ${projectName}`
+            : projectName;
 
-        renderCell: ({ row }) => (
-          <Box
-            sx={{
-              whiteSpace: "normal",
-              wordWrap: "break-word",
-              lineHeight: 1.2,
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {row.name}
-          </Box>
-        ),
-      },
-
-      {
-        field: "client",
-        headerName: "Client",
-        flex: 1,
-        minWidth: 140,
-        maxWidth: 220,
-        renderCell: ({ row }) => (
-          <Typography
-            variant="body2"
-            sx={{
-              whiteSpace: "normal",
-              wordWrap: "break-word",
-              lineHeight: 1.2,
-              maxHeight: "2.4em", // 2 lines * 1.2 line height
-              overflow: "hidden",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              width: "100%",
-            }}
-          >
-            {row.client?.name || row.client || ""}
-          </Typography>
-        ),
+          return (
+            <Box
+              sx={{
+                whiteSpace: "normal",
+                wordWrap: "break-word",
+                lineHeight: 1.2,
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                maxHeight: "2.4em", // 2 lines * 1.2 line height
+                overflow: "hidden",
+                width: "100%",
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  whiteSpace: "normal",
+                  wordWrap: "break-word",
+                  lineHeight: 1.2,
+                  width: "100%",
+                  color: "black",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                }}
+              >
+                {displayText}
+              </Typography>
+            </Box>
+          );
+        },
       },
       {
         field: "d_Date",
@@ -1690,8 +1699,18 @@ const Projects = ({ initialFilters = {} }) => {
         minWidth: 60,
         maxWidth: 120,
         renderCell: (params) => {
+          // Debug logging to see what data we're getting
+          console.log("Users column debug:", {
+            projectId: params.row.projectID,
+            users: params.row.users,
+            usersType: typeof params.row.users,
+            usersLength: params.row.users?.length,
+            usersArray: Array.isArray(params.row.users),
+          });
+
           // Safety check to ensure UsersCell component is available
-          if (typeof UsersCell !== "function") {
+          if (!UsersCell) {
+            console.log("UsersCell component not available");
             return <span>-</span>;
           }
           return <UsersCell users={params.row.users} />;

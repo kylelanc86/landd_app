@@ -76,27 +76,29 @@ const Dashboard = () => {
   const isExtraSmall = useMediaQuery("(max-width:480px)"); // Back to 480px for very small
 
   // Load widget order from user preferences or use defaults
+  // Order should prioritize visible widgets first
   const [widgetOrder, setWidgetOrder] = useState([
-    "dailyTimesheet",
-    "inProgress",
-    "samplesSubmitted",
-    "labComplete",
-    "reportReview",
-    "readyForInvoicing",
-    "invoiceSent",
-    "awaitingPayment",
+    "dailyTimesheet", // Required widget
+    "inProgress", // Additional widget 1
+    "samplesSubmitted", // Additional widget 2
+    "labComplete", // Additional widget 3 (can be enabled)
+    "reportReview", // Additional widget 4 (can be enabled)
+    "readyForInvoicing", // Additional widget 5 (can be enabled)
+    "invoiceSent", // Additional widget 6 (can be enabled)
+    "awaitingPayment", // Additional widget 7 (can be enabled)
   ]);
 
   // Load widget preferences from user preferences or use defaults
+  // All additional widgets are false by default - users must explicitly select them
   const [visibleWidgets, setVisibleWidgets] = useState({
-    dailyTimesheet: true,
-    inProgress: true,
-    samplesSubmitted: true,
-    labComplete: true,
-    reportReview: true,
-    readyForInvoicing: true,
-    invoiceSent: true,
-    awaitingPayment: true,
+    dailyTimesheet: true, // Required widget (always true)
+    inProgress: false, // Additional widget 1 (user must select)
+    samplesSubmitted: false, // Additional widget 2 (user must select)
+    labComplete: false, // Additional widget 3 (user must select)
+    reportReview: false, // Additional widget 4 (user must select)
+    readyForInvoicing: false, // Additional widget 5 (user must select)
+    invoiceSent: false, // Additional widget 6 (user must select)
+    awaitingPayment: false, // Additional widget 7 (user must select)
   });
 
   const [stats, setStats] = useState({
@@ -343,7 +345,7 @@ const Dashboard = () => {
     }
   }, [visibleWidgets.dailyTimesheet]);
 
-  // Get ordered and visible widgets - limit to 4 widgets maximum
+  // Get ordered and visible widgets - limit to 3 additional widgets + daily timesheet = 4 total
   const displayWidgets = useMemo(() => {
     // First, ensure we have valid widget IDs
     const validWidgetIds = gridItems.map((item) => item.id);
@@ -355,12 +357,12 @@ const Dashboard = () => {
     const orderToUse =
       filteredOrder.length > 0 ? filteredOrder : validWidgetIds;
 
-    // Map and filter widgets, then limit to first 4
+    // Map and filter widgets, then limit to first 4 (1 required + up to 3 additional)
     const result = orderToUse
       .map((id) => gridItems.find((item) => item.id === id))
       .filter(Boolean)
       .filter((item) => visibleWidgets[item.id])
-      .slice(0, 4); // Only show first 4 widgets
+      .slice(0, 4); // Only show first 4 widgets (1 required + up to 3 additional)
 
     return result;
   }, [widgetOrder, gridItems, visibleWidgets]);
@@ -389,7 +391,9 @@ const Dashboard = () => {
 
     // If trying to enable a widget and we're already at the limit, prevent it
     if (!isCurrentlyVisible && currentVisibleCount >= 4) {
-      console.log("Cannot enable widget - already at limit of 4");
+      console.log(
+        "Cannot enable widget - already at limit of 4 (1 required + 3 additional)"
+      );
       return; // Exit early - already at limit
     }
 
@@ -851,7 +855,15 @@ const Dashboard = () => {
                 const isChecked = visibleWidgets[item.id];
                 const currentCount =
                   Object.values(visibleWidgets).filter(Boolean).length;
+                // Can toggle if: already checked (can uncheck) OR not at limit of 4 total widgets
                 const canToggle = isChecked || currentCount < 4;
+
+                console.log(`Widget ${item.id}:`, {
+                  isChecked,
+                  currentCount,
+                  canToggle,
+                  visibleWidgets: visibleWidgets[item.id],
+                });
 
                 return (
                   <FormControlLabel

@@ -15,21 +15,42 @@ const path = require('path');
 
 console.log('🔄 Starting database migration...');
 
-// Run the users index migration
-const migrationPath = path.join(__dirname, 'addUsersIndex.js');
+// Run migrations in sequence
+const migrations = [
+  'addUsersIndex.js',
+  'addCompoundIndexes.js'
+];
 
-exec(`node ${migrationPath}`, (error, stdout, stderr) => {
-  if (error) {
-    console.error('❌ Migration failed:', error);
-    process.exit(1);
+let currentMigration = 0;
+
+const runNextMigration = () => {
+  if (currentMigration >= migrations.length) {
+    console.log('✅ All migrations completed!');
+    return;
   }
   
-  if (stderr) {
-    console.error('⚠️ Migration warnings:', stderr);
-  }
+  const migrationFile = migrations[currentMigration];
+  const migrationPath = path.join(__dirname, migrationFile);
   
-  console.log('📋 Migration output:');
-  console.log(stdout);
+  console.log(`🔄 Running migration ${currentMigration + 1}/${migrations.length}: ${migrationFile}`);
   
-  console.log('✅ Migration completed!');
-});
+  // Use quotes around the path to handle spaces in directory names
+  exec(`node "${migrationPath}"`, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`❌ Migration ${migrationFile} failed:`, error);
+      process.exit(1);
+    }
+    
+    if (stderr) {
+      console.error(`⚠️ Migration ${migrationFile} warnings:`, stderr);
+    }
+    
+    console.log(`📋 Migration ${migrationFile} output:`);
+    console.log(stdout);
+    
+    currentMigration++;
+    runNextMigration();
+  });
+};
+
+runNextMigration();
