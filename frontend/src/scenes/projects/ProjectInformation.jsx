@@ -1263,6 +1263,15 @@ const ProjectInformation = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const operationStartTime = performance.now();
+    console.log("🚀 PROJECT OPERATION START", {
+      operation: isEditMode ? "UPDATE" : "CREATE",
+      timestamp: new Date().toISOString(),
+      projectID: form.projectID,
+      projectId: form._id,
+      isEditMode,
+    });
+
     console.log("🔍 handleSubmit called");
     console.log("🔍 Form data:", form);
     console.log("🔍 Form data details:", {
@@ -1281,6 +1290,12 @@ const ProjectInformation = () => {
 
     try {
       if (isEditMode) {
+        const updateStartTime = performance.now();
+        console.log("🔄 PROJECT UPDATE START", {
+          projectId: id,
+          timestamp: new Date().toISOString(),
+        });
+
         console.log("🔍 Updating existing project with ID:", id);
         console.log("🔍 Update payload:", {
           id,
@@ -1288,9 +1303,25 @@ const ProjectInformation = () => {
           formProjectID: form.projectID,
           formId: form._id,
         });
+
+        const apiStartTime = performance.now();
         const response = await projectService.update(id, form);
+        const apiEndTime = performance.now();
+
+        console.log("✅ PROJECT UPDATE API COMPLETE", {
+          projectId: id,
+          apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          totalTime: `${(apiEndTime - updateStartTime).toFixed(2)}ms`,
+          responseSize: JSON.stringify(response).length,
+        });
         console.log("🔍 Update response:", response);
       } else {
+        const createStartTime = performance.now();
+        console.log("🆕 PROJECT CREATE START", {
+          timestamp: new Date().toISOString(),
+          hasPreGeneratedId: !!form.projectID,
+        });
+
         console.log("🔍 Creating new project");
         console.log("🔍 Form before Project ID generation:", form);
         console.log("🔍 Form structure before ID generation:", {
@@ -1302,10 +1333,18 @@ const ProjectInformation = () => {
 
         // Use pre-generated ID or generate one as fallback
         let projectId = form.projectID;
+        let idGenerationTime = 0;
+
         if (!projectId) {
           console.log("🔍 No pre-generated ID, generating now...");
+          const idStartTime = performance.now();
           projectId = await generateNextProjectId();
+          idGenerationTime = performance.now() - idStartTime;
           console.log("🔍 Generated Project ID:", projectId);
+          console.log(
+            "⏱️ ID Generation Time:",
+            `${idGenerationTime.toFixed(2)}ms`
+          );
         } else {
           console.log("🔍 Using pre-generated Project ID:", projectId);
         }
@@ -1321,7 +1360,18 @@ const ProjectInformation = () => {
         });
 
         console.log("🔍 Calling projectService.create...");
+        const apiStartTime = performance.now();
         const response = await projectService.create(formWithId);
+        const apiEndTime = performance.now();
+
+        console.log("✅ PROJECT CREATE API COMPLETE", {
+          projectId: projectId,
+          apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          idGenerationTime: `${idGenerationTime.toFixed(2)}ms`,
+          totalTime: `${(apiEndTime - createStartTime).toFixed(2)}ms`,
+          responseSize: JSON.stringify(response).length,
+        });
+
         console.log("🔍 Create response:", response);
         console.log("🔍 Create response details:", {
           hasData: !!response.data,
@@ -1428,22 +1478,44 @@ const ProjectInformation = () => {
   };
 
   const handleDeleteProject = async () => {
+    const deleteStartTime = performance.now();
+    console.log("🗑️ PROJECT DELETE START", {
+      projectId: id,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
       setDeleting(true);
+
+      const apiStartTime = performance.now();
       const response = await projectService.delete(id);
+      const apiEndTime = performance.now();
+
+      console.log("✅ PROJECT DELETE API COMPLETE", {
+        projectId: id,
+        apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+        totalTime: `${(apiEndTime - deleteStartTime).toFixed(2)}ms`,
+        responseSize: JSON.stringify(response).length,
+      });
 
       // Check if this was a permission denied response
       if (response.data?.permissionDenied) {
+        console.log("❌ PROJECT DELETE PERMISSION DENIED", { projectId: id });
         // Permission denied - don't navigate, just close the dialog
         setDeleting(false);
         setDeleteDialogOpen(false);
         return;
       }
 
+      console.log("✅ PROJECT DELETE SUCCESS", { projectId: id });
       // Success - navigate to projects list
       navigate("/projects");
     } catch (error) {
-      console.error("Error deleting project:", error);
+      console.error("❌ PROJECT DELETE ERROR", {
+        projectId: id,
+        error: error.message,
+        totalTime: `${(performance.now() - deleteStartTime).toFixed(2)}ms`,
+      });
       setError("Failed to delete project. Please try again.");
     } finally {
       setDeleting(false);

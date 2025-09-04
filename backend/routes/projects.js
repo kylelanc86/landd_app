@@ -653,101 +653,9 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       const dbTime = Date.now() - dbStartTime;
       console.log(`[${userId}] Database query completed in ${dbTime}ms`);
 
-      // Get overdue invoice data for all projects in a single aggregation
-      const invoiceStartTime = Date.now();
-      const projectIds = projects.map(p => p._id);
-      
-      // Aggregate invoice data for all projects (both overdue and general invoice info)
-      const invoiceData = await require('../models/Invoice').aggregate([
-        {
-          $match: {
-            projectId: { $in: projectIds },
-            isDeleted: { $ne: true }
-          }
-        },
-        {
-          $group: {
-            _id: '$projectId',
-            invoices: { $push: '$$ROOT' },
-            overdueDays: {
-              $max: {
-                $cond: [
-                  { 
-                    $and: [
-                      { $eq: ['$status', 'unpaid'] },
-                      { $lt: ['$dueDate', new Date()] }
-                    ]
-                  },
-                  {
-                    $ceil: {
-                      $divide: [
-                        { $subtract: [new Date(), '$dueDate'] },
-                        1000 * 60 * 60 * 24
-                      ]
-                    }
-                  },
-                  0
-                ]
-              }
-            }
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            invoices: 1,
-            overdueDays: { $max: ['$overdueDays', 0] }
-          }
-        }
-      ]);
-      
-      const invoiceTime = Date.now() - invoiceStartTime;
-      console.log(`[${userId}] Invoice aggregation completed in ${invoiceTime}ms`);
+      // Invoice processing removed for performance
 
-      // Create maps for quick lookup
-      const overdueMap = {};
-      const invoiceMap = {};
-      
-      invoiceData.forEach(item => {
-        const projectId = item._id.toString();
-        
-        // Handle overdue invoices
-        if (item.overdueDays > 0) {
-          overdueMap[projectId] = {
-            overdueInvoice: true,
-            overdueDays: item.overdueDays
-          };
-        }
-        
-        // Handle general invoice info
-        if (item.invoices && item.invoices.length > 0) {
-          // Get the most recent invoice for this project
-          const latestInvoice = item.invoices.sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-          
-          // Calculate days until due for unpaid invoices
-          let daysUntilDue = null;
-          if (latestInvoice.status === 'unpaid' && latestInvoice.dueDate) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const dueDate = new Date(latestInvoice.dueDate);
-            dueDate.setHours(0, 0, 0, 0);
-            
-            const diffTime = dueDate - today;
-            daysUntilDue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          }
-          
-          invoiceMap[projectId] = {
-            hasInvoice: true,
-            status: latestInvoice.status,
-            xeroStatus: latestInvoice.xeroStatus,
-            daysUntilDue: daysUntilDue,
-            amount: latestInvoice.amount,
-            invoiceID: latestInvoice.invoiceID
-          };
-        }
-      });
-
-      // Transform the response with both overdue and invoice data
+      // Transform the response
       const response = {
         data: projects.map(project => ({
           _id: project._id,
@@ -758,9 +666,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           client: project.client?.name || '',
           users: project.users,
           createdAt: project.createdAt,
-          d_Date: project.d_Date,
-          overdueInvoice: overdueMap[project._id.toString()] || { overdueInvoice: false, overdueDays: 0 },
-          invoiceInfo: invoiceMap[project._id.toString()] || { hasInvoice: false }
+          d_Date: project.d_Date
         })),
         pagination: {
           total,
@@ -771,7 +677,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       };
 
       const totalTime = Date.now() - startTime;
-      console.log(`[${userId}] getAssignedToMe completed in ${totalTime}ms (DB: ${dbTime}ms, Invoice: ${invoiceTime}ms)`);
+      console.log(`[${userId}] getAssignedToMe completed in ${totalTime}ms (DB: ${dbTime}ms)`);
 
       res.json(response);
     } catch (error) {

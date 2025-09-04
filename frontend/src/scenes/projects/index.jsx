@@ -460,6 +460,13 @@ const Projects = ({ initialFilters = {} }) => {
       isSearch = false,
       currentFilters = null
     ) => {
+      const fetchStartTime = performance.now();
+      console.log("📊 PROJECTS PAGE FETCH START", {
+        operation: isSearch ? "SEARCH" : "LOAD",
+        searchTerm: searchValue,
+        timestamp: new Date().toISOString(),
+      });
+
       // Use current filters state if currentFilters is null (for search operations)
       const filtersToUse = currentFilters || filtersRef.current;
       try {
@@ -491,11 +498,24 @@ const Projects = ({ initialFilters = {} }) => {
           params.status = filtersToUse.statusFilter;
         }
 
+        const apiStartTime = performance.now();
         const response = await projectService.getAll(params);
+        const apiEndTime = performance.now();
 
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
+
+        const processingEndTime = performance.now();
+
+        console.log("✅ PROJECTS PAGE FETCH COMPLETE", {
+          operation: isSearch ? "SEARCH" : "LOAD",
+          projectCount: projectsData.length,
+          apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          processingTime: `${(processingEndTime - apiEndTime).toFixed(2)}ms`,
+          totalTime: `${(processingEndTime - fetchStartTime).toFixed(2)}ms`,
+          responseSize: JSON.stringify(response).length,
+        });
 
         setProjects(projectsData);
         setPagination({
@@ -507,7 +527,11 @@ const Projects = ({ initialFilters = {} }) => {
 
         // Status counts will be updated when the component re-renders with new projects
       } catch (err) {
-        console.error("Error fetching projects:", err);
+        console.error("❌ PROJECTS PAGE FETCH ERROR", {
+          operation: isSearch ? "SEARCH" : "LOAD",
+          error: err.message,
+          totalTime: `${(performance.now() - fetchStartTime).toFixed(2)}ms`,
+        });
         setError(err.message);
         setProjects([]);
       } finally {
@@ -874,6 +898,13 @@ const Projects = ({ initialFilters = {} }) => {
   };
 
   const handleDeleteProject = async () => {
+    const deleteStartTime = performance.now();
+    console.log("🗑️ PROJECT DELETE START", {
+      projectId: selectedProject?._id || selectedProject?.id,
+      projectName: selectedProject?.name,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
       console.log("=== DELETING PROJECT ===");
       console.log("Selected project:", selectedProject);
@@ -891,10 +922,19 @@ const Projects = ({ initialFilters = {} }) => {
       }
 
       // First check for dependencies
+      let dependencyCheckTime = 0;
       try {
+        const dependencyStartTime = performance.now();
         const dependencyResponse = await projectService.checkDependencies(
           projectId
         );
+        dependencyCheckTime = performance.now() - dependencyStartTime;
+
+        console.log("🔍 DEPENDENCY CHECK COMPLETE", {
+          projectId,
+          canDelete: dependencyResponse.data.canDelete,
+          checkTime: `${dependencyCheckTime.toFixed(2)}ms`,
+        });
 
         if (!dependencyResponse.data.canDelete) {
           // Has dependencies, show dependency dialog instead of deleting
@@ -908,15 +948,29 @@ const Projects = ({ initialFilters = {} }) => {
           return;
         }
       } catch (dependencyError) {
-        console.error("Error checking project dependencies:", dependencyError);
+        console.error("❌ DEPENDENCY CHECK ERROR", {
+          projectId,
+          error: dependencyError.message,
+          checkTime: `${dependencyCheckTime.toFixed(2)}ms`,
+        });
         // Continue with deletion attempt - let the backend handle it
       }
 
       // Proceed with deletion
+      const deleteApiStartTime = performance.now();
       const response = await projectService.delete(projectId);
+      const deleteApiEndTime = performance.now();
+
+      console.log("✅ PROJECT DELETE API COMPLETE", {
+        projectId,
+        apiTime: `${(deleteApiEndTime - deleteApiStartTime).toFixed(2)}ms`,
+        totalTime: `${(deleteApiEndTime - deleteStartTime).toFixed(2)}ms`,
+        responseSize: JSON.stringify(response).length,
+      });
 
       // Check if this was a permission denied response
       if (response.data?.permissionDenied) {
+        console.log("❌ PROJECT DELETE PERMISSION DENIED", { projectId });
         // Permission denied - don't update the state, just close the dialog
         setDeleteDialogOpen(false);
         setSelectedProject(null);
@@ -954,10 +1008,19 @@ const Projects = ({ initialFilters = {} }) => {
         });
       }
 
+      console.log("✅ PROJECT DELETE SUCCESS", {
+        projectId,
+        totalTime: `${(performance.now() - deleteStartTime).toFixed(2)}ms`,
+      });
+
       setDeleteDialogOpen(false);
       setSelectedProject(null);
     } catch (error) {
-      console.error("Error deleting project:", error);
+      console.error("❌ PROJECT DELETE ERROR", {
+        projectId: selectedProject?._id || selectedProject?.id,
+        error: error.message,
+        totalTime: `${(performance.now() - deleteStartTime).toFixed(2)}ms`,
+      });
       console.error("Error response:", error.response?.data);
 
       // Check if this is a dependency error (400 with dependencies)
@@ -1011,8 +1074,24 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Handler for delete action - show dialog immediately, check dependencies on confirm
   const handleDeleteClick = (project) => {
+    const dialogStartTime = performance.now();
+    console.log("🗑️ DELETE DIALOG OPEN START", {
+      projectId: project._id || project.id,
+      projectName: project.name,
+      timestamp: new Date().toISOString(),
+    });
+
     setSelectedProject(project);
     setDeleteDialogOpen(true); // Show dialog immediately
+
+    // Log dialog open time
+    requestAnimationFrame(() => {
+      const dialogOpenTime = performance.now() - dialogStartTime;
+      console.log("✅ DELETE DIALOG OPEN COMPLETE", {
+        projectId: project._id || project.id,
+        dialogOpenTime: `${dialogOpenTime.toFixed(2)}ms`,
+      });
+    });
   };
 
   // Handler for export action

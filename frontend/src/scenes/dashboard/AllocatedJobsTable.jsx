@@ -21,11 +21,6 @@ const AllocatedJobsTable = () => {
     page: 0,
   });
   const [rowCount, setRowCount] = useState(0);
-  const [performanceMetrics, setPerformanceMetrics] = useState({
-    totalLoadTime: 0,
-    dataFetchTime: 0,
-    renderTime: 0,
-  });
   const theme = useTheme();
 
   const fetchAllocatedJobs = useCallback(
@@ -34,10 +29,18 @@ const AllocatedJobsTable = () => {
         return;
       }
 
-      const startTime = performance.now();
+      const fetchStartTime = performance.now();
+      console.log("📋 ALLOCATED JOBS FETCH START", {
+        page,
+        pageSize,
+        userId: currentUser._id || currentUser.id,
+        timestamp: new Date().toISOString(),
+      });
+
       setLoading(true);
 
       try {
+        const apiStartTime = performance.now();
         const response = await projectService.getAssignedToMe({
           page: page + 1, // Backend uses 1-based pagination
           limit: pageSize,
@@ -45,43 +48,42 @@ const AllocatedJobsTable = () => {
           sortBy: "projectID",
           sortOrder: "desc",
         });
-
-        const dataFetchTime = performance.now() - startTime;
+        const apiEndTime = performance.now();
 
         const projectsData = response.data.data || [];
+        const processingEndTime = performance.now();
+
+        console.log("✅ ALLOCATED JOBS FETCH COMPLETE", {
+          page,
+          pageSize,
+          projectCount: projectsData.length,
+          totalCount: response.data.pagination?.total || 0,
+          apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          processingTime: `${(processingEndTime - apiEndTime).toFixed(2)}ms`,
+          totalTime: `${(processingEndTime - fetchStartTime).toFixed(2)}ms`,
+          responseSize: JSON.stringify(response).length,
+        });
 
         // Store raw data, transformation happens in memoized function
         setJobs(projectsData);
         setRowCount(response.data.pagination?.total || 0);
-
-        const totalTime = performance.now() - startTime;
-        setPerformanceMetrics({
-          totalLoadTime: totalTime,
-          dataFetchTime: dataFetchTime,
-          renderTime: 0,
-        });
       } catch (err) {
+        console.error("❌ ALLOCATED JOBS FETCH ERROR", {
+          page,
+          pageSize,
+          error: err.message,
+          totalTime: `${(performance.now() - fetchStartTime).toFixed(2)}ms`,
+        });
         setError(err.message);
       } finally {
         setLoading(false);
       }
     },
-    [authLoading, currentUser]
+    [authLoading, currentUser, activeStatuses]
   );
 
   useEffect(() => {
-    const renderStartTime = performance.now();
-
     fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
-
-    // Measure render time after the next tick
-    requestAnimationFrame(() => {
-      const renderTime = performance.now() - renderStartTime;
-      setPerformanceMetrics((prev) => ({
-        ...prev,
-        renderTime: renderTime,
-      }));
-    });
   }, [authLoading, currentUser, paginationModel, fetchAllocatedJobs]);
 
   const handlePaginationModelChange = useCallback((newModel) => {
@@ -94,14 +96,8 @@ const AllocatedJobsTable = () => {
       id: job._id || job.id,
       projectID: job.projectID,
       name: job.name,
-      // department: job.department || "N/A",
       status: job.status,
       d_Date: job.d_Date,
-      overdueInvoice: job.overdueInvoice || {
-        overdueInvoice: false,
-        overdueDays: 0,
-      },
-      invoiceInfo: job.invoiceInfo || { hasInvoice: false },
     }));
   }, [jobs]);
 
@@ -186,85 +182,8 @@ const AllocatedJobsTable = () => {
           />
         ),
       },
-      {
-        field: "overdueInvoice",
-        headerName: "Invoice",
-        flex: 1,
-        minWidth: 120,
-        maxWidth: 150,
-        renderCell: (params) => {
-          const overdue = params.row.overdueInvoice;
-          const invoiceInfo = params.row.invoiceInfo;
-
-          // If there's an overdue invoice, show that prominently
-          if (overdue?.overdueInvoice && overdue.overdueDays > 0) {
-            return (
-              <span style={{ color: "#d32f2f", fontWeight: "bold" }}>
-                {overdue.overdueDays} day{overdue.overdueDays === 1 ? "" : "s"}{" "}
-                overdue
-              </span>
-            );
-          }
-
-          // If there's an invoice but not overdue, show status and days until due
-          if (invoiceInfo?.hasInvoice) {
-            let statusColor = "#666";
-            let statusText = invoiceInfo.status || "Unknown";
-
-            // Color code the status
-            switch (invoiceInfo.status) {
-              case "paid":
-                statusColor = "#2e7d32"; // Green
-                break;
-              case "unpaid":
-                statusColor = "#ed6c02"; // Orange
-                break;
-              case "draft":
-                statusColor = "#666"; // Gray
-                break;
-              case "awaiting_approval":
-                statusColor = "#1976d2"; // Blue
-                break;
-              default:
-                statusColor = "#666";
-            }
-
-            // Show status and days until due if applicable
-            if (
-              invoiceInfo.daysUntilDue !== null &&
-              invoiceInfo.daysUntilDue >= 0
-            ) {
-              return (
-                <div>
-                  <div style={{ color: statusColor, fontWeight: "bold" }}>
-                    {statusText.charAt(0).toUpperCase() + statusText.slice(1)}
-                  </div>
-                  <div style={{ fontSize: "0.75rem", color: "#666" }}>
-                    {invoiceInfo.daysUntilDue === 0
-                      ? "Due today"
-                      : `${invoiceInfo.daysUntilDue} day${
-                          invoiceInfo.daysUntilDue === 1 ? "" : "s"
-                        } left`}
-                  </div>
-                </div>
-              );
-            } else {
-              return (
-                <span style={{ color: statusColor, fontWeight: "bold" }}>
-                  {statusText.charAt(0).toUpperCase() + statusText.slice(1)}
-                </span>
-              );
-            }
-          }
-
-          // No invoice found
-          return (
-            <span style={{ color: "#666", fontStyle: "italic" }}>None</span>
-          );
-        },
-      },
     ],
-    []
+    [statusColors]
   );
 
   if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
@@ -335,34 +254,6 @@ const AllocatedJobsTable = () => {
         },
         "& .MuiDataGrid-row:hover": {
           backgroundColor: "#e3f2fd",
-        },
-        // Ensure footer is properly positioned
-        "& .MuiDataGrid-footerContainer": {
-          position: "relative",
-          borderTop: "1px solid rgba(224, 224, 224, 1)",
-          color: "white",
-          "& .MuiTablePagination-root": {
-            color: "white",
-          },
-          "& .MuiTablePagination-selectLabel": {
-            color: "white",
-          },
-          "& .MuiTablePagination-displayedRows": {
-            color: "white",
-          },
-          "& .MuiTablePagination-select": {
-            color: "white",
-          },
-          "& .MuiTablePagination-actions": {
-            color: "white",
-          },
-          "& .MuiIconButton-root": {
-            color: "white",
-          },
-        },
-        // Remove any empty row spacing
-        "& .MuiDataGrid-virtualScroller": {
-          minHeight: "auto",
         },
       }}
     >
