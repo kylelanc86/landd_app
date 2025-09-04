@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Box,
   Typography,
@@ -131,6 +137,7 @@ const ProjectInformation = () => {
   // State for tracking form changes and confirmation dialog
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [originalForm, setOriginalForm] = useState(null);
+  const [changeDetectionEnabled, setChangeDetectionEnabled] = useState(false);
   const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] =
     useState(false);
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
@@ -172,6 +179,7 @@ const ProjectInformation = () => {
 
   // Debug: Log form state changes, especially _id and projectID
   useEffect(() => {
+    formRef.current = form; // Keep formRef in sync
     console.log("🔍 Form state changed:", {
       projectID: form.projectID,
       hasProjectID: !!form.projectID,
@@ -190,17 +198,64 @@ const ProjectInformation = () => {
     console.log("🔍 Unsaved changes check:", {
       hasOriginalForm: !!originalForm,
       isEditMode,
+      changeDetectionEnabled,
       formKeys: Object.keys(form),
       originalFormKeys: originalForm ? Object.keys(originalForm) : null,
     });
 
+    // Only track changes if change detection is enabled
+    if (!changeDetectionEnabled) {
+      console.log("🔍 Change detection disabled - skipping check");
+      return;
+    }
+
     // Track changes for both edit mode and add mode
     if (originalForm) {
-      const hasChanges = JSON.stringify(form) !== JSON.stringify(originalForm);
+      // For add mode, exclude projectID from change detection since it's auto-generated
+      // This prevents the initial project ID generation from being considered a "form change"
+      let formToCompare = form;
+      let originalFormToCompare = originalForm;
+
+      if (!isEditMode) {
+        // Create copies without projectID for comparison
+        const { projectID: _, ...formWithoutProjectID } = form;
+        const { projectID: __, ...originalFormWithoutProjectID } = originalForm;
+        formToCompare = formWithoutProjectID;
+        originalFormToCompare = originalFormWithoutProjectID;
+      }
+
+      const hasChanges =
+        JSON.stringify(formToCompare) !== JSON.stringify(originalFormToCompare);
+
+      // Debug: Find the specific differences
+      if (hasChanges) {
+        const formKeys = Object.keys(formToCompare);
+        const originalKeys = Object.keys(originalFormToCompare);
+        const differences = [];
+
+        // Check for missing or extra keys
+        const allKeys = new Set([...formKeys, ...originalKeys]);
+        for (const key of allKeys) {
+          if (formToCompare[key] !== originalFormToCompare[key]) {
+            differences.push({
+              key,
+              formValue: formToCompare[key],
+              originalValue: originalFormToCompare[key],
+              formHasKey: key in formToCompare,
+              originalHasKey: key in originalFormToCompare,
+            });
+          }
+        }
+
+        console.log("🔍 Form differences found:", differences);
+      }
+
       console.log("🔍 Form change detection:", {
         hasChanges,
-        formString: JSON.stringify(form),
-        originalFormString: JSON.stringify(originalForm),
+        isEditMode,
+        formString: JSON.stringify(formToCompare),
+        originalFormString: JSON.stringify(originalFormToCompare),
+        excludedProjectID: !isEditMode,
       });
       setHasUnsavedChanges(hasChanges);
 
@@ -224,7 +279,7 @@ const ProjectInformation = () => {
       window.currentProjectPath = null;
       window.showUnsavedChangesDialog = null;
     };
-  }, [form, originalForm, isEditMode]);
+  }, [form, originalForm, isEditMode, changeDetectionEnabled]);
 
   // Intercept navigation attempts when there are unsaved changes
   useEffect(() => {
@@ -391,6 +446,8 @@ const ProjectInformation = () => {
   const [isClientSearching, setIsClientSearching] = useState(false);
   const [isGeneratingId, setIsGeneratingId] = useState(false);
   const [idGenerated, setIdGenerated] = useState(false);
+  const isGeneratingRef = useRef(false);
+  const formRef = useRef(form);
 
   // Get project statuses from custom data fields
   const { activeStatuses, inactiveStatuses, statusColors } =
@@ -697,61 +754,74 @@ const ProjectInformation = () => {
       });
       throw new Error("Failed to generate project ID");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.isLargeProject]);
 
-  // Pre-generate project ID when form becomes valid
-  const preGenerateProjectId = useCallback(
-    async (forceRegenerate = false) => {
-      if (isEditMode || (idGenerated && !forceRegenerate) || isGeneratingId) {
-        return;
-      }
+  // Generate project ID immediately when page loads (for add mode only)
+  const generateInitialProjectId = useCallback(async () => {
+    if (
+      isEditMode ||
+      idGenerated ||
+      isGeneratingId ||
+      isGeneratingRef.current
+    ) {
+      return;
+    }
 
-      // Only generate if we have basic required info
-      if (!form.name || !form.client) {
-        return;
-      }
+    try {
+      isGeneratingRef.current = true;
+      setIsGeneratingId(true);
+      console.log("🔍 Generating initial project ID...");
+      const nextId = await generateNextProjectId();
+      console.log("🔍 Generated initial project ID:", nextId);
 
-      try {
-        setIsGeneratingId(true);
-        console.log("🔍 Pre-generating project ID...");
-        const nextId = await generateNextProjectId();
-        console.log("🔍 Pre-generated project ID:", nextId);
+      setForm((prev) => ({ ...prev, projectID: nextId }));
+      setIdGenerated(true);
 
-        setForm((prev) => ({ ...prev, projectID: nextId }));
-        setIdGenerated(true);
-      } catch (error) {
-        console.error("🔍 Error pre-generating project ID:", error);
-        // Don't show error to user, will fall back to generation on submit
-        setIdGenerated(false);
-      } finally {
-        setIsGeneratingId(false);
-      }
-    },
-    [
-      isEditMode,
-      idGenerated,
-      isGeneratingId,
-      form.name,
-      form.client,
-      generateNextProjectId,
-    ]
-  );
+      // Original form will be set when change detection is enabled
+    } catch (error) {
+      console.error("🔍 Error generating initial project ID:", error);
+      // Don't show error to user, will fall back to generation on submit
+      setIdGenerated(false);
+    } finally {
+      isGeneratingRef.current = false;
+      setIsGeneratingId(false);
+    }
+  }, [isEditMode, idGenerated, isGeneratingId, generateNextProjectId]);
 
   useEffect(() => {
     console.log("ProjectInformation component mounted");
-  }, []);
-
-  // Trigger pre-generation when form becomes valid
-  useEffect(() => {
-    preGenerateProjectId();
-  }, [preGenerateProjectId]);
-
-  // Regenerate ID when large project setting changes
-  useEffect(() => {
-    if (form.name && form.client) {
-      preGenerateProjectId(true);
+    // Generate project ID immediately for add mode
+    if (!isEditMode) {
+      generateInitialProjectId();
     }
-  }, [form.isLargeProject, form.name, form.client, preGenerateProjectId]);
+  }, [isEditMode, generateInitialProjectId]);
+
+  // Enable change detection after a delay to allow initial form setup
+  useEffect(() => {
+    if (isEditMode) {
+      // For edit mode, enable immediately since data is already loaded
+      console.log("🔍 Enabling change detection immediately for edit mode");
+      setChangeDetectionEnabled(true);
+    } else {
+      // For add mode, delay to allow initial setup (project ID generation, default values, etc.)
+      const timer = setTimeout(() => {
+        console.log("🔍 Enabling change detection after initial setup");
+        // Set original form now that initialization is complete
+        setOriginalForm(JSON.parse(JSON.stringify(formRef.current)));
+        setChangeDetectionEnabled(true);
+      }, 2000); // 2 second delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [isEditMode]); // Removed form dependency to prevent multiple original form updates
+
+  // Regenerate ID when large project setting changes (only for add mode)
+  useEffect(() => {
+    if (!isEditMode && form.isLargeProject !== undefined) {
+      generateInitialProjectId();
+    }
+  }, [form.isLargeProject, isEditMode, generateInitialProjectId]);
 
   // Function to fetch audit trail
   const fetchAuditTrail = async (projectId) => {
@@ -879,32 +949,8 @@ const ProjectInformation = () => {
           // Don't generate Project ID yet - wait for form submission
           console.log("🔍 New project mode - setting empty users array");
           setForm((prev) => ({ ...prev, users: [] }));
-          // Set original form for change tracking in new project mode
-          setOriginalForm(
-            JSON.parse(
-              JSON.stringify({
-                projectID: "",
-                name: "",
-                client: null,
-                department: "Asbestos & HAZMAT",
-                status: "",
-                address: "",
-                d_Date: "",
-                startDate: "",
-                endDate: "",
-                description: "",
-                workOrder: 1,
-                users: [],
-                isLargeProject: false,
-                projectContact: {
-                  name: "",
-                  number: "",
-                  email: "",
-                },
-                notes: "",
-              })
-            )
-          );
+          // Don't set original form yet - wait for initialization to complete
+          // This will be set after project ID generation and status setting
         } else {
           // Invalid ID, redirect to projects list
           console.log("🔍 Invalid ID, redirecting to projects list:", id);
@@ -930,7 +976,7 @@ const ProjectInformation = () => {
     };
 
     fetchData();
-  }, [id, navigate]);
+  }, [id, navigate, isEditMode]);
 
   useEffect(() => {
     const initializeGoogleMaps = async () => {
@@ -1393,6 +1439,38 @@ const ProjectInformation = () => {
           hasId: !!formWithId._id,
           allKeys: Object.keys(formWithId),
         });
+
+        // Verify project ID is still unique before creating
+        console.log("🔍 Verifying project ID uniqueness...");
+        try {
+          const projects = await projectService.getAll();
+          const existingProjects = projects.data?.data || projects.data;
+          const isDuplicate = existingProjects.some(
+            (p) => p.projectID === projectId
+          );
+
+          if (isDuplicate) {
+            console.log("🔍 Project ID is duplicate, generating new one...");
+            const idStartTime = performance.now();
+            projectId = await generateNextProjectId();
+            idGenerationTime = performance.now() - idStartTime;
+            console.log("🔍 Generated new Project ID:", projectId);
+            console.log(
+              "⏱️ ID Generation Time:",
+              `${idGenerationTime.toFixed(2)}ms`
+            );
+
+            // Update form with new ID
+            formWithId.projectID = projectId;
+          } else {
+            console.log("🔍 Project ID is unique, proceeding with creation");
+          }
+        } catch (error) {
+          console.warn(
+            "🔍 Could not verify uniqueness, proceeding with current ID:",
+            error.message
+          );
+        }
 
         console.log("🔍 Calling projectService.create...");
         const apiStartTime = performance.now();
