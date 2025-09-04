@@ -26,6 +26,7 @@ import {
   FormControlLabel,
 } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
+import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import api from "../../services/api";
 import AddIcon from "@mui/icons-material/Add";
@@ -47,6 +48,7 @@ import { debounce } from "lodash";
 const Timesheets = () => {
   const theme = useTheme();
   const { currentUser, loading: authLoading } = useAuth();
+  const { activeStatuses } = useProjectStatuses();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(() => {
     const dateParam = searchParams.get("date");
@@ -491,9 +493,16 @@ const Timesheets = () => {
   // Fetch projects separately to avoid infinite loop
   useEffect(() => {
     const fetchProjects = async () => {
+      // Don't fetch if we don't have active statuses yet
+      if (!activeStatuses || activeStatuses.length === 0) {
+        return;
+      }
+
       try {
+        // Build status parameter from active statuses
+        const statusParam = activeStatuses.join(",");
         const projectsResponse = await api.get(
-          "/projects?status=Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent&limit=1000"
+          `/projects?status=${statusParam}&limit=1000`
         );
         const projectsData = Array.isArray(projectsResponse.data)
           ? projectsResponse.data
@@ -507,7 +516,7 @@ const Timesheets = () => {
     };
 
     fetchProjects();
-  }, []); // Only run once on mount
+  }, [activeStatuses]); // Run when activeStatuses change
 
   // Update filtered projects when projects change
   useEffect(() => {
