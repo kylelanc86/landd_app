@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -22,7 +22,6 @@ import {
   Alert,
   Snackbar,
   MenuItem,
-  Checkbox,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -32,7 +31,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
-import projectStatusService from "../../services/projectStatusService";
+import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 
 // Tab panel component
 function TabPanel({ children, value, index, ...other }) {
@@ -52,6 +51,7 @@ function TabPanel({ children, value, index, ...other }) {
 const CustomDataFields = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { refreshStatuses } = useProjectStatuses();
   const [tabValue, setTabValue] = useState(0);
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [locationDescriptions, setLocationDescriptions] = useState([]);
@@ -78,12 +78,7 @@ const CustomDataFields = () => {
     navigate("/admin");
   };
 
-  // Load data from database on component mount
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
       const [
@@ -123,7 +118,12 @@ const CustomDataFields = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Load data from database on component mount
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
 
   const showSnackbar = (message, severity = "success") => {
     setSnackbar({
@@ -237,19 +237,47 @@ const CustomDataFields = () => {
   const handleDeleteItem = async (itemId) => {
     const { data, setter, title } = getCurrentData();
     try {
-      // For now, we'll just remove from local state since the new structure doesn't support individual field deletion
-      // TODO: Implement proper deletion in the new grouped structure
-      const updatedData = data.filter((item) => item._id !== itemId);
-      setter(updatedData);
-
-      // Clear project status cache if we're deleting a project status
+      // For project statuses, we need to update the backend group
       if (title === "Projects Status") {
-        projectStatusService.clearCache();
-      }
+        // Get the current project status group
+        const group = await customDataFieldGroupService.getGroupByType(
+          "project_status"
+        );
 
-      showSnackbar(
-        `${title} removed from display (deletion not yet implemented in new structure)`
-      );
+        console.log("Project status group response:", group);
+
+        if (!group) {
+          showSnackbar("Project status group not found", "error");
+          return;
+        }
+
+        // Remove the field from the group's fields array
+        const updatedFields = group.fields.filter(
+          (field) => field._id.toString() !== itemId.toString()
+        );
+
+        // Update the group with the new fields array
+        await customDataFieldGroupService.updateGroup(group._id, {
+          name: group.name,
+          description: group.description,
+          fields: updatedFields,
+        });
+
+        // Refresh the project statuses context to update all UI components
+        refreshStatuses();
+
+        // Refresh the data from backend
+        await fetchAllData();
+
+        showSnackbar(`${title} deleted successfully`);
+      } else {
+        // For other types, just remove from local state for now
+        const updatedData = data.filter((item) => item._id !== itemId);
+        setter(updatedData);
+        showSnackbar(
+          `${title} removed from display (backend deletion not implemented for this type)`
+        );
+      }
     } catch (error) {
       console.error(`Error removing ${title}:`, error);
       showSnackbar(`Failed to remove ${title}`, "error");
@@ -310,9 +338,9 @@ const CustomDataFields = () => {
         );
         setter(updatedData);
 
-        // Clear project status cache if we're updating a project status
+        // Refresh project statuses context if we're updating a project status
         if (title === "Projects Status") {
-          projectStatusService.clearCache();
+          refreshStatuses();
         }
 
         showSnackbar(
@@ -356,9 +384,9 @@ const CustomDataFields = () => {
         const updatedData = [...data, newItem];
         setter(updatedData);
 
-        // Clear project status cache if we're adding a project status
+        // Refresh project statuses context if we're adding a project status
         if (title === "Projects Status") {
-          projectStatusService.clearCache();
+          refreshStatuses();
         }
 
         showSnackbar(
