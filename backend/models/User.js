@@ -186,6 +186,34 @@ const userSchema = new mongoose.Schema({
         type: Object,
         default: {}
       }
+    },
+    dashboard: {
+      widgetOrder: {
+        type: [String],
+        default: [
+          "dailyTimesheet",
+          "inProgress",
+          "samplesSubmitted",
+          "labComplete",
+          "reportReview",
+          "readyForInvoicing",
+          "invoiceSent",
+          "awaitingPayment",
+        ]
+      },
+      visibleWidgets: {
+        type: Object,
+        default: {
+          dailyTimesheet: true,
+          inProgress: true,
+          samplesSubmitted: true,
+          labComplete: true,
+          reportReview: true,
+          readyForInvoicing: true,
+          invoiceSent: true,
+          awaitingPayment: true,
+        }
+      }
     }
   }
 }, {

@@ -187,8 +187,21 @@ const ProjectInformation = () => {
 
   // Track form changes and compare with original values
   useEffect(() => {
-    if (originalForm && isEditMode) {
+    console.log("🔍 Unsaved changes check:", {
+      hasOriginalForm: !!originalForm,
+      isEditMode,
+      formKeys: Object.keys(form),
+      originalFormKeys: originalForm ? Object.keys(originalForm) : null,
+    });
+
+    // Track changes for both edit mode and add mode
+    if (originalForm) {
       const hasChanges = JSON.stringify(form) !== JSON.stringify(originalForm);
+      console.log("🔍 Form change detection:", {
+        hasChanges,
+        formString: JSON.stringify(form),
+        originalFormString: JSON.stringify(originalForm),
+      });
       setHasUnsavedChanges(hasChanges);
 
       // Set global variables for sidebar navigation
@@ -198,7 +211,8 @@ const ProjectInformation = () => {
         setUnsavedChangesDialogOpen(true);
       };
     } else {
-      // Clean up global variables when not in edit mode
+      console.log("🔍 Not tracking changes - no originalForm");
+      // Clean up global variables when no original form
       window.hasUnsavedChanges = false;
       window.currentProjectPath = null;
       window.showUnsavedChangesDialog = null;
@@ -214,7 +228,7 @@ const ProjectInformation = () => {
 
   // Intercept navigation attempts when there are unsaved changes
   useEffect(() => {
-    if (!hasUnsavedChanges || !isEditMode) return;
+    if (!hasUnsavedChanges) return;
 
     // Override the navigate function temporarily
     const originalNavigate = navigate;
@@ -254,11 +268,11 @@ const ProjectInformation = () => {
       // Restore original navigate function
       delete window.customNavigate;
     };
-  }, [hasUnsavedChanges, isEditMode, navigate]);
+  }, [hasUnsavedChanges, navigate]);
 
   // Intercept clicks on navigation links
   useEffect(() => {
-    if (!hasUnsavedChanges || !isEditMode) return;
+    if (!hasUnsavedChanges) return;
 
     const handleLinkClick = (e) => {
       const target = e.target.closest("a[href]");
@@ -296,12 +310,12 @@ const ProjectInformation = () => {
     return () => {
       document.removeEventListener("click", handleLinkClick, true);
     };
-  }, [hasUnsavedChanges, isEditMode]);
+  }, [hasUnsavedChanges]);
 
   // Handle page refresh and browser navigation
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (hasUnsavedChanges && isEditMode) {
+      if (hasUnsavedChanges) {
         e.preventDefault();
         e.returnValue =
           "You have unsaved changes. Are you sure you want to leave?";
@@ -311,7 +325,7 @@ const ProjectInformation = () => {
 
     // Handle browser back/forward buttons
     const handlePopState = (e) => {
-      if (hasUnsavedChanges && isEditMode) {
+      if (hasUnsavedChanges) {
         // Prevent the navigation
         window.history.pushState(null, "", window.location.pathname);
         setPendingNavigation("/projects");
@@ -327,7 +341,7 @@ const ProjectInformation = () => {
       );
       const isF5Key = e.key === "F5";
 
-      if ((isRefreshButton || isF5Key) && hasUnsavedChanges && isEditMode) {
+      if ((isRefreshButton || isF5Key) && hasUnsavedChanges) {
         e.preventDefault();
         e.stopPropagation();
         setRefreshDialogOpen(true);
@@ -335,8 +349,8 @@ const ProjectInformation = () => {
       }
     };
 
-    // Add a history entry when entering edit mode with unsaved changes
-    if (hasUnsavedChanges && isEditMode) {
+    // Add a history entry when entering with unsaved changes
+    if (hasUnsavedChanges) {
       window.history.pushState(null, "", window.location.pathname);
     }
 
@@ -351,7 +365,7 @@ const ProjectInformation = () => {
       document.removeEventListener("click", handleRefreshClick, true);
       document.removeEventListener("keydown", handleRefreshClick, true);
     };
-  }, [hasUnsavedChanges, isEditMode]);
+  }, [hasUnsavedChanges]);
 
   // Add state to control the status dropdown
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
@@ -837,6 +851,32 @@ const ProjectInformation = () => {
           // Don't generate Project ID yet - wait for form submission
           console.log("🔍 New project mode - setting empty users array");
           setForm((prev) => ({ ...prev, users: [] }));
+          // Set original form for change tracking in new project mode
+          setOriginalForm(
+            JSON.parse(
+              JSON.stringify({
+                projectID: "",
+                name: "",
+                client: null,
+                department: "Asbestos & HAZMAT",
+                status: "",
+                address: "",
+                d_Date: "",
+                startDate: "",
+                endDate: "",
+                description: "",
+                workOrder: 1,
+                users: [],
+                isLargeProject: false,
+                projectContact: {
+                  name: "",
+                  number: "",
+                  email: "",
+                },
+                notes: "",
+              })
+            )
+          );
         } else {
           // Invalid ID, redirect to projects list
           console.log("🔍 Invalid ID, redirecting to projects list:", id);
@@ -1172,10 +1212,17 @@ const ProjectInformation = () => {
 
   // Override navigate function to check for unsaved changes
   const safeNavigate = (path) => {
-    if (hasUnsavedChanges && isEditMode) {
+    console.log("🔍 safeNavigate called:", {
+      path,
+      hasUnsavedChanges,
+      isEditMode,
+    });
+    if (hasUnsavedChanges) {
+      console.log("🔍 Showing unsaved changes dialog");
       setPendingNavigation(path);
       setUnsavedChangesDialogOpen(true);
     } else {
+      console.log("🔍 Navigating directly");
       navigate(path);
     }
   };

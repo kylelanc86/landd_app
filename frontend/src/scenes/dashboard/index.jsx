@@ -43,8 +43,12 @@ import LoadingSpinner from "../../components/LoadingSpinner";
 import ScienceIcon from "@mui/icons-material/Science";
 import SendIcon from "@mui/icons-material/Send";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import DescriptionIcon from "@mui/icons-material/Description";
+import PaymentIcon from "@mui/icons-material/Payment";
 import { format } from "date-fns";
 import api from "../../services/api";
+import { userPreferencesService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import {
   navigateToProjects,
@@ -71,57 +75,92 @@ const Dashboard = () => {
   const isTablet = useMediaQuery(theme.breakpoints.down("md")); // Back to "md" for tablet
   const isExtraSmall = useMediaQuery("(max-width:480px)"); // Back to 480px for very small
 
-  // Load widget order from localStorage or use defaults
-  const [widgetOrder, setWidgetOrder] = useState(() => {
-    const savedOrder = localStorage.getItem("dashboardWidgetOrder");
-    return savedOrder
-      ? JSON.parse(savedOrder)
-      : [
-          "dailyTimesheet",
-          "active",
-          "review",
-          "invoice",
-          "outstanding",
-          "labComplete",
-          "samplesSubmitted",
-          "inProgress",
-        ];
-  });
+  // Load widget order from user preferences or use defaults
+  const [widgetOrder, setWidgetOrder] = useState([
+    "dailyTimesheet",
+    "inProgress",
+    "samplesSubmitted",
+    "labComplete",
+    "reportReview",
+    "readyForInvoicing",
+    "invoiceSent",
+    "awaitingPayment",
+  ]);
 
-  // Load widget preferences from localStorage or use defaults
-  const [visibleWidgets, setVisibleWidgets] = useState(() => {
-    const savedPreferences = localStorage.getItem("dashboardWidgets");
-    const defaultPreferences = {
-      dailyTimesheet: true,
-      active: true,
-      review: true,
-      invoice: true,
-      outstanding: true,
-      samplesSubmitted: true,
-      inProgress: true,
-    };
-
-    const result = savedPreferences
-      ? JSON.parse(savedPreferences)
-      : defaultPreferences;
-
-    // Ensure daily timesheet is always enabled (required widget)
-    result.dailyTimesheet = true;
-
-    return result;
+  // Load widget preferences from user preferences or use defaults
+  const [visibleWidgets, setVisibleWidgets] = useState({
+    dailyTimesheet: true,
+    inProgress: true,
+    samplesSubmitted: true,
+    labComplete: true,
+    reportReview: true,
+    readyForInvoicing: true,
+    invoiceSent: true,
+    awaitingPayment: true,
   });
 
   const [stats, setStats] = useState({
-    activeProjects: 0,
-    reviewProjects: 0,
-    invoiceProjects: 0,
-    outstandingInvoices: 0,
-    labCompleteProjects: 0,
-    samplesSubmittedProjects: 0,
     inProgressProjects: 0,
+    samplesSubmittedProjects: 0,
+    labCompleteProjects: 0,
+    reportReviewProjects: 0,
+    readyForInvoicingProjects: 0,
+    invoiceSentProjects: 0,
+    awaitingPaymentProjects: 0,
   });
 
-  // Removed unnecessary data fetching since dashboard stats aren't needed
+  // Load user preferences from database
+  useEffect(() => {
+    const loadUserPreferences = async () => {
+      try {
+        const response = await userPreferencesService.getPreferences();
+        if (response.data?.dashboard) {
+          const dashboardPrefs = response.data.dashboard;
+
+          // Load widget order
+          if (dashboardPrefs.widgetOrder) {
+            setWidgetOrder(dashboardPrefs.widgetOrder);
+          }
+
+          // Load visible widgets
+          if (dashboardPrefs.visibleWidgets) {
+            const prefs = { ...dashboardPrefs.visibleWidgets };
+            // Ensure daily timesheet is always enabled (required widget)
+            prefs.dailyTimesheet = true;
+            setVisibleWidgets(prefs);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading user preferences:", error);
+        // Fallback to localStorage if API fails
+        const savedOrder = localStorage.getItem("dashboardWidgetOrder");
+        const savedWidgets = localStorage.getItem("dashboardWidgets");
+
+        if (savedOrder) {
+          try {
+            setWidgetOrder(JSON.parse(savedOrder));
+          } catch (parseError) {
+            console.error("Error parsing saved widget order:", parseError);
+          }
+        }
+
+        if (savedWidgets) {
+          try {
+            const parsed = JSON.parse(savedWidgets);
+            parsed.dailyTimesheet = true; // Ensure daily timesheet is always enabled
+            setVisibleWidgets(parsed);
+          } catch (parseError) {
+            console.error(
+              "Error parsing saved widget preferences:",
+              parseError
+            );
+          }
+        }
+      }
+    };
+
+    loadUserPreferences();
+  }, []);
 
   // Fetch daily timesheet data
   useEffect(() => {
@@ -168,16 +207,29 @@ const Dashboard = () => {
     fetchDailyTimesheet();
   }, []);
 
-  const handleDragEnd = (result) => {
+  const handleDragEnd = async (result) => {
     if (!result.destination) return;
 
     const newOrder = Array.from(widgetOrder);
     const [removed] = newOrder.splice(result.source.index, 1);
     newOrder.splice(result.destination.index, 0, removed);
 
-    // Update both state and localStorage
+    // Update state
     setWidgetOrder(newOrder);
-    localStorage.setItem("dashboardWidgetOrder", JSON.stringify(newOrder));
+
+    try {
+      // Save to database
+      await userPreferencesService.updatePreferences({
+        dashboard: {
+          widgetOrder: newOrder,
+          visibleWidgets: visibleWidgets,
+        },
+      });
+    } catch (error) {
+      console.error("Error saving widget order preferences:", error);
+      // Fallback to localStorage if API fails
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(newOrder));
+    }
 
     // Force a re-render by updating visibleWidgets
     setVisibleWidgets((prev) => ({ ...prev }));
@@ -197,42 +249,60 @@ const Dashboard = () => {
           dailyTimesheetData.status.slice(1),
       },
       {
-        id: "active",
-        title: "Active Projects",
-        icon: <AssignmentIcon />,
-        bgcolor: "#2e7d32",
-        onClick: () => navigateToProjects(navigate, { status: "all_active" }),
-      },
-      {
-        id: "review",
-        title: "Report Ready for Review",
-        icon: <RateReviewIcon />,
-        bgcolor: "#2BBAD4",
-        onClick: () =>
-          navigateToProjects(navigate, { status: "Report sent for review" }),
-      },
-      {
-        id: "invoice",
-        title: "Ready for Invoicing",
-        icon: <ReceiptOutlinedIcon />,
-        bgcolor: "#9c27b0",
-        onClick: () =>
-          navigateToProjects(navigate, { status: "Ready for invoicing" }),
+        id: "inProgress",
+        title: "In Progress",
+        icon: <PlayArrowIcon />,
+        bgcolor: "#1976d2",
+        onClick: () => navigateToProjects(navigate, { status: "In progress" }),
       },
       {
         id: "samplesSubmitted",
-        title: "Samples Submitted",
+        title: "Samples Submitted to Lab",
         icon: <SendIcon />,
-        bgcolor: "#2e7d32",
+        bgcolor: "#ff9800",
         onClick: () =>
           navigateToProjects(navigate, { status: "Samples Submitted to Lab" }),
       },
       {
-        id: "inProgress",
-        title: "Projects In Progress",
-        icon: <PlayArrowIcon />,
-        bgcolor: "#CD32BF",
-        onClick: () => navigateToProjects(navigate, { status: "In progress" }),
+        id: "labComplete",
+        title: "Lab Analysis Completed",
+        icon: <ScienceIcon />,
+        bgcolor: "#9c27b0",
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Lab Analysis Completed" }),
+      },
+      {
+        id: "reportReview",
+        title: "Report sent for review",
+        icon: <RateReviewIcon />,
+        bgcolor: "#f57c00",
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Report sent for review" }),
+      },
+      {
+        id: "readyForInvoicing",
+        title: "Ready for invoicing",
+        icon: <ReceiptOutlinedIcon />,
+        bgcolor: "#388e3c",
+        onClick: () =>
+          navigateToProjects(navigate, { status: "Ready for invoicing" }),
+      },
+      {
+        id: "invoiceSent",
+        title: "Invoice sent",
+        icon: <DescriptionIcon />,
+        bgcolor: "#7b1fa2",
+        onClick: () => navigateToProjects(navigate, { status: "Invoice sent" }),
+      },
+      {
+        id: "awaitingPayment",
+        title: "Invoiced - Awaiting Payment",
+        icon: <PaymentIcon />,
+        bgcolor: "#d32f2f",
+        onClick: () =>
+          navigateToProjects(navigate, {
+            status: "Invoiced - Awaiting Payment",
+          }),
       },
     ],
     [dailyTimesheetData, stats, currentUser, navigate]
@@ -260,7 +330,7 @@ const Dashboard = () => {
         );
       }
     }
-  }, [gridItems, visibleWidgets]); // Run when gridItems or visibleWidgets changes
+  }, [gridItems]); // Run when gridItems changes
 
   // Ensure daily timesheet widget is always enabled (required widget)
   useEffect(() => {
@@ -301,31 +371,54 @@ const Dashboard = () => {
     }
   };
 
-  const handleWidgetToggle = (widgetId) => {
-    setVisibleWidgets((prev) => {
-      const isCurrentlyVisible = prev[widgetId];
-      const currentVisibleCount = Object.values(prev).filter(Boolean).length;
+  const handleWidgetToggle = async (widgetId) => {
+    console.log("Toggling widget:", widgetId);
 
-      // Prevent disabling the daily timesheet widget (it's required)
-      if (widgetId === "dailyTimesheet" && isCurrentlyVisible) {
-        return prev; // Return previous state unchanged - cannot disable required widget
-      }
+    const isCurrentlyVisible = visibleWidgets[widgetId];
+    const currentVisibleCount =
+      Object.values(visibleWidgets).filter(Boolean).length;
+    console.log("Current state:", visibleWidgets);
+    console.log("Is currently visible:", isCurrentlyVisible);
+    console.log("Current visible count:", currentVisibleCount);
 
-      // If trying to enable a widget and we're already at the limit, prevent it
-      if (!isCurrentlyVisible && currentVisibleCount >= 4) {
-        return prev; // Return previous state unchanged
-      }
+    // Prevent disabling the daily timesheet widget (it's required)
+    if (widgetId === "dailyTimesheet" && isCurrentlyVisible) {
+      console.log("Cannot disable required daily timesheet widget");
+      return; // Exit early - cannot disable required widget
+    }
 
-      // Create new state
-      const newState = {
-        ...prev,
-        [widgetId]: !isCurrentlyVisible,
-      };
+    // If trying to enable a widget and we're already at the limit, prevent it
+    if (!isCurrentlyVisible && currentVisibleCount >= 4) {
+      console.log("Cannot enable widget - already at limit of 4");
+      return; // Exit early - already at limit
+    }
 
-      // Save to localStorage whenever preferences change
+    // Create new state
+    const newState = {
+      ...visibleWidgets,
+      [widgetId]: !isCurrentlyVisible,
+    };
+
+    console.log("New state:", newState);
+
+    // Update state immediately
+    setVisibleWidgets(newState);
+
+    try {
+      // Save to database
+      await userPreferencesService.updatePreferences({
+        dashboard: {
+          widgetOrder: widgetOrder,
+          visibleWidgets: newState,
+        },
+      });
+      console.log("Saved to database:", JSON.stringify(newState));
+    } catch (error) {
+      console.error("Error saving widget preferences:", error);
+      // Fallback to localStorage if API fails
       localStorage.setItem("dashboardWidgets", JSON.stringify(newState));
-      return newState;
-    });
+      console.log("Saved to localStorage:", JSON.stringify(newState));
+    }
   };
 
   const handleWidgetDialogClose = () => {

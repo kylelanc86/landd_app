@@ -238,6 +238,19 @@ const Projects = ({ initialFilters = {} }) => {
     [statusColors]
   );
 
+  // Memoized status color cache to avoid recalculating colors for the same status
+  const statusColorCache = useMemo(() => {
+    const cache = new Map();
+    return (status) => {
+      if (cache.has(status)) {
+        return cache.get(status);
+      }
+      const color = getStatusColor(status);
+      cache.set(status, color);
+      return color;
+    };
+  }, [getStatusColor]);
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -458,7 +471,7 @@ const Projects = ({ initialFilters = {} }) => {
 
         const params = {
           page: 1,
-          limit: 100000, // Very large number to fetch ALL projects
+          limit: 50000, // Large limit to load all projects for status filtering
           sortBy: filtersToUse.sortModel[0]?.field || "createdAt",
           sortOrder: filtersToUse.sortModel[0]?.sort || "desc",
         };
@@ -492,8 +505,7 @@ const Projects = ({ initialFilters = {} }) => {
           limit: paginationModel.pageSize,
         });
 
-        // Refresh status counts after projects are updated
-        setTimeout(() => refreshStatusCounts(), 100);
+        // Status counts will be updated when the component re-renders with new projects
       } catch (err) {
         console.error("Error fetching projects:", err);
         setError(err.message);
@@ -556,7 +568,7 @@ const Projects = ({ initialFilters = {} }) => {
 
           const params = {
             page: 1, // Reset to first page
-            limit: paginationModel.pageSize,
+            limit: 50000, // Load all projects for proper filtering
             sortBy: updatedFilters.sortModel[0]?.field || "createdAt",
             sortOrder: updatedFilters.sortModel[0]?.sort || "desc",
           };
@@ -589,8 +601,7 @@ const Projects = ({ initialFilters = {} }) => {
             pages: response.data.pagination?.pages || 0,
           }));
 
-          // Refresh status counts after projects are updated
-          setTimeout(() => refreshStatusCounts(), 100);
+          // Status counts will be updated when the component re-renders with new projects
         } catch (err) {
           console.error("Error fetching projects:", err);
           setError(err.message);
@@ -879,6 +890,29 @@ const Projects = ({ initialFilters = {} }) => {
         return;
       }
 
+      // First check for dependencies
+      try {
+        const dependencyResponse = await projectService.checkDependencies(
+          projectId
+        );
+
+        if (!dependencyResponse.data.canDelete) {
+          // Has dependencies, show dependency dialog instead of deleting
+          setDependencyInfo({
+            project: selectedProject,
+            dependencies: dependencyResponse.data.dependencies,
+            message: dependencyResponse.data.message,
+          });
+          setDeleteDialogOpen(false);
+          setDependencyDialogOpen(true);
+          return;
+        }
+      } catch (dependencyError) {
+        console.error("Error checking project dependencies:", dependencyError);
+        // Continue with deletion attempt - let the backend handle it
+      }
+
+      // Proceed with deletion
       const response = await projectService.delete(projectId);
 
       // Check if this was a permission denied response
@@ -890,9 +924,36 @@ const Projects = ({ initialFilters = {} }) => {
       }
 
       // Success - update the state
-      setProjects(projects.filter((p) => (p._id || p.id) !== projectId));
-      // Refresh status counts after deleting a project
-      fetchStatusCounts();
+      const deletedProject = projects.find(
+        (p) => (p._id || p.id) === projectId
+      );
+      const updatedProjects = projects.filter(
+        (p) => (p._id || p.id) !== projectId
+      );
+      setProjects(updatedProjects);
+
+      // Update status counts locally instead of making API call
+      if (deletedProject && deletedProject.status) {
+        setStatusCounts((prevCounts) => {
+          const newCounts = { ...prevCounts };
+          if (newCounts[deletedProject.status] > 0) {
+            newCounts[deletedProject.status] -= 1;
+          }
+
+          // Update active/inactive totals
+          if (activeStatuses.includes(deletedProject.status)) {
+            newCounts.all_active = Math.max(0, (newCounts.all_active || 0) - 1);
+          } else if (inactiveStatuses.includes(deletedProject.status)) {
+            newCounts.all_inactive = Math.max(
+              0,
+              (newCounts.all_inactive || 0) - 1
+            );
+          }
+
+          return newCounts;
+        });
+      }
+
       setDeleteDialogOpen(false);
       setSelectedProject(null);
     } catch (error) {
@@ -917,8 +978,8 @@ const Projects = ({ initialFilters = {} }) => {
     }
   };
 
-  // UsersCell component for rendering user avatars
-  const UsersCell = ({ users }) => {
+  // Memoized UsersCell component for rendering user avatars
+  const UsersCell = React.memo(({ users }) => {
     if (!users || users.length === 0) {
       return <span>-</span>;
     }
@@ -944,43 +1005,14 @@ const Projects = ({ initialFilters = {} }) => {
         ))}
       </Box>
     );
-  };
+  });
 
   // Update the renderUsersSelect function
 
-  // Handler for delete action
-  const handleDeleteClick = async (project) => {
+  // Handler for delete action - show dialog immediately, check dependencies on confirm
+  const handleDeleteClick = (project) => {
     setSelectedProject(project);
-
-    // First check for dependencies before showing confirmation dialog
-    try {
-      const response = await projectService.checkDependencies(
-        project._id || project.id
-      );
-
-      if (response.data.canDelete) {
-        // No dependencies, show confirmation dialog
-        setDeleteDialogOpen(true);
-      } else {
-        // Has dependencies, show dependency dialog
-        setDependencyInfo({
-          project: project,
-          dependencies: response.data.dependencies,
-          message: response.data.message,
-        });
-        setDependencyDialogOpen(true);
-      }
-    } catch (error) {
-      console.error("Error checking project dependencies:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Error status:", error.response?.status);
-      console.error("Error config:", error.config);
-      setError(
-        `Failed to check project dependencies: ${
-          error.response?.data?.message || error.message
-        }`
-      );
-    }
+    setDeleteDialogOpen(true); // Show dialog immediately
   };
 
   // Handler for export action
@@ -1164,7 +1196,7 @@ const Projects = ({ initialFilters = {} }) => {
 
         const params = {
           page: 1, // Reset to first page
-          limit: paginationModel.pageSize,
+          limit: 50000, // Load all projects for proper filtering
           sortBy: tempFilters.sortModel[0]?.field || "createdAt",
           sortOrder: tempFilters.sortModel[0]?.sort || "desc",
         };
@@ -1482,7 +1514,7 @@ const Projects = ({ initialFilters = {} }) => {
             {/* Status display - no click functionality */}
             <Box
               sx={{
-                backgroundColor: getStatusColor(params.value),
+                backgroundColor: statusColorCache(params.value),
                 color: "white",
                 padding: "4px 8px",
                 borderRadius: "4px",

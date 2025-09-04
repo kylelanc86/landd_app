@@ -25,7 +25,7 @@ const projectSchema = new mongoose.Schema({
   department: {
     type: String,
     required: true,
-    enum: ['Asbestos & HAZMAT', 'Occupational Hygiene', 'Client Supplied', 'air_quality']
+    enum: ['Asbestos & HAZMAT', 'Occupational Hygiene', 'Client Supplied']
   },
   categories: [{
     type: String,

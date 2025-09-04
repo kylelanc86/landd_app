@@ -80,6 +80,17 @@ const Item = ({ title, to, icon }) => {
   // Handle navigation with refresh and unsaved changes check
   const handleNavigation = () => {
     // Check for unsaved changes
+    console.log("🔍 Sidebar navigation check:", {
+      hasUnsavedChanges: window.hasUnsavedChanges,
+      currentProjectPath: window.currentProjectPath,
+      currentLocation: location.pathname,
+      targetPath: to,
+      isProjectPage: location.pathname.startsWith("/projects/"),
+      isClientPage: location.pathname.startsWith("/clients/"),
+      isTargetProjectPage: to.startsWith("/projects/"),
+      isTargetClientPage: to.startsWith("/clients/"),
+    });
+
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
@@ -88,6 +99,7 @@ const Item = ({ title, to, icon }) => {
       !to.startsWith("/projects/") &&
       !to.startsWith("/clients/")
     ) {
+      console.log("🔍 Sidebar showing unsaved changes dialog");
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
@@ -191,6 +203,17 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
   // Handle navigation with refresh and unsaved changes check
   const handleNavigation = () => {
     // Check for unsaved changes
+    console.log("🔍 Sidebar navigation check:", {
+      hasUnsavedChanges: window.hasUnsavedChanges,
+      currentProjectPath: window.currentProjectPath,
+      currentLocation: location.pathname,
+      targetPath: to,
+      isProjectPage: location.pathname.startsWith("/projects/"),
+      isClientPage: location.pathname.startsWith("/clients/"),
+      isTargetProjectPage: to.startsWith("/projects/"),
+      isTargetClientPage: to.startsWith("/clients/"),
+    });
+
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
@@ -199,6 +222,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
       !to.startsWith("/projects/") &&
       !to.startsWith("/clients/")
     ) {
+      console.log("🔍 Sidebar showing unsaved changes dialog");
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
