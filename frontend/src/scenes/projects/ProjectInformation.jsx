@@ -54,6 +54,7 @@ import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 import {
   formatPhoneNumber,
   isValidAustralianMobile,
+  isValidAustralianPhone,
   isValidEmailOrDash,
 } from "../../utils/formatters";
 
@@ -2188,15 +2189,15 @@ const ProjectInformation = () => {
                 onChange={handleNewClientChange}
                 fullWidth
                 autoComplete="new-password"
-                placeholder="04xx xxx xxx or '-' for no phone"
+                placeholder="04xx xxx xxx (mobile) or 02 xxxx xxxx (landline) or '-' for no phone"
                 error={
                   newClientForm.contact1Number &&
-                  !isValidAustralianMobile(newClientForm.contact1Number)
+                  !isValidAustralianPhone(newClientForm.contact1Number)
                 }
                 helperText={
                   newClientForm.contact1Number &&
-                  !isValidAustralianMobile(newClientForm.contact1Number)
-                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
+                  !isValidAustralianPhone(newClientForm.contact1Number)
+                    ? "Please enter a valid Australian phone number (mobile or landline) or use '-' for no phone"
                     : ""
                 }
               />
@@ -2238,15 +2239,15 @@ const ProjectInformation = () => {
                 onChange={handleNewClientChange}
                 fullWidth
                 autoComplete="new-password"
-                placeholder="04xx xxx xxx or '-' for no phone"
+                placeholder="04xx xxx xxx (mobile) or 02 xxxx xxxx (landline) or '-' for no phone"
                 error={
                   newClientForm.contact2Number &&
-                  !isValidAustralianMobile(newClientForm.contact2Number)
+                  !isValidAustralianPhone(newClientForm.contact2Number)
                 }
                 helperText={
                   newClientForm.contact2Number &&
-                  !isValidAustralianMobile(newClientForm.contact2Number)
-                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
+                  !isValidAustralianPhone(newClientForm.contact2Number)
+                    ? "Please enter a valid Australian phone number (mobile or landline) or use '-' for no phone"
                     : ""
                 }
               />

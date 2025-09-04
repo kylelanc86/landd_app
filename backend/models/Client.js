@@ -8,25 +8,25 @@ const clientSchema = new mongoose.Schema({
   },
   invoiceEmail: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
     lowercase: true
   },
   address: {
     type: String,
-    required: true
+    required: false
   },
   contact1Name: {
     type: String,
-    required: true
+    required: false
   },
   contact1Number: {
     type: String,
-    required: true
+    required: false
   },
   contact1Email: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
     lowercase: true
   },

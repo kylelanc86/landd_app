@@ -78,24 +78,30 @@ router.get('/:id', async (req, res) => {
 
 // Create client
 router.post('/', async (req, res) => {
-  const client = new Client({
-    name: req.body.name,
-    invoiceEmail: req.body.invoiceEmail,
-    address: req.body.address,
-    contact1Name: req.body.contact1Name || "-",
-    contact1Number: req.body.contact1Number || "-",
-    contact1Email: req.body.contact1Email || "-",
-    contact2Name: req.body.contact2Name || "-",
-    contact2Number: req.body.contact2Number || "-",
-    contact2Email: req.body.contact2Email || "-",
-    paymentTerms: req.body.paymentTerms || "Standard (30 days)",
-    written_off: req.body.written_off || false
-  });
-
   try {
+    // Validate required fields and set defaults for optional fields
+    if (!req.body.name || req.body.name.trim() === '') {
+      return res.status(400).json({ message: 'Client name is required' });
+    }
+
+    const client = new Client({
+      name: req.body.name.trim(),
+      invoiceEmail: req.body.invoiceEmail && req.body.invoiceEmail.trim() !== '' ? req.body.invoiceEmail.trim().toLowerCase() : '-',
+      address: req.body.address && req.body.address.trim() !== '' ? req.body.address.trim() : '-',
+      contact1Name: req.body.contact1Name && req.body.contact1Name.trim() !== '' ? req.body.contact1Name.trim() : '-',
+      contact1Number: req.body.contact1Number && req.body.contact1Number.trim() !== '' ? req.body.contact1Number.trim() : '-',
+      contact1Email: req.body.contact1Email && req.body.contact1Email.trim() !== '' ? req.body.contact1Email.trim().toLowerCase() : '-',
+      contact2Name: req.body.contact2Name && req.body.contact2Name.trim() !== '' ? req.body.contact2Name.trim() : '-',
+      contact2Number: req.body.contact2Number && req.body.contact2Number.trim() !== '' ? req.body.contact2Number.trim() : '-',
+      contact2Email: req.body.contact2Email && req.body.contact2Email.trim() !== '' ? req.body.contact2Email.trim().toLowerCase() : '-',
+      paymentTerms: req.body.paymentTerms || "Standard (30 days)",
+      written_off: req.body.written_off || false
+    });
+
     const newClient = await client.save();
     res.status(201).json(newClient);
   } catch (err) {
+    console.error('Error creating client:', err);
     res.status(400).json({ message: err.message });
   }
 });
@@ -108,13 +114,45 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Client not found' });
     }
 
-    Object.keys(req.body).forEach(key => {
-      client[key] = req.body[key];
-    });
+    // Update fields with proper handling of empty values
+    if (req.body.name !== undefined) {
+      client.name = req.body.name.trim();
+    }
+    if (req.body.invoiceEmail !== undefined) {
+      client.invoiceEmail = req.body.invoiceEmail && req.body.invoiceEmail.trim() !== '' ? req.body.invoiceEmail.trim().toLowerCase() : '-';
+    }
+    if (req.body.address !== undefined) {
+      client.address = req.body.address && req.body.address.trim() !== '' ? req.body.address.trim() : '-';
+    }
+    if (req.body.contact1Name !== undefined) {
+      client.contact1Name = req.body.contact1Name && req.body.contact1Name.trim() !== '' ? req.body.contact1Name.trim() : '-';
+    }
+    if (req.body.contact1Number !== undefined) {
+      client.contact1Number = req.body.contact1Number && req.body.contact1Number.trim() !== '' ? req.body.contact1Number.trim() : '-';
+    }
+    if (req.body.contact1Email !== undefined) {
+      client.contact1Email = req.body.contact1Email && req.body.contact1Email.trim() !== '' ? req.body.contact1Email.trim().toLowerCase() : '-';
+    }
+    if (req.body.contact2Name !== undefined) {
+      client.contact2Name = req.body.contact2Name && req.body.contact2Name.trim() !== '' ? req.body.contact2Name.trim() : '-';
+    }
+    if (req.body.contact2Number !== undefined) {
+      client.contact2Number = req.body.contact2Number && req.body.contact2Number.trim() !== '' ? req.body.contact2Number.trim() : '-';
+    }
+    if (req.body.contact2Email !== undefined) {
+      client.contact2Email = req.body.contact2Email && req.body.contact2Email.trim() !== '' ? req.body.contact2Email.trim().toLowerCase() : '-';
+    }
+    if (req.body.paymentTerms !== undefined) {
+      client.paymentTerms = req.body.paymentTerms;
+    }
+    if (req.body.written_off !== undefined) {
+      client.written_off = req.body.written_off;
+    }
 
     const updatedClient = await client.save();
     res.json(updatedClient);
   } catch (err) {
+    console.error('Error updating client:', err);
     res.status(400).json({ message: err.message });
   }
 });

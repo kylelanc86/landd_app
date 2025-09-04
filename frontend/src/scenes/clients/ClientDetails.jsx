@@ -24,7 +24,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { clientService } from "../../services/api";
 import {
-  isValidAustralianMobile,
+  isValidAustralianPhone,
   isValidEmailOrDash,
 } from "../../utils/formatters";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -680,15 +680,15 @@ const ClientDetails = () => {
                 onChange={handleChange}
                 fullWidth
                 autoComplete="new-password"
-                placeholder="04xx xxx xxx or '-' for no phone"
+                placeholder="04xx xxx xxx (mobile) or 02 xxxx xxxx (landline) or '-' for no phone"
                 error={
                   form.contact1Number &&
-                  !isValidAustralianMobile(form.contact1Number)
+                  !isValidAustralianPhone(form.contact1Number)
                 }
                 helperText={
                   form.contact1Number &&
-                  !isValidAustralianMobile(form.contact1Number)
-                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
+                  !isValidAustralianPhone(form.contact1Number)
+                    ? "Please enter a valid Australian phone number (mobile or landline) or use '-' for no phone"
                     : ""
                 }
               />
@@ -743,15 +743,15 @@ const ClientDetails = () => {
                 onChange={handleChange}
                 fullWidth
                 autoComplete="new-password"
-                placeholder="04xx xxx xxx or '-' for no phone"
+                placeholder="04xx xxx xxx (mobile) or 02 xxxx xxxx (landline) or '-' for no phone"
                 error={
                   form.contact2Number &&
-                  !isValidAustralianMobile(form.contact2Number)
+                  !isValidAustralianPhone(form.contact2Number)
                 }
                 helperText={
                   form.contact2Number &&
-                  !isValidAustralianMobile(form.contact2Number)
-                    ? "Please enter a valid Australian mobile number or use '-' for no phone"
+                  !isValidAustralianPhone(form.contact2Number)
+                    ? "Please enter a valid Australian phone number (mobile or landline) or use '-' for no phone"
                     : ""
                 }
               />
