@@ -2669,6 +2669,17 @@ const ProjectInformation = () => {
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        sx={{
+          position: "fixed",
+          zIndex: 9999999,
+          bottom: "20px !important",
+          right: "20px !important",
+          left: "252px !important", // 232px sidebar width + 20px margin
+          transform: "none !important",
+          width: "auto",
+          maxWidth: "400px",
+        }}
       >
         <Alert
           onClose={() => setSnackbar({ ...snackbar, open: false })}

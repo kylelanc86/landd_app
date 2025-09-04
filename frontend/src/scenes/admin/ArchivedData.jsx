@@ -373,6 +373,17 @@ const ArchivedData = () => {
         open={!!success}
         autoHideDuration={6000}
         onClose={() => setSuccess(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        sx={{
+          position: "fixed",
+          zIndex: 9999999,
+          bottom: "20px !important",
+          right: "20px !important",
+          left: "252px !important", // 232px sidebar width + 20px margin
+          transform: "none !important",
+          width: "auto",
+          maxWidth: "400px",
+        }}
       >
         <Alert onClose={() => setSuccess(null)} severity="success">
           {success}
@@ -383,6 +394,17 @@ const ArchivedData = () => {
         open={!!error}
         autoHideDuration={6000}
         onClose={() => setError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        sx={{
+          position: "fixed",
+          zIndex: 9999999,
+          bottom: "20px !important",
+          right: "20px !important",
+          left: "252px !important", // 232px sidebar width + 20px margin
+          transform: "none !important",
+          width: "auto",
+          maxWidth: "400px",
+        }}
       >
         <Alert onClose={() => setError(null)} severity="error">
           {error}

@@ -14,6 +14,7 @@ const GlobalSnackbar = ({ open, message, severity, onClose }) => {
         zIndex: 9999999,
         bottom: "20px !important",
         right: "20px !important",
+        left: "252px !important", // 232px sidebar width + 20px margin
         transform: "none !important",
         width: "auto",
         maxWidth: "400px",
