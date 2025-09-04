@@ -226,10 +226,11 @@ router.post('/forgot-password', async (req, res) => {
     // Send email
     const logoBase64 = await loadLogoAsBase64();
     // Always use FRONTEND_URL for consistent reset links
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.landd.com.au';
     const resetUrl = `${frontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     console.log('Attempting to send email to:', user.email);
     console.log('Using frontend URL for reset:', frontendUrl);
+    console.log('FRONTEND_URL env var:', process.env.FRONTEND_URL);
     console.log('Email configuration:', {
       host: process.env.EMAIL_HOST,
       port: process.env.EMAIL_PORT,
@@ -614,9 +615,10 @@ router.post('/admin-reset-password', auth, checkPermission(['users.manage']), as
     const logoBase64 = await loadLogoAsBase64();
     console.log('Logo loaded:', logoBase64 ? 'success' : 'failed');
     
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.landd.com.au';
     const resetUrl = `${frontendUrl}/reset-password?token=${token}&email=${encodeURIComponent(normalizedEmail)}`;
     console.log('Reset URL generated:', resetUrl);
+    console.log('FRONTEND_URL env var:', process.env.FRONTEND_URL);
     
     console.log('Sending email to:', user.email);
     await sendMail({
