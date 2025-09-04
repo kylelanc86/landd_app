@@ -76,6 +76,9 @@ router.get('/status-counts', auth, checkPermission(['projects.view']), async (re
 
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
+  const requestStartTime = Date.now();
+  console.log(`[PROJECTS] Starting getAll request - Page: ${req.query.page}, Limit: ${req.query.limit}, Search: ${req.query.search}`);
+  
   try {
     const {
       page = 1,
@@ -88,7 +91,10 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     } = req.query;
 
     // Get status arrays from custom data fields
+    const statusStartTime = Date.now();
     const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+    const statusTime = Date.now() - statusStartTime;
+    console.log(`[PROJECTS] Status fetching completed in ${statusTime}ms`);
 
     // Build query
     const query = {};
@@ -125,6 +131,9 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const queryBuildTime = Date.now() - requestStartTime;
+    console.log(`[PROJECTS] Query building completed in ${queryBuildTime}ms`);
     
     try {
       let projects, total;
@@ -192,13 +201,20 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         }));
       } else {
         // Use regular find for non-search queries
+        const countStartTime = Date.now();
         total = await Project.countDocuments(query);
+        const countTime = Date.now() - countStartTime;
+        console.log(`[PROJECTS] Count query completed in ${countTime}ms`);
+        
+        const dataStartTime = Date.now();
         projects = await Project.find(query)
           .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
           .skip(skip)
           .limit(parseInt(limit))
           .populate('client', 'name')
           .populate('users', 'firstName lastName');
+        const dataTime = Date.now() - dataStartTime;
+        console.log(`[PROJECTS] Data query completed in ${dataTime}ms`);
       }
 
       const pages = Math.ceil(total / parseInt(limit));
@@ -227,11 +243,16 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         }
       };
 
+      const totalTime = Date.now() - requestStartTime;
+      console.log(`[PROJECTS] getAll completed in ${totalTime}ms - Projects: ${projects.length}, Total: ${total}`);
+      
       res.json(response);
     } catch (error) {
       throw new Error(`Database error: ${error.message}`);
     }
   } catch (error) {
+    const totalTime = Date.now() - requestStartTime;
+    console.log(`[PROJECTS] getAll ERROR after ${totalTime}ms: ${error.message}`);
     res.status(500).json({ message: error.message });
   }
 });
@@ -620,6 +641,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     const userId = req.user.id;
 
     // Build query for user's assigned projects
+    const queryStartTime = Date.now();
     const query = {
       users: userId
     };
@@ -636,22 +658,33 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
+    const queryBuildTime = Date.now() - queryStartTime;
+    console.log(`[${userId}] Query building completed in ${queryBuildTime}ms`);
     
     try {
       const dbStartTime = Date.now();
+      
+      // Count query timing
+      const countStartTime = Date.now();
       const total = await Project.countDocuments(query);
+      const countTime = Date.now() - countStartTime;
+      console.log(`[${userId}] Count query completed in ${countTime}ms`);
+      
       const pages = Math.ceil(total / parseInt(limit));
 
-      // Get projects with pagination and sorting
+      // Data query timing
+      const dataStartTime = Date.now();
       const projects = await Project.find(query)
         .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
         .skip(skip)
         .limit(parseInt(limit))
         .populate('client', 'name')
         .select('projectID name department status client users createdAt d_Date');
+      const dataTime = Date.now() - dataStartTime;
+      console.log(`[${userId}] Data query completed in ${dataTime}ms`);
       
       const dbTime = Date.now() - dbStartTime;
-      console.log(`[${userId}] Database query completed in ${dbTime}ms`);
+      console.log(`[${userId}] Total database operations completed in ${dbTime}ms (Count: ${countTime}ms, Data: ${dataTime}ms)`);
 
       // Invoice processing removed for performance
 

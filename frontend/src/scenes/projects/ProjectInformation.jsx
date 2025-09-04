@@ -776,6 +776,13 @@ const ProjectInformation = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      const pageLoadStartTime = performance.now();
+      console.log("🚀 PROJECT INFO PAGE LOAD START", {
+        operation: isEditMode ? "EDIT" : "ADD",
+        projectId: id,
+        timestamp: new Date().toISOString(),
+      });
+
       console.log("fetchData called with id:", id);
       console.log("isEditMode:", isEditMode);
       try {
@@ -783,10 +790,18 @@ const ProjectInformation = () => {
         setError(null);
 
         // Fetch clients and users
+        const clientsUsersStartTime = performance.now();
         const [clientsRes, usersRes] = await Promise.all([
           clientService.getAll({ limit: 100 }),
           userService.getAll(),
         ]);
+        const clientsUsersTime = performance.now() - clientsUsersStartTime;
+        console.log("✅ CLIENTS & USERS FETCH COMPLETE", {
+          clientsCount:
+            clientsRes.data?.clients?.length || clientsRes.data?.length || 0,
+          usersCount: usersRes.data?.length || 0,
+          apiTime: `${clientsUsersTime.toFixed(2)}ms`,
+        });
 
         setClients(clientsRes.data.clients || clientsRes.data);
         setUsers(usersRes.data);
@@ -794,8 +809,15 @@ const ProjectInformation = () => {
         // If we're in edit mode, fetch the project data
         if (id && id !== "new" && id !== "add-new" && id !== "undefined") {
           try {
+            const projectFetchStartTime = performance.now();
             console.log("🔍 Fetching project with ID:", id);
             const projectRes = await projectService.getById(id);
+            const projectFetchTime = performance.now() - projectFetchStartTime;
+            console.log("✅ PROJECT FETCH COMPLETE", {
+              projectId: id,
+              apiTime: `${projectFetchTime.toFixed(2)}ms`,
+              hasData: !!projectRes.data,
+            });
             console.log("🔍 Project API response:", {
               hasData: !!projectRes.data,
               dataKeys: projectRes.data ? Object.keys(projectRes.data) : [],
@@ -837,7 +859,13 @@ const ProjectInformation = () => {
             setOriginalForm(JSON.parse(JSON.stringify(projectData)));
 
             // Fetch audit trail for existing projects
+            const auditStartTime = performance.now();
             await fetchAuditTrail(projectData._id);
+            const auditTime = performance.now() - auditStartTime;
+            console.log("✅ AUDIT TRAIL FETCH COMPLETE", {
+              projectId: projectData._id,
+              apiTime: `${auditTime.toFixed(2)}ms`,
+            });
           } catch (projectErr) {
             console.error("Error fetching project:", projectErr);
             if (projectErr.response) {
@@ -890,6 +918,13 @@ const ProjectInformation = () => {
         }
         setError("Failed to load data. Please try again.");
       } finally {
+        const totalPageLoadTime = performance.now() - pageLoadStartTime;
+        console.log("✅ PROJECT INFO PAGE LOAD COMPLETE", {
+          operation: isEditMode ? "EDIT" : "ADD",
+          projectId: id,
+          totalTime: `${totalPageLoadTime.toFixed(2)}ms`,
+          timestamp: new Date().toISOString(),
+        });
         setLoading(false);
       }
     };
@@ -1385,6 +1420,15 @@ const ProjectInformation = () => {
         return; // Exit early to avoid the navigate("/projects") call
       }
 
+      const operationEndTime = performance.now();
+      const totalOperationTime = operationEndTime - operationStartTime;
+      console.log("✅ PROJECT OPERATION COMPLETE", {
+        operation: isEditMode ? "UPDATE" : "CREATE",
+        projectId: isEditMode ? id : form.projectID,
+        totalTime: `${totalOperationTime.toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
+
       console.log("🔍 Success!");
 
       // Show success message
@@ -1406,6 +1450,16 @@ const ProjectInformation = () => {
         navigate("/projects");
       }
     } catch (error) {
+      const operationEndTime = performance.now();
+      const totalOperationTime = operationEndTime - operationStartTime;
+      console.log("❌ PROJECT OPERATION ERROR", {
+        operation: isEditMode ? "UPDATE" : "CREATE",
+        projectId: isEditMode ? id : form.projectID,
+        totalTime: `${totalOperationTime.toFixed(2)}ms`,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+
       console.error("🔍 Error saving project:", error);
       console.error("🔍 Error details:", {
         message: error.message,

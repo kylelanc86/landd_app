@@ -1351,18 +1351,55 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Status editing handlers
   const handleStatusClick = (projectId, event) => {
+    const dropdownOpenStartTime = performance.now();
+    console.log("📋 STATUS DROPDOWN OPEN START", {
+      projectId,
+      timestamp: new Date().toISOString(),
+    });
+
     if (isAdmin || isManager || can("projects.change_status")) {
       // Store the project ID in the anchor element's dataset
       event.currentTarget.dataset.projectId = projectId;
       setStatusDropdownAnchor(event.currentTarget);
+
+      const dropdownOpenTime = performance.now() - dropdownOpenStartTime;
+      console.log("✅ STATUS DROPDOWN OPEN COMPLETE", {
+        projectId,
+        openTime: `${dropdownOpenTime.toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.log("❌ STATUS DROPDOWN ACCESS DENIED", {
+        projectId,
+        isAdmin,
+        isManager,
+        canChangeStatus: can("projects.change_status"),
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
   const handleStatusChange = async (projectId, newStatus) => {
+    const statusChangeStartTime = performance.now();
+    console.log("🔄 STATUS CHANGE START", {
+      projectId,
+      newStatus,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
+      const apiStartTime = performance.now();
       await projectService.update(projectId, { status: newStatus });
+      const apiEndTime = performance.now();
+
+      console.log("✅ STATUS CHANGE API COMPLETE", {
+        projectId,
+        newStatus,
+        apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+      });
 
       // Update the local state
+      const stateUpdateStartTime = performance.now();
       setProjects((prevProjects) =>
         prevProjects.map((project) =>
           project._id === projectId
@@ -1370,20 +1407,59 @@ const Projects = ({ initialFilters = {} }) => {
             : project
         )
       );
+      const stateUpdateTime = performance.now() - stateUpdateStartTime;
+      console.log("✅ STATUS CHANGE STATE UPDATE COMPLETE", {
+        projectId,
+        stateUpdateTime: `${stateUpdateTime.toFixed(2)}ms`,
+      });
 
       // Refresh status counts after updating project status
+      const statusCountsStartTime = performance.now();
       fetchStatusCounts();
+      const statusCountsTime = performance.now() - statusCountsStartTime;
+      console.log("✅ STATUS COUNTS REFRESH COMPLETE", {
+        projectId,
+        statusCountsTime: `${statusCountsTime.toFixed(2)}ms`,
+      });
 
       // Close the dropdown
       setStatusDropdownAnchor(null);
+
+      const totalTime = performance.now() - statusChangeStartTime;
+      console.log("✅ STATUS CHANGE COMPLETE", {
+        projectId,
+        newStatus,
+        totalTime: `${totalTime.toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
+      const totalTime = performance.now() - statusChangeStartTime;
+      console.log("❌ STATUS CHANGE ERROR", {
+        projectId,
+        newStatus,
+        totalTime: `${totalTime.toFixed(2)}ms`,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+
       console.error("Error updating project status:", error);
       // You might want to show an error message to the user here
     }
   };
 
   const handleStatusClose = () => {
+    const dropdownCloseStartTime = performance.now();
+    console.log("📋 STATUS DROPDOWN CLOSE START", {
+      timestamp: new Date().toISOString(),
+    });
+
     setStatusDropdownAnchor(null);
+
+    const dropdownCloseTime = performance.now() - dropdownCloseStartTime;
+    console.log("✅ STATUS DROPDOWN CLOSE COMPLETE", {
+      closeTime: `${dropdownCloseTime.toFixed(2)}ms`,
+      timestamp: new Date().toISOString(),
+    });
   };
 
   // Load user preferences from database
