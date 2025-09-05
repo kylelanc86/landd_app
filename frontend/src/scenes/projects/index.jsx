@@ -1476,6 +1476,7 @@ const Projects = ({ initialFilters = {} }) => {
                 variant="body2"
                 sx={{
                   color: "#2e7d32",
+                  fontWeight: "bold",
                   whiteSpace: "normal",
                   wordWrap: "break-word",
                   lineHeight: 1.2,
