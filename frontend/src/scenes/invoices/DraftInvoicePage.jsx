@@ -15,7 +15,6 @@ import {
   IconButton,
   Autocomplete,
   FormControl,
-  InputLabel,
   Select,
   MenuItem,
   Breadcrumbs,
@@ -66,7 +65,6 @@ const DraftInvoicePage = () => {
   // Responsive column visibility state
   const [showTaxRateColumn, setShowTaxRateColumn] = useState(true);
   const [showAccountColumn, setShowAccountColumn] = useState(true);
-  const [tableWidth, setTableWidth] = useState(0);
 
   // Default values
   const defaultAccount = "191 - Consulting Fees";
@@ -98,7 +96,6 @@ const DraftInvoicePage = () => {
       const tableContainer = document.querySelector(".invoice-table-container");
       if (tableContainer) {
         const width = tableContainer.offsetWidth;
-        setTableWidth(width);
 
         // Calculate available space for description column
         // Fixed columns: Item No (80px) + Qty (60px) + Unit Price (100px) + Tax Amount (100px) + Amount (105px) + Actions (50px) = 495px
@@ -138,8 +135,16 @@ const DraftInvoicePage = () => {
     try {
       setLoading(true);
 
+      // Check if user is authenticated
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No authentication token found - user needs to log in");
+        setProjects([]);
+        return;
+      }
+
       const response = await projectService.getAll({
-        limit: 1000, // High limit to get all projects
+        limit: 100000, // High limit to get all projects
       });
 
       // Handle different response structures
@@ -149,9 +154,12 @@ const DraftInvoicePage = () => {
       // Filter for active projects (in progress, report sent for review, ready for invoicing, invoice sent)
       const activeStatuses = [
         "in progress",
+        "samples submitted to lab",
+        "lab analysis completed",
         "report sent for review",
         "ready for invoicing",
         "invoice sent",
+        "invoiced - awaiting payment",
       ];
 
       const activeProjects = Array.isArray(projectsData)
@@ -163,9 +171,19 @@ const DraftInvoicePage = () => {
           })
         : [];
 
-      setProjects(activeProjects);
+      // Sort projects by projectID in descending order (most recent first)
+      const sortedActiveProjects = activeProjects.sort((a, b) => {
+        return b.projectID.localeCompare(a.projectID, undefined, {
+          numeric: true,
+        });
+      });
+
+      setProjects(sortedActiveProjects);
     } catch (error) {
       console.error("Error fetching projects:", error);
+      if (error.response?.status === 401) {
+        console.error("Authentication failed - user may need to log in");
+      }
       setProjects([]);
     } finally {
       setLoading(false);
@@ -537,7 +555,7 @@ const DraftInvoicePage = () => {
                 setProjectInputValue(newInputValue)
               }
               filterOptions={(options, { inputValue }) => {
-                if (inputValue.length < 2) return [];
+                if (inputValue.length < 2) return options || [];
                 const filterValue = inputValue.toLowerCase();
                 const filtered = (options || []).filter(
                   (option) =>
@@ -555,8 +573,10 @@ const DraftInvoicePage = () => {
                   required
                   fullWidth
                   helperText={
-                    projectInputValue.length < 2
-                      ? "Type at least 2 characters to search projects"
+                    projects.length === 0 && !loading
+                      ? "No active projects found. Please ensure you're logged in and there are projects with active statuses."
+                      : projects.length > 0
+                      ? `Found ${projects.length} active projects. Type to filter or click to see all.`
                       : ""
                   }
                 />
