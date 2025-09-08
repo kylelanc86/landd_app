@@ -282,12 +282,43 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
     console.log('Users:', req.body.users);
     console.log('============================');
     
+    // Validate categories before creating project
+    const validCategories = [
+      'Asbestos Management Plan',
+      'Air Monitoring and Clearance',
+      'Asbestos Materials Assessment',
+      'Asbestos & Lead Paint Assessment',
+      'Clearance Certificate',
+      'Client Supplied - Bulk ID',
+      'Client Supplied - Soil/dust (AS4964)',
+      'Client Supplied - WA Guidelines',
+      'Client Supplied - Fibre Count',
+      'Hazardous Materials Management Plan',
+      'Intrusive Asbestos Assessment',
+      'Intrusive Hazardous Materials Assessment',
+      'Lead Dust Assessment',
+      'Lead Paint Assessment',
+      'Lead Paint/Dust Assessment',
+      'Mould/Moisture Assessment',
+      'Mould/Moisture Validation',
+      'Residential Asbestos Assessment',
+      'Silica Air Monitoring',
+      'Other'
+    ];
+    
+    const processedCategories = req.body.categories 
+      ? req.body.categories
+          .filter(category => category && typeof category === 'string')
+          .map(category => category.trim())
+          .filter(category => validCategories.includes(category))
+      : [];
+
     // Create new project instance
     const project = new Project({
       name: req.body.name,
       client: req.body.client,
       department: req.body.department,
-      categories: req.body.categories || [],
+      categories: processedCategories,
       status: req.body.status,
       address: req.body.address,
       d_Date: req.body.d_Date,
@@ -428,20 +459,25 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     // Handle categories validation - filter out invalid categories
     if (req.body.categories !== undefined) {
       const validCategories = [
-        'Asbestos Material Assessment',
+        'Asbestos Management Plan',
+        'Air Monitoring and Clearance',
         'Asbestos Materials Assessment',
         'Asbestos & Lead Paint Assessment',
+        'Clearance Certificate',
+        'Client Supplied - Bulk ID',
+        'Client Supplied - Soil/dust (AS4964)',
+        'Client Supplied - WA Guidelines',
+        'Client Supplied - Fibre Count',
+        'Hazardous Materials Management Plan',
+        'Intrusive Asbestos Assessment',
+        'Intrusive Hazardous Materials Assessment',
+        'Lead Dust Assessment',
         'Lead Paint Assessment',
         'Lead Paint/Dust Assessment',
-        'Air Monitoring and Clearance',
-        'Clearance Certificate',
-        'Commercial Asbestos Management Plan',
-        'Hazardous Materials Management Plan',
-        'Hazardous Materials Survey',
-        'Residential Asbestos Assessment',
-        'Residential Asbestos Survey',
-        'Silica Air Monitoring',
         'Mould/Moisture Assessment',
+        'Mould/Moisture Validation',
+        'Residential Asbestos Assessment',
+        'Silica Air Monitoring',
         'Other'
       ];
       
