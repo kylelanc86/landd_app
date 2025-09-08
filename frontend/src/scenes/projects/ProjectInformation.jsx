@@ -119,6 +119,7 @@ const ProjectInformation = () => {
   // Debug: Log the isEditMode calculation
   useEffect(() => {}, [id, isEditMode]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
@@ -1077,6 +1078,13 @@ const ProjectInformation = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Prevent multiple submissions
+    if (saving) {
+      console.log("🚫 SUBMISSION BLOCKED - Already saving");
+      return;
+    }
+
     const operationStartTime = performance.now();
     console.log("🚀 PROJECT OPERATION START", {
       operation: isEditMode ? "UPDATE" : "CREATE",
@@ -1114,6 +1122,7 @@ const ProjectInformation = () => {
     console.log("🔍 URL params id:", id);
 
     try {
+      setSaving(true);
       if (isEditMode) {
         const updateStartTime = performance.now();
         console.log("🔄 PROJECT UPDATE START", {
@@ -1358,6 +1367,8 @@ const ProjectInformation = () => {
       });
       setErrorMessage("Failed to save project. Please try again.");
       setErrorDialogOpen(true);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1507,7 +1518,32 @@ const ProjectInformation = () => {
           {error}
         </Alert>
       ) : (
-        <Paper sx={{ p: 3 }}>
+        <Paper sx={{ p: 3, position: "relative" }}>
+          {/* Loading overlay */}
+          {saving && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(255, 255, 255, 0.8)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1000,
+                borderRadius: 1,
+              }}
+            >
+              <CircularProgress size={60} />
+              <Typography variant="h6" sx={{ mt: 2, color: "text.primary" }}>
+                {isEditMode ? "Updating Project..." : "Creating Project..."}
+              </Typography>
+            </Box>
+          )}
+
           <form onSubmit={handleSubmit} autoComplete="off">
             {/* Hidden fields to prevent autofill */}
             <input
@@ -2024,7 +2060,12 @@ const ProjectInformation = () => {
                     >
                       Cancel
                     </Button>
-                    <Button type="submit" variant="contained" color="primary">
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      color="primary"
+                      disabled={saving}
+                    >
                       {isEditMode ? "Update Project" : "Create Project"}
                     </Button>
                   </Box>
