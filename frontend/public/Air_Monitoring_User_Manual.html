@@ -151,7 +151,7 @@
   </head>
   <body>
     <div class="container">
-      <h1>🌬️ L&D App - User Manual</h1>
+      <h1>L&D App - User Manual</h1>
 
       <div class="toc">
         <h3>📋 Table of Contents</h3>
@@ -202,18 +202,21 @@
       <section id="overview">
         <h2>1. 🏠 System Overview</h2>
         <p>
-          The L&D App is a comprehensive web-based application
-          designed for L&D projects, client
-          relationships, timesheets, and invoicing. The system provides
-          role-based access control and integrates with Xero for accounting
-          purposes.
+          The L&D App (version 1) is a web-based application designed for
+          managing L&D projects, client relationships, timesheets, and
+          invoicing. The system provides role-based access control and
+          integrates with Xero for accounting purposes.
         </p>
 
         <div class="feature-box">
           <h4>Key Features:</h4>
           <ul>
             <li>
-              <strong>Project Management:</strong> Track air monitoring projects
+              <strong>Dashboard:</strong> Real-time overview of project statuses
+              and key metrics
+            </li>
+            <li>
+              <strong>Project Management:</strong> Track L&D projects
               from creation to completion
             </li>
             <li>
@@ -232,10 +235,6 @@
               <strong>Admin Controls:</strong> Manage users, custom data fields,
               and system settings
             </li>
-            <li>
-              <strong>Dashboard:</strong> Real-time overview of project statuses
-              and key metrics
-            </li>
           </ul>
         </div>
       </section>
@@ -244,8 +243,8 @@
         <h2>2. 📊 Dashboard</h2>
         <p>
           The dashboard provides a centralized view of your work and project
-          statuses. It's customizable and shows different widgets based on your
-          role and preferences.
+          statuses. It's customizable and shows different widgets so you can
+          link toproject based on your role and preferences.
         </p>
 
         <h3>Dashboard Widgets</h3>
@@ -253,18 +252,18 @@
           <h4>My Daily Timesheet</h4>
           <p>
             Shows your current timesheet status for today. Click to navigate to
-            the timesheets page.
+            the daily timesheet page.
           </p>
           <div class="step">
             <strong>Status Indicators:</strong>
             <ul>
               <li>
                 <span style="color: #4caf50">●</span> Complete - All required
-                entries submitted
+                entries submitted and timesheet finalised
               </li>
               <li>
                 <span style="color: #ff9800">●</span> Incomplete - Missing
-                required entries
+                required entries or timesheet not finalised
               </li>
             </ul>
           </div>
@@ -273,36 +272,36 @@
         <div class="feature-box">
           <h4>Project Status Widgets</h4>
           <p>
-            Each widget shows the count of projects in a specific status and
-            allows quick navigation:
+            Each widget shows the count of projects of a specific status and
+            allows quick navigation to filtered projects table:
           </p>
           <ul>
             <li>
               <strong>In Progress:</strong> Projects currently being worked on
             </li>
             <li>
-              <strong>Samples Submitted to Lab:</strong> Projects with samples
-              sent for analysis
+              <strong>Samples Submitted to Lab:</strong> Project samples have
+              been sent for analysis
             </li>
             <li>
-              <strong>Lab Analysis Completed:</strong> Projects with completed
-              lab work
+              <strong>Lab Analysis Completed:</strong> Projects samples have
+              been analysed
             </li>
             <li>
               <strong>Report sent for review:</strong> Projects with reports
               under review
             </li>
             <li>
-              <strong>Ready for invoicing:</strong> Projects ready to be
+              <strong>Ready for invoicing:</strong> Project is ready to be
               invoiced
             </li>
-            <li>
+            <!-- <li>
               <strong>Invoice sent:</strong> Projects with invoices sent to
               clients
-            </li>
+            </li> -->
             <li>
-              <strong>Awaiting Payment:</strong> Projects with outstanding
-              invoices
+              <strong>Awaiting Payment:</strong> Project invoice has been sent -
+              report to be sent on receipt of payment
             </li>
           </ul>
         </div>
@@ -311,7 +310,7 @@
         <div class="step">
           <strong>To customize widget visibility:</strong>
           <ol>
-            <li>Click the settings icon (⚙️) on any widget</li>
+            <li>Click the 'Select Widget' button</li>
             <li>Check/uncheck widgets you want to show/hide</li>
             <li>Drag and drop widgets to reorder them</li>
             <li>Your preferences are automatically saved</li>
@@ -331,8 +330,10 @@
           <h4>Navigation</h4>
           <ul>
             <li>Use the arrow buttons (← →) to navigate between days</li>
-            <li>Click on the calendar icon to jump to a specific date</li>
-            <li>Use the URL parameters to bookmark specific dates or users</li>
+            <li>
+              Click on the 'Monthly View' button to jump to access the monthly
+              calendat where you can select a specific date
+            </li>
           </ul>
         </div>
 
@@ -340,69 +341,45 @@
         <div class="step">
           <strong>To add a new time entry:</strong>
           <ol>
-            <li>Click the "Add Entry" button</li>
+            <li>Select the time period you want to log by clicking and dragging</li>
             <li>Select start and end times</li>
             <li>
               Choose the type of work:
               <ul>
                 <li>
-                  <strong>Project Work:</strong> Select a project and input type
+                  <strong>Project Work (Chargable):</strong> Select an active project and input type (Site Work/Travel, Reporting, Project Admin)
                 </li>
                 <li>
                   <strong>Admin Work:</strong> General administrative tasks
                 </li>
-                <li><strong>Break:</strong> Break time (not billable)</li>
+                <li><strong>Break:</strong> Break times, Lunches</li>
               </ul>
             </li>
             <li>Add a description if needed</li>
-            <li>Click "Save Entry"</li>
+            <li>Click "+ Save"</li>
           </ol>
-        </div>
-
-        <h3>Project Input Types</h3>
-        <div class="info-box">
-          <p>
-            When logging project work, you can specify the type of work
-            performed:
-          </p>
-          <ul>
-            <li>
-              <strong>Field Work:</strong> On-site monitoring and sampling
-            </li>
-            <li><strong>Lab Work:</strong> Sample preparation and analysis</li>
-            <li>
-              <strong>Report Writing:</strong> Documentation and report
-              preparation
-            </li>
-            <li><strong>Travel:</strong> Travel time to/from sites</li>
-            <li><strong>Other:</strong> Miscellaneous project-related tasks</li>
-          </ul>
         </div>
 
         <h3>Managing Entries</h3>
         <div class="step">
           <strong>To edit an entry:</strong>
           <ol>
-            <li>Click the edit icon (✏️) next to the entry</li>
+            <li>Click the entry block to edit or delete the timesheet entry </li>
             <li>Modify the details as needed</li>
-            <li>Click "Update Entry" to save changes</li>
-          </ol>
-        </div>
-
-        <div class="step">
-          <strong>To delete an entry:</strong>
-          <ol>
-            <li>Click the delete icon (🗑️) next to the entry</li>
-            <li>Confirm deletion in the dialog</li>
+            <li>Click "Update" to save changes or "Delete" to delete the entry</li>
           </ol>
         </div>
 
         <h3>Timesheet Status</h3>
         <div class="warning-box">
+          <h4>Finalise</h4>
           <p>
-            <strong>Important:</strong> Once a timesheet is finalized, you
-            cannot modify entries. Contact your administrator if you need to
-            make changes to a finalized timesheet.
+            Click Finalise button to set your timesheet status to complete. Click unfinalise if you
+            need to modify your timesheet.
+          </p>
+          <h4>Absent</h4>
+          <p>
+            Clicking Mark Absent button tells management that you were absent for that date.
           </p>
         </div>
       </section>
@@ -410,8 +387,7 @@
       <section id="projects">
         <h2>4. 📁 Projects</h2>
         <p>
-          Projects are the core of the system, representing individual air
-          monitoring assignments from clients.
+          Projects holds all the information for a project, including client, status, users, and more.
         </p>
 
         <section id="projects-overview">
@@ -426,11 +402,11 @@
             </li>
             <li><strong>Name:</strong> Project title/description</li>
             <li><strong>Client:</strong> Associated client</li>
+            <li><strong>Due Date:</strong> When the project is due</li>
             <li>
               <strong>Status:</strong> Current project status with color coding
             </li>
             <li><strong>Users:</strong> Assigned team members</li>
-            <li><strong>Created Date:</strong> When the project was created</li>
           </ul>
 
           <h4>Search and Filter</h4>
@@ -442,7 +418,7 @@
                 ID
               </li>
               <li>Filter by status using the status dropdown</li>
-              <li>Sort by any column by clicking the column header</li>
+              <li>Sort by any column by clicking the arrows in the column header</li>
             </ol>
           </div>
         </section>
@@ -465,13 +441,9 @@
                     new
                   </li>
                   <li>
-                    <strong>Department:</strong> Choose from Asbestos & HAZMAT,
-                    Lead, Mould, etc.
+                    <strong>Department:</strong> Choose from Asbestos & HAZMAT, Occupational Hygiene, Client Supplied
                   </li>
                   <li><strong>Status:</strong> Defaults to "In progress"</li>
-                  <li>
-                    <strong>Project Type:</strong> Regular or Large project
-                  </li>
                 </ul>
               </li>
               <li>
@@ -480,26 +452,27 @@
                   <li>
                     <strong>Work Order:</strong> Client's work order number
                   </li>
-                  <li><strong>Location:</strong> Project site address</li>
+                  <li><strong>Address:</strong> Project site address</li>
                   <li>
-                    <strong>Project Contact:</strong> On-site contact
-                    information
+                    <strong>Project Contact:</strong> On-site contact information
                   </li>
                   <li>
                     <strong>Notes:</strong> Additional project information
                   </li>
+                  <li>
+                    <strong>Users:</strong> Assign users to the project
+                  </li>
                 </ul>
               </li>
-              <li>Click "Create Project"</li>
+              <li>Click "Create Project" to save project.</li>
             </ol>
           </div>
 
           <div class="info-box">
             <p>
               <strong>Project ID Generation:</strong> The system automatically
-              generates a unique project ID (e.g., LDJ05116) based on the
-              project type and existing projects. This ID is used for tracking
-              and reference throughout the project lifecycle.
+              generates a unique project ID based on the
+              project type and existing projects. Standard project have the prefix 'LDJ' and large projects have the prefix 'HAZ'.
             </p>
           </div>
         </section>
@@ -509,9 +482,8 @@
           <div class="step">
             <strong>To edit an existing project:</strong>
             <ol>
-              <li>Click on the project name or use the "Edit" button</li>
+              <li>Click on the project row</li>
               <li>Modify any of the project details</li>
-              <li>Update assigned users if needed</li>
               <li>Click "Update Project" to save changes</li>
             </ol>
           </div>
@@ -582,7 +554,14 @@
               </tr>
             </tbody>
           </table>
+          <div class="warning-box">
+            <p>
+              <strong>Project Table Status Edit</strong> Project status can also be edited from
+               the projects table by clicking the 3 dot menu and selecting the relevant status.
+            </p>
+          </div>
         </section>
+        
       </section>
 
       <section id="clients">
@@ -648,7 +627,7 @@
         <section id="client-details">
           <h3>5.3 Client Details</h3>
           <div class="step">
-            <strong>To view client details:</strong>
+            <strong>To view or edit client details:</strong>
             <ol>
               <li>Click the "Details" button next to any client</li>
               <li>View comprehensive client information</li>
@@ -661,8 +640,12 @@
             <h4>Client Actions</h4>
             <ul>
               <li>
-                <strong>View Invoices:</strong> Click the money icon (💰) to see
-                all invoices for this client
+                <strong>Write Off Client:</strong> Marks the client as having historical unpaid invoices. Works for these client
+                should be confirmed by management.
+              </li>
+              <li>
+                <strong>View Invoices:</strong> Click the dollar icon ($) to see
+                all invoices for this client (Admin/Manager only)
               </li>
               <li>
                 <strong>Archive Client:</strong> Archive inactive clients
@@ -681,13 +664,13 @@
         <h2>6. 💰 Invoices</h2>
         <p>
           The invoices module handles all billing activities, including invoice
-          creation, editing, and Xero integration.
+          drafting, editing, and Xero integration.
         </p>
 
         <section id="invoices-overview">
           <h3>6.1 Invoices Overview</h3>
           <p>
-            The invoices page displays all invoices with the following
+            The invoices page displays all draft and invoices Awaiting Approval with the following
             information:
           </p>
           <ul>
@@ -706,59 +689,29 @@
           <div class="step">
             <strong>To create a new invoice:</strong>
             <ol>
-              <li>Click the "Add Invoice" button</li>
+              <li>Click the "Add Draft Invoice" button</li>
               <li>Select a project (this auto-populates client information)</li>
               <li>
                 Enter invoice details:
                 <ul>
-                  <li><strong>Invoice Number:</strong> Unique identifier</li>
-                  <li><strong>Amount:</strong> Total invoice amount</li>
-                  <li><strong>Date:</strong> Invoice date</li>
+                  <li><strong>Invoice Items:</strong> Select invoice items from the dropdown to use pre-defined invoice items or add your own custom items (description, amount, qty)</li>
+                  <li><strong>Reference:</strong>Add WO/PO number or reference if required</li>
+                  <li>
+                    <strong>Invoice Date:</strong> Invoice date (set as 'Today' by default)
+                  </li>
                   <li>
                     <strong>Due Date:</strong> Payment due date (auto-calculated
-                    based on client terms)
-                  </li>
-                  <li><strong>Description:</strong> Invoice description</li>
-                  <li>
-                    <strong>Reference:</strong> Additional reference information
+                    based on client terms) or can be manually set
                   </li>
                 </ul>
               </li>
-              <li>Click "Create Invoice" to save</li>
+              <li>Click "Save Draft" to save</li>
             </ol>
           </div>
         </section>
 
-        <section id="draft-invoices">
-          <h3>6.3 Draft Invoices</h3>
-          <p>
-            Draft invoices allow you to create detailed invoices with line items
-            before finalizing them.
-          </p>
-
-          <div class="step">
-            <strong>To create a draft invoice:</strong>
-            <ol>
-              <li>Navigate to the Draft Invoices section</li>
-              <li>Click "Create Draft Invoice"</li>
-              <li>Select a project and client</li>
-              <li>
-                Add invoice line items:
-                <ul>
-                  <li><strong>Description:</strong> Item description</li>
-                  <li><strong>Quantity:</strong> Number of units</li>
-                  <li><strong>Rate:</strong> Price per unit</li>
-                  <li><strong>Account:</strong> Chart of accounts code</li>
-                  <li><strong>Tax Rate:</strong> Tax classification</li>
-                </ul>
-              </li>
-              <li>Review totals and save as draft</li>
-            </ol>
-          </div>
-        </section>
-
-        <section id="xero-integration">
-          <h3>6.4 Xero Integration</h3>
+                <section id="xero-integration">
+          <h3>6.3 Xero Integration</h3>
           <div class="info-box">
             <p>
               <strong>Xero Integration:</strong> The system integrates with Xero
@@ -771,8 +724,8 @@
             <strong>To sync with Xero:</strong>
             <ol>
               <li>Ensure you have Xero sync permissions</li>
-              <li>Click the "Sync with Xero" button</li>
-              <li>Select invoices to sync</li>
+              <li>Click the "Sync with Xero" button to receive any Draft or Awaiting Approval invoices in Xero</li>
+              <li>Click the "Sync Drafted Invoices to Xero" button to sync any Draft invoices you have created to Xero for management approval</li>
               <li>Review sync status and resolve any errors</li>
             </ol>
           </div>
@@ -1052,13 +1005,13 @@
           <h4>Timesheet Entry Issues</h4>
           <p><strong>Common Problems:</strong></p>
           <ul>
-            <li>Cannot edit finalized timesheet entries</li>
+            <li>Cannot edit finalised timesheet entries</li>
             <li>Time entries not saving</li>
             <li>Project not appearing in dropdown</li>
           </ul>
           <p><strong>Solutions:</strong></p>
           <ul>
-            <li>Contact admin to unfinalize timesheet if needed</li>
+            <li>Unfinalise timesheet if needed</li>
             <li>Ensure all required fields are completed</li>
             <li>Check that the project is in an active status</li>
           </ul>
@@ -1069,7 +1022,7 @@
           <p>If you encounter issues not covered in this manual:</p>
           <ol>
             <li>Check the error messages displayed in the application</li>
-            <li>Try refreshing the page and attempting the action again</li>
+            <li>Try refreshing the page or logging out and back in and attempting the action again</li>
             <li>Contact your system administrator</li>
             <li>Document the steps that led to the issue for better support</li>
           </ol>
@@ -1085,7 +1038,7 @@
           color: #666;
         "
       >
-        <p><strong>L&D App User Manual</strong></p>
+        <p><strong>L&D App - User Manual</strong></p>
         <p>Last Updated: <span id="currentDate"></span></p>
         <p>For technical support, contact your system administrator.</p>
       </footer>
