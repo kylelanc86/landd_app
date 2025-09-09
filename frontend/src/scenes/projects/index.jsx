@@ -56,6 +56,7 @@ import {
 import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
 import { usePermissions } from "../../hooks/usePermissions";
+import { useAuth } from "../../context/AuthContext";
 import { Visibility, Visibility as VisibilityIcon } from "@mui/icons-material";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import AddIcon from "@mui/icons-material/Add";
@@ -162,6 +163,7 @@ const Projects = ({ initialFilters = {} }) => {
   const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
     useJobStatus() || {};
   const { isAdmin, isManager, can } = usePermissions();
+  const { currentUser } = useAuth();
   const [projects, setProjects] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1236,16 +1238,27 @@ const Projects = ({ initialFilters = {} }) => {
   const getAccessibleStatuses = () => {
     if (isAdmin || isManager || can("projects.change_status")) {
       // Filter out restricted statuses for employee users
-      const restrictedStatuses = ["Job complete", "Cancelled"];
+      const restrictedStatuses = ["Cancelled"];
 
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
-        const filteredActive = activeStatuses.filter(
+        let filteredActive = activeStatuses.filter(
           (status) => !restrictedStatuses.includes(status)
         );
-        const filteredInactive = inactiveStatuses.filter(
+        let filteredInactive = inactiveStatuses.filter(
           (status) => !restrictedStatuses.includes(status)
         );
+
+        // Check if user can set "Job complete" status
+        if (!currentUser.canSetJobComplete) {
+          filteredActive = filteredActive.filter(
+            (status) => status !== "Job complete"
+          );
+          filteredInactive = filteredInactive.filter(
+            (status) => status !== "Job complete"
+          );
+        }
+
         return { active: filteredActive, inactive: filteredInactive };
       }
 

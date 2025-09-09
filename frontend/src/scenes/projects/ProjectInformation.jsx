@@ -448,16 +448,26 @@ const ProjectInformation = () => {
         : [];
 
       // Filter out restricted statuses for employee users
-      const restrictedStatuses = ["Job complete", "Cancelled"];
+      const restrictedStatuses = ["Cancelled"];
 
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
-        const filteredActive = active.filter(
+        let filteredActive = active.filter(
           (status) => !restrictedStatuses.includes(status)
         );
-        const filteredInactive = inactive.filter(
+        let filteredInactive = inactive.filter(
           (status) => !restrictedStatuses.includes(status)
         );
+
+        // Check if user can set "Job complete" status
+        if (!currentUser.canSetJobComplete) {
+          filteredActive = filteredActive.filter(
+            (status) => status !== "Job complete"
+          );
+          filteredInactive = filteredInactive.filter(
+            (status) => status !== "Job complete"
+          );
+        }
 
         return { active: filteredActive, inactive: filteredInactive };
       }
@@ -465,7 +475,7 @@ const ProjectInformation = () => {
       return { active, inactive };
     }
     return { active: [], inactive: [] };
-  }, [isAdmin, isManager, can, activeStatuses, inactiveStatuses]);
+  }, [isAdmin, isManager, can, activeStatuses, inactiveStatuses, currentUser]);
 
   // Memoize the status menu items to prevent recreation on every render
   const statusMenuItems = useMemo(() => {
@@ -506,16 +516,26 @@ const ProjectInformation = () => {
         : [];
 
       // Filter out restricted statuses for employee users
-      const restrictedStatuses = ["Job complete", "Cancelled"];
+      const restrictedStatuses = ["Cancelled"];
 
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
-        const filteredActive = active.filter(
+        let filteredActive = active.filter(
           (status) => !restrictedStatuses.includes(status)
         );
-        const filteredInactive = inactive.filter(
+        let filteredInactive = inactive.filter(
           (status) => !restrictedStatuses.includes(status)
         );
+
+        // Check if user can set "Job complete" status
+        if (!currentUser.canSetJobComplete) {
+          filteredActive = filteredActive.filter(
+            (status) => status !== "Job complete"
+          );
+          filteredInactive = filteredInactive.filter(
+            (status) => status !== "Job complete"
+          );
+        }
 
         return { active: filteredActive, inactive: filteredInactive };
       }

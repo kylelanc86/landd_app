@@ -78,7 +78,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new user
 router.post('/', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, licences, signature, workingHours, labApprovals } = req.body;
+    const { firstName, lastName, email, role, phone, licences, signature, workingHours, labApprovals, canSetJobComplete } = req.body;
 
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -113,6 +113,7 @@ router.post('/', auth, async (req, res) => {
         fibreCounting: false,
         fibreIdentification: false
       },
+      canSetJobComplete: canSetJobComplete || false,
       isActive: true,
       setupPasswordToken: setupToken,
       setupPasswordExpires: setupExpires,
@@ -177,7 +178,7 @@ router.post('/', auth, async (req, res) => {
 // Update user
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, isActive, licences, signature, workingHours, labApprovals } = req.body;
+    const { firstName, lastName, email, role, phone, isActive, licences, signature, workingHours, labApprovals, canSetJobComplete } = req.body;
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -196,6 +197,7 @@ router.put('/:id', auth, async (req, res) => {
     if (signature !== undefined) user.signature = signature;
     if (workingHours !== undefined) user.workingHours = workingHours;
     if (labApprovals !== undefined) user.labApprovals = labApprovals;
+    if (canSetJobComplete !== undefined) user.canSetJobComplete = canSetJobComplete;
 
     await user.save();
 

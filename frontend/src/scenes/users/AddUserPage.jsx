@@ -59,6 +59,7 @@ const emptyForm = {
     fibreCounting: false,
     fibreIdentification: false,
   },
+  canSetJobComplete: false,
 };
 
 const AddUserPage = () => {
@@ -178,6 +179,8 @@ const AddUserPage = () => {
         ), // Only include valid licences
         signature: form.signature || "",
         workingHours: form.workingHours,
+        labApprovals: form.labApprovals,
+        canSetJobComplete: form.canSetJobComplete,
       };
 
       console.log("Creating user with data:", userData);
@@ -468,6 +471,51 @@ const AddUserPage = () => {
               </Grid>
             </Box>
           </Box>
+
+          {/* Job Complete Permission Section - Only for Employee users */}
+          {form.role === "employee" && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Project Status Permissions
+              </Typography>
+              <Box
+                sx={{
+                  border: "1px solid #e0e0e0",
+                  borderRadius: 1,
+                  p: 2,
+                  backgroundColor: "#fafafa",
+                }}
+              >
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={form.canSetJobComplete}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          canSetJobComplete: e.target.checked,
+                        })
+                      }
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        Can Set "Job Complete" Status
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Allow this employee to change project status to "Job
+                        Complete". Admin and Manager users can always set this
+                        status.
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ alignItems: "flex-start" }}
+                />
+              </Box>
+            </Box>
+          )}
 
           {/* LAA Licences Section */}
           <Box sx={{ mt: 3 }}>

@@ -112,6 +112,10 @@ const userSchema = new mongoose.Schema({
     fibreCounting: { type: Boolean, default: false },
     fibreIdentification: { type: Boolean, default: false }
   },
+  canSetJobComplete: {
+    type: Boolean,
+    default: false
+  },
   notifications: {
     email: {
       type: Boolean,

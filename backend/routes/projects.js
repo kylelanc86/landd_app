@@ -437,6 +437,23 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     // Store old status before updating
     const oldStatus = project.status;
     
+    // Check if user is trying to set status to "Job complete" and if they have permission
+    if (req.body.status === "Job complete") {
+      const user = await User.findById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      // Admin and manager users can always set "Job complete"
+      // Employee users need the canSetJobComplete permission
+      if (user.role === 'employee' && !user.canSetJobComplete) {
+        return res.status(403).json({ 
+          message: 'You do not have permission to set project status to "Job complete"',
+          requiredPermission: 'canSetJobComplete'
+        });
+      }
+    }
+    
     // Update project fields
     console.log('🔍 UPDATING PROJECT FIELDS', {
       projectId: project._id,
