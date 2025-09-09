@@ -779,6 +779,7 @@ const Invoices = () => {
   const handleSyncDraftsToXero = async () => {
     try {
       console.log("Starting draft sync to Xero...");
+      setSyncingXero(true);
       setXeroError(null);
 
       // Get all draft invoices that don't have a Xero ID and are not deleted
@@ -834,6 +835,8 @@ const Invoices = () => {
 
       setXeroError(errorMessage);
       setShowXeroAlert(true);
+    } finally {
+      setSyncingXero(false);
     }
   };
 
@@ -1530,9 +1533,10 @@ const Invoices = () => {
             color="primary"
             onClick={handleSyncDraftsToXero}
             startIcon={<SyncIcon />}
+            disabled={syncingXero}
             sx={{ minWidth: "200px" }}
           >
-            Sync Drafted Invoices to Xero
+            {syncingXero ? "Syncing..." : "Sync Drafted Invoices to Xero"}
           </Button>
         )}
       </Box>
