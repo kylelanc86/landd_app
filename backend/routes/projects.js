@@ -526,7 +526,10 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.endDate = req.body.endDate || project.endDate;
     project.description = req.body.description || project.description;
     project.workOrder = req.body.workOrder || project.workOrder;
-    project.users = req.body.users || project.users;
+    // Only update users if explicitly provided and not empty
+    if (req.body.users !== undefined && req.body.users.length > 0) {
+      project.users = req.body.users;
+    }
     project.isLargeProject = req.body.isLargeProject !== undefined ? req.body.isLargeProject : project.isLargeProject;
     project.projectContact = req.body.projectContact || project.projectContact;
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;

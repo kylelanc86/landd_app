@@ -239,11 +239,11 @@ export const projectService = {
   getById: (id) => api.get(`/projects/${id}`),
   create: (data) => api.post('/projects', data),
   update: (id, data) => {
-    // Ensure users is included in the update and is always an array
-    const updateData = {
-      ...data,
-      users: Array.isArray(data.users) ? data.users : (data.users ? [data.users] : [])
-    };
+    // Only include users in the update if explicitly provided
+    const updateData = { ...data };
+    if (data.users !== undefined) {
+      updateData.users = Array.isArray(data.users) ? data.users : (data.users ? [data.users] : []);
+    }
     return api.put(`/projects/${id}`, updateData);
   },
   delete: (id) => api.delete(`/projects/${id}`),

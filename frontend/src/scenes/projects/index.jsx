@@ -1289,15 +1289,15 @@ const Projects = ({ initialFilters = {} }) => {
       const updatePayload = { status: newStatus };
 
       const apiStartTime = performance.now();
-      await projectService.update(projectId, updatePayload);
+      const response = await projectService.update(projectId, updatePayload);
       const apiEndTime = performance.now();
 
-      // Update the local state
+      // Update the local state with the full updated project data from the API response
       const stateUpdateStartTime = performance.now();
       setProjects((prevProjects) =>
         prevProjects.map((project) =>
           project._id === projectId
-            ? { ...project, status: newStatus }
+            ? response.data // Use the full updated project data from the API response
             : project
         )
       );
