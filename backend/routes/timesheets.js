@@ -7,6 +7,7 @@ const { ROLE_PERMISSIONS } = require("../config/permissions");
 const { format, eachDayOfInterval } = require('date-fns');
 const mongoose = require('mongoose');
 const Project = require("../models/Project");
+const User = require("../models/User");
 
 // Helper function to check permissions
 const hasPermission = (user, permission) => {
@@ -816,6 +817,109 @@ router.put("/:userId/:date/approve", auth, async (req, res) => {
     res.json({ message: "Timesheet authorized successfully" });
   } catch (error) {
     console.error("Error authorizing timesheet:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get timesheet report for a specific user and date range
+router.get("/report", auth, async (req, res) => {
+  try {
+    const { userId, startDate, endDate } = req.query;
+
+    // Validate required parameters
+    if (!userId || !startDate || !endDate) {
+      return res.status(400).json({ message: "userId, startDate, and endDate are required" });
+    }
+
+    // Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    // Set time to start/end of day
+    start.setUTCHours(0, 0, 0, 0);
+    end.setUTCHours(23, 59, 59, 999);
+
+    // Get user details
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Get all timesheets for the user in the date range
+    const timesheets = await Timesheet.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      date: {
+        $gte: start,
+        $lte: end
+      }
+    }).populate('projectId', 'name projectID');
+
+    // Get timesheet statuses for the date range
+    const timesheetStatuses = await TimesheetStatus.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      date: {
+        $gte: start,
+        $lte: end
+      }
+    });
+
+    // Create a map of statuses by date
+    const statusMap = {};
+    timesheetStatuses.forEach(status => {
+      const dateKey = format(new Date(status.date), 'yyyy-MM-dd');
+      statusMap[dateKey] = status.status;
+    });
+
+    // Group timesheets by date and calculate totals
+    const dailyData = {};
+    
+    timesheets.forEach(timesheet => {
+      const dateKey = format(new Date(timesheet.date), 'yyyy-MM-dd');
+      
+      if (!dailyData[dateKey]) {
+        dailyData[dateKey] = {
+          date: timesheet.date,
+          totalTime: 0,
+          projectTime: 0,
+          nonProjectTime: 0,
+          status: statusMap[dateKey] || 'incomplete'
+        };
+      }
+      
+      // Add time based on whether it's project or non-project time
+      if (timesheet.projectId) {
+        dailyData[dateKey].projectTime += timesheet.duration || 0;
+      } else {
+        dailyData[dateKey].nonProjectTime += timesheet.duration || 0;
+      }
+      
+      dailyData[dateKey].totalTime += timesheet.duration || 0;
+    });
+
+    // Convert to array and calculate project percentage
+    const reportData = Object.values(dailyData).map(entry => {
+      const projectPercentage = entry.totalTime > 0 
+        ? (entry.projectTime / entry.totalTime) * 100 
+        : 0;
+      
+      return {
+        date: entry.date,
+        totalTime: entry.totalTime,
+        projectTimePercentage: projectPercentage,
+        status: entry.status
+      };
+    });
+
+    // Sort by date
+    reportData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json(reportData);
+  } catch (error) {
+    console.error("Error generating timesheet report:", error);
     res.status(500).json({ message: error.message });
   }
 });

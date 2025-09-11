@@ -8,6 +8,19 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Breadcrumbs,
+  Link,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid,
+  Alert,
 } from "@mui/material";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
@@ -25,6 +38,9 @@ import { DataGrid } from "@mui/x-data-grid";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
+import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+import PrintIcon from "@mui/icons-material/Print";
+import DateRangeIcon from "@mui/icons-material/DateRange";
 import { useNavigate, useLocation } from "react-router-dom";
 
 const TimesheetReview = () => {
@@ -46,6 +62,173 @@ const TimesheetReview = () => {
   const [dailyStatuses, setDailyStatuses] = useState({});
   const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
   const [error, setError] = useState("");
+
+  // Report modal state
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportUser, setReportUser] = useState("");
+  const [reportStartDate, setReportStartDate] = useState("");
+  const [reportEndDate, setReportEndDate] = useState("");
+  const [reportUsers, setReportUsers] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
+
+  // Handle navigation back to user management
+  const handleBackToUserManagement = () => {
+    navigate("/users");
+  };
+
+  // Handle report modal
+  const handleOpenReportModal = () => {
+    setReportModalOpen(true);
+    setReportError("");
+    // Set default dates to current month
+    const today = new Date();
+    const firstDay = startOfMonth(today);
+    const lastDay = endOfMonth(today);
+    setReportStartDate(format(firstDay, "yyyy-MM-dd"));
+    setReportEndDate(format(lastDay, "yyyy-MM-dd"));
+  };
+
+  const handleCloseReportModal = () => {
+    setReportModalOpen(false);
+    setReportUser("");
+    setReportStartDate("");
+    setReportEndDate("");
+    setReportError("");
+  };
+
+  // Fetch users for report dropdown
+  const fetchReportUsers = async () => {
+    try {
+      const response = await api.get("/users");
+      setReportUsers(response.data || []);
+    } catch (error) {
+      console.error("Error fetching users for report:", error);
+      setReportError("Failed to load users");
+    }
+  };
+
+  // Generate PDF report
+  const generateReport = async () => {
+    if (!reportUser || !reportStartDate || !reportEndDate) {
+      setReportError("Please select a user and date range");
+      return;
+    }
+
+    setReportLoading(true);
+    setReportError("");
+
+    try {
+      // Fetch timesheet data for the selected user and date range
+      const response = await api.get(`/timesheets/report`, {
+        params: {
+          userId: reportUser,
+          startDate: reportStartDate,
+          endDate: reportEndDate,
+        },
+      });
+
+      const timesheetData = response.data || [];
+
+      // Calculate averages
+      const totalTime = timesheetData.reduce(
+        (sum, entry) => sum + (entry.totalTime || 0),
+        0
+      );
+      const totalProjectPercentage = timesheetData.reduce(
+        (sum, entry) => sum + (entry.projectTimePercentage || 0),
+        0
+      );
+      const averageTime =
+        timesheetData.length > 0 ? totalTime / timesheetData.length : 0;
+      const averageProjectPercentage =
+        timesheetData.length > 0
+          ? totalProjectPercentage / timesheetData.length
+          : 0;
+
+      // Format hours and minutes
+      const formatTime = (minutes) => {
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${hours}h ${mins}m`;
+      };
+
+      // Create PDF content
+      const pdfContent = `
+        <html>
+          <head>
+            <title>Timesheet Review Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              h1 { color: #1976d2; text-align: center; }
+              h2 { color: #333; }
+              table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f5f5f5; font-weight: bold; }
+              .summary { background-color: #e3f2fd; padding: 15px; margin: 20px 0; }
+              .summary h3 { margin: 0 0 10px 0; color: #1976d2; }
+            </style>
+          </head>
+          <body>
+            <h1>Timesheet Review Report</h1>
+            <h2>Period: ${format(
+              new Date(reportStartDate),
+              "dd/MM/yyyy"
+            )} - ${format(new Date(reportEndDate), "dd/MM/yyyy")}</h2>
+            
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time Entered</th>
+                  <th>Project %</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${timesheetData
+                  .map(
+                    (entry) => `
+                  <tr>
+                    <td>${format(new Date(entry.date), "dd/MM/yyyy")}</td>
+                    <td>${formatTime(entry.totalTime || 0)}</td>
+                    <td>${(entry.projectTimePercentage || 0).toFixed(1)}%</td>
+                    <td>${entry.status || "N/A"}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+            
+            <div class="summary">
+              <h3>Summary</h3>
+              <p><strong>Average Time Entered:</strong> ${formatTime(
+                averageTime
+              )}</p>
+              <p><strong>Average Project %:</strong> ${averageProjectPercentage.toFixed(
+                1
+              )}%</p>
+              <p><strong>Total Days:</strong> ${timesheetData.length}</p>
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Create and download PDF
+      const printWindow = window.open("", "_blank");
+      printWindow.document.write(pdfContent);
+      printWindow.document.close();
+      printWindow.print();
+
+      handleCloseReportModal();
+    } catch (error) {
+      console.error("Error generating report:", error);
+      setReportError("Failed to generate report. Please try again.");
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   // Add a ref to track the current request
   const currentRequestRef = useRef(null);
@@ -73,6 +256,13 @@ const TimesheetReview = () => {
       setSelectedUserName("");
     }
   }, [location.search]);
+
+  // Fetch users when report modal opens
+  useEffect(() => {
+    if (reportModalOpen) {
+      fetchReportUsers();
+    }
+  }, [reportModalOpen]);
 
   // Update useEffect to handle initial setup and user data loading
   useEffect(() => {
@@ -276,6 +466,7 @@ const TimesheetReview = () => {
     {
       field: "date",
       headerName: "Date",
+      minWidth: 240,
       flex: 1,
       valueGetter: (params) => {
         try {
@@ -313,7 +504,7 @@ const TimesheetReview = () => {
     {
       field: "totalTime",
       headerName: "Time Entered",
-      flex: 1,
+      width: 120,
       valueGetter: (params) => {
         const hours = Math.floor(params.row.totalTime / 60);
         const minutes = params.row.totalTime % 60;
@@ -323,7 +514,7 @@ const TimesheetReview = () => {
     {
       field: "projectTimePercentage",
       headerName: "Project %",
-      flex: 1,
+      width: 100,
       valueGetter: (params) => {
         if (params.row.totalTime === 0) return "0%";
         return `${Math.round(
@@ -334,7 +525,7 @@ const TimesheetReview = () => {
     {
       field: "status",
       headerName: "Status",
-      flex: 1,
+      minWidth: 140,
       renderCell: (params) => {
         const statusColors = {
           incomplete: "warning",
@@ -367,8 +558,8 @@ const TimesheetReview = () => {
               }}
               disabled={params.row.status === "authorized"}
               sx={{
-                backgroundColor: colors.secondary[500],
-                color: colors.grey[100],
+                backgroundColor: "#5A9DA5",
+                color: "colors.grey[100]",
                 fontSize: "0.75rem",
                 padding: "4px 8px",
                 minWidth: "120px",
@@ -391,16 +582,31 @@ const TimesheetReview = () => {
 
   return (
     <Box m="20px">
+      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+        Timesheet Review
+      </Typography>
+
+      <Box sx={{ mt: 4, mb: 4 }}>
+        <Breadcrumbs sx={{ mb: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToUserManagement}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            User Management
+          </Link>
+          <Typography color="text.primary">Timesheet Review</Typography>
+        </Breadcrumbs>
+      </Box>
+
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
         mb="20px"
       >
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          {" "}
-          TIMESHEET REVIEW{" "}
-        </Typography>
         <Box display="flex" alignItems="center" gap={2}>
           <IconButton
             onClick={() => handleMonthChange("prev")}
@@ -418,6 +624,21 @@ const TimesheetReview = () => {
             <ArrowForwardIosIcon />
           </IconButton>
         </Box>
+
+        <Button
+          variant="contained"
+          startIcon={<PrintIcon />}
+          onClick={handleOpenReportModal}
+          sx={{
+            backgroundColor: colors.primary[500],
+            color: colors.grey[100],
+            "&:hover": {
+              backgroundColor: colors.primary[600],
+            },
+          }}
+        >
+          Generate Report
+        </Button>
       </Box>
 
       <Paper
@@ -491,6 +712,126 @@ const TimesheetReview = () => {
           }}
         />
       </Paper>
+
+      {/* Report Generation Modal */}
+      <Dialog
+        open={reportModalOpen}
+        onClose={handleCloseReportModal}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            backgroundColor: colors.primary[500],
+            color: "white",
+          }}
+        >
+          <DateRangeIcon />
+          Generate Timesheet Report
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, py: 3 }}>
+          {reportError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {reportError}
+            </Alert>
+          )}
+
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <FormControl fullWidth required>
+                <InputLabel>Select User</InputLabel>
+                <Select
+                  value={reportUser}
+                  onChange={(e) => setReportUser(e.target.value)}
+                  label="Select User"
+                >
+                  {reportUsers.map((user) => (
+                    <MenuItem key={user._id} value={user._id}>
+                      {user.firstName} {user.lastName} ({user.email})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                label="Start Date"
+                type="date"
+                value={reportStartDate}
+                onChange={(e) => setReportStartDate(e.target.value)}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                required
+              />
+            </Grid>
+
+            <Grid item xs={6}>
+              <TextField
+                fullWidth
+                label="End Date"
+                type="date"
+                value={reportEndDate}
+                onChange={(e) => setReportEndDate(e.target.value)}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                required
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={handleCloseReportModal}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={generateReport}
+            variant="contained"
+            disabled={
+              reportLoading || !reportUser || !reportStartDate || !reportEndDate
+            }
+            startIcon={<PrintIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              backgroundColor: colors.primary[500],
+              "&:hover": {
+                backgroundColor: colors.primary[600],
+              },
+            }}
+          >
+            {reportLoading ? "Generating..." : "Print Report"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
