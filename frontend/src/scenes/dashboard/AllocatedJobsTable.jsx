@@ -11,7 +11,11 @@ const AllocatedJobsTable = () => {
   const { currentUser, loading: authLoading } = useAuth();
 
   // Get project statuses from custom data fields
-  const { activeStatuses, statusColors } = useProjectStatuses();
+  const {
+    activeStatuses,
+    statusColors,
+    loading: statusesLoading,
+  } = useProjectStatuses();
   const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +29,12 @@ const AllocatedJobsTable = () => {
 
   const fetchAllocatedJobs = useCallback(
     async (page = 0, pageSize = 25) => {
-      if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
+      if (
+        authLoading ||
+        statusesLoading ||
+        !currentUser ||
+        !(currentUser._id || currentUser.id)
+      ) {
         return;
       }
 
@@ -34,6 +43,8 @@ const AllocatedJobsTable = () => {
         page,
         pageSize,
         userId: currentUser._id || currentUser.id,
+        activeStatuses: activeStatuses,
+        statusesLoaded: !statusesLoading,
         timestamp: new Date().toISOString(),
       });
 
@@ -79,12 +90,18 @@ const AllocatedJobsTable = () => {
         setLoading(false);
       }
     },
-    [authLoading, currentUser, activeStatuses]
+    [authLoading, statusesLoading, currentUser, activeStatuses]
   );
 
   useEffect(() => {
     fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
-  }, [authLoading, currentUser, paginationModel, fetchAllocatedJobs]);
+  }, [
+    authLoading,
+    statusesLoading,
+    currentUser,
+    paginationModel,
+    fetchAllocatedJobs,
+  ]);
 
   const handlePaginationModelChange = useCallback((newModel) => {
     setPaginationModel(newModel);
@@ -265,7 +282,7 @@ const AllocatedJobsTable = () => {
       <DataGrid
         rows={formattedJobs}
         columns={columns}
-        loading={loading}
+        loading={loading || statusesLoading}
         paginationMode="server"
         rowCount={rowCount}
         paginationModel={paginationModel}
