@@ -52,32 +52,46 @@ const AllocatedJobsTable = () => {
 
       try {
         const apiStartTime = performance.now();
+        // Load all projects since we need to filter client-side
         const response = await projectService.getAssignedToMe({
-          page: page + 1, // Backend uses 1-based pagination
-          limit: pageSize,
-          status: activeStatuses.join(","),
+          page: 1,
+          limit: 10000, // Load all projects
+          // Note: Status filtering is handled client-side, not on the backend
           sortBy: "projectID",
           sortOrder: "desc",
         });
         const apiEndTime = performance.now();
 
-        const projectsData = response.data.data || [];
+        const allProjectsData = response.data.data || [];
+
+        // Filter to show only active projects on the client side
+        const filteredProjects = allProjectsData.filter((project) =>
+          activeStatuses.includes(project.status)
+        );
+
+        // Apply client-side pagination
+        const startIndex = page * pageSize;
+        const endIndex = startIndex + pageSize;
+        const projectsData = filteredProjects.slice(startIndex, endIndex);
+
         const processingEndTime = performance.now();
 
         console.log("✅ ALLOCATED JOBS FETCH COMPLETE", {
           page,
           pageSize,
-          projectCount: projectsData.length,
-          totalCount: response.data.pagination?.total || 0,
+          allProjectsCount: allProjectsData.length,
+          filteredProjectsCount: filteredProjects.length,
+          paginatedProjectsCount: projectsData.length,
+          activeStatuses: activeStatuses,
           apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
           processingTime: `${(processingEndTime - apiEndTime).toFixed(2)}ms`,
           totalTime: `${(processingEndTime - fetchStartTime).toFixed(2)}ms`,
           responseSize: JSON.stringify(response).length,
         });
 
-        // Store raw data, transformation happens in memoized function
+        // Store paginated filtered data
         setJobs(projectsData);
-        setRowCount(response.data.pagination?.total || 0);
+        setRowCount(filteredProjects.length);
       } catch (err) {
         console.error("❌ ALLOCATED JOBS FETCH ERROR", {
           page,
