@@ -485,10 +485,7 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = filtersToUse.departmentFilter;
         }
 
-        // Add status filter
-        if (filtersToUse.statusFilter !== "all") {
-          params.status = filtersToUse.statusFilter;
-        }
+        // Note: Status filtering is handled client-side, not on the backend
 
         const apiStartTime = performance.now();
         const response = await projectService.getAll(params);
@@ -585,10 +582,7 @@ const Projects = ({ initialFilters = {} }) => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // Add status filter
-          if (updatedFilters.statusFilter !== "all") {
-            params.status = updatedFilters.statusFilter;
-          }
+          // Note: Status filtering is handled client-side, not on the backend
 
           const response = await projectService.getAll(params);
 
@@ -1199,10 +1193,7 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = departmentValue;
         }
 
-        // Handle status filters
-        if (tempFilters.statusFilter !== "all") {
-          params.status = tempFilters.statusFilter;
-        }
+        // Note: Status filtering is handled client-side, not on the backend
 
         const response = await projectService.getAll(params);
 
@@ -1612,11 +1603,19 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Client-side filtering for live status updates
   const filteredProjects = useMemo(() => {
+    console.log("Filtering projects:", {
+      totalProjects: projects.length,
+      statusFilter: filters.statusFilter,
+      activeStatuses: activeStatuses,
+      inactiveStatuses: inactiveStatuses,
+    });
+
     if (filters.statusFilter === "all") {
+      console.log("Showing all projects:", projects.length);
       return projects;
     }
 
-    return projects.filter((project) => {
+    const filtered = projects.filter((project) => {
       const projectStatus = project.status;
 
       // Handle active/inactive filter categories
@@ -1631,6 +1630,14 @@ const Projects = ({ initialFilters = {} }) => {
       // Handle specific status filters
       return projectStatus === filters.statusFilter;
     });
+
+    console.log("Filtered projects:", {
+      statusFilter: filters.statusFilter,
+      filteredCount: filtered.length,
+      totalCount: projects.length,
+    });
+
+    return filtered;
   }, [projects, filters.statusFilter, activeStatuses, inactiveStatuses]);
 
   // Show UI immediately, data will load in background
