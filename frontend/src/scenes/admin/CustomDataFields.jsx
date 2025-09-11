@@ -31,6 +31,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
+import projectStatusService from "../../services/projectStatusService";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 
 // Tab panel component
@@ -330,22 +331,72 @@ const CustomDataFields = () => {
           updateData.statusColor = newStatusColor;
         }
 
-        // For now, we'll just update in local state since the new structure requires different handling
-        // TODO: Implement proper update in the new grouped structure
-        const updatedItem = { ...editingItem, ...updateData };
-        const updatedData = data.map((item) =>
-          item._id === editingItem._id ? updatedItem : item
-        );
-        setter(updatedData);
-
-        // Refresh project statuses context if we're updating a project status
+        // For project statuses, update the backend group
         if (title === "Projects Status") {
-          refreshStatuses();
-        }
+          try {
+            // Get the current project status group
+            const group = await customDataFieldGroupService.getGroupByType(
+              "project_status"
+            );
 
-        showSnackbar(
-          `${title} updated in display (backend update not yet implemented in new structure)`
-        );
+            if (!group) {
+              showSnackbar("Project status group not found", "error");
+              return;
+            }
+
+            // Update the specific field in the group's fields array
+            const updatedFields = group.fields.map((field) => {
+              if (field._id.toString() === editingItem._id.toString()) {
+                return {
+                  ...field,
+                  ...updateData,
+                  updatedAt: new Date(),
+                };
+              }
+              return field;
+            });
+
+            // Update the group with the new fields array
+            await customDataFieldGroupService.updateGroup(group._id, {
+              name: group.name,
+              description: group.description,
+              fields: updatedFields,
+            });
+
+            // Update local state
+            const updatedItem = { ...editingItem, ...updateData };
+            const updatedData = data.map((item) =>
+              item._id === editingItem._id ? updatedItem : item
+            );
+            setter(updatedData);
+
+            // Refresh project statuses context
+            refreshStatuses();
+
+            // Update hardcoded colors when status color is changed
+            if (updateData.statusColor) {
+              const colorUpdate = {
+                [updatedItem.text]: updateData.statusColor,
+              };
+              projectStatusService.updateHardcodedColors(colorUpdate);
+            }
+
+            showSnackbar(`${title} updated successfully`);
+          } catch (error) {
+            console.error(`Error updating ${title} in backend:`, error);
+            showSnackbar(`Failed to update ${title} in backend`, "error");
+            return;
+          }
+        } else {
+          // For other types, just update local state
+          const updatedItem = { ...editingItem, ...updateData };
+          const updatedData = data.map((item) =>
+            item._id === editingItem._id ? updatedItem : item
+          );
+          setter(updatedData);
+
+          showSnackbar(`${title} updated in display`);
+        }
       } catch (error) {
         console.error(`Error updating ${title} in display:`, error);
         showSnackbar(`Failed to update ${title} in display`, "error");
@@ -372,26 +423,80 @@ const CustomDataFields = () => {
           newItemData.statusColor = newStatusColor;
         }
 
-        // For now, we'll just add to local state since the new structure requires different handling
-        // TODO: Implement proper creation in the new grouped structure
-        const newItem = {
-          _id: Date.now().toString(), // Temporary ID
-          ...newItemData,
-          isActive: true,
-          createdBy: { firstName: "User", lastName: "User" },
-          createdAt: new Date(),
-        };
-        const updatedData = [...data, newItem];
-        setter(updatedData);
-
-        // Refresh project statuses context if we're adding a project status
+        // For project statuses, add to the backend group
         if (title === "Projects Status") {
-          refreshStatuses();
-        }
+          try {
+            // Get the current project status group
+            const group = await customDataFieldGroupService.getGroupByType(
+              "project_status"
+            );
 
-        showSnackbar(
-          `${title} added to display (backend creation not yet implemented in new structure)`
-        );
+            if (!group) {
+              showSnackbar("Project status group not found", "error");
+              return;
+            }
+
+            // Create new field with proper structure
+            const newField = {
+              text: newItemData.text,
+              isActiveStatus: newItemData.isActiveStatus,
+              statusColor: newItemData.statusColor,
+              order: group.fields.length, // Add to end
+              isActive: true,
+              createdBy: "currentUser", // This will be replaced by the backend
+              createdAt: new Date(),
+            };
+
+            // Add the new field to the group's fields array
+            const updatedFields = [...group.fields, newField];
+
+            // Update the group with the new fields array
+            await customDataFieldGroupService.updateGroup(group._id, {
+              name: group.name,
+              description: group.description,
+              fields: updatedFields,
+            });
+
+            // Create new item for local state
+            const newItem = {
+              _id: Date.now().toString(), // Temporary ID
+              ...newItemData,
+              isActive: true,
+              createdBy: { firstName: "User", lastName: "User" },
+              createdAt: new Date(),
+            };
+            const updatedData = [...data, newItem];
+            setter(updatedData);
+
+            // Refresh project statuses context
+            refreshStatuses();
+
+            // Update hardcoded colors when new status color is added
+            if (newItemData.statusColor) {
+              const colorUpdate = { [newItem.text]: newItemData.statusColor };
+              projectStatusService.updateHardcodedColors(colorUpdate);
+            }
+
+            showSnackbar(`${title} added successfully`);
+          } catch (error) {
+            console.error(`Error adding ${title} to backend:`, error);
+            showSnackbar(`Failed to add ${title} to backend`, "error");
+            return;
+          }
+        } else {
+          // For other types, just add to local state
+          const newItem = {
+            _id: Date.now().toString(), // Temporary ID
+            ...newItemData,
+            isActive: true,
+            createdBy: { firstName: "User", lastName: "User" },
+            createdAt: new Date(),
+          };
+          const updatedData = [...data, newItem];
+          setter(updatedData);
+
+          showSnackbar(`${title} added to display`);
+        }
       } catch (error) {
         console.error(`Error adding new ${title} to display:`, error);
         showSnackbar(`Failed to add new ${title} to display`, "error");
@@ -557,7 +662,7 @@ const CustomDataFields = () => {
                 <Typography variant="h6" sx={{ fontWeight: "bold" }}>
                   Active Statuses
                 </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                <Typography variant="body2" sx={{ color: "white" }}>
                   {activeStatuses.length} status
                   {activeStatuses.length !== 1 ? "es" : ""}
                 </Typography>
@@ -643,7 +748,7 @@ const CustomDataFields = () => {
                 <Typography variant="h6" sx={{ fontWeight: "bold" }}>
                   Inactive Statuses
                 </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                <Typography variant="body2" sx={{ color: "white" }}>
                   {inactiveStatuses.length} status
                   {inactiveStatuses.length !== 1 ? "es" : ""}
                 </Typography>

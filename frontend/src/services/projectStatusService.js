@@ -5,6 +5,24 @@ let statusCache = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Hardcoded status colors - these can be updated dynamically
+let hardcodedStatusColors = {
+  // Active statuses
+  "Assigned": "#1976d2", // Blue
+  "In progress": "#ed6c02", // Orange
+  "Samples submitted": "#9c27b0", // Purple
+  "Lab Analysis Complete": "#2e7d32", // Green
+  "Report sent for review": "#d32f2f", // Red
+  "Ready for invoicing": "#7b1fa2", // Deep Purple
+  "Invoice sent": "#388e3c", // Dark Green
+  "Quote sent": "#1976d2", // Blue
+  
+  // Inactive statuses
+  "Job complete": "#424242", // Grey
+  "On hold": "#f57c00", // Dark Orange
+  "Cancelled": "#d32f2f", // Red
+};
+
 const projectStatusService = {
   // Get all project statuses from custom data fields
   async getAllStatuses() {
@@ -137,20 +155,52 @@ const projectStatusService = {
     lastFetchTime = 0;
   },
 
-  // Get status color (maintains compatibility with existing color system)
+  // Get status color from hardcoded colors
   getStatusColor(status) {
-    const statusColors = {
-      "In progress": "#ff9800", // Orange
-      "Report sent for review": "#9c27b0", // Purple
-      "Ready for invoicing": "#795548", // Brown
-      "Invoice sent": "#607d8b", // Blue Grey
-      "Job complete": "#4caf50", // Green
-      "On hold": "#ff9800", // Orange
-      "Quote sent": "#2196f3", // Blue
-      "Cancelled": "#f44336", // Red
-    };
-    return statusColors[status] || "#757575"; // Default grey
+    return hardcodedStatusColors[status] || "#1976d2"; // Default Material-UI primary blue
+  },
+
+  // Get all hardcoded status colors
+  getAllHardcodedColors() {
+    return { ...hardcodedStatusColors };
+  },
+
+  // Update hardcoded colors when they're changed in admin interface
+  updateHardcodedColors(updatedColors) {
+    console.log('Updating hardcoded status colors:', updatedColors);
+    
+    // Update the hardcoded colors object
+    hardcodedStatusColors = { ...hardcodedStatusColors, ...updatedColors };
+    
+    // Store in localStorage for persistence across page reloads
+    try {
+      localStorage.setItem('statusColors', JSON.stringify(hardcodedStatusColors));
+    } catch (error) {
+      console.warn('Failed to save status colors to localStorage:', error);
+    }
+    
+    // Clear the status cache to force a refresh
+    this.clearCache();
+    
+    console.log('Hardcoded status colors updated successfully');
+  },
+
+  // Load hardcoded colors from localStorage on initialization
+  loadHardcodedColors() {
+    try {
+      const savedColors = localStorage.getItem('statusColors');
+      if (savedColors) {
+        const parsedColors = JSON.parse(savedColors);
+        hardcodedStatusColors = { ...hardcodedStatusColors, ...parsedColors };
+        console.log('Loaded status colors from localStorage:', parsedColors);
+      }
+    } catch (error) {
+      console.warn('Failed to load status colors from localStorage:', error);
+    }
   }
 };
+
+// Initialize hardcoded colors from localStorage on module load
+projectStatusService.loadHardcodedColors();
 
 export default projectStatusService;
