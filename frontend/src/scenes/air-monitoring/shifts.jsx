@@ -26,6 +26,7 @@ import {
   projectService,
   clientService,
 } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useAuth } from "../../context/AuthContext";
@@ -155,7 +156,15 @@ const Shifts = () => {
     const fetchAll = async () => {
       try {
         setLoading(true);
-        const jobResponse = await jobService.getById(jobId);
+        // Try to fetch as asbestos removal job first, fallback to air monitoring job
+        let jobResponse;
+        try {
+          jobResponse = await asbestosRemovalJobService.getById(jobId);
+        } catch (error) {
+          console.log("Not an asbestos removal job, trying air monitoring job");
+          jobResponse = await jobService.getById(jobId);
+        }
+
         if (jobResponse.data && jobResponse.data.projectId) {
           setProjectDetails(jobResponse.data.projectId);
         }
@@ -203,6 +212,7 @@ const Shifts = () => {
         endTime: "16:00",
         supervisor: currentUser._id,
         status: "ongoing",
+        descriptionOfWorks: "",
       };
 
       const response = await shiftService.create(shiftData);
@@ -691,21 +701,15 @@ const Shifts = () => {
         <Link
           component="button"
           variant="body1"
-          onClick={() => navigate("/asbestos-removal")}
+          onClick={() => navigate(`/asbestos-removal/jobs/${jobId}/details`)}
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
           <ArrowBackIcon sx={{ mr: 1 }} />
-          Asbestos Removal
+          Asbestos Removal Job Details
         </Link>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={() => navigate("/air-monitoring")}
-          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-        >
-          Air Monitoring
-        </Link>
-        <Typography color="text.primary">Shifts</Typography>
+        <Typography color="text.primary">
+          Shifts - {projectDetails?.projectID || "Loading..."}
+        </Typography>
       </Breadcrumbs>
 
       <Box

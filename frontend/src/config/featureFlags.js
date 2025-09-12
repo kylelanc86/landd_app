@@ -30,7 +30,7 @@ export const FEATURE_FLAGS = {
     CUSTOM_DATA_FIELDS: true,
     INVOICE_ITEMS: true,
     USER_MANAGEMENT: true,
-    TEMPLATE_MANAGEMENT: false, // Report templates
+    TEMPLATE_MANAGEMENT: true, // Report templates
   },
 };
 

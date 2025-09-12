@@ -30,6 +30,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import MicIcon from "@mui/icons-material/Mic";
 import DownloadIcon from "@mui/icons-material/Download";
 import { sampleService, shiftService } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import { formatDate, formatTime } from "../../utils/dateUtils";
 
 const SampleList = () => {
@@ -43,6 +44,7 @@ const SampleList = () => {
   const [shift, setShift] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [job, setJob] = useState(null);
   const [isCompleteDisabled, setIsCompleteDisabled] = useState(true);
   const [nextSampleNumber, setNextSampleNumber] = useState(null);
   const [descriptionOfWorks, setDescriptionOfWorks] = useState("");
@@ -97,7 +99,38 @@ const SampleList = () => {
       try {
         setLoading(true);
         const shiftResponse = await shiftService.getById(shiftId);
+        console.log("Shift response data:", shiftResponse.data);
         setShift(shiftResponse.data);
+
+        // Fetch job data if available
+        const jobId = shiftResponse.data?.job?._id || shiftResponse.data?.job;
+        if (jobId) {
+          console.log("Attempting to fetch job with ID:", jobId);
+          try {
+            const jobResponse = await asbestosRemovalJobService.getById(jobId);
+            console.log("Job response data:", jobResponse.data);
+            setJob(jobResponse.data);
+          } catch (error) {
+            console.log("Could not fetch job data:", error);
+            // Try to fetch as air monitoring job as fallback
+            try {
+              const { jobService } = await import("../../services/api");
+              const airMonitoringJobResponse = await jobService.getById(jobId);
+              console.log(
+                "Air monitoring job response data:",
+                airMonitoringJobResponse.data
+              );
+              setJob(airMonitoringJobResponse.data);
+            } catch (airMonitoringError) {
+              console.log(
+                "Could not fetch air monitoring job data either:",
+                airMonitoringError
+              );
+            }
+          }
+        } else {
+          console.log("No job ID found in shift data");
+        }
 
         const samplesResponse = await sampleService.getByShift(shiftId);
         setSamples(samplesResponse.data || []);
@@ -387,9 +420,17 @@ const SampleList = () => {
 
   const saveDescriptionOfWorks = async () => {
     try {
-      await shiftService.update(shiftId, { descriptionOfWorks });
+      console.log("Saving description of works:", {
+        shiftId,
+        descriptionOfWorks,
+      });
+      const response = await shiftService.update(shiftId, {
+        descriptionOfWorks,
+      });
+      console.log("Save response:", response);
       setDescSaveStatus("Saved");
     } catch (err) {
+      console.error("Error saving description of works:", err);
       setDescSaveStatus("Error");
     }
   };
@@ -474,56 +515,45 @@ const SampleList = () => {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() =>
-          navigate(`/air-monitoring/jobs/${shift?.job?._id}/shifts`)
-        }
-        sx={{ mb: 4 }}
-      >
-        Back to Shifts
-      </Button>
-
       {/* Breadcrumbs */}
       <Breadcrumbs sx={{ marginBottom: 3 }}>
         <Link
           component="button"
           variant="body1"
-          onClick={() => navigate("/asbestos-removal")}
+          onClick={() => {
+            const jobId = shift?.job?._id || shift?.job;
+            if (jobId) {
+              navigate(`/asbestos-removal/jobs/${jobId}/details`);
+            } else {
+              navigate("/asbestos-removal");
+            }
+          }}
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
           <ArrowBackIcon sx={{ mr: 1 }} />
-          Asbestos Removal
-        </Link>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={() => navigate("/air-monitoring")}
-          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-        >
-          Air Monitoring
-        </Link>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={() =>
-            navigate(`/air-monitoring/jobs/${shift?.job?._id}/shifts`)
-          }
-          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-        >
-          Shifts
+          {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
+          {job?.projectName || job?.name || "Loading..."} - Shifts
         </Link>
         <Typography color="text.primary">Samples</Typography>
       </Breadcrumbs>
-
+      <Typography
+        variant="h4"
+        sx={{
+          color:
+            theme.palette.mode === "dark"
+              ? "#fff"
+              : theme.palette.secondary[200],
+          mb: 4,
+        }}
+      >
+        {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
+        {job?.projectName || job?.name || "Loading..."}-{" "}
+        {shift?.name ? `${formatDate(shift.date)}` : "Loading..."}
+      </Typography>
       {/* Description of Works Field */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h6" sx={{ mb: 1 }}>
           Description of Works
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Type your description or click the microphone icon to dictate. Speak
-          clearly and naturally for best results.
         </Typography>
         <TextField
           fullWidth
@@ -619,21 +649,6 @@ const SampleList = () => {
           )}
         </Box>
       </Box>
-
-      <Typography
-        variant="h4"
-        sx={{
-          color:
-            theme.palette.mode === "dark"
-              ? "#fff"
-              : theme.palette.secondary[200],
-          mb: 4,
-        }}
-      >
-        Samples for{" "}
-        {shift?.name ? `Shift ${formatDate(shift.date)}` : "Loading..."}
-      </Typography>
-
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -757,19 +772,6 @@ const SampleList = () => {
           "shift_complete",
         ].includes(shift?.status) && (
           <>
-            {isCompleteDisabled && shift?.status === "ongoing" && (
-              <Typography
-                variant="body2"
-                color="warning.main"
-                sx={{
-                  alignSelf: "center",
-                  mr: 2,
-                  fontStyle: "italic",
-                }}
-              >
-                Complete all sample data before marking sampling complete
-              </Typography>
-            )}
             <Button
               variant="contained"
               color="primary"

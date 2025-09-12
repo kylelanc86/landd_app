@@ -3,7 +3,12 @@ const mongoose = require('mongoose');
 const shiftSchema = new mongoose.Schema({
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AirMonitoringJob',
+    refPath: 'jobModel',
+    required: true
+  },
+  jobModel: {
+    type: String,
+    enum: ['AirMonitoringJob', 'AsbestosRemovalJob'],
     required: true
   },
   name: {
@@ -67,7 +72,7 @@ const shiftSchema = new mongoose.Schema({
   },
   descriptionOfWorks: {
     type: String,
-    required: false
+    required: true
   },
   notes: {
     type: String

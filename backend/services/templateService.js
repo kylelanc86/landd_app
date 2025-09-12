@@ -256,6 +256,7 @@ const replacePlaceholders = async (content, data) => {
   // Look up user's Asbestos Assessor licence number and signature
   let laaLicenceNumber = 'AA00031'; // Default fallback
   let userSignature = null;
+  let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
   
   // Handle both clearance (LAA) and assessment (assessorId) user lookups
   let userIdentifier = data.LAA || data.assessorId;
@@ -286,15 +287,18 @@ const replacePlaceholders = async (content, data) => {
         const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
         console.log('[TEMPLATE SERVICE] Is valid ObjectId:', isValidObjectId);
         
-        const queryConditions = [
-          { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
-          { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
-          { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
-        ];
+        let queryConditions = [];
         
-        // Only add ObjectId condition if it's a valid ObjectId
+        // If it's a valid ObjectId, prioritize direct ID lookup
         if (isValidObjectId) {
-          queryConditions.push({ _id: userIdentifier });
+          queryConditions = [{ _id: userIdentifier }];
+        } else {
+          // Fallback to name-based lookup for backward compatibility
+          queryConditions = [
+            { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
+            { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
+            { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
+          ];
         }
         
         console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
@@ -311,6 +315,9 @@ const replacePlaceholders = async (content, data) => {
           console.log('[TEMPLATE SERVICE] Found user:', user.firstName, user.lastName);
           console.log('[TEMPLATE SERVICE] User signature exists:', !!user.signature);
           console.log('[TEMPLATE SERVICE] User licences:', user.licences?.length || 0);
+          
+          // Update LAA name with actual user name from database
+          laaName = `${user.firstName} ${user.lastName}`;
           
           // Get user's signature
           if (user.signature) {
@@ -357,8 +364,8 @@ const replacePlaceholders = async (content, data) => {
     '{SITE_NAME}': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
     '[SITE_NAME]': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
     '{ASBESTOS_REMOVALIST}': data.asbestosRemovalist || 'Unknown Removalist',
-    '{LAA_NAME}': data.LAA || data.laaName || 'Unknown LAA',
-    '[LAA_NAME]': data.LAA || data.laaName || 'Unknown LAA',
+    '{LAA_NAME}': laaName,
+    '[LAA_NAME]': laaName,
     '{LAA_LICENSE}': laaLicenceNumber,
     '[LAA_LICENCE]': laaLicenceNumber,
     '{ASSESSMENT_DATE}': data.assessmentDate 

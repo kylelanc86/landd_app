@@ -18,12 +18,8 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import {
-  sampleService,
-  shiftService,
-  jobService,
-  userService,
-} from "../../services/api";
+import { sampleService, shiftService, userService } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import airPumpService from "../../services/airPumpService";
 import { equipmentService } from "../../services/equipmentService";
 import { useAuth } from "../../context/AuthContext";
@@ -289,7 +285,9 @@ const NewSample = () => {
         // Fetch job details
         if (response.data.job?._id) {
           try {
-            const jobResponse = await jobService.getById(response.data.job._id);
+            const jobResponse = await asbestosRemovalJobService.getById(
+              response.data.job._id
+            );
             setJob(jobResponse.data);
           } catch (error) {
             console.error("Error fetching job details:", error);

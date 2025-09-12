@@ -39,15 +39,15 @@ const AdminDashboard = () => {
       requiredPermission: "users.view",
       color: "#1976d2",
     },
-    // {
-    //   id: "report-templates",
-    //   title: "Report Templates",
-    //   description: "Manage standardized content for different report types",
-    //   icon: <AssessmentIcon />,
-    //   path: "/admin/report-templates",
-    //   requiredPermission: "admin.view",
-    //   color: "#2e7d32",
-    // },
+    {
+      id: "report-templates",
+      title: "Report Templates",
+      description: "Manage standardized content for different report types",
+      icon: <AssessmentIcon />,
+      path: "/admin/report-templates",
+      requiredPermission: "admin.view",
+      color: "#2e7d32",
+    },
     {
       id: "invoice-items",
       title: "Invoice Items",
@@ -91,7 +91,7 @@ const AdminDashboard = () => {
         <Box sx={{ mt: 4 }}>
           <Grid container spacing={4}>
             {adminModules.map((module) => (
-              <Grid item xs={12} md={6} lg={6} key={module.id}>
+              <Grid item xs={12} md={4} lg={4} key={module.id}>
                 <Card
                   sx={{
                     height: "100%",

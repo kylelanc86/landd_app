@@ -21,20 +21,22 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
 // Get shifts by job ID
 router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    // First check if the job exists
-    const job = await mongoose.model('AirMonitoringJob').findById(req.params.jobId);
-    if (!job) {
+    // Check if the job exists in either AirMonitoringJob or AsbestosRemovalJob
+    const airMonitoringJob = await mongoose.model('AirMonitoringJob').findById(req.params.jobId);
+    const asbestosRemovalJob = await mongoose.model('AsbestosRemovalJob').findById(req.params.jobId);
+    
+    if (!airMonitoringJob && !asbestosRemovalJob) {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    // Then fetch the shifts
+    // Fetch the shifts for this job
     const shifts = await Shift.find({ job: req.params.jobId })
       .populate({
         path: 'job',
-        select: 'jobID name projectId status asbestosRemovalist description',
+        select: 'jobID name projectId status asbestosRemovalist description projectName client',
         populate: {
-                  path: 'projectId',
-        select: 'projectID name'
+          path: 'projectId',
+          select: 'projectID name'
         }
       })
       .populate('samples');
@@ -67,10 +69,10 @@ router.get('/:id', auth, async (req, res) => {
     const shift = await Shift.findById(req.params.id)
       .populate({
         path: 'job',
-        select: 'jobID name projectId status asbestosRemovalist description',
+        select: 'jobID name projectId status asbestosRemovalist description projectName client',
         populate: {
-                  path: 'projectId',
-        select: 'projectID name'
+          path: 'projectId',
+          select: 'projectID name'
         }
       })
       .populate('supervisor', 'firstName lastName');
@@ -97,10 +99,16 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
 // Update a shift
 router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']), async (req, res) => {
   try {
+    console.log('PATCH /shifts/:id - Request body:', req.body);
+    console.log('PATCH /shifts/:id - Shift ID:', req.params.id);
+    
     const shift = await Shift.findById(req.params.id);
     if (!shift) {
+      console.log('Shift not found:', req.params.id);
       return res.status(404).json({ message: 'Shift not found' });
     }
+    
+    console.log('Found shift:', shift._id);
 
     // Only update the fields that are provided in the request
     const allowedUpdates = [
@@ -127,11 +135,30 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
     for (const [key, value] of Object.entries(updates)) {
       shift[key] = value;
     }
+    
+    // Ensure descriptionOfWorks is set (for existing shifts that might not have it)
+    if (!shift.descriptionOfWorks) {
+      shift.descriptionOfWorks = "";
+    }
+    
+    // Ensure jobModel is set (for existing shifts that might not have it)
+    if (!shift.jobModel) {
+      shift.jobModel = "AsbestosRemovalJob"; // Default to AsbestosRemovalJob since we're phasing out AirMonitoringJob
+    }
+    
+    console.log('Shift before validation:', {
+      _id: shift._id,
+      descriptionOfWorks: shift.descriptionOfWorks,
+      status: shift.status,
+      job: shift.job,
+      jobModel: shift.jobModel
+    });
 
     try {
       // Validate the document before saving
       const validationError = shift.validateSync();
       if (validationError) {
+        console.log('Validation error:', validationError);
         return res.status(400).json({ 
           message: 'Validation error updating shift',
           details: validationError.message,

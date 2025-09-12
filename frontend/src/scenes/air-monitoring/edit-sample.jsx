@@ -17,12 +17,8 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import {
-  sampleService,
-  shiftService,
-  jobService,
-  userService,
-} from "../../services/api";
+import { sampleService, shiftService, userService } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import airPumpService from "../../services/airPumpService";
 import { equipmentService } from "../../services/equipmentService";
 import { useAuth } from "../../context/AuthContext";
@@ -128,7 +124,9 @@ const EditSample = () => {
           setProjectID(sampleData.job.projectId.projectID);
         } else {
           // If project is not populated, fetch the job to get project details
-          const jobResponse = await jobService.getById(sampleData.job);
+          const jobResponse = await asbestosRemovalJobService.getById(
+            sampleData.job
+          );
           if (jobResponse.data && jobResponse.data.projectId) {
             setProjectID(jobResponse.data.projectId.projectID);
           }
