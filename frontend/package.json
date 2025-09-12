@@ -51,7 +51,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false REACT_APP_VERSION=$npm_package_version react-scripts build",
+    "build:dev": "GENERATE_SOURCEMAP=false REACT_APP_VERSION=$npm_package_version-dev react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "postbuild": "echo 'Build completed successfully' && ls -la build/ && ls -la build/static/js/ 2>/dev/null || echo 'No static/js directory found'"

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Branch Management Guide</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: Consolas, monospace;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        .command {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Git Branch Management Guide for Your Web App</h1>
+    <p>This guide outlines how to manage your Git branches for handling minor fixes on the live app (deployed from <code>main</code>) and developing new features or large improvements on the <code>development</code> branch. The <code>hotfix</code> branch is used for quick, minor fixes to avoid disrupting ongoing development work.</p>
+    
+    <p><strong>Assumptions:</strong></p>
+    <ul>
+        <li>Your remote repository is named <code>origin</code> (adjust if different).</li>
+        <li>Render auto-deploys from <code>main</code>, so pushes to <code>main</code> trigger deployments.</li>
+        <li><code>development</code> is already up-to-date with <code>main</code>.</li>
+        <li>Always pull the latest changes before starting work to avoid conflicts.</li>
+    </ul>
+
+    <h2>1. Handling Minor Fixes for the Live App (Using Hotfix Branch)</h2>
+    <p>For small bug fixes or minor updates that need to go live quickly without waiting for the full development cycle:</p>
+    
+    <h3>Step-by-Step Process:</h3>
+    <ol>
+        <li><strong>Update your local main branch:</strong> Ensure you're starting from the latest production code.</li>
+        <pre><code><span class="command">git checkout main</span>  # Switches to the main branch locally
+<span class="command">git pull origin main</span>  # Fetches and merges the latest changes from the remote main branch</code></pre>
+        
+        <li><strong>Create or switch to the hotfix branch:</strong> If the hotfix branch doesn't exist, create it from main. If it does, update it.</li>
+        <pre><code><span class="command">git checkout -b hotfix</span>  # Creates and switches to a new hotfix branch from main
+# OR
+<span class="command">git checkout hotfix</span>  # Switches to the existing hotfix branch
+<span class="command">git pull origin hotfix</span>  # Fetches and merges the latest changes from the remote hotfix branch</code></pre>
+        
+        <li><strong>Make your changes:</strong> Edit files and test locally.</li>
+        
+        <li><strong>Commit your changes:</strong> Save your changes with a descriptive message.</li>
+        <pre><code><span class="command">git add .</span>  # Stages all modified and new files for commit
+<span class="command">git commit -m "Fix: [brief description of the fix]"</span>  # Commits staged changes with a message</code></pre>
+        
+        <li><strong>Push the hotfix branch to remote:</strong> (Optional, for collaboration or backup).</li>
+        <pre><code><span class="command">git push origin hotfix</span>  # Pushes the local hotfix branch to the remote repository</code></pre>
+        
+        <li><strong>Merge hotfix into main:</strong> This will deploy the fix via Render.</li>
+        <pre><code><span class="command">git checkout main</span>  # Switches back to the main branch
+<span class="command">git merge hotfix</span>  # Merges changes from hotfix into main
+<span class="command">git push origin main</span>  # Pushes updated main branch to remote, triggering Render deployment</code></pre>
+        
+        <li><strong>Merge hotfix into development:</strong> To keep development in sync and avoid future merge conflicts.</li>
+        <pre><code><span class="command">git checkout development</span>  # Switches to the development branch
+<span class="command">git pull origin development</span>  # Fetches and merges the latest changes from remote development
+<span class="command">git merge hotfix</span>  # Merges hotfix changes into development
+<span class="command">git push origin development</span>  # Pushes updated development branch to remote</code></pre>
+        
+        <li><strong>Delete or reset hotfix if needed:</strong> After merging, you can delete the branch or keep it for future hotfixes.</li>
+        <pre><code><span class="command">git branch -d hotfix</span>  # Deletes the local hotfix branch
+<span class="command">git push origin --delete hotfix</span>  # Deletes the remote hotfix branch</code></pre>
+    </ol>
+    
+    <p><strong>Best Practices for Hotfixes:</strong></p>
+    <ul>
+        <li>Keep changes small and isolated to minimize risks.</li>
+        <li>Test thoroughly locally before merging to main.</li>
+        <li>If conflicts arise during merge, resolve them carefully.</li>
+    </ul>
+
+    <h2>2. Developing New Features or Large Improvements (Using Development Branch)</h2>
+    <p>For adding new features, refactoring, or major changes that shouldn't go live immediately:</p>
+    
+    <h3>Step-by-Step Process:</h3>
+    <ol>
+        <li><strong>Update your local development branch:</strong> Start from the latest code.</li>
+        <pre><code><span class="command">git checkout development</span>  # Switches to the development branch
+<span class="command">git pull origin development</span>  # Fetches and merges the latest changes from remote development</code></pre>
+        
+        <li><strong>Create a feature branch (optional but recommended):</strong> For better organization, especially if working on multiple features. Name it descriptively, e.g., <code>feature/new-login-system</code>.</li>
+        <pre><code><span class="command">git checkout -b feature/[feature-name]</span>  # Creates and switches to a new feature branch</code></pre>
+        
+        <li><strong>Make your changes:</strong> Develop, test, and iterate.</li>
+        
+        <li><strong>Commit your changes:</strong> Commit often with meaningful messages.</li>
+        <pre><code><span class="command">git add .</span>  # Stages all modified and new files
+<span class="command">git commit -m "Add: [brief description]"</span>  # Commits staged changes with a message</code></pre>
+        
+        <li><strong>Push the feature branch to remote:</strong> (For backup or collaboration).</li>
+        <pre><code><span class="command">git push origin feature/[feature-name]</span>  # Pushes the feature branch to the remote repository</code></pre>
+        
+        <li><strong>Merge feature into development:</strong> Once the feature is ready and tested.</li>
+        <pre><code><span class="command">git checkout development</span>  # Switches to the development branch
+<span class="command">git merge feature/[feature-name]</span>  # Merges feature branch changes into development
+<span class="command">git push origin development</span>  # Pushes updated development branch to remote</code></pre>
+        
+        <li><strong>Delete the feature branch:</strong> Clean up after merging.</li>
+        <pre><code><span class="command">git branch -d feature/[feature-name]</span>  # Deletes the local feature branch
+<span class="command">git push origin --delete feature/[feature-name]</span>  # Deletes the remote feature branch</code></pre>
+        
+        <li><strong>When ready to deploy:</strong> Merge development into main to trigger Render deployment. Do this only after thorough testing.</li>
+        <pre><code><span class="command">git checkout main</span>  # Switches to the main branch
+<span class="command">git pull origin main</span>  # Fetches and merges the latest changes from remote main
+<span class="command">git merge development</span>  # Merges development changes into main
+<span class="command">git push origin main</span>  # Pushes updated main branch to remote, triggering deployment</code></pre>
+    </ol>
+    
+    <p><strong>Best Practices for Development:</strong></p>
+    <ul>
+        <li>Use feature branches to isolate work and make pull requests if collaborating.</li>
+        <li>Regularly merge hotfixes or main into development to stay in sync: <code>git merge main</code> while on development.</li>
+        <li>Test extensively before merging to main to avoid breaking the live app.</li>
+        <li>Consider using Git tags for releases, e.g., <code>git tag v1.0.1; git push origin v1.0.1</code>.</li>
+    </ul>
+
+    <h2>General Tips</h2>
+    <ul>
+        <li><strong>Resolve Conflicts:</strong> If merges cause conflicts, use <code>git status</code> (shows conflicted files) and edit files manually, then <code>git add</code> and <code>git commit</code>.</li>
+        <li><strong>Undo Mistakes:</strong> Use <code>git revert [commit-hash]</code> to undo a commit or <code>git reset</code> carefully to rewind changes.</li>
+        <li><strong>View Branch Status:</strong> <code>git branch -a</code> lists all branches; <code>git log --graph --oneline --all</code> shows a visual commit history.</li>
+        <li>Always back up your work by pushing to remote.</li>
+    </ul>
+    
+    <p>If you encounter issues, refer to the official Git documentation or tools like GitHub Desktop for a GUI alternative.</p>
+</body>
+</html>

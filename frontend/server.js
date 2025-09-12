@@ -31,14 +31,31 @@ if (fs.existsSync(buildPath)) {
   }
 }
 
-// Helper function to set proper headers
+// Helper function to set proper headers with cache control
 const setStaticHeaders = (res, filePath) => {
   if (filePath.endsWith('.js')) {
     res.setHeader('Content-Type', 'application/javascript');
+    // Cache JS files for 1 year (they have hashes in filenames)
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   } else if (filePath.endsWith('.css')) {
     res.setHeader('Content-Type', 'text/css');
+    // Cache CSS files for 1 year (they have hashes in filenames)
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   } else if (filePath.endsWith('.json')) {
     res.setHeader('Content-Type', 'application/json');
+    // Cache JSON files for 1 hour
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+  } else if (filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.gif') || filePath.endsWith('.svg')) {
+    // Cache images for 1 year
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (filePath.endsWith('.html')) {
+    // Don't cache HTML files - always fetch fresh
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    // Default cache for other files
+    res.setHeader('Cache-Control', 'public, max-age=3600');
   }
 };
 

@@ -82,7 +82,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 10,
+      limit = 50,
       sortBy = 'createdAt',
       sortOrder = 'desc',
       search,

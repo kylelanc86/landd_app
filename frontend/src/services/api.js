@@ -12,6 +12,7 @@ const api = axios.create({
   baseURL: config.currentUrl,
   headers: {
     "Content-Type": "application/json",
+    "X-App-Version": process.env.REACT_APP_VERSION || "1.0.0",
   },
   withCredentials: true
 });
