@@ -502,7 +502,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
             <CollapsibleSection
-              title="ASBESTOS REMOVAL"
+              title="Air Mon & Clearances"
               to="/asbestos-removal"
               icon={<ConstructionIcon />}
             />

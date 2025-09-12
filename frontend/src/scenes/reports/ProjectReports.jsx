@@ -385,7 +385,8 @@ const ProjectReports = () => {
         navigate(`/air-monitoring/shifts/${report.data.shift._id}/edit`);
       } else if (report.type === "clearance") {
         // Navigate to the clearance edit page
-        navigate(`/clearances/asbestos/${report.data._id}/edit`);
+        // Navigate to asbestos removal job details page instead of standalone clearance page
+        navigate(`/asbestos-removal`);
       } else if (report.type === "asbestos_assessment") {
         // Navigate to the asbestos assessment edit page
         navigate(

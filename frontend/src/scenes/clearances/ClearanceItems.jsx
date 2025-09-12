@@ -47,7 +47,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { tokens } from "../../theme/tokens";
 import PermissionGate from "../../components/PermissionGate";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
-import customDataFieldService from "../../services/customDataFieldService";
+import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import { compressImage, needsCompression } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
@@ -119,15 +119,39 @@ const ClearanceItems = () => {
         locationDescriptionsData,
         materialsDescriptionsData,
       ] = await Promise.all([
-        customDataFieldService.getByType("room_area"),
-        customDataFieldService.getByType("location_description"),
-        customDataFieldService.getByType("materials_description"),
+        customDataFieldGroupService.getFieldsByType("room_area"),
+        customDataFieldGroupService.getFieldsByType("location_description"),
+        customDataFieldGroupService.getFieldsByType("materials_description"),
       ]);
 
+      // Handle both array and object responses and sort alphabetically
+      const processData = (data) => {
+        let processedData = [];
+
+        if (Array.isArray(data)) {
+          processedData = data;
+        } else if (data && typeof data === "object") {
+          // If it's an object, try to extract the array from common property names
+          processedData =
+            data.data ||
+            data.items ||
+            data.fields ||
+            Object.values(data).filter(Array.isArray)[0] ||
+            [];
+        }
+
+        // Sort alphabetically by text field
+        return processedData.sort((a, b) => {
+          const textA = (a.text || "").toLowerCase();
+          const textB = (b.text || "").toLowerCase();
+          return textA.localeCompare(textB);
+        });
+      };
+
       setCustomDataFields({
-        roomAreas: roomAreasData || [],
-        locationDescriptions: locationDescriptionsData || [],
-        materialsDescriptions: materialsDescriptionsData || [],
+        roomAreas: processData(roomAreasData),
+        locationDescriptions: processData(locationDescriptionsData),
+        materialsDescriptions: processData(materialsDescriptionsData),
       });
     } catch (err) {
       console.error("Error fetching custom data fields:", err);
@@ -773,7 +797,7 @@ const ClearanceItems = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={() => navigate(`/clearances/asbestos`)}
+            onClick={() => navigate(`/asbestos-removal`)}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             Asbestos Clearances
@@ -814,7 +838,7 @@ const ClearanceItems = () => {
               },
             }}
           >
-            {jobCompleted ? "COMPLETED" : "COMPLETE JOB"}
+            {jobCompleted ? "COMPLETED" : "COMPLETE CLEARANCE"}
           </Button>
         </Box>
 
@@ -1152,6 +1176,12 @@ const ClearanceItems = () => {
                     options={customDataFields.roomAreas.map(
                       (item) => item.text
                     )}
+                    onOpen={() =>
+                      console.log(
+                        "Room areas options:",
+                        customDataFields.roomAreas
+                      )
+                    }
                     freeSolo
                     renderInput={(params) => (
                       <TextField {...params} label="Room/Area" required />

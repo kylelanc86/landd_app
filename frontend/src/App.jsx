@@ -63,15 +63,7 @@ const EditUserPage = lazy(() => import("./scenes/users/EditUserPage"));
 const AddUserPage = lazy(() => import("./scenes/users/AddUserPage"));
 const Profile = lazy(() => import("./scenes/profile"));
 
-const AsbestosClearance = lazy(() =>
-  import("./scenes/clearances/AsbestosClearance")
-);
-
 const ClearanceItems = lazy(() => import("./scenes/clearances/ClearanceItems"));
-
-const ClearanceReports = lazy(() =>
-  import("./scenes/clearances/AsbestosClearance")
-);
 
 const Clients = lazy(() => import("./scenes/clients"));
 const ClientDetails = lazy(() => import("./scenes/clients/ClientDetails"));
@@ -114,6 +106,9 @@ const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
 const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
+const AsbestosRemovalJobDetails = lazy(() =>
+  import("./scenes/asbestos-removal/AsbestosRemovalJobDetails")
+);
 
 // Records pages
 const TrainingRecords = lazy(() => import("./scenes/records/training"));
@@ -480,20 +475,6 @@ function App() {
                             )}
                             {isFeatureEnabled("ADVANCED.SURVEYS") && (
                               <Route
-                                path="/clearances/asbestos"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["asbestos.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <AsbestosClearance />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                            )}
-                            {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                              <Route
                                 path="/clearances/lead"
                                 element={
                                   <PermissionRoute
@@ -520,33 +501,7 @@ function App() {
                                 }
                               />
                             )}
-                            {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                              <Route
-                                path="/clearances/:id/details"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["asbestos.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <AsbestosClearance />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                            )}
-                            {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                              <Route
-                                path="/clearances/:clearanceId/reports"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["asbestos.view"]}
-                                  >
-                                    <ClearanceReports />
-                                  </PermissionRoute>
-                                }
-                              />
-                            )}
-                            {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                            {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
                               <Route
                                 path="/clearances/:clearanceId/items"
                                 element={
@@ -1140,6 +1095,20 @@ function App() {
                                   >
                                     <Suspense fallback={<LoadingSpinner />}>
                                       <AsbestosRemoval />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                            )}
+                            {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
+                              <Route
+                                path="/asbestos-removal/jobs/:jobId/details"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["projects.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <AsbestosRemovalJobDetails />
                                     </Suspense>
                                   </PermissionRoute>
                                 }
