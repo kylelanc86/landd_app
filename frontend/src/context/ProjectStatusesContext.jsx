@@ -57,11 +57,32 @@ export const ProjectStatusesProvider = ({ children }) => {
 
       console.log("Raw status data from backend:", { active, inactive, all });
 
-      // Use hardcoded colors for fast loading instead of loading from database
-      const colors = projectStatusService.getAllHardcodedColors();
+      // Extract colors from the database response
+      let colors = {};
 
-      console.log("Using hardcoded status colors:", colors);
-      console.log("Setting statusColors state with hardcoded colors:", colors);
+      if (
+        all &&
+        typeof all === "object" &&
+        all.activeStatuses &&
+        all.inactiveStatuses
+      ) {
+        // New structure: extract colors from the full status objects
+        const allStatusObjects = [
+          ...(all.activeStatuses || []),
+          ...(all.inactiveStatuses || []),
+        ];
+        colors = allStatusObjects.reduce((acc, status) => {
+          if (status.text && status.statusColor) {
+            acc[status.text] = status.statusColor;
+          }
+          return acc;
+        }, {});
+        console.log("Extracted status colors from database:", colors);
+      } else {
+        // Fallback to hardcoded colors if database colors are not available
+        colors = projectStatusService.getAllHardcodedColors();
+        console.log("Using hardcoded status colors as fallback:", colors);
+      }
 
       setActiveStatuses(active);
       setInactiveStatuses(inactive);
