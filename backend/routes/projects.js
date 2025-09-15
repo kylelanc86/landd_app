@@ -419,6 +419,37 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       return res.status(404).json({ message: 'Project not found' });
     }
 
+    // Clean up any malformed users data in existing project
+    if (project.users && Array.isArray(project.users)) {
+      const originalUsers = project.users;
+      const cleanedUsers = project.users
+        .filter(user => {
+          // Keep valid ObjectIds
+          if (typeof user === 'object' && user._id) return true;
+          // Keep valid ObjectId strings
+          if (typeof user === 'string' && /^[0-9a-fA-F]{24}$/.test(user.trim())) return true;
+          return false;
+        })
+        .map(user => {
+          // Convert to ObjectId if it's a string
+          if (typeof user === 'string') {
+            return user.trim();
+          }
+          return user;
+        });
+      
+      if (originalUsers.length !== cleanedUsers.length) {
+        console.log('🔍 CLEANED UP EXISTING PROJECT USERS', {
+          projectId: project._id,
+          originalUsers,
+          cleanedUsers,
+          originalCount: originalUsers.length,
+          cleanedCount: cleanedUsers.length
+        });
+        project.users = cleanedUsers;
+      }
+    }
+
     console.log('🔍 EXISTING PROJECT DATA', {
       projectId: project._id,
       projectID: project.projectID,
@@ -526,9 +557,35 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.endDate = req.body.endDate || project.endDate;
     project.description = req.body.description || project.description;
     project.workOrder = req.body.workOrder || project.workOrder;
-    // Only update users if explicitly provided and not empty
-    if (req.body.users !== undefined && req.body.users.length > 0) {
-      project.users = req.body.users;
+    // Handle users field - clean up any malformed data from older imports
+    if (req.body.users !== undefined) {
+      if (Array.isArray(req.body.users)) {
+        // Filter out any invalid user IDs and clean up strings
+        const cleanedUsers = req.body.users
+          .filter(user => user && typeof user === 'string' && user.trim())
+          .map(user => {
+            const trimmed = user.trim();
+            // Remove any carriage returns or newlines
+            return trimmed.replace(/[\r\n]/g, '');
+          })
+          .filter(user => {
+            // Check if it's a valid ObjectId format
+            return /^[0-9a-fA-F]{24}$/.test(user);
+          });
+        
+        console.log('🔍 USERS FIELD PROCESSING', {
+          originalUsers: req.body.users,
+          cleanedUsers,
+          originalCount: req.body.users.length,
+          cleanedCount: cleanedUsers.length
+        });
+        
+        project.users = cleanedUsers;
+      } else {
+        console.log('🔍 USERS FIELD NOT ARRAY', { users: req.body.users, type: typeof req.body.users });
+        // If users is not an array, set to empty array
+        project.users = [];
+      }
     }
     project.isLargeProject = req.body.isLargeProject !== undefined ? req.body.isLargeProject : project.isLargeProject;
     project.projectContact = req.body.projectContact || project.projectContact;
@@ -557,6 +614,21 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     });
 
     console.log('🔄 ATTEMPTING TO SAVE PROJECT', { projectId: project._id });
+    
+    // Add detailed validation before save
+    try {
+      await project.validate();
+      console.log('✅ PROJECT VALIDATION PASSED', { projectId: project._id });
+    } catch (validationError) {
+      console.error('❌ PROJECT VALIDATION FAILED', {
+        projectId: project._id,
+        validationError: validationError.message,
+        validationErrors: validationError.errors,
+        errorName: validationError.name
+      });
+      throw validationError;
+    }
+    
     const updatedProject = await project.save();
     console.log('✅ PROJECT SAVED SUCCESSFULLY', { projectId: project._id });
     
