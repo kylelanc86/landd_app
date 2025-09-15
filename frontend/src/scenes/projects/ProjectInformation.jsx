@@ -43,11 +43,13 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ErrorIcon from "@mui/icons-material/Error";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import { projectService, clientService, userService } from "../../services/api";
 import ProjectAuditService from "../../services/projectAuditService";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { usePermissions } from "../../hooks/usePermissions";
+import ProjectLogModalWrapper from "../reports/ProjectLogModalWrapper";
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
@@ -145,6 +147,9 @@ const ProjectInformation = () => {
   // State for tracking form changes and confirmation dialog
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [originalForm, setOriginalForm] = useState(null);
+
+  // Project log modal state
+  const [logModalOpen, setLogModalOpen] = useState(false);
   const [changeDetectionEnabled, setChangeDetectionEnabled] = useState(false);
   const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] =
     useState(false);
@@ -1495,23 +1500,39 @@ const ProjectInformation = () => {
 
   return (
     <Box m="20px">
-      <Box display="flex" alignItems="center" mb={3}>
-        <IconButton onClick={() => safeNavigate("/projects")} sx={{ mr: 2 }}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Box display="flex" alignItems="center" gap={2}>
-          <Typography variant="h4">
-            {isEditMode ? "Project Details" : "Add New Project"}
-          </Typography>
-          {isEditMode && hasUnsavedChanges && (
-            <Chip
-              label="Unsaved Changes"
-              color="warning"
-              size="small"
-              sx={{ fontSize: "0.75rem" }}
-            />
-          )}
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        mb={3}
+      >
+        <Box display="flex" alignItems="center">
+          <IconButton onClick={() => safeNavigate("/projects")} sx={{ mr: 2 }}>
+            <ArrowBackIcon />
+          </IconButton>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="h4">
+              {isEditMode ? "Project Details" : "Add New Project"}
+            </Typography>
+            {isEditMode && hasUnsavedChanges && (
+              <Chip
+                label="Unsaved Changes"
+                color="warning"
+                size="small"
+                sx={{ fontSize: "0.75rem" }}
+              />
+            )}
+          </Box>
         </Box>
+        {isEditMode && (
+          <Button
+            variant="outlined"
+            startIcon={<AssessmentIcon />}
+            onClick={() => setLogModalOpen(true)}
+          >
+            View Project Log
+          </Button>
+        )}
         {!isEditMode && id === "new" && (
           <Button
             variant="outlined"
@@ -2872,6 +2893,15 @@ const ProjectInformation = () => {
             </TableContainer>
           )}
         </Paper>
+      )}
+
+      {/* Project Log Modal */}
+      {logModalOpen && (
+        <ProjectLogModalWrapper
+          open={logModalOpen}
+          onClose={() => setLogModalOpen(false)}
+          project={form}
+        />
       )}
     </Box>
   );
