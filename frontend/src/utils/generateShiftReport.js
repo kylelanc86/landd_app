@@ -553,7 +553,7 @@ pdfMake.fonts = {
   const projectNameRaw = project?.name || '';
   const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
   const samplingDate = shift?.date ? formatDateForFilename(shift.date) : '';
-  const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? `_${samplingDate}` : ''}.pdf`;
+  const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
     // Security options to prevent text selection/copying

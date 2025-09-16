@@ -35,7 +35,7 @@ const NewSample = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  const [users, setUsers] = useState([]);
+  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [airPumps, setAirPumps] = useState([]);
   const [flowmeters, setFlowmeters] = useState([]);
   const [form, setForm] = useState({
@@ -64,17 +64,38 @@ const NewSample = () => {
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState(null);
 
-  // Fetch users when component mounts
+  // Fetch asbestos assessors when component mounts
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchAsbestosAssessors = async () => {
       try {
         const response = await userService.getAll();
-        setUsers(response.data);
+        const users = response.data;
+
+        // Filter users who have Asbestos Assessor licenses
+        const assessors = users.filter(
+          (user) =>
+            user.isActive &&
+            user.licences &&
+            user.licences.some(
+              (licence) =>
+                licence.licenceType &&
+                licence.licenceType.toLowerCase().includes("asbestos assessor")
+            )
+        );
+
+        // Sort alphabetically by name
+        const sortedAssessors = assessors.sort((a, b) => {
+          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        setAsbestosAssessors(sortedAssessors);
       } catch (error) {
-        console.error("Error fetching users:", error);
+        console.error("Error fetching asbestos assessors:", error);
       }
     };
-    fetchUsers();
+    fetchAsbestosAssessors();
   }, []);
 
   // Fetch active air pumps when component mounts
@@ -151,15 +172,34 @@ const NewSample = () => {
               projectID
             );
             const allProjectSamples = allProjectSamplesResponse.data || [];
+            console.log("All project samples:", allProjectSamples);
+            console.log("Project ID:", projectID);
 
             // Find the highest sample number across all shifts
             const highestNumber = Math.max(
               ...allProjectSamples.map((sample) => {
-                // Only consider air monitoring samples (with AM prefix in sample number)
-                if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
-                  const match = sample.fullSampleID?.match(/AM(\d+)$/);
-                  return match ? parseInt(match[1]) : 0;
+                console.log("Processing sample:", {
+                  fullSampleID: sample.fullSampleID,
+                  sampleNumber: sample.sampleNumber,
+                  projectID: projectID,
+                });
+
+                // Check both fullSampleID and sampleNumber for AM prefix
+                const hasAMPrefix =
+                  sample.fullSampleID?.startsWith(`${projectID}-AM`) ||
+                  sample.sampleNumber?.startsWith("AM");
+
+                if (hasAMPrefix) {
+                  // Try to extract from fullSampleID first, then sampleNumber
+                  let match = sample.fullSampleID?.match(/AM(\d+)$/);
+                  if (!match && sample.sampleNumber) {
+                    match = sample.sampleNumber.match(/AM(\d+)$/);
+                  }
+                  const number = match ? parseInt(match[1]) : 0;
+                  console.log("Extracted number:", number);
+                  return number;
                 }
+                console.log("Sample ignored - no AM prefix");
                 return 0; // Ignore non-AM samples
               }),
               0 // Start from 0 if no samples exist
@@ -561,6 +601,7 @@ const NewSample = () => {
         ...form,
         shift: shiftId,
         job: job._id,
+        jobModel: shift.jobModel, // Add jobModel from shift
         fullSampleID: `${projectID}-${form.sampleNumber}`,
         sampler: form.sampler,
         collectedBy: form.sampler,
@@ -641,9 +682,9 @@ const NewSample = () => {
               label="Sampler"
               required
             >
-              {users.map((user) => (
-                <MenuItem key={user._id} value={user._id}>
-                  {user.firstName} {user.lastName}
+              {asbestosAssessors.map((assessor) => (
+                <MenuItem key={assessor._id} value={assessor._id}>
+                  {assessor.firstName} {assessor.lastName}
                 </MenuItem>
               ))}
             </Select>
@@ -802,13 +843,6 @@ const NewSample = () => {
                   {fieldErrors.flowmeter}
                 </Typography>
               )}
-              <Typography
-                variant="caption"
-                sx={{ mt: 0.5, color: "text.secondary" }}
-              >
-                Current value: {form.flowmeter || "None"} | Available options:{" "}
-                {flowmeters.map((f) => f.equipmentReference).join(", ")}
-              </Typography>
             </FormControl>
           )}
           {!form.isFieldBlank && (

@@ -8,7 +8,12 @@ const sampleSchema = new mongoose.Schema({
   },
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AirMonitoringJob',
+    refPath: 'jobModel',
+    required: true
+  },
+  jobModel: {
+    type: String,
+    enum: ['AirMonitoringJob', 'AsbestosRemovalJob'],
     required: true
   },
   sampleNumber: {

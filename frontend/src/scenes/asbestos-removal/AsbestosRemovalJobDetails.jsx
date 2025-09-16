@@ -45,15 +45,25 @@ import AddIcon from "@mui/icons-material/Add";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import CloseIcon from "@mui/icons-material/Close";
 import { tokens } from "../../theme/tokens";
-import { jobService, shiftService, sampleService } from "../../services/api";
+import {
+  jobService,
+  shiftService,
+  sampleService,
+  projectService,
+  clientService,
+} from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import userService from "../../services/userService";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
+import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
+import { formatDate } from "../../utils/dateFormat";
+import { hasPermission } from "../../config/permissions";
 
 const AsbestosRemovalJobDetails = () => {
   const theme = useTheme();
@@ -85,8 +95,11 @@ const AsbestosRemovalJobDetails = () => {
     message: "",
     severity: "success",
   });
+  const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetShiftId, setResetShiftId] = useState(null);
 
   const [clearanceForm, setClearanceForm] = useState({
     projectId: "",
@@ -406,6 +419,206 @@ const AsbestosRemovalJobDetails = () => {
     navigate("/asbestos-removal");
   };
 
+  const handleCompleteJob = async () => {
+    try {
+      // Update the job status to completed
+      await asbestosRemovalJobService.update(jobId, { status: "completed" });
+
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: "Job marked as completed successfully",
+        severity: "success",
+      });
+
+      // Navigate back to jobs page
+      navigate("/asbestos-removal");
+    } catch (error) {
+      console.error("Error completing job:", error);
+      setError("Failed to complete job. Please try again.");
+    }
+  };
+
+  // Check if all shifts and clearances are complete
+  const allShiftsComplete =
+    airMonitoringShifts.length > 0 &&
+    airMonitoringShifts.every((shift) => shift.status === "shift_complete");
+
+  const allClearancesComplete =
+    clearances.length > 0 &&
+    clearances.every((clearance) => clearance.status === "complete");
+
+  // Job can only be completed if:
+  // 1. Job is not already completed
+  // 2. All shifts are complete (if there are any)
+  // 3. All clearances are complete (if there are any)
+  const canCompleteJob =
+    job &&
+    job.status !== "completed" &&
+    (airMonitoringShifts.length === 0 || allShiftsComplete) &&
+    (clearances.length === 0 || allClearancesComplete);
+
+  const handleViewReport = async (shift) => {
+    try {
+      // Fetch the latest shift data
+      const shiftResponse = await shiftService.getById(shift._id);
+      const latestShift = shiftResponse.data;
+
+      // Fetch job and samples for this shift - use correct service based on jobModel
+      let jobResponse;
+      if (latestShift.jobModel === "AsbestosRemovalJob") {
+        jobResponse = await asbestosRemovalJobService.getById(
+          latestShift.job?._id || latestShift.job
+        );
+      } else {
+        jobResponse = await jobService.getById(
+          latestShift.job?._id || latestShift.job
+        );
+      }
+      const samplesResponse = await sampleService.getByShift(latestShift._id);
+
+      // Ensure we have the complete sample data including analysis
+      const samplesWithAnalysis = await Promise.all(
+        samplesResponse.data.map(async (sample) => {
+          if (!sample.analysis) {
+            // If analysis data is missing, fetch the complete sample data
+            const completeSample = await sampleService.getById(sample._id);
+            return completeSample.data;
+          }
+          return sample;
+        })
+      );
+
+      // Ensure project and client are fully populated
+      let project = jobResponse.data.projectId;
+      if (project && typeof project === "string") {
+        const projectResponse = await projectService.getById(project);
+        project = projectResponse.data;
+      }
+      if (project && project.client && typeof project.client === "string") {
+        const clientResponse = await clientService.getById(project.client);
+        project.client = clientResponse.data;
+      }
+
+      generateShiftReport({
+        shift: latestShift,
+        job: jobResponse.data,
+        samples: samplesWithAnalysis,
+        project,
+        openInNewTab: !shift.reportApprovedBy, // download if authorised, open if not
+      });
+      setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
+    } catch (err) {
+      console.error("Error generating report:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to generate report.",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAuthoriseReport = async (shift) => {
+    try {
+      const now = new Date().toISOString();
+      const approver =
+        currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser?.name || currentUser?.email || "Unknown";
+
+      // First get the current shift data
+      const currentShift = await shiftService.getById(shift._id);
+
+      // Create the updated shift data by spreading the current data and updating the fields we want
+      const updatedShiftData = {
+        ...currentShift.data,
+        job: currentShift.data.job._id, // Convert to string ID
+        supervisor: currentShift.data.supervisor._id, // Convert to string ID
+        defaultSampler: currentShift.data.defaultSampler, // Keep as is
+        status: "shift_complete",
+        reportApprovedBy: approver,
+        reportIssueDate: now,
+      };
+
+      // Log the data being sent
+      console.log("Updating shift with data:", updatedShiftData);
+
+      // Update shift with report approval
+      const response = await shiftService.update(shift._id, updatedShiftData);
+
+      // Log the response
+      console.log("Update response:", response.data);
+
+      // Generate and download the report
+      try {
+        // Fetch job and samples for this shift - use correct service based on jobModel
+        let jobResponse;
+        if (currentShift.data.jobModel === "AsbestosRemovalJob") {
+          jobResponse = await asbestosRemovalJobService.getById(
+            shift.job?._id || shift.job
+          );
+        } else {
+          jobResponse = await jobService.getById(shift.job?._id || shift.job);
+        }
+        const samplesResponse = await sampleService.getByShift(shift._id);
+
+        // Ensure we have the complete sample data including analysis
+        const samplesWithAnalysis = await Promise.all(
+          samplesResponse.data.map(async (sample) => {
+            if (!sample.analysis) {
+              // If analysis data is missing, fetch the complete sample data
+              const completeSample = await sampleService.getById(sample._id);
+              return completeSample.data;
+            }
+            return sample;
+          })
+        );
+
+        // Ensure project and client are fully populated
+        let project = jobResponse.data.projectId;
+        if (project && typeof project === "string") {
+          const projectResponse = await projectService.getById(project);
+          project = projectResponse.data;
+        }
+        if (project && project.client && typeof project.client === "string") {
+          const clientResponse = await clientService.getById(project.client);
+          project.client = clientResponse.data;
+        }
+
+        generateShiftReport({
+          shift: currentShift.data,
+          job: jobResponse.data,
+          samples: samplesWithAnalysis,
+          project,
+          openInNewTab: false, // Always download when authorised
+        });
+
+        setSnackbar({
+          open: true,
+          message: "Report authorised and downloaded successfully.",
+          severity: "success",
+        });
+
+        // Refresh the shifts data
+        fetchJobDetails();
+      } catch (reportError) {
+        console.error("Error generating authorised report:", reportError);
+        setSnackbar({
+          open: true,
+          message: "Report authorised but failed to generate download.",
+          severity: "warning",
+        });
+      }
+    } catch (error) {
+      console.error("Error authorising report:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to authorise report. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
@@ -444,7 +657,7 @@ const AsbestosRemovalJobDetails = () => {
       const shiftData = {
         job: jobId,
         jobModel: "AsbestosRemovalJob",
-        projectId: job.projectId._id,
+        projectId: job?.projectId?._id,
         name: `Shift ${airMonitoringShifts.length + 1}`,
         date: newShiftDate,
         startTime: "08:00",
@@ -463,8 +676,8 @@ const AsbestosRemovalJobDetails = () => {
         const newShift = {
           ...response.data,
           job: jobId, // Ensure job field is set
-          projectId: job.projectId._id, // Ensure projectId field is set
-          jobName: job.name || "Asbestos Removal Job",
+          projectId: job?.projectId?._id, // Ensure projectId field is set
+          jobName: job?.name || "Asbestos Removal Job",
           jobId: jobId,
         };
         setAirMonitoringShifts((prev) => [...prev, newShift]);
@@ -479,9 +692,17 @@ const AsbestosRemovalJobDetails = () => {
       });
     } catch (error) {
       console.error("Error creating shift:", error);
+      console.error("Error response:", error.response?.data);
+      console.error("Error message:", error.message);
+
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create shift. Please try again.";
+
       setSnackbar({
         open: true,
-        message: "Failed to create shift. Please try again.",
+        message: errorMessage,
         severity: "error",
       });
     }
@@ -495,6 +716,74 @@ const AsbestosRemovalJobDetails = () => {
   const handleShiftRowClick = (shift) => {
     // Navigate to air monitoring sample list page for this shift
     navigate(`/air-monitoring/shift/${shift._id}/samples`);
+  };
+
+  const handleResetStatus = async (shiftId) => {
+    setResetShiftId(shiftId);
+    setResetDialogOpen(true);
+  };
+
+  const confirmResetStatus = async () => {
+    if (!resetShiftId) return;
+    try {
+      // Get the current shift data first
+      const currentShift = await shiftService.getById(resetShiftId);
+
+      // Update shift status while preserving analysis data but clearing report authorization
+      await shiftService.update(resetShiftId, {
+        status: "ongoing",
+        analysedBy: currentShift.data.analysedBy,
+        analysisDate: currentShift.data.analysisDate,
+        reportApprovedBy: null,
+        reportIssueDate: null,
+      });
+
+      // Refetch job details to update UI
+      await fetchJobDetails();
+      setResetDialogOpen(false);
+      setResetShiftId(null);
+
+      setSnackbar({
+        open: true,
+        message: "Shift status reset to ongoing successfully.",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Error resetting shift status:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to reset shift status.",
+        severity: "error",
+      });
+      setResetDialogOpen(false);
+      setResetShiftId(null);
+    }
+  };
+
+  const cancelResetStatus = () => {
+    setResetDialogOpen(false);
+    setResetShiftId(null);
+  };
+
+  const handleSamplesClick = (shift) => {
+    // Don't allow access to samples if report is authorized
+    if (shift.reportApprovedBy) {
+      setSnackbar({
+        open: true,
+        message:
+          "Cannot access samples while report is authorized. Please reset the shift status to access samples.",
+        severity: "warning",
+      });
+      return;
+    }
+    console.log("Samples button clicked for shift:", shift._id);
+    const path = `/air-monitoring/shift/${shift._id}/samples`;
+    console.log("Attempting to navigate to:", path);
+    try {
+      navigate(path, { replace: false });
+    } catch (error) {
+      console.error("Navigation error:", error);
+    }
   };
 
   const handleGeneratePDF = async (clearance, event) => {
@@ -749,21 +1038,62 @@ const AsbestosRemovalJobDetails = () => {
           Asbestos Removal Jobs
         </Link>
         <Typography color="text.primary">
-          {job.projectId.projectID}: {job.projectName}
+          {job?.projectId?.projectID || "Loading..."}:{" "}
+          {job?.projectName || "Loading..."}
         </Typography>
       </Breadcrumbs>
 
       {/* Job Header */}
       <Box mb={3}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Asbestos Removal Job Details
-        </Typography>
-        <Typography variant="h6" color="text.secondary">
-          Project: {job.projectId.projectID} - {job.projectName}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Asbestos Removalist: {job.asbestosRemovalist}
-        </Typography>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="flex-start"
+        >
+          <Box>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Asbestos Removal Job Details
+            </Typography>
+            <Typography variant="h6" color="text.secondary">
+              Project: {job?.projectId?.projectID || "Loading..."} -{" "}
+              {job?.projectName || "Loading..."}
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Asbestos Removalist: {job?.asbestosRemovalist || "Loading..."}
+            </Typography>
+          </Box>
+          {job && (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleCompleteJob}
+              disabled={!canCompleteJob}
+              sx={{
+                backgroundColor: canCompleteJob
+                  ? theme.palette.success.main
+                  : theme.palette.grey[400],
+                color: canCompleteJob
+                  ? theme.palette.common.white
+                  : theme.palette.grey[600],
+                fontSize: "14px",
+                fontWeight: "bold",
+                padding: "10px 20px",
+                cursor: canCompleteJob ? "pointer" : "not-allowed",
+                "&:hover": {
+                  backgroundColor: canCompleteJob
+                    ? theme.palette.success.dark
+                    : theme.palette.grey[400],
+                },
+                "&:disabled": {
+                  backgroundColor: theme.palette.grey[400],
+                  color: theme.palette.grey[600],
+                },
+              }}
+            >
+              Complete Job
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* Tabs for Air Monitoring and Clearances */}
@@ -866,9 +1196,7 @@ const AsbestosRemovalJobDetails = () => {
                         sx={{ cursor: "pointer" }}
                       >
                         <TableCell>
-                          {shift.date
-                            ? new Date(shift.date).toLocaleDateString()
-                            : "N/A"}
+                          {shift.date ? formatDate(shift.date) : "N/A"}
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -886,27 +1214,121 @@ const AsbestosRemovalJobDetails = () => {
                             : "-"}
                         </TableCell>
                         <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditShift(shift, e);
-                            }}
-                            title="Edit Shift"
-                            sx={{ mr: 1 }}
+                          <Box
+                            display="flex"
+                            alignItems="center"
+                            gap={1}
+                            flexWrap="wrap"
                           >
-                            <EditIcon color="primary" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteShift(shift, e);
-                            }}
-                            title="Delete Shift"
-                          >
-                            <DeleteIcon color="error" />
-                          </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditShift(shift, e);
+                              }}
+                              title="Edit Shift"
+                            >
+                              <EditIcon color="primary" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteShift(shift, e);
+                              }}
+                              title="Delete Shift"
+                            >
+                              <DeleteIcon color="error" />
+                            </IconButton>
+                            {shift.status !== "shift_complete" && (
+                              <Button
+                                variant="contained"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSamplesClick(shift);
+                                }}
+                                disabled={shift.reportApprovedBy}
+                                sx={{
+                                  mr: 1,
+                                  backgroundColor: theme.palette.primary.main,
+                                  color: theme.palette.common.white,
+                                  "&:hover": {
+                                    backgroundColor: theme.palette.primary.dark,
+                                  },
+                                  "&:disabled": {
+                                    backgroundColor: theme.palette.grey[400],
+                                    color: theme.palette.grey[600],
+                                  },
+                                }}
+                              >
+                                Samples
+                              </Button>
+                            )}
+                            {(shift.status === "analysis_complete" ||
+                              shift.status === "shift_complete") && (
+                              <>
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewReport(shift);
+                                  }}
+                                  sx={{
+                                    borderColor: theme.palette.success.main,
+                                    color: theme.palette.success.main,
+                                    "&:hover": {
+                                      borderColor: theme.palette.success.dark,
+                                      backgroundColor:
+                                        theme.palette.success.light,
+                                    },
+                                  }}
+                                >
+                                  {shift.reportApprovedBy
+                                    ? "Download Report"
+                                    : "View Report"}
+                                </Button>
+                                {!shift.reportApprovedBy &&
+                                  reportViewedShiftIds.has(shift._id) &&
+                                  hasPermission(currentUser, "admin.view") && (
+                                    <Button
+                                      variant="contained"
+                                      size="small"
+                                      color="success"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleAuthoriseReport(shift);
+                                      }}
+                                      sx={{
+                                        backgroundColor:
+                                          theme.palette.success.main,
+                                        color: theme.palette.common.white,
+                                        "&:hover": {
+                                          backgroundColor:
+                                            theme.palette.success.dark,
+                                        },
+                                      }}
+                                    >
+                                      Authorise Report
+                                    </Button>
+                                  )}
+                                {hasPermission(currentUser, "admin.view") && (
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleResetStatus(shift._id);
+                                    }}
+                                    title="Reset status to Ongoing"
+                                    sx={{ color: theme.palette.error.main }}
+                                  >
+                                    <CloseIcon fontSize="small" />
+                                  </IconButton>
+                                )}
+                              </>
+                            )}
+                          </Box>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -961,9 +1383,7 @@ const AsbestosRemovalJobDetails = () => {
                       >
                         <TableCell>
                           {clearance.clearanceDate
-                            ? new Date(
-                                clearance.clearanceDate
-                              ).toLocaleDateString()
+                            ? formatDate(clearance.clearanceDate)
                             : "N/A"}
                         </TableCell>
                         <TableCell>
@@ -1359,6 +1779,88 @@ const AsbestosRemovalJobDetails = () => {
             }}
           >
             Add Shift
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reset Status Confirmation Dialog */}
+      <Dialog
+        open={resetDialogOpen}
+        onClose={cancelResetStatus}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              backgroundColor: theme.palette.error.light,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 20, color: theme.palette.error.main }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Reset Shift Status?
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            Are you sure you want to reset this shift's status to <b>Ongoing</b>
+            ? This will allow editing of analysis data. No data will be deleted
+            or cleared.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelResetStatus}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmResetStatus}
+            variant="contained"
+            color="error"
+            startIcon={<CloseIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Reset Status
           </Button>
         </DialogActions>
       </Dialog>

@@ -21,7 +21,7 @@ export const FEATURE_FLAGS = {
     SURVEYS: false,           // Asbestos, lead, mould assessments
     ASBESTOS_REMOVAL: true,  // Asbestos removal job management
     FIBRE_ID: false,          // Fibre identification and client supplied jobs
-    REPORTS: false,           // Report generation and templates
+    REPORTS: true,            // Report generation and templates
   },
 
   // Admin functionality

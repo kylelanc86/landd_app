@@ -425,10 +425,27 @@ const Analysis = () => {
     }
   }, [samples]);
 
-  // Fetch users for analyst dropdown
+  // Fetch users for analyst dropdown - only those with fibre counting approval
   useEffect(() => {
     userService.getAll().then((res) => {
-      setUsers(res.data || []);
+      const allUsers = res.data || [];
+
+      // Filter users who have fibre counting ticked in lab approvals
+      const fibreCountingUsers = allUsers.filter(
+        (user) =>
+          user.isActive &&
+          user.labApprovals &&
+          user.labApprovals.fibreCounting === true
+      );
+
+      // Sort alphabetically by name
+      const sortedUsers = fibreCountingUsers.sort((a, b) => {
+        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+
+      setUsers(sortedUsers);
     });
   }, []);
 
@@ -662,7 +679,7 @@ const Analysis = () => {
       (fibresForCalculation / fieldsCounted) *
       (1 / (averageFlowrate * 1000 * minutes));
 
-    return parseFloat(concentration.toFixed(2));
+    return parseFloat(concentration.toFixed(4));
   };
 
   const getReportedConcentration = (sampleId) => {
@@ -828,11 +845,11 @@ const Analysis = () => {
         analysisDate: new Date().toISOString(),
       });
 
-      // Navigate back to shifts page
+      // Navigate to asbestos removal job details page
       if (jobId) {
-        navigate(`/air-monitoring/jobs/${jobId}/shifts`);
+        navigate(`/asbestos-removal/${jobId}`);
       } else {
-        navigate("/air-monitoring/shifts");
+        navigate("/asbestos-removal");
       }
     } catch (error) {
       console.error("Error finalizing analysis:", error);
@@ -1217,9 +1234,9 @@ const Analysis = () => {
                   onClick={handleSubmit}
                   disabled={!isAllAnalysisComplete()}
                   sx={{
-                    backgroundColor: theme.palette.primary.main,
+                    backgroundColor: "#1976d2",
                     "&:hover": {
-                      backgroundColor: theme.palette.primary.dark,
+                      backgroundColor: "#1565c0",
                     },
                     "&.Mui-disabled": {
                       backgroundColor: theme.palette.grey[700],
@@ -1384,75 +1401,6 @@ const Analysis = () => {
                                 {sampleAnalyses[activeSampleId].fieldsCounted ||
                                   0}
                               </Typography>
-                            </Stack>
-                          </TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell colSpan={21}>
-                            {/* Status message for concentration calculation */}
-                            {activeSampleId && (
-                              <Box sx={{ mb: 2, textAlign: "center" }}>
-                                {canCalculateConcentration(activeSampleId) ? (
-                                  <Typography
-                                    variant="body2"
-                                    color="success.main"
-                                  >
-                                    ✓ All fields completed - Concentration
-                                    calculated
-                                  </Typography>
-                                ) : (
-                                  <Typography
-                                    variant="body2"
-                                    color="warning.main"
-                                  >
-                                    ⚠ Complete fibre counts, flowrate, and
-                                    timing to calculate concentration
-                                  </Typography>
-                                )}
-                              </Box>
-                            )}
-                            <Stack
-                              direction="row"
-                              spacing={4}
-                              justifyContent="center"
-                              sx={{ mt: 2 }}
-                            >
-                              <Box>
-                                <Typography
-                                  variant="subtitle2"
-                                  color="text.secondary"
-                                >
-                                  Calculated Concentration
-                                </Typography>
-                                <Typography variant="h4">
-                                  {activeSampleId &&
-                                  canCalculateConcentration(activeSampleId)
-                                    ? calculateConcentration(activeSampleId)
-                                    : "Complete all fields"}{" "}
-                                  {activeSampleId &&
-                                  canCalculateConcentration(activeSampleId)
-                                    ? "fibres/mL"
-                                    : ""}
-                                </Typography>
-                              </Box>
-                              <Box>
-                                <Typography
-                                  variant="subtitle2"
-                                  color="text.secondary"
-                                >
-                                  Reported Concentration
-                                </Typography>
-                                <Typography variant="h4">
-                                  {activeSampleId &&
-                                  canCalculateConcentration(activeSampleId)
-                                    ? getReportedConcentration(activeSampleId)
-                                    : "Complete all fields"}{" "}
-                                  {activeSampleId &&
-                                  canCalculateConcentration(activeSampleId)
-                                    ? "fibres/mL"
-                                    : ""}
-                                </Typography>
-                              </Box>
                             </Stack>
                           </TableCell>
                         </TableRow>

@@ -42,23 +42,41 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
 // Get samples by project
 router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const samples = await Sample.find()
-      .populate({
-        path: 'job',
-        populate: {
-          path: 'projectId',
-          match: { projectID: req.params.projectId }
-        }
-      })
+    console.log('Getting samples for project:', req.params.projectId);
+    
+    // First, let's get all samples and see what we have
+    const allSamples = await Sample.find()
       .populate('collectedBy')
       .populate('sampler')
       .populate('analyzedBy')
+      .populate({
+        path: 'job',
+        populate: {
+          path: 'projectId'
+        }
+      })
       .sort({ createdAt: -1 });
 
-    // Filter samples where the populated project matches
-    const projectSamples = samples.filter(sample => sample.job?.projectId);
+    console.log('All samples found:', allSamples.length);
+    console.log('Sample details:', allSamples.map(s => ({
+      _id: s._id,
+      fullSampleID: s.fullSampleID,
+      sampleNumber: s.sampleNumber,
+      job: s.job,
+      jobProjectId: s.job?.projectId?.projectID
+    })));
+
+    // Filter samples where the job's project matches the requested projectId
+    const projectSamples = allSamples.filter(sample => {
+      const matches = sample.job?.projectId?.projectID === req.params.projectId;
+      console.log(`Sample ${sample.fullSampleID}: job project ${sample.job?.projectId?.projectID} matches ${req.params.projectId}? ${matches}`);
+      return matches;
+    });
+
+    console.log('Filtered project samples:', projectSamples.length);
     res.json(projectSamples);
   } catch (err) {
+    console.error('Error getting samples by project:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -93,6 +111,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     const sample = new Sample({
       shift: req.body.shift,
       job: req.body.job,
+      jobModel: req.body.jobModel,
       sampleNumber: req.body.sampleNumber,
       fullSampleID: req.body.fullSampleID,
       type: req.body.type,

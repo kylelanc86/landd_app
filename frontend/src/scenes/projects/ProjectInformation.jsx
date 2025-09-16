@@ -37,12 +37,15 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Collapse,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ErrorIcon from "@mui/icons-material/Error";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { projectService, clientService, userService } from "../../services/api";
 import ProjectAuditService from "../../services/projectAuditService";
 import { useAuth } from "../../context/AuthContext";
@@ -141,6 +144,13 @@ const ProjectInformation = () => {
   const [auditTrail, setAuditTrail] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(null);
+  const [auditTrailExpanded, setAuditTrailExpanded] = useState(false);
+  const auditTrailRef = useRef(null);
+
+  // Function to handle audit trail expand/collapse
+  const handleAuditTrailToggle = () => {
+    setAuditTrailExpanded(!auditTrailExpanded);
+  };
 
   // State for tracking form changes and confirmation dialog
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -2758,120 +2768,146 @@ const ProjectInformation = () => {
 
       {/* Project Audit Trail */}
       {isEditMode && (
-        <Paper sx={{ p: 3, mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Project History
-          </Typography>
-
-          {auditLoading ? (
-            <Box display="flex" justifyContent="center" p={2}>
-              <CircularProgress />
-            </Box>
-          ) : auditError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {auditError}
-            </Alert>
-          ) : auditTrail.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No history available for this project.
+        <Box
+          ref={auditTrailRef}
+          sx={{
+            p: 3,
+            mt: 3,
+            backgroundColor: "#e8f5e8",
+            borderRadius: 1,
+            boxShadow: 1,
+          }}
+        >
+          <Box
+            display="flex"
+            alignItems="center"
+            sx={{ cursor: "pointer" }}
+            onClick={handleAuditTrailToggle}
+          >
+            <Typography variant="h6" gutterBottom sx={{ flexGrow: 1, mb: 0 }}>
+              Project History
             </Typography>
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: "bold" }}>Event</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Details</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>User Name</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {auditTrail
-                    .sort(
-                      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-                    )
-                    .map((entry, index) => {
-                      // Format the event name
-                      const getEventName = () => {
-                        if (entry.action === "created")
-                          return "Project Created";
-                        if (entry.action === "status_changed")
-                          return "Status Changed";
-                        if (entry.action === "updated")
-                          return `${entry.field} Updated`;
-                        return entry.action || "Unknown Event";
-                      };
+            <IconButton size="small">
+              {auditTrailExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
 
-                      // Format the details
-                      const getDetails = () => {
-                        if (entry.action === "status_changed") {
-                          return `${entry.oldValue || "Not set"} → ${
-                            entry.newValue
-                          }`;
-                        }
-                        if (entry.action === "updated") {
-                          return `${entry.oldValue || "Not set"} → ${
-                            entry.newValue
-                          }`;
-                        }
-                        if (entry.action === "created") {
-                          return "Project was created";
-                        }
-                        return entry.newValue || "No details available";
-                      };
+          <Collapse in={auditTrailExpanded}>
+            {auditLoading ? (
+              <Box display="flex" justifyContent="center" p={2}>
+                <CircularProgress />
+              </Box>
+            ) : auditError ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {auditError}
+              </Alert>
+            ) : auditTrail.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No history available for this project.
+              </Typography>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: "bold" }}>Event</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Details</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        User Name
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {auditTrail
+                      .sort(
+                        (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+                      )
+                      .map((entry, index) => {
+                        // Format the event name
+                        const getEventName = () => {
+                          if (entry.action === "created")
+                            return "Project Created";
+                          if (entry.action === "status_changed")
+                            return "Status Changed";
+                          if (entry.action === "updated")
+                            return `${entry.field} Updated`;
+                          return entry.action || "Unknown Event";
+                        };
 
-                      // Format the user name
-                      const getUserName = () => {
-                        if (entry.changedBy) {
-                          return `${entry.changedBy.firstName} ${entry.changedBy.lastName}`;
-                        }
-                        return "System";
-                      };
+                        // Format the details
+                        const getDetails = () => {
+                          if (entry.action === "status_changed") {
+                            return `${entry.oldValue || "Not set"} → ${
+                              entry.newValue
+                            }`;
+                          }
+                          if (entry.action === "updated") {
+                            return `${entry.oldValue || "Not set"} → ${
+                              entry.newValue
+                            }`;
+                          }
+                          if (entry.action === "created") {
+                            return "Project was created";
+                          }
+                          return entry.newValue || "No details available";
+                        };
 
-                      return (
-                        <TableRow key={entry._id || index} hover>
-                          <TableCell>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: "medium" }}
-                            >
-                              {getEventName()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {new Date(entry.timestamp).toLocaleDateString(
-                                "en-AU",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                }
-                              )}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {getDetails()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="text.secondary">
-                              {getUserName()}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Paper>
+                        // Format the user name
+                        const getUserName = () => {
+                          if (entry.changedBy) {
+                            return `${entry.changedBy.firstName} ${entry.changedBy.lastName}`;
+                          }
+                          return "System";
+                        };
+
+                        return (
+                          <TableRow key={entry._id || index} hover>
+                            <TableCell>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: "medium" }}
+                              >
+                                {getEventName()}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {new Date(entry.timestamp).toLocaleDateString(
+                                  "en-AU",
+                                  {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: true,
+                                  }
+                                )}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {getDetails()}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                {getUserName()}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Collapse>
+        </Box>
       )}
     </Box>
   );

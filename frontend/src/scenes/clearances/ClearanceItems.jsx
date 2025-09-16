@@ -100,6 +100,7 @@ const ClearanceItems = () => {
   const [attachmentsModalOpen, setAttachmentsModalOpen] = useState(false);
   const [jobCompleted, setJobCompleted] = useState(false);
   const [showLevelFloor, setShowLevelFloor] = useState(false);
+  const [asbestosRemovalJobId, setAsbestosRemovalJobId] = useState(null);
   const [customDataFields, setCustomDataFields] = useState({
     roomAreas: [],
     locationDescriptions: [],
@@ -108,8 +109,14 @@ const ClearanceItems = () => {
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
-    fetchData();
-    fetchCustomDataFields();
+    if (clearanceId) {
+      fetchData();
+      fetchCustomDataFields();
+    } else {
+      console.error("No clearanceId provided in URL parameters");
+      setError("No clearance ID provided");
+      setLoading(false);
+    }
   }, [clearanceId]);
 
   const fetchCustomDataFields = async () => {
@@ -161,6 +168,14 @@ const ClearanceItems = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+
+      // Check if clearanceId is valid
+      if (!clearanceId) {
+        throw new Error("Clearance ID is missing from URL");
+      }
+
+      console.log("Fetching data for clearance ID:", clearanceId);
+
       const [itemsData, clearanceData] = await Promise.all([
         asbestosClearanceService.getItems(clearanceId),
         asbestosClearanceService.getById(clearanceId),
@@ -171,9 +186,43 @@ const ClearanceItems = () => {
 
       // Set job completed state based on clearance status
       setJobCompleted(clearanceData?.status === "complete");
+
+      // Fetch asbestos removal job ID for breadcrumb navigation (separate from main data loading)
+      if (clearanceData?.projectId) {
+        try {
+          const asbestosRemovalJobService = (
+            await import("../../services/asbestosRemovalJobService")
+          ).default;
+          const jobsResponse = await asbestosRemovalJobService.getAll();
+          const projectId =
+            clearanceData.projectId._id || clearanceData.projectId;
+
+          // Find the asbestos removal job that matches this project
+          const matchingJob = jobsResponse.data.find(
+            (job) =>
+              job.projectId === projectId ||
+              job.projectId?._id === projectId ||
+              job.projectId === clearanceData.projectId ||
+              job.projectId?._id === clearanceData.projectId
+          );
+
+          if (matchingJob) {
+            setAsbestosRemovalJobId(matchingJob._id);
+          }
+        } catch (jobError) {
+          console.error("Error fetching asbestos removal job ID:", jobError);
+          // Don't fail the entire data loading if job ID fetching fails
+        }
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
-      setError("Failed to load data");
+      console.error("Error details:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        clearanceId: clearanceId,
+      });
+      setError(`Failed to load data: ${err.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }
@@ -747,6 +796,45 @@ const ClearanceItems = () => {
           severity: "success",
         });
         fetchData(); // Refresh the data to show updated status
+
+        // Navigate to asbestos removal job details after completing clearance
+        if (clearance?.projectId) {
+          // Find the asbestos removal job for this project
+          try {
+            const asbestosRemovalJobService = (
+              await import("../../services/asbestosRemovalJobService")
+            ).default;
+            const jobsResponse = await asbestosRemovalJobService.getAll();
+            const projectId = clearance.projectId._id || clearance.projectId;
+
+            // Find the asbestos removal job that matches this project
+            const matchingJob = jobsResponse.data.find(
+              (job) =>
+                job.projectId === projectId ||
+                job.projectId?._id === projectId ||
+                job.projectId === clearance.projectId ||
+                job.projectId?._id === clearance.projectId
+            );
+
+            if (matchingJob) {
+              // Navigate to the asbestos removal job details
+              navigate(`/asbestos-removal/jobs/${matchingJob._id}/details`);
+            } else {
+              // If no matching job found, navigate to asbestos removal jobs list
+              navigate("/asbestos-removal");
+            }
+          } catch (navError) {
+            console.error(
+              "Error navigating to asbestos removal job:",
+              navError
+            );
+            // Fallback to asbestos removal jobs list
+            navigate("/asbestos-removal");
+          }
+        } else {
+          // If no project ID, navigate to asbestos removal jobs list
+          navigate("/asbestos-removal");
+        }
       } catch (error) {
         console.error("Error completing job:", error);
         setSnackbar({
@@ -797,10 +885,16 @@ const ClearanceItems = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={() => navigate(`/asbestos-removal`)}
+            onClick={() =>
+              navigate(
+                asbestosRemovalJobId
+                  ? `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`
+                  : `/asbestos-removal`
+              )
+            }
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            Asbestos Clearances
+            Asbestos Removal Job Details
           </Link>
           <Typography color="text.primary">
             {clearance.projectId?.name || "Unknown Project"}:{" "}
@@ -828,13 +922,13 @@ const ClearanceItems = () => {
 
           <Button
             variant="contained"
-            color={jobCompleted ? "error" : "success"}
+            color={jobCompleted ? "error" : "primary"}
             onClick={jobCompleted ? undefined : handleCompleteJob}
             disabled={!items || items.length === 0 || jobCompleted}
             sx={{
-              backgroundColor: jobCompleted ? "#d32f2f" : undefined,
+              backgroundColor: jobCompleted ? "#d32f2f" : "#1976d2",
               "&:hover": {
-                backgroundColor: jobCompleted ? "#d32f2f" : undefined,
+                backgroundColor: jobCompleted ? "#d32f2f" : "#1565c0",
               },
             }}
           >

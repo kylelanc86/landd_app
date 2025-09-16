@@ -21,7 +21,6 @@ import Login from "./scenes/login";
 import ResetPassword from "./scenes/login/ResetPassword";
 import SetupPassword from "./scenes/auth/SetupPassword";
 import AirMonitoring from "./scenes/air-monitoring";
-import Shifts from "./scenes/air-monitoring/shifts";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
@@ -200,16 +199,6 @@ function App() {
                                   requiredPermissions={["jobs.view"]}
                                 >
                                   <AirMonitoring />
-                                </PermissionRoute>
-                              }
-                            />
-                            <Route
-                              path="/air-monitoring/jobs/:jobId/shifts"
-                              element={
-                                <PermissionRoute
-                                  requiredPermissions={["jobs.view"]}
-                                >
-                                  <Shifts />
                                 </PermissionRoute>
                               }
                             />

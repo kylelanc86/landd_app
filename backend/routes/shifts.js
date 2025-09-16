@@ -88,11 +88,38 @@ router.get('/:id', auth, async (req, res) => {
 // Create a new shift
 router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
   try {
+    console.log('Creating shift with data:', req.body);
+    
+    // Validate required fields
+    const requiredFields = ['job', 'jobModel', 'name', 'date', 'startTime', 'endTime', 'supervisor', 'descriptionOfWorks'];
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    
+    if (missingFields.length > 0) {
+      console.log('Missing required fields:', missingFields);
+      return res.status(400).json({ 
+        message: 'Missing required fields', 
+        fields: missingFields 
+      });
+    }
+    
     const shift = new Shift(req.body);
+    console.log('Shift object created:', shift);
+    
     const newShift = await shift.save();
+    console.log('Shift saved successfully:', newShift._id);
+    
     res.status(201).json(newShift);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Error creating shift:', error);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      errors: error.errors
+    });
+    res.status(400).json({ 
+      message: error.message,
+      details: error.errors || {}
+    });
   }
 });
 

@@ -22,7 +22,6 @@ import {
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
-import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -38,7 +37,6 @@ const SampleList = () => {
   const { shiftId } = useParams();
   const navigate = useNavigate();
   const [samples, setSamples] = useState([]);
-  const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState("fullSampleID");
   const [sortAsc, setSortAsc] = useState(true);
   const [shift, setShift] = useState(null);
@@ -181,10 +179,6 @@ const SampleList = () => {
     }
   }, [samples]);
 
-  const handleSearch = (event) => {
-    setSearch(event.target.value);
-  };
-
   const handleSort = (field) => {
     if (field === sortField) {
       setSortAsc(!sortAsc);
@@ -285,12 +279,7 @@ const SampleList = () => {
     }
   };
 
-  const filteredSamples = samples.filter((sample) =>
-    Object.values(sample).some(
-      (value) =>
-        value && value.toString().toLowerCase().includes(search.toLowerCase())
-    )
-  );
+  const filteredSamples = samples;
 
   const sortedSamples = [...filteredSamples].sort((a, b) => {
     if (sortField === "sampleNumber" || sortField === "fullSampleID") {
@@ -531,10 +520,13 @@ const SampleList = () => {
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
           <ArrowBackIcon sx={{ mr: 1 }} />
-          {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
-          {job?.projectName || job?.name || "Loading..."} - Shifts
+          Asbestos Removal Job Details
+
         </Link>
-        <Typography color="text.primary">Samples</Typography>
+        <Typography color="text.primary">
+          {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
+          {job?.projectName || job?.name || "Loading..."}
+        </Typography>
       </Breadcrumbs>
       <Typography
         variant="h4"
@@ -555,43 +547,60 @@ const SampleList = () => {
         <Typography variant="h6" sx={{ mb: 1 }}>
           Description of Works
         </Typography>
-        <TextField
-          fullWidth
-          multiline
-          minRows={2}
-          maxRows={6}
-          value={descriptionOfWorks}
-          onChange={handleDescriptionChange}
-          placeholder="Enter a description of works for this shift..."
-          required
-          error={!descriptionOfWorks}
-          helperText={
-            !descriptionOfWorks ? "Description of works is required" : ""
-          }
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  onClick={isDictating ? stopDictation : startDictation}
-                  color={isDictating ? "error" : "primary"}
-                  title={isDictating ? "Stop Dictation" : "Start Dictation"}
-                  sx={{
-                    backgroundColor: isDictating
-                      ? theme.palette.error.light
-                      : "transparent",
-                    "&:hover": {
+        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+          <TextField
+            sx={{ flex: 1 }}
+            multiline
+            minRows={2}
+            maxRows={6}
+            value={descriptionOfWorks}
+            onChange={handleDescriptionChange}
+            placeholder="Enter a description of works for this shift..."
+            required
+            error={!descriptionOfWorks}
+            helperText={
+              !descriptionOfWorks ? "Description of works is required" : ""
+            }
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={isDictating ? stopDictation : startDictation}
+                    color={isDictating ? "error" : "primary"}
+                    title={isDictating ? "Stop Dictation" : "Start Dictation"}
+                    sx={{
                       backgroundColor: isDictating
-                        ? theme.palette.error.main
-                        : theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <MicIcon />
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-        />
+                        ? theme.palette.error.light
+                        : "transparent",
+                      "&:hover": {
+                        backgroundColor: isDictating
+                          ? theme.palette.error.main
+                          : theme.palette.action.hover,
+                      },
+                    }}
+                  >
+                    <MicIcon />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+          <Button
+            variant="contained"
+            onClick={saveDescriptionOfWorks}
+            disabled={!descriptionOfWorks.trim()}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+              minWidth: 140,
+              height: 56, // Match the height of the text field
+            }}
+          >
+            Save Description
+          </Button>
+        </Box>
         {/* Dictation Status and Errors */}
         {isDictating && (
           <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
@@ -623,20 +632,8 @@ const SampleList = () => {
             {dictationError}
           </Typography>
         )}
+        {/* Save Status Messages */}
         <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
-          <Button
-            variant="contained"
-            onClick={saveDescriptionOfWorks}
-            disabled={!descriptionOfWorks.trim()}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              "&:hover": {
-                backgroundColor: theme.palette.primary.dark,
-              },
-            }}
-          >
-            Save Description
-          </Button>
           {descSaveStatus === "Saved" && (
             <Typography variant="caption" color="success.main">
               Description saved successfully
@@ -656,20 +653,19 @@ const SampleList = () => {
         justifyContent="space-between"
         alignItems="center"
       >
-        <TextField
-          label="Search"
-          variant="outlined"
-          value={search}
-          onChange={handleSearch}
-          sx={{ width: { xs: "100%", sm: "300px" } }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddSample}
+          sx={{
+            backgroundColor: theme.palette.primary.main,
+            "&:hover": {
+              backgroundColor: theme.palette.primary.dark,
+            },
           }}
-        />
+        >
+          Add Sample
+        </Button>
         <Button
           variant="outlined"
           startIcon={<DownloadIcon />}
@@ -684,19 +680,6 @@ const SampleList = () => {
           }}
         >
           Download Raw Data
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddSample}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
-            },
-          }}
-        >
-          Add Sample
         </Button>
       </Stack>
 
@@ -833,7 +816,7 @@ const SampleList = () => {
               },
             }}
           >
-            COMPLETE ANALYSIS
+            SAMPLE ANALYSIS
           </Button>
         </Box>
       )}

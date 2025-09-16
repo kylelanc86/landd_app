@@ -29,7 +29,7 @@ const EditSample = () => {
   const { shiftId, sampleId } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [users, setUsers] = useState([]);
+  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [airPumps, setAirPumps] = useState([]);
   const [flowmeters, setFlowmeters] = useState([]);
   const [form, setForm] = useState({
@@ -58,17 +58,38 @@ const EditSample = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch users when component mounts
+  // Fetch asbestos assessors when component mounts
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchAsbestosAssessors = async () => {
       try {
         const response = await userService.getAll();
-        setUsers(response.data);
+        const users = response.data;
+
+        // Filter users who have Asbestos Assessor licenses
+        const assessors = users.filter(
+          (user) =>
+            user.isActive &&
+            user.licences &&
+            user.licences.some(
+              (licence) =>
+                licence.licenceType &&
+                licence.licenceType.toLowerCase().includes("asbestos assessor")
+            )
+        );
+
+        // Sort alphabetically by name
+        const sortedAssessors = assessors.sort((a, b) => {
+          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        setAsbestosAssessors(sortedAssessors);
       } catch (error) {
-        console.error("Error fetching users:", error);
+        console.error("Error fetching asbestos assessors:", error);
       }
     };
-    fetchUsers();
+    fetchAsbestosAssessors();
   }, []);
 
   // Fetch active air pumps when component mounts
@@ -459,9 +480,9 @@ const EditSample = () => {
               label="Sampler"
               required
             >
-              {users.map((user) => (
-                <MenuItem key={user._id} value={user._id}>
-                  {user.firstName} {user.lastName}
+              {asbestosAssessors.map((assessor) => (
+                <MenuItem key={assessor._id} value={assessor._id}>
+                  {assessor.firstName} {assessor.lastName}
                 </MenuItem>
               ))}
             </Select>
