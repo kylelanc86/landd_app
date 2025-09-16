@@ -70,6 +70,7 @@ const projectSchema = new mongoose.Schema({
           });
           
           if (!group) {
+            console.log('❌ STATUS VALIDATION: No project status group found');
             return false;
           }
           
@@ -78,11 +79,18 @@ const projectSchema = new mongoose.Schema({
           );
           
           if (!statusExists) {
+            console.log('❌ STATUS VALIDATION FAILED:', {
+              attemptedStatus: value,
+              availableStatuses: group.fields.map(f => ({ text: f.text, isActive: f.isActive })),
+              projectId: this._id
+            });
             return false;
           }
           
+          console.log('✅ STATUS VALIDATION PASSED:', { status: value, projectId: this._id });
           return true;
         } catch (error) {
+          console.error('❌ STATUS VALIDATION ERROR:', error);
           // If validation fails due to database error, allow the value
           // This prevents validation from breaking if the database is unavailable
           return true;

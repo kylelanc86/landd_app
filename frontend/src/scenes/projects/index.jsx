@@ -1277,7 +1277,13 @@ const Projects = ({ initialFilters = {} }) => {
     const statusChangeStartTime = performance.now();
 
     try {
-      const updatePayload = { status: newStatus };
+      // Find the current project to preserve its users
+      const currentProject = projects.find((p) => p._id === projectId);
+      const updatePayload = {
+        status: newStatus,
+        // Preserve existing users to prevent them from being cleared
+        users: currentProject?.users || [],
+      };
 
       const apiStartTime = performance.now();
       const response = await projectService.update(projectId, updatePayload);
