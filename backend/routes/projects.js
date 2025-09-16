@@ -562,11 +562,23 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       if (Array.isArray(req.body.users)) {
         // Filter out any invalid user IDs and clean up strings
         const cleanedUsers = req.body.users
-          .filter(user => user && typeof user === 'string' && user.trim())
+          .filter(user => {
+            // Accept both string IDs and populated user objects
+            if (typeof user === 'string' && user.trim()) return true;
+            if (typeof user === 'object' && user._id) return true;
+            return false;
+          })
           .map(user => {
-            const trimmed = user.trim();
-            // Remove any carriage returns or newlines
-            return trimmed.replace(/[\r\n]/g, '');
+            // Extract ID from populated objects or clean up string IDs
+            if (typeof user === 'object' && user._id) {
+              return user._id;
+            }
+            if (typeof user === 'string') {
+              const trimmed = user.trim();
+              // Remove any carriage returns or newlines
+              return trimmed.replace(/[\r\n]/g, '');
+            }
+            return user;
           })
           .filter(user => {
             // Check if it's a valid ObjectId format
