@@ -94,6 +94,23 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     
     const templateContent = await getTemplateByType(templateType);
     
+    // Debug logging for template content
+    console.log('\n\n>>>>> TEMPLATE_CONTENT_DEBUG <<<<<\n');
+    console.log('Template type:', templateType);
+    console.log('Template content exists:', !!templateContent);
+    if (templateContent) {
+      console.log('Template standardSections exists:', !!templateContent.standardSections);
+      console.log('Available sections:', Object.keys(templateContent.standardSections || {}));
+      console.log('Background information content exists:', !!templateContent.standardSections?.backgroundInformationContent);
+      console.log('Legislative requirements content exists:', !!templateContent.standardSections?.legislativeRequirementsContent);
+      console.log('Inspection exclusions content exists:', !!templateContent.standardSections?.inspectionExclusionsContent);
+      console.log('Clearance certification content exists:', !!templateContent.standardSections?.clearanceCertificationContent);
+      console.log('Non-friable limitations content exists:', !!templateContent.standardSections?.nonFriableClearanceCertificateLimitationsContent);
+    } else {
+      console.log('No template content found!');
+    }
+    console.log('>>>>> END TEMPLATE_CONTENT_DEBUG <<<<<\n\n');
+    
     // Special handling for Complex clearance type - bypass default template content
     if (clearanceData.useComplexTemplate || clearanceData.clearanceType === 'Complex') {
       console.log('[COMPLEX CLEARANCE] Bypassing default template content system');
@@ -143,7 +160,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
-      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
+      .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: Asbestos Clearance Report - ${clearanceData.projectId?.name || 'Unknown'} (${clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
@@ -267,10 +284,16 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     };
 
     // Prepare template content placeholders first (async operations)
-    const inspectionDetailsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, clearanceData) : 'Inspection details content not found';
-    const inspectionExclusionsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionExclusionsContent, clearanceData) : 'Inspection exclusions content not found';
-    const clearanceCertificationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, clearanceData) : 'Clearance certification content not found';
-    const signOffContent = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, clearanceData) : 'Sign-off content not found';
+    // Merge clearance data with template's selectedLegislation for placeholder replacement
+    const templateData = {
+      ...clearanceData,
+      selectedLegislation: templateContent?.selectedLegislation || []
+    };
+    
+    const inspectionDetailsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, templateData) : 'Inspection details content not found';
+    const inspectionExclusionsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionExclusionsContent, templateData) : 'Inspection exclusions content not found';
+    const clearanceCertificationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, templateData) : 'Clearance certification content not found';
+    const signOffContent = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
 
     // Populate inspection details template with data
     const populatedInspectionDetails = inspectionDetailsTemplate
@@ -281,7 +304,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[ASBESTOS_TYPE\]/g, clearanceData.clearanceType || 'Non-friable')
       .replace(/\[ASBESTOS_REMOVALIST\]/g, clearanceData.asbestosRemovalist || 'Unknown Removalist')
-      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
+      .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[LAA_LICENSE\]/g, 'AA00031')
       .replace(/\[INSPECTION_TIME\]/g, clearanceData.inspectionTime || 'Unknown Time')
       .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
@@ -298,13 +321,13 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent);
 
     // Prepare background information template content placeholders (async operations)
-    const backgroundInformationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, clearanceData) : 'Background information content not found';
-    const legislativeRequirementsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.legislativeRequirementsContent, clearanceData) : 'Legislative requirements content not found';
+    const backgroundInformationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, templateData) : 'Background information content not found';
+    const legislativeRequirementsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.legislativeRequirementsContent, templateData) : 'Legislative requirements content not found';
     
     // Handle limitations based on clearance type (like the old PDF route)
     const clearanceCertificateLimitationsContent = clearanceData.clearanceType === 'Friable'
-      ? (templateContent ? await replacePlaceholders(templateContent.standardSections.friableClearanceCertificateLimitationsContent, clearanceData) : 'Friable clearance certificate limitations content not available')
-      : (templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, clearanceData) : 'Non-friable clearance certificate limitations content not available');
+      ? (templateContent ? await replacePlaceholders(templateContent.standardSections.friableClearanceCertificateLimitationsContent, templateData) : 'Friable clearance certificate limitations content not available')
+      : (templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, templateData) : 'Non-friable clearance certificate limitations content not available');
 
     // Populate background information template with data
     const populatedBackgroundInformation = backgroundInformationTemplate
@@ -624,7 +647,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         
         <!-- Background Information Page -->
           ${populatedBackgroundInformation}
-        <div class="page-break"></div>
+        ${appendixContent ? '<div class="page-break"></div>' : ''}
         
         <!-- Appendix Content -->
         ${appendixContent}
@@ -1719,7 +1742,7 @@ const generateAssessmentHTML = async (assessmentData) => {
             </div>
             <div class="footer">
               <div class="footer-line"></div>
-              ${templateContent?.standardSections?.footerText ? await replacePlaceholders(templateContent.standardSections.footerText, assessmentData) : 'Asbestos Assessment Report'} - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
+              ${templateContent?.standardSections?.footerText ? await replacePlaceholders(templateContent.standardSections.footerText, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Asbestos Assessment Report'} - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
             </div>
           </div>
         `);
@@ -1768,7 +1791,7 @@ const generateAssessmentHTML = async (assessmentData) => {
             </div>
             <div class="footer">
               <div class="footer-line"></div>
-              ${templateContent?.standardSections?.footerText ? await replacePlaceholders(templateContent.standardSections.footerText, assessmentData) : 'Asbestos Assessment Report'} - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
+              ${templateContent?.standardSections?.footerText ? await replacePlaceholders(templateContent.standardSections.footerText, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Asbestos Assessment Report'} - ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}
             </div>
           </div>
         `);
@@ -1784,9 +1807,9 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
-      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, assessmentData) : 'Introduction content not found')
+      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Introduction content not found')
       .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || 'SURVEY FINDINGS')
-      .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, templateContent?.standardSections?.surveyFindingsContent ? await replacePlaceholders(templateContent.standardSections.surveyFindingsContent, assessmentData) : 'Survey findings content not found')
+      .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, templateContent?.standardSections?.surveyFindingsContent ? await replacePlaceholders(templateContent.standardSections.surveyFindingsContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Survey findings content not found')
       .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
 
     // Populate Discussion and Conclusions template with dynamic content
@@ -1808,7 +1831,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[LAA_LICENCE\]/g, 'AA00031') // Default license - will be looked up in replacePlaceholders
       .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[DISCUSSION_TITLE\]/g, templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')
-      .replace(/\[DISCUSSION_CONTENT\]/g, templateContent?.standardSections?.discussionContent ? await replacePlaceholders(templateContent.standardSections.discussionContent, assessmentData) : 'Discussion and conclusions content not found');
+      .replace(/\[DISCUSSION_CONTENT\]/g, templateContent?.standardSections?.discussionContent ? await replacePlaceholders(templateContent.standardSections.discussionContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Discussion and conclusions content not found');
 
 
 
@@ -1816,23 +1839,23 @@ const generateAssessmentHTML = async (assessmentData) => {
     const sections = [
       {
         title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT',
-        content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, assessmentData) : 'Risk assessment content not found'
+        content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Risk assessment content not found'
       },
       {
         title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES',
-        content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, assessmentData) : 'Control measures content not found'
+        content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Control measures content not found'
       },
       {
         title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM',
-        content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, assessmentData) : 'Remediation requirements content not found'
+        content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Remediation requirements content not found'
       },
       {
         title: templateContent?.standardSections?.legislationTitle || 'LEGISLATION',
-        content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, assessmentData) : 'Legislation content not found'
+        content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Legislation content not found'
       },
       {
         title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS',
-        content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, assessmentData) : 'Assessment limitations content not found'
+        content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Assessment limitations content not found'
       }
     ];
 
@@ -1840,7 +1863,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     if (templateContent?.standardSections?.signOffContent) {
       sections.push({
         title: 'SIGN-OFF',
-        content: await replacePlaceholders(templateContent.standardSections.signOffContent, assessmentData)
+        content: await replacePlaceholders(templateContent.standardSections.signOffContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
       });
     }
 
@@ -1848,7 +1871,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     if (templateContent?.standardSections?.signaturePlaceholder) {
       sections.push({
         title: 'SIGNATURE',
-        content: await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, assessmentData)
+        content: await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
       });
     }
 

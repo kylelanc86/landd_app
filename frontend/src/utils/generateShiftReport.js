@@ -304,13 +304,6 @@ pdfMake.fonts = {
                 ],
                 [
                   {
-                    text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
-                    style: 'tableContent',
-                    margin: [0, 0, 0, 2]
-                  }
-                ],
-                [
-                  {
                     columns: [
                       {
                         text: [ { text: 'Sampled by: ', bold: true }, { text: shift?.supervisor ? `${shift.supervisor.firstName} ${shift.supervisor.lastName}` : shift?.defaultSampler ? `${shift.defaultSampler.firstName} ${shift.defaultSampler.lastName}` : 'N/A' } ],
@@ -349,7 +342,13 @@ pdfMake.fonts = {
                   {
                     columns: [
                       {
-                        text: [ { text: 'Report Authorised by: ', bold: true }, { text: shift?.reportApprovedBy || 'Pending authorization' } ],
+                        text: [ 
+                          { text: 'Report Authorised by: ', bold: true }, 
+                          { 
+                            text: shift?.reportApprovedBy || 'Pending authorization',
+                            color: (!shift?.reportApprovedBy) ? 'red' : 'black'
+                          } 
+                        ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -445,6 +444,42 @@ pdfMake.fonts = {
               paddingRight: function(i, node) { return 8; },
               paddingTop: function(i, node) { return 8; },
               paddingBottom: function(i, node) { return 8; },
+            },
+            margin: [0, 0, 0, 10],
+          },
+          
+          // Description of Works Section
+          {
+            table: {
+              headerRows: 0,
+              widths: ['100%'],
+              body: [
+                [
+                  {
+                    text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
+                    style: 'tableContent',
+                    margin: [0, 0, 0, 2]
+                  }
+                ]
+              ]
+            },
+            layout: {
+              hLineWidth: function(i, node) {
+                return 1;
+              },
+              vLineWidth: function(i, node) {
+                return 1;
+              },
+              hLineColor: function(i, node) {
+                return 'gray';
+              },
+              vLineColor: function(i, node) {
+                return 'gray';
+              },
+              paddingLeft: function(i, node) { return 4; },
+              paddingRight: function(i, node) { return 4; },
+              paddingTop: function(i, node) { return 2; },
+              paddingBottom: function(i, node) { return 2; },
             },
             margin: [0, 0, 0, 10],
           },

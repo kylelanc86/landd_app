@@ -23,7 +23,14 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
 
     const jobs = await AsbestosRemovalJob.find(filter)
-      .populate("projectId", "projectID name client")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name contact1Name contact1Email invoiceEmail contact2Email"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName")
       .sort(sortOptions)
@@ -49,7 +56,14 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
 router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
     const job = await AsbestosRemovalJob.findById(req.params.id)
-      .populate("projectId", "projectID name client")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name contact1Name contact1Email invoiceEmail contact2Email"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName");
 
@@ -102,6 +116,8 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       return res.status(404).json({ message: "Asbestos removal job not found" });
     }
 
+    const previousStatus = job.status;
+
     // Update fields
     if (projectId !== undefined) job.projectId = projectId;
     if (projectName !== undefined) job.projectName = projectName;
@@ -113,15 +129,99 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     job.updatedBy = req.user.id;
 
     const updatedJob = await job.save();
+
+    // If job status is being updated to "completed", also update associated shifts
+    if (status === "completed" && previousStatus !== "completed") {
+      try {
+        const Shift = require('../models/Shift');
+        
+        // Update all shifts associated with this job to "complete" status
+        const shiftUpdateResult = await Shift.updateMany(
+          { job: job._id },
+          { 
+            status: "complete",
+            updatedBy: req.user.id
+          }
+        );
+        
+        console.log(`Updated ${shiftUpdateResult.modifiedCount} shifts to complete status for job ${job._id}`);
+      } catch (shiftError) {
+        console.error("Error updating shifts when completing asbestos removal job:", shiftError);
+        // Don't fail the main request if shift update fails
+      }
+    }
     
     const populatedJob = await AsbestosRemovalJob.findById(updatedJob._id)
-      .populate("projectId", "projectID name client")
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name contact1Name contact1Email invoiceEmail contact2Email"
+        }
+      })
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName");
 
     res.json(populatedJob);
   } catch (error) {
     console.error("Error updating asbestos removal job:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Update asbestos removal job status
+router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    const job = await AsbestosRemovalJob.findById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: "Asbestos removal job not found" });
+    }
+
+    const previousStatus = job.status;
+    job.status = status;
+    job.updatedBy = req.user.id;
+
+    const updatedJob = await job.save();
+
+    // If job status is being updated to "completed", also update associated shifts
+    if (status === "completed" && previousStatus !== "completed") {
+      try {
+        const Shift = require('../models/Shift');
+        
+        // Update all shifts associated with this job to "complete" status
+        const shiftUpdateResult = await Shift.updateMany(
+          { job: job._id },
+          { 
+            status: "complete",
+            updatedBy: req.user.id
+          }
+        );
+        
+        console.log(`Updated ${shiftUpdateResult.modifiedCount} shifts to complete status for job ${job._id}`);
+      } catch (shiftError) {
+        console.error("Error updating shifts when completing asbestos removal job:", shiftError);
+        // Don't fail the main request if shift update fails
+      }
+    }
+    
+    const populatedJob = await AsbestosRemovalJob.findById(updatedJob._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name contact1Name contact1Email invoiceEmail contact2Email"
+        }
+      })
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName");
+
+    res.json(populatedJob);
+  } catch (error) {
+    console.error("Error updating asbestos removal job status:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

@@ -72,6 +72,18 @@ const AsbestosRemovalJobDetails = () => {
   const { jobId } = useParams();
   const { currentUser } = useAuth();
 
+  // Debug logging for current user
+  useEffect(() => {
+    console.log("Current User in AsbestosRemovalJobDetails:", {
+      id: currentUser?._id,
+      firstName: currentUser?.firstName,
+      lastName: currentUser?.lastName,
+      role: currentUser?.role,
+      labSignatory: currentUser?.labSignatory,
+      fullUser: currentUser,
+    });
+  }, [currentUser]);
+
   const [job, setJob] = useState(null);
   const [airMonitoringShifts, setAirMonitoringShifts] = useState([]);
   const [clearances, setClearances] = useState([]);
@@ -450,11 +462,16 @@ const AsbestosRemovalJobDetails = () => {
 
   // Job can only be completed if:
   // 1. Job is not already completed
-  // 2. All shifts are complete (if there are any)
-  // 3. All clearances are complete (if there are any)
+  // 2. At least one shift or clearance has been added
+  // 3. All shifts are complete (if there are any)
+  // 4. All clearances are complete (if there are any)
+  const hasShiftsOrClearances =
+    airMonitoringShifts.length > 0 || clearances.length > 0;
+
   const canCompleteJob =
     job &&
     job.status !== "completed" &&
+    hasShiftsOrClearances &&
     (airMonitoringShifts.length === 0 || allShiftsComplete) &&
     (clearances.length === 0 || allClearancesComplete);
 
@@ -586,7 +603,7 @@ const AsbestosRemovalJobDetails = () => {
         }
 
         generateShiftReport({
-          shift: currentShift.data,
+          shift: updatedShiftData,
           job: jobResponse.data,
           samples: samplesWithAnalysis,
           project,
@@ -1054,7 +1071,7 @@ const AsbestosRemovalJobDetails = () => {
             <Typography variant="h4" component="h1" gutterBottom>
               Asbestos Removal Job Details
             </Typography>
-            <Typography variant="h6" color="text.secondary">
+            <Typography variant="h5" color="text.secondary">
               Project: {job?.projectId?.projectID || "Loading..."} -{" "}
               {job?.projectName || "Loading..."}
             </Typography>
@@ -1062,7 +1079,7 @@ const AsbestosRemovalJobDetails = () => {
               Asbestos Removalist: {job?.asbestosRemovalist || "Loading..."}
             </Typography>
           </Box>
-          {job && (
+          {job && hasShiftsOrClearances && (
             <Button
               variant="contained"
               color="success"
@@ -1240,31 +1257,6 @@ const AsbestosRemovalJobDetails = () => {
                             >
                               <DeleteIcon color="error" />
                             </IconButton>
-                            {shift.status !== "shift_complete" && (
-                              <Button
-                                variant="contained"
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSamplesClick(shift);
-                                }}
-                                disabled={shift.reportApprovedBy}
-                                sx={{
-                                  mr: 1,
-                                  backgroundColor: theme.palette.primary.main,
-                                  color: theme.palette.common.white,
-                                  "&:hover": {
-                                    backgroundColor: theme.palette.primary.dark,
-                                  },
-                                  "&:disabled": {
-                                    backgroundColor: theme.palette.grey[400],
-                                    color: theme.palette.grey[600],
-                                  },
-                                }}
-                              >
-                                Samples
-                              </Button>
-                            )}
                             {(shift.status === "analysis_complete" ||
                               shift.status === "shift_complete") && (
                               <>
@@ -1289,30 +1281,64 @@ const AsbestosRemovalJobDetails = () => {
                                     ? "Download Report"
                                     : "View Report"}
                                 </Button>
-                                {!shift.reportApprovedBy &&
-                                  reportViewedShiftIds.has(shift._id) &&
-                                  hasPermission(currentUser, "admin.view") && (
-                                    <Button
-                                      variant="contained"
-                                      size="small"
-                                      color="success"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleAuthoriseReport(shift);
-                                      }}
-                                      sx={{
+                                {(() => {
+                                  const conditions = {
+                                    notApproved: !shift.reportApprovedBy,
+                                    reportViewed: reportViewedShiftIds.has(
+                                      shift._id
+                                    ),
+                                    hasAdminPermission: hasPermission(
+                                      currentUser,
+                                      "admin.view"
+                                    ),
+                                    isLabSignatory: currentUser?.labSignatory,
+                                  };
+                                  console.log(
+                                    "Authorise Report Button Conditions:",
+                                    {
+                                      shiftId: shift._id,
+                                      conditions,
+                                      currentUser: {
+                                        id: currentUser?._id,
+                                        role: currentUser?.role,
+                                        labSignatory: currentUser?.labSignatory,
+                                      },
+                                    }
+                                  );
+                                  // Temporarily test without lab signatory requirement
+                                  const showButton =
+                                    conditions.notApproved &&
+                                    conditions.reportViewed &&
+                                    conditions.hasAdminPermission;
+                                  console.log(
+                                    "Should show button:",
+                                    showButton,
+                                    "Lab signatory check:",
+                                    conditions.isLabSignatory
+                                  );
+                                  return showButton;
+                                })() && (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    color="success"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAuthoriseReport(shift);
+                                    }}
+                                    sx={{
+                                      backgroundColor:
+                                        theme.palette.success.main,
+                                      color: theme.palette.common.white,
+                                      "&:hover": {
                                         backgroundColor:
-                                          theme.palette.success.main,
-                                        color: theme.palette.common.white,
-                                        "&:hover": {
-                                          backgroundColor:
-                                            theme.palette.success.dark,
-                                        },
-                                      }}
-                                    >
-                                      Authorise Report
-                                    </Button>
-                                  )}
+                                          theme.palette.success.dark,
+                                      },
+                                    }}
+                                  >
+                                    Authorise Report
+                                  </Button>
+                                )}
                                 {hasPermission(currentUser, "admin.view") && (
                                   <IconButton
                                     size="small"

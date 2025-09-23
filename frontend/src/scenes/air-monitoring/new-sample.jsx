@@ -545,7 +545,12 @@ const NewSample = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    // Prevent any default behavior if event is provided
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     setError("");
     setFieldErrors({});
 
@@ -619,17 +624,15 @@ const NewSample = () => {
 
       await sampleService.create(sampleData);
 
-      // Add a small delay before navigation to ensure the sample is saved
-      setTimeout(() => {
-        navigate(`/air-monitoring/shift/${shiftId}/samples`);
-      }, 500);
+      // Navigate immediately after successful creation
+      navigate(`/air-monitoring/shift/${shiftId}/samples`);
     } catch (error) {
+      console.error("Error creating sample:", error);
       setError(
         error.response?.data?.message ||
           error.message ||
           "Failed to create sample"
       );
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -671,7 +674,7 @@ const NewSample = () => {
         </Typography>
       )}
 
-      <Box component="form" onSubmit={handleSubmit} noValidate>
+      <Box component="form" noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
           <FormControl fullWidth required error={!!fieldErrors.sampler}>
             <InputLabel>Sampler</InputLabel>
@@ -965,16 +968,21 @@ const NewSample = () => {
               Cancel
             </Button>
             <Button
-              type="submit"
+              type="button"
               variant="contained"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 "&:hover": {
                   backgroundColor: theme.palette.primary.dark,
                 },
+                "&:disabled": {
+                  backgroundColor: theme.palette.grey[400],
+                },
               }}
             >
-              Save Sample
+              {isSubmitting ? "Saving..." : "Save Sample"}
             </Button>
           </Box>
         </Stack>

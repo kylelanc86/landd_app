@@ -5,21 +5,21 @@ let statusCache = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Hardcoded status colors - these can be updated dynamically
+// Hardcoded status colors - these are synced with database and used for fast loading
+// These colors should match the colors in your Custom Data Fields - Project Status table
 let hardcodedStatusColors = {
-  // Active statuses
-  "Assigned": "#1976d2", // Blue
-  "In progress": "#ed6c02", // Orange
-  "Samples submitted": "#9c27b0", // Purple
-  "Lab Analysis Complete": "#2e7d32", // Green
-  "Report sent for review": "#d32f2f", // Red
-  "Ready for invoicing": "#7b1fa2", // Deep Purple
-  "Invoice sent": "#388e3c", // Dark Green
-  "Quote sent": "#1976d2", // Blue
+  // Active statuses (from your database)
+  "In progress": "#1976d2", // Blue
+  "Samples Submitted to Lab": "#84af0d", // Green
+  "Lab Analysis Completed": "#9c27b0", // Purple
+  "Report sent for review": "#f57c00", // Orange
+  "Ready for invoicing": "#37723a", // Dark Green
+  "Invoiced - Awaiting Payment": "#1976d2", // Blue
   
-  // Inactive statuses
+  // Inactive statuses (from your database)
   "Job complete": "#424242", // Grey
-  "On hold": "#f57c00", // Dark Orange
+  "On hold": "#f57c00", // Orange
+  "Quote sent": "#1976d2", // Blue
   "Cancelled": "#d32f2f", // Red
 };
 
@@ -185,6 +185,48 @@ const projectStatusService = {
     console.log('Hardcoded status colors updated successfully');
   },
 
+  // Sync hardcoded colors with database colors (call this when database colors change)
+  async syncHardcodedColorsWithDatabase() {
+    try {
+      console.log('Syncing hardcoded colors with database...');
+      
+      // Get current database colors
+      const allStatuses = await this.getAllStatuses();
+      
+      if (allStatuses && typeof allStatuses === 'object' && allStatuses.activeStatuses && allStatuses.inactiveStatuses) {
+        // Extract colors from database
+        const allStatusObjects = [
+          ...(allStatuses.activeStatuses || []),
+          ...(allStatuses.inactiveStatuses || []),
+        ];
+        
+        const databaseColors = allStatusObjects.reduce((acc, status) => {
+          if (status.text && status.statusColor) {
+            acc[status.text] = status.statusColor;
+          }
+          return acc;
+        }, {});
+        
+        // Update hardcoded colors to match database
+        hardcodedStatusColors = { ...hardcodedStatusColors, ...databaseColors };
+        
+        // Store in localStorage
+        try {
+          localStorage.setItem('statusColors', JSON.stringify(hardcodedStatusColors));
+        } catch (error) {
+          console.warn('Failed to save synced colors to localStorage:', error);
+        }
+        
+        console.log('Hardcoded colors synced with database:', databaseColors);
+        return databaseColors;
+      }
+    } catch (error) {
+      console.error('Error syncing hardcoded colors with database:', error);
+    }
+    
+    return hardcodedStatusColors;
+  },
+
   // Load hardcoded colors from localStorage on initialization
   loadHardcodedColors() {
     try {
@@ -202,5 +244,8 @@ const projectStatusService = {
 
 // Initialize hardcoded colors from localStorage on module load
 projectStatusService.loadHardcodedColors();
+
+// Optional: Sync with database on app startup (uncomment if you want automatic sync)
+// projectStatusService.syncHardcodedColorsWithDatabase();
 
 export default projectStatusService;

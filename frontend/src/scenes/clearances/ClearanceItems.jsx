@@ -40,6 +40,7 @@ import {
   Upload as UploadIcon,
   Delete as DeletePhotoIcon,
   Description as DescriptionIcon,
+  Check as CheckIcon,
 } from "@mui/icons-material";
 import { Checkbox, FormControlLabel } from "@mui/material";
 
@@ -106,6 +107,8 @@ const ClearanceItems = () => {
     locationDescriptions: [],
     materialsDescriptions: [],
   });
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
@@ -197,17 +200,59 @@ const ClearanceItems = () => {
           const projectId =
             clearanceData.projectId._id || clearanceData.projectId;
 
-          // Find the asbestos removal job that matches this project
-          const matchingJob = jobsResponse.data.find(
-            (job) =>
-              job.projectId === projectId ||
-              job.projectId?._id === projectId ||
-              job.projectId === clearanceData.projectId ||
-              job.projectId?._id === clearanceData.projectId
+          // Handle different response structures - some APIs return {data: [...]} others return {jobs: [...]}
+          const jobsArray = jobsResponse.data || jobsResponse.jobs || [];
+
+          console.log(
+            "Looking for asbestos removal job with projectId:",
+            projectId
           );
+          console.log("Clearance data projectId:", clearanceData.projectId);
+          console.log("Jobs response structure:", jobsResponse);
+          console.log(
+            "Available jobs:",
+            jobsArray?.map((job) => ({
+              id: job._id,
+              projectId: job.projectId,
+              projectIdId: job.projectId?._id,
+              name: job.name,
+            }))
+          );
+
+          // Find the asbestos removal job that matches this project
+          // Try multiple matching strategies to be more robust
+          const matchingJob = jobsArray.find((job) => {
+            const jobProjectId = job.projectId?._id || job.projectId;
+            const clearanceProjectId =
+              clearanceData.projectId._id || clearanceData.projectId;
+
+            console.log(
+              `Comparing job ${job._id} projectId (${jobProjectId}) with clearance projectId (${clearanceProjectId})`
+            );
+
+            return (
+              jobProjectId === clearanceProjectId ||
+              jobProjectId === projectId ||
+              job.projectId === projectId ||
+              job.projectId === clearanceData.projectId ||
+              job.projectId?._id === projectId ||
+              job.projectId?._id === clearanceData.projectId
+            );
+          });
+
+          console.log("Matching job found:", matchingJob);
 
           if (matchingJob) {
             setAsbestosRemovalJobId(matchingJob._id);
+            console.log("Set asbestosRemovalJobId to:", matchingJob._id);
+          } else {
+            console.log(
+              "No matching asbestos removal job found for projectId:",
+              projectId
+            );
+            console.log(
+              "This might cause navigation to go to asbestos removal list instead of job details"
+            );
           }
         } catch (jobError) {
           console.error("Error fetching asbestos removal job ID:", jobError);
@@ -783,66 +828,108 @@ const ClearanceItems = () => {
     navigate("/asbestos-removal");
   };
 
-  const handleCompleteJob = async () => {
-    if (window.confirm("Are you sure you want to complete this job?")) {
-      try {
-        await asbestosClearanceService.update(clearanceId, {
-          status: "complete",
-        });
-        setJobCompleted(true);
-        setSnackbar({
-          open: true,
-          message: "Job completed successfully!",
-          severity: "success",
-        });
-        fetchData(); // Refresh the data to show updated status
+  const handleCompleteJob = () => {
+    setCompleteDialogOpen(true);
+  };
 
-        // Navigate to asbestos removal job details after completing clearance
-        if (clearance?.projectId) {
-          // Find the asbestos removal job for this project
-          try {
-            const asbestosRemovalJobService = (
-              await import("../../services/asbestosRemovalJobService")
-            ).default;
-            const jobsResponse = await asbestosRemovalJobService.getAll();
-            const projectId = clearance.projectId._id || clearance.projectId;
+  const confirmCompleteJob = async () => {
+    try {
+      await asbestosClearanceService.update(clearanceId, {
+        status: "complete",
+      });
+      setJobCompleted(true);
+      setSnackbar({
+        open: true,
+        message: "Job completed successfully!",
+        severity: "success",
+      });
+      fetchData(); // Refresh the data to show updated status
 
-            // Find the asbestos removal job that matches this project
-            const matchingJob = jobsResponse.data.find(
-              (job) =>
-                job.projectId === projectId ||
-                job.projectId?._id === projectId ||
-                job.projectId === clearance.projectId ||
-                job.projectId?._id === clearance.projectId
+      console.log(
+        "Complete clearance button clicked - asbestosRemovalJobId:",
+        asbestosRemovalJobId
+      );
+
+      // Navigate to asbestos removal job details after completing clearance
+      if (asbestosRemovalJobId) {
+        console.log(
+          "Navigating to asbestos removal job details:",
+          `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`
+        );
+        // Navigate to the asbestos removal job details using the already fetched job ID
+        navigate(`/asbestos-removal/jobs/${asbestosRemovalJobId}/details`);
+      } else {
+        console.log(
+          "No asbestosRemovalJobId found, attempting to find job ID again..."
+        );
+
+        // Try to find the job ID one more time as a fallback
+        try {
+          const asbestosRemovalJobService = (
+            await import("../../services/asbestosRemovalJobService")
+          ).default;
+          const jobsResponse = await asbestosRemovalJobService.getAll();
+          const projectId = clearance?.projectId?._id || clearance?.projectId;
+
+          // Handle different response structures - some APIs return {data: [...]} others return {jobs: [...]}
+          const jobsArray = jobsResponse.data || jobsResponse.jobs || [];
+
+          const matchingJob = jobsArray.find((job) => {
+            const jobProjectId = job.projectId?._id || job.projectId;
+            return jobProjectId === projectId;
+          });
+
+          if (matchingJob) {
+            console.log("Found matching job in fallback:", matchingJob._id);
+            navigate(`/asbestos-removal/jobs/${matchingJob._id}/details`);
+          } else {
+            console.log(
+              "Still no matching job found, navigating to asbestos removal list"
             );
-
-            if (matchingJob) {
-              // Navigate to the asbestos removal job details
-              navigate(`/asbestos-removal/jobs/${matchingJob._id}/details`);
-            } else {
-              // If no matching job found, navigate to asbestos removal jobs list
-              navigate("/asbestos-removal");
-            }
-          } catch (navError) {
-            console.error(
-              "Error navigating to asbestos removal job:",
-              navError
-            );
-            // Fallback to asbestos removal jobs list
             navigate("/asbestos-removal");
           }
-        } else {
-          // If no project ID, navigate to asbestos removal jobs list
+        } catch (fallbackError) {
+          console.error("Error in fallback job search:", fallbackError);
           navigate("/asbestos-removal");
         }
-      } catch (error) {
-        console.error("Error completing job:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to complete job",
-          severity: "error",
-        });
       }
+    } catch (error) {
+      console.error("Error completing job:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to complete job",
+        severity: "error",
+      });
+    } finally {
+      setCompleteDialogOpen(false);
+    }
+  };
+
+  const handleReopenJob = () => {
+    setReopenDialogOpen(true);
+  };
+
+  const confirmReopenJob = async () => {
+    try {
+      await asbestosClearanceService.update(clearanceId, {
+        status: "in progress",
+      });
+      setJobCompleted(false);
+      setSnackbar({
+        open: true,
+        message: "Clearance reopened successfully!",
+        severity: "success",
+      });
+      fetchData(); // Refresh the data to show updated status
+    } catch (error) {
+      console.error("Error reopening job:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to reopen clearance",
+        severity: "error",
+      });
+    } finally {
+      setReopenDialogOpen(false);
     }
   };
 
@@ -923,16 +1010,16 @@ const ClearanceItems = () => {
           <Button
             variant="contained"
             color={jobCompleted ? "error" : "primary"}
-            onClick={jobCompleted ? undefined : handleCompleteJob}
-            disabled={!items || items.length === 0 || jobCompleted}
+            onClick={jobCompleted ? handleReopenJob : handleCompleteJob}
+            disabled={!items || items.length === 0}
             sx={{
               backgroundColor: jobCompleted ? "#d32f2f" : "#1976d2",
               "&:hover": {
-                backgroundColor: jobCompleted ? "#d32f2f" : "#1565c0",
+                backgroundColor: jobCompleted ? "#b71c1c" : "#1565c0",
               },
             }}
           >
-            {jobCompleted ? "COMPLETED" : "COMPLETE CLEARANCE"}
+            {jobCompleted ? "REOPEN CLEARANCE" : "COMPLETE CLEARANCE"}
           </Button>
         </Box>
 
@@ -1868,6 +1955,166 @@ const ClearanceItems = () => {
               }}
             >
               Close
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Complete Clearance Confirmation Dialog */}
+        <Dialog
+          open={completeDialogOpen}
+          onClose={() => setCompleteDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "success.main",
+                color: "white",
+              }}
+            >
+              <CheckIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Complete Clearance
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to complete this clearance?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setCompleteDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmCompleteJob}
+              variant="contained"
+              color="success"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: "success.main",
+                "&:hover": {
+                  backgroundColor: "success.dark",
+                },
+              }}
+            >
+              Complete Clearance
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Reopen Clearance Confirmation Dialog */}
+        <Dialog
+          open={reopenDialogOpen}
+          onClose={() => setReopenDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <EditIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Reopen Clearance
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to reopen this clearance?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setReopenDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReopenJob}
+              variant="contained"
+              color="warning"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: "warning.main",
+                "&:hover": {
+                  backgroundColor: "warning.dark",
+                },
+              }}
+            >
+              Reopen Clearance
             </Button>
           </DialogActions>
         </Dialog>

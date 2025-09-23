@@ -115,6 +115,13 @@ const reportTemplateSchema = new mongoose.Schema(
       documentDetailsLabel: String,
       revisionHistoryLabel: String,
     },
+    // Selected legislation items for the template
+    selectedLegislation: [{
+      _id: String,
+      text: String,
+      legislationTitle: String,
+      jurisdiction: String
+    }],
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

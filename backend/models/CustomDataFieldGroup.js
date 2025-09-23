@@ -154,6 +154,7 @@ CustomDataFieldGroupSchema.statics.getFieldsByType = async function(type) {
       .filter(field => field.isActive)
       .sort((a, b) => a.order - b.order)
       .map(field => ({
+        _id: field._id,
         text: field.text,
         isActive: field.isActive,
         isActiveStatus: field.isActiveStatus,

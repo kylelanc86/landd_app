@@ -116,6 +116,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  labSignatory: {
+    type: Boolean,
+    default: false
+  },
   notifications: {
     email: {
       type: Boolean,

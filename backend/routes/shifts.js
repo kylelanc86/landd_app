@@ -91,7 +91,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     console.log('Creating shift with data:', req.body);
     
     // Validate required fields
-    const requiredFields = ['job', 'jobModel', 'name', 'date', 'startTime', 'endTime', 'supervisor', 'descriptionOfWorks'];
+    const requiredFields = ['job', 'jobModel', 'name', 'date', 'startTime', 'endTime', 'supervisor'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {

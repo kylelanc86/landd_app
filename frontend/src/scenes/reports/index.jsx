@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
@@ -22,10 +22,28 @@ import {
   Search as SearchIcon,
   Clear as ClearIcon,
   Assessment as AssessmentIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 
 import { projectService } from "../../services/api";
 import ProjectDetailsModal from "./ProjectDetailsModal.jsx";
+
+// Debounce hook for search optimization
+const useDebounce = (value, delay) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+};
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -37,85 +55,95 @@ const Reports = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
-  const [allProjects, setAllProjects] = useState([]);
+  const [searchCache, setSearchCache] = useState(new Map());
 
-  // Search projects function
-  // Load all projects and recent searches on mount
-  useEffect(() => {
-    const loadAllProjects = async () => {
+  // Debounce search term to reduce API calls
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Function to load search results directly
+  const loadSearchResults = useCallback(
+    async (searchValue) => {
+      if (!searchValue.trim() || searchValue.length < 2) {
+        setSearchResults([]);
+        setError("");
+        return;
+      }
+
+      // Check cache first
+      const cacheKey = `search_${searchValue.trim().toLowerCase()}`;
+      if (searchCache.has(cacheKey)) {
+        const cachedResults = searchCache.get(cacheKey);
+        setSearchResults(cachedResults);
+        if (cachedResults.length === 0) {
+          setError("No projects found matching your search term");
+        } else {
+          setError("");
+        }
+        return;
+      }
+
       try {
-        const response = await projectService.getAll({
-          limit: 1000,
-          sortBy: "projectID",
+        setSearching(true);
+        setError("");
+        setSearchResults([]);
+
+        const params = {
+          page: 1,
+          limit: 20, // Show more results since it's the main table
+          sortBy: "createdAt", // Use createdAt for better performance
           sortOrder: "desc",
-        });
+          search: searchValue.trim(),
+        };
+
+        const response = await projectService.getAll(params);
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
-        setAllProjects(projectsData);
+
+        // Debug: Log the first project to see client data structure
+        if (projectsData.length > 0) {
+          console.log("First project data:", projectsData[0]);
+          console.log("Client data:", projectsData[0].client);
+          console.log("Total projects found:", projectsData.length);
+        }
+
+        // Cache the results
+        setSearchCache((prev) => new Map(prev).set(cacheKey, projectsData));
+        setSearchResults(projectsData);
+
+        if (projectsData.length === 0) {
+          setError("No projects found matching your search term");
+        } else {
+          setError("");
+        }
       } catch (err) {
-        console.error("Error loading all projects:", err);
+        console.error("Error searching projects:", err);
+        setError("Failed to search projects");
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
       }
-    };
+    },
+    [searchCache]
+  );
 
-    loadAllProjects();
-
-    // Load recent searches from localStorage
+  // Load recent searches on mount
+  useEffect(() => {
     const savedSearches = localStorage.getItem("recentProjectSearches");
     if (savedSearches) {
       setRecentSearches(JSON.parse(savedSearches));
     }
   }, []);
 
-  const handleSearch = async (searchValue = searchTerm) => {
-    const termToSearch = searchValue || searchTerm;
-    if (!termToSearch.trim()) {
-      setError("Please enter a search term");
-      return;
-    }
-
-    try {
-      setSearching(true);
+  // Load search results when debounced term changes
+  useEffect(() => {
+    if (debouncedSearchTerm.trim()) {
+      loadSearchResults(debouncedSearchTerm);
+    } else {
+      setSearchResults([]);
       setError("");
-      setSearchResults([]);
-
-      const params = {
-        page: 1,
-        limit: 1000,
-        sortBy: "projectID",
-        sortOrder: "desc",
-        search: termToSearch.trim(),
-      };
-
-      const response = await projectService.getAll(params);
-      const projectsData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-
-      setSearchResults(projectsData);
-
-      if (projectsData.length === 0) {
-        setError("No projects found matching your search term");
-      } else {
-        // Update recent searches
-        const updatedSearches = [
-          projectsData[0],
-          ...recentSearches.filter((p) => p._id !== projectsData[0]._id),
-        ].slice(0, 5);
-        setRecentSearches(updatedSearches);
-        localStorage.setItem(
-          "recentProjectSearches",
-          JSON.stringify(updatedSearches)
-        );
-      }
-    } catch (err) {
-      console.error("Error searching projects:", err);
-      setError("Failed to search projects");
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
     }
-  };
+  }, [debouncedSearchTerm, loadSearchResults]);
 
   const handleClearSearch = () => {
     setSearchTerm("");
@@ -123,10 +151,21 @@ const Reports = () => {
     setError("");
   };
 
+  const handleRemoveFromRecent = (projectToRemove) => {
+    const updatedSearches = recentSearches.filter(
+      (project) => project._id !== projectToRemove._id
+    );
+    setRecentSearches(updatedSearches);
+    localStorage.setItem(
+      "recentProjectSearches",
+      JSON.stringify(updatedSearches)
+    );
+  };
+
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Reports
+      <Typography variant="h3" component="h1" marginTop="10px" marginBottom="20px">
+        All Projects
       </Typography>
 
       {/* Project Search Section */}
@@ -135,31 +174,22 @@ const Reports = () => {
           Search Projects
         </Typography>
 
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={2}
-          sx={{
-            width: "100%",
-            mb: 2,
-          }}
-        >
+        <Box sx={{ mb: 2 }}>
           <TextField
-            sx={{
-              flexGrow: 1,
-              minWidth: { xs: "100%", sm: "60%" },
-            }}
+            fullWidth
             label="Search for a project"
-            placeholder="Enter project ID, name, or client"
+            placeholder="Type project ID, name, or client (searches automatically)"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === "Enter") {
-                handleSearch(searchTerm);
-              }
-            }}
             InputProps={{
               startAdornment: (
-                <SearchIcon sx={{ mr: 1, color: "text.secondary" }} />
+                <InputAdornment position="start">
+                  {searching ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <SearchIcon sx={{ color: "text.secondary" }} />
+                  )}
+                </InputAdornment>
               ),
               endAdornment: searchTerm && (
                 <InputAdornment position="end">
@@ -174,64 +204,97 @@ const Reports = () => {
               ),
             }}
           />
+        </Box>
 
-          <Button
-            variant="contained"
-            onClick={() => handleSearch(searchTerm)}
-            disabled={!searchTerm.trim() || searching}
-            sx={{
-              minWidth: { xs: "100%", sm: 140 },
-            }}
-          >
-            {searching ? (
-              <CircularProgress size={20} color="inherit" />
-            ) : (
-              "Search"
-            )}
-          </Button>
-        </Stack>
-
-        {/* Recent Projects */}
-        {recentSearches.length > 0 && (
+        {/* Recent Projects - Only show when not searching */}
+        {!searchTerm.trim() && recentSearches.length > 0 && (
           <Box sx={{ mt: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Recent Projects
+              Recent Projects ({recentSearches.length})
             </Typography>
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
                   <TableRow>
                     <TableCell>Project ID</TableCell>
-                    <TableCell>Site Name</TableCell>
-                    <TableCell>Client</TableCell>
+                    <TableCell>Project</TableCell>
                     <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {recentSearches.map((project) => (
-                    <TableRow
-                      key={project._id}
-                      hover
-                      sx={{ cursor: "pointer" }}
-                      onClick={() =>
-                        navigate(`/reports/project/${project._id}`)
-                      }
-                    >
+                    <TableRow key={project._id} hover>
                       <TableCell>{project.projectID}</TableCell>
-                      <TableCell>{project.name}</TableCell>
-                      <TableCell>{project.client?.name}</TableCell>
+                      <TableCell>
+                        <Box>
+                          <Typography variant="body1">
+                            {project.name}
+                          </Typography>
+                          {project.client?.name ||
+                          (typeof project.client === "string"
+                            ? project.client
+                            : null) ? (
+                            <Typography variant="body2" color="text.secondary">
+                              Client:{" "}
+                              {project.client?.name ||
+                                (typeof project.client === "string"
+                                  ? project.client
+                                  : "No Client")}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      </TableCell>
                       <TableCell align="right">
-                        <Button
-                          size="small"
-                          startIcon={<AssessmentIcon />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedProject(project);
-                            setDetailsModalOpen(true);
-                          }}
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          justifyContent="flex-end"
                         >
-                          Details
-                        </Button>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Add to recent searches when clicked
+                              const updatedSearches = [
+                                project,
+                                ...recentSearches.filter(
+                                  (p) => p._id !== project._id
+                                ),
+                              ].slice(0, 20);
+                              setRecentSearches(updatedSearches);
+                              localStorage.setItem(
+                                "recentProjectSearches",
+                                JSON.stringify(updatedSearches)
+                              );
+                              navigate(`/reports/project/${project._id}`);
+                            }}
+                          >
+                            View Reports
+                          </Button>
+                          <Button
+                            size="small"
+                            startIcon={<AssessmentIcon />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedProject(project);
+                              setDetailsModalOpen(true);
+                            }}
+                          >
+                            Details
+                          </Button>
+                          <IconButton
+                            size="small"
+                            color="default"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveFromRecent(project);
+                            }}
+                            title="Remove from recent"
+                          >
+                            <CloseIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -240,52 +303,6 @@ const Reports = () => {
             </TableContainer>
           </Box>
         )}
-
-        {/* All Projects */}
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            All Projects
-          </Typography>
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Project ID</TableCell>
-                  <TableCell>Site Name</TableCell>
-                  <TableCell>Client</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {allProjects.map((project) => (
-                  <TableRow
-                    key={project._id}
-                    hover
-                    sx={{ cursor: "pointer" }}
-                    onClick={() => navigate(`/reports/project/${project._id}`)}
-                  >
-                    <TableCell>{project.projectID}</TableCell>
-                    <TableCell>{project.name}</TableCell>
-                    <TableCell>{project.client?.name}</TableCell>
-                    <TableCell align="right">
-                      <Button
-                        size="small"
-                        startIcon={<AssessmentIcon />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedProject(project);
-                          setDetailsModalOpen(true);
-                        }}
-                      >
-                        Details
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
 
         {/* Search Results */}
         {searchResults.length > 0 && (
@@ -298,8 +315,7 @@ const Reports = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Project ID</TableCell>
-                    <TableCell>Site Name</TableCell>
-                    <TableCell>Client</TableCell>
+                    <TableCell>Project</TableCell>
                     <TableCell align="center">Action</TableCell>
                   </TableRow>
                 </TableHead>
@@ -307,8 +323,25 @@ const Reports = () => {
                   {searchResults.map((project) => (
                     <TableRow key={project._id}>
                       <TableCell>{project.projectID}</TableCell>
-                      <TableCell>{project.name}</TableCell>
-                      <TableCell>{project.client?.name}</TableCell>
+                      <TableCell>
+                        <Box>
+                          <Typography variant="body1">
+                            {project.name}
+                          </Typography>
+                          {project.client?.name ||
+                          (typeof project.client === "string"
+                            ? project.client
+                            : null) ? (
+                            <Typography variant="body2" color="text.secondary">
+                              Client:{" "}
+                              {project.client?.name ||
+                                (typeof project.client === "string"
+                                  ? project.client
+                                  : "No Client")}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      </TableCell>
                       <TableCell align="center">
                         <Stack
                           direction="row"
@@ -318,9 +351,21 @@ const Reports = () => {
                           <Button
                             variant="contained"
                             size="small"
-                            onClick={() =>
-                              navigate(`/reports/project/${project._id}`)
-                            }
+                            onClick={() => {
+                              // Add to recent searches when clicked
+                              const updatedSearches = [
+                                project,
+                                ...recentSearches.filter(
+                                  (p) => p._id !== project._id
+                                ),
+                              ].slice(0, 20);
+                              setRecentSearches(updatedSearches);
+                              localStorage.setItem(
+                                "recentProjectSearches",
+                                JSON.stringify(updatedSearches)
+                              );
+                              navigate(`/reports/project/${project._id}`);
+                            }}
                           >
                             View Reports
                           </Button>

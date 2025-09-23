@@ -216,7 +216,8 @@ export const projectService = {
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.search) queryParams.append('search', params.search);
-    // Note: Status filtering is handled client-side, not on the backend
+    // Add status parameter for backend filtering
+    if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
     if (params.projectType) queryParams.append('projectType', params.projectType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);

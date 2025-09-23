@@ -19,6 +19,10 @@ import {
   Link,
   Snackbar,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import EditIcon from "@mui/icons-material/Edit";
@@ -49,11 +53,15 @@ const SampleList = () => {
   const [descSaveStatus, setDescSaveStatus] = useState("");
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
+  const [showDescriptionDialog, setShowDescriptionDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
     severity: "success",
   });
+
+  // Check if report is authorized
+  const isReportAuthorized = shift?.reportApprovedBy;
 
   // Function to extract the numeric part from a sample number
   const extractSampleNumber = (sampleNumber) => {
@@ -395,6 +403,12 @@ const SampleList = () => {
   };
 
   const handleAddSample = () => {
+    // Check if description of works is provided
+    if (!descriptionOfWorks || descriptionOfWorks.trim() === "") {
+      setShowDescriptionDialog(true);
+      return;
+    }
+
     // Reset shift status to ongoing when adding a new sample
     shiftService.update(shiftId, { status: "ongoing" });
     navigate(`/air-monitoring/shift/${shiftId}/samples/new`, {
@@ -521,13 +535,22 @@ const SampleList = () => {
         >
           <ArrowBackIcon sx={{ mr: 1 }} />
           Asbestos Removal Job Details
-
         </Link>
         <Typography color="text.primary">
           {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
           {job?.projectName || job?.name || "Loading..."}
         </Typography>
       </Breadcrumbs>
+
+      {/* Authorization Warning */}
+      {isReportAuthorized && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          This report was finalised by {shift.reportApprovedBy} on{" "}
+          {new Date(shift.reportIssueDate).toLocaleDateString()}. Contact admin
+          if shift data needs revision.
+        </Alert>
+      )}
+
       <Typography
         variant="h4"
         sx={{
@@ -539,7 +562,7 @@ const SampleList = () => {
         }}
       >
         {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
-        {job?.projectName || job?.name || "Loading..."}-{" "}
+        {job?.projectName || job?.name || "Loading..."} -
         {shift?.name ? `${formatDate(shift.date)}` : "Loading..."}
       </Typography>
       {/* Description of Works Field */}
@@ -561,8 +584,9 @@ const SampleList = () => {
             helperText={
               !descriptionOfWorks ? "Description of works is required" : ""
             }
+            disabled={isReportAuthorized}
             InputProps={{
-              endAdornment: (
+              endAdornment: !isReportAuthorized ? (
                 <InputAdornment position="end">
                   <IconButton
                     onClick={isDictating ? stopDictation : startDictation}
@@ -582,13 +606,13 @@ const SampleList = () => {
                     <MicIcon />
                   </IconButton>
                 </InputAdornment>
-              ),
+              ) : undefined,
             }}
           />
           <Button
             variant="contained"
             onClick={saveDescriptionOfWorks}
-            disabled={!descriptionOfWorks.trim()}
+            disabled={!descriptionOfWorks.trim() || isReportAuthorized}
             sx={{
               backgroundColor: theme.palette.primary.main,
               "&:hover": {
@@ -657,6 +681,7 @@ const SampleList = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddSample}
+          disabled={isReportAuthorized}
           sx={{
             backgroundColor: theme.palette.primary.main,
             "&:hover": {
@@ -687,20 +712,52 @@ const SampleList = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell onClick={() => handleSort("sampleNumber")}>
+              <TableCell
+                onClick={
+                  !isReportAuthorized
+                    ? () => handleSort("sampleNumber")
+                    : undefined
+                }
+              >
                 Sample Number
               </TableCell>
-              <TableCell onClick={() => handleSort("type")}>Type</TableCell>
-              <TableCell onClick={() => handleSort("location")}>
+              <TableCell
+                onClick={
+                  !isReportAuthorized ? () => handleSort("type") : undefined
+                }
+              >
+                Type
+              </TableCell>
+              <TableCell
+                onClick={
+                  !isReportAuthorized ? () => handleSort("location") : undefined
+                }
+              >
                 Location
               </TableCell>
-              <TableCell onClick={() => handleSort("startTime")}>
+              <TableCell
+                onClick={
+                  !isReportAuthorized
+                    ? () => handleSort("startTime")
+                    : undefined
+                }
+              >
                 Start Time
               </TableCell>
-              <TableCell onClick={() => handleSort("endTime")}>
+              <TableCell
+                onClick={
+                  !isReportAuthorized ? () => handleSort("endTime") : undefined
+                }
+              >
                 End Time
               </TableCell>
-              <TableCell onClick={() => handleSort("averageFlowrate")}>
+              <TableCell
+                onClick={
+                  !isReportAuthorized
+                    ? () => handleSort("averageFlowrate")
+                    : undefined
+                }
+              >
                 Flow Rate (L/min)
               </TableCell>
               <TableCell>Actions</TableCell>
@@ -716,7 +773,7 @@ const SampleList = () => {
                 <TableCell>
                   {sample.endTime ? formatTime(sample.endTime) : "-"}
                 </TableCell>
-                <TableCell>{sample.averageFlowrate}</TableCell>
+                <TableCell>{sample.averageFlowrate || "-"}</TableCell>
                 <TableCell>
                   <Button
                     variant="outlined"
@@ -726,11 +783,15 @@ const SampleList = () => {
                         `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
                       )
                     }
+                    disabled={isReportAuthorized}
                     sx={{ mr: 1 }}
                   >
                     Edit Sample
                   </Button>
-                  <IconButton onClick={() => handleDelete(sample._id)}>
+                  <IconButton
+                    onClick={() => handleDelete(sample._id)}
+                    disabled={isReportAuthorized}
+                  >
                     <DeleteIcon />
                   </IconButton>
                 </TableCell>
@@ -759,7 +820,11 @@ const SampleList = () => {
               variant="contained"
               color="primary"
               onClick={handleSampleComplete}
-              disabled={isCompleteDisabled || shift?.status !== "ongoing"}
+              disabled={
+                isCompleteDisabled ||
+                shift?.status !== "ongoing" ||
+                isReportAuthorized
+              }
               sx={{
                 backgroundColor: theme.palette.info.main,
                 color: theme.palette.info.contrastText,
@@ -786,6 +851,7 @@ const SampleList = () => {
               variant="contained"
               color="secondary"
               onClick={handleSamplesSubmittedToLab}
+              disabled={isReportAuthorized}
               sx={{
                 backgroundColor: theme.palette.warning.main,
                 color: theme.palette.warning.contrastText,
@@ -808,6 +874,7 @@ const SampleList = () => {
             onClick={() =>
               navigate(`/air-monitoring/shift/${shiftId}/analysis`)
             }
+            disabled={isReportAuthorized}
             sx={{
               backgroundColor: theme.palette.success.main,
               color: theme.palette.success.contrastText,
@@ -836,6 +903,50 @@ const SampleList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Description Required Dialog */}
+      <Dialog
+        open={showDescriptionDialog}
+        onClose={() => setShowDescriptionDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Description of Works Required</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mt: 2, mb: 2 }}>
+            You must provide a description of works before adding samples to
+            this shift.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowDescriptionDialog(false)}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setShowDescriptionDialog(false);
+              // Scroll to the description field
+              const descriptionField = document.querySelector(
+                'textarea[placeholder*="description of works"]'
+              );
+              if (descriptionField) {
+                descriptionField.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+                descriptionField.focus();
+              }
+            }}
+            variant="contained"
+            color="primary"
+          >
+            Go to Description Field
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

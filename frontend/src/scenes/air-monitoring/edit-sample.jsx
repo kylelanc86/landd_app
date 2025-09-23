@@ -330,7 +330,12 @@ const EditSample = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    // Prevent any default behavior if event is provided
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     setError("");
     setFieldErrors({});
 
@@ -469,7 +474,7 @@ const EditSample = () => {
         Edit Sample
       </Typography>
 
-      <Box component="form" onSubmit={handleSubmit} noValidate>
+      <Box component="form" noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
           <FormControl fullWidth required error={!!fieldErrors.sampler}>
             <InputLabel>Sampler</InputLabel>
@@ -751,16 +756,21 @@ const EditSample = () => {
               Cancel
             </Button>
             <Button
-              type="submit"
+              type="button"
               variant="contained"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 "&:hover": {
                   backgroundColor: theme.palette.primary.dark,
                 },
+                "&:disabled": {
+                  backgroundColor: theme.palette.grey[400],
+                },
               }}
             >
-              Save Changes
+              {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </Box>
         </Stack>

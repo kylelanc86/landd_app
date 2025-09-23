@@ -9,6 +9,12 @@ const customDataFieldService = {
 
   // Get all custom data fields by type
   getByType: async (type) => {
+    // For legislation, use the custom data field groups endpoint
+    if (type === 'legislation') {
+      const response = await api.get(`/custom-data-field-groups/fields/${type}`);
+      return response.data;
+    }
+    // For other types, use the original endpoint
     const response = await api.get(`/custom-data-fields/${type}`);
     return response.data;
   },

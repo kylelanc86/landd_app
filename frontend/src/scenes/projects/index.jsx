@@ -40,6 +40,7 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
+import InfoIcon from "@mui/icons-material/Info";
 
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
@@ -200,41 +201,16 @@ const Projects = ({ initialFilters = {} }) => {
     }
   }, [projects, statusColors, uniqueStatuses]);
 
-  // Helper to get a color for a given status - memoized to prevent recreation
+  // Helper to get a color for a given status - uses hardcoded colors for fast loading
   const getStatusColor = useCallback(
     (status) => {
-      // Use custom colors from the database if available
+      // Use hardcoded colors (these are synced with database)
       if (statusColors && statusColors[status]) {
         return statusColors[status];
       }
 
-      // Fallback to hardcoded colors for backward compatibility
-      switch (status) {
-        case "Assigned":
-          return "#1976d2"; // Blue
-        case "In progress":
-          return "#ed6c02"; // Orange
-        case "Samples submitted":
-          return "#9c27b0"; // Purple
-        case "Lab Analysis Complete":
-          return "#2e7d32"; // Green
-        case "Report sent for review":
-          return "#d32f2f"; // Red
-        case "Ready for invoicing":
-          return "#7b1fa2"; // Deep Purple
-        case "Invoice sent":
-          return "#388e3c"; // Dark Green
-        case "Job complete":
-          return "#424242"; // Grey
-        case "On hold":
-          return "#f57c00"; // Dark Orange
-        case "Quote sent":
-          return "#1976d2"; // Blue
-        case "Cancelled":
-          return "#d32f2f"; // Red
-        default:
-          return "#1976d2"; // Default Material-UI primary blue
-      }
+      // Fallback to default color if status not found
+      return "#1976d2"; // Default Material-UI primary blue
     },
     [statusColors]
   );
@@ -485,17 +461,17 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = filtersToUse.departmentFilter;
         }
 
-        // Note: Status filtering is handled client-side, not on the backend
+        // Only load active projects for better performance
+        // Inactive projects can be accessed via the reports page if needed
+        if (activeStatuses.length > 0) {
+          params.status = "all_active";
+        }
 
-        const apiStartTime = performance.now();
         const response = await projectService.getAll(params);
-        const apiEndTime = performance.now();
 
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
-
-        const processingEndTime = performance.now();
 
         setProjects(projectsData);
         setPagination({
@@ -514,7 +490,7 @@ const Projects = ({ initialFilters = {} }) => {
         setSearchLoading(false);
       }
     },
-    [] // Remove filters dependency since we now use ref to get current state
+    [activeStatuses] // Include activeStatuses to refetch when statuses change
   );
 
   // Move fetchProjects here so it is defined after fetchAllProjects
@@ -582,7 +558,10 @@ const Projects = ({ initialFilters = {} }) => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // Note: Status filtering is handled client-side, not on the backend
+          // Only load active projects for better performance
+          if (activeStatuses.length > 0) {
+            params.status = "all_active";
+          }
 
           const response = await projectService.getAll(params);
 
@@ -819,10 +798,13 @@ const Projects = ({ initialFilters = {} }) => {
     fetchUsers();
   }, []);
 
-  // Initial fetch for projects when component mounts
+  // Initial fetch for projects when component mounts and statuses are loaded
   useEffect(() => {
-    fetchProjects(false);
-  }, []); // Empty dependency array for initial load only
+    // Only fetch projects if we have active statuses loaded
+    if (activeStatuses.length > 0) {
+      fetchAllProjects();
+    }
+  }, [activeStatuses, fetchAllProjects]); // Depend on activeStatuses and fetchAllProjects
 
   // Fetch status counts when component mounts and when statuses change
   useEffect(() => {
@@ -1193,7 +1175,10 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = departmentValue;
         }
 
-        // Note: Status filtering is handled client-side, not on the backend
+        // Only load active projects for better performance
+        if (activeStatuses.length > 0) {
+          params.status = "all_active";
+        }
 
         const response = await projectService.getAll(params);
 
@@ -1370,9 +1355,6 @@ const Projects = ({ initialFilters = {} }) => {
         renderCell: ({ row }) => {
           const clientName = row.client?.name || row.client || "";
           const projectName = row.name || "";
-          const displayText = clientName
-            ? `${clientName} - ${projectName}`
-            : projectName;
 
           return (
             <Box
@@ -1382,10 +1364,10 @@ const Projects = ({ initialFilters = {} }) => {
                 lineHeight: 1.2,
                 height: "100%",
                 display: "flex",
-                alignItems: "center",
-                maxHeight: "2.4em", // 2 lines * 1.2 line height
-                overflow: "hidden",
+                flexDirection: "column",
+                justifyContent: "center",
                 width: "100%",
+                py: 0.5,
               }}
             >
               <Typography
@@ -1399,10 +1381,30 @@ const Projects = ({ initialFilters = {} }) => {
                   display: "-webkit-box",
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
                 }}
               >
-                {displayText}
+                {projectName}
               </Typography>
+              {clientName && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    whiteSpace: "normal",
+                    wordWrap: "break-word",
+                    lineHeight: 1.2,
+                    width: "100%",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 1,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    mt: 0.25,
+                  }}
+                >
+                  Client: {clientName}
+                </Typography>
+              )}
             </Box>
           );
         },
@@ -1519,8 +1521,8 @@ const Projects = ({ initialFilters = {} }) => {
         field: "status",
         headerName: "Status",
         flex: 1,
-        minWidth: 60,
-        maxWidth: 165,
+        minWidth: 180,
+        maxWidth: 200,
         renderCell: (params) => (
           <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
             {/* Status display - no click functionality */}
@@ -1558,12 +1560,26 @@ const Projects = ({ initialFilters = {} }) => {
       },
       {
         field: "actions",
-        headerName: "Actions & Status",
+        headerName: "Actions",
         flex: 1,
-        minWidth: 120,
+        minWidth: 150,
         maxWidth: 160,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
+            {/* Project Details button */}
+            <Tooltip title="View Project Details">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/projects/${params.row._id}`);
+                }}
+                size="small"
+                color="primary"
+              >
+                <InfoIcon />
+              </IconButton>
+            </Tooltip>
+
             {/* Delete button - only show for admin and manager users */}
             {(isAdmin || isManager) && (
               <Tooltip title="Delete Project">
@@ -1604,10 +1620,11 @@ const Projects = ({ initialFilters = {} }) => {
         ),
       },
     ],
-    [navigate]
+    [navigate, isAdmin, isManager, can, handleDeleteClick, handleStatusClick]
   );
 
   // Client-side filtering for live status updates
+  // Note: Since we now only load active projects from backend, inactive status filtering is not available
   const filteredProjects = useMemo(() => {
     console.log("Filtering projects:", {
       totalProjects: projects.length,
@@ -1616,24 +1633,15 @@ const Projects = ({ initialFilters = {} }) => {
       inactiveStatuses: inactiveStatuses,
     });
 
+    // Since we only load active projects from backend, "all" shows all active projects
     if (filters.statusFilter === "all") {
-      console.log("Showing all projects:", projects.length);
+      console.log("Showing all active projects:", projects.length);
       return projects;
     }
 
+    // Handle specific status filters (only for active statuses that are loaded)
     const filtered = projects.filter((project) => {
       const projectStatus = project.status;
-
-      // Handle active/inactive filter categories
-      if (filters.statusFilter === "all_active") {
-        return activeStatuses.includes(projectStatus);
-      }
-
-      if (filters.statusFilter === "all_inactive") {
-        return inactiveStatuses.includes(projectStatus);
-      }
-
-      // Handle specific status filters
       return projectStatus === filters.statusFilter;
     });
 
@@ -1656,8 +1664,13 @@ const Projects = ({ initialFilters = {} }) => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Projects
+      <Typography
+        variant="h3"
+        component="h1"
+        marginTop="20px"
+        marginBottom="20px"
+      >
+        Active Projects
       </Typography>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
@@ -1768,44 +1781,7 @@ const Projects = ({ initialFilters = {} }) => {
                         marginRight: "8px",
                       }}
                     >
-                      All Statuses
-                    </span>
-                    <Box
-                      sx={{
-                        backgroundColor: "#666",
-                        color: "white",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        fontSize: "0.77rem",
-                        fontWeight: "bold",
-                        minWidth: "20px",
-                        textAlign: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {statusCounts.all || 0}
-                    </Box>
-                  </Box>
-                </MenuItem>
-                <MenuItem value="all_active" sx={{ fontSize: "0.88rem" }}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "100%",
-                    }}
-                  >
-                    <span
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                        marginRight: "8px",
-                      }}
-                    >
-                      Active
+                      All Active Projects
                     </span>
                     <Box
                       sx={{
@@ -1824,110 +1800,9 @@ const Projects = ({ initialFilters = {} }) => {
                     </Box>
                   </Box>
                 </MenuItem>
-                <MenuItem value="all_inactive" sx={{ fontSize: "0.88rem" }}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "100%",
-                    }}
-                  >
-                    <span
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                        marginRight: "8px",
-                      }}
-                    >
-                      Inactive
-                    </span>
-                    <Box
-                      sx={{
-                        backgroundColor: "#666",
-                        color: "white",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        fontSize: "0.77rem",
-                        fontWeight: "bold",
-                        minWidth: "20px",
-                        textAlign: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {statusCounts.all_inactive || 0}
-                    </Box>
-                  </Box>
-                </MenuItem>
                 <Divider />
-                <MenuItem disabled>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ fontSize: "0.88rem" }}
-                  >
-                    Active Statuses
-                  </Typography>
-                </MenuItem>
+                <MenuItem disabled></MenuItem>
                 {activeStatuses.map((status) => {
-                  const count = statusCounts[status] || 0;
-                  return (
-                    <MenuItem
-                      key={status}
-                      value={status}
-                      sx={{ fontSize: "0.88rem" }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          width: "100%",
-                        }}
-                      >
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            flex: 1,
-                            marginRight: "8px",
-                          }}
-                        >
-                          {status}
-                        </span>
-                        <Box
-                          sx={{
-                            backgroundColor: statusColors[status] || "#1976d2",
-                            color: "white",
-                            padding: "2px 8px",
-                            borderRadius: "12px",
-                            fontSize: "0.77rem",
-                            fontWeight: "bold",
-                            minWidth: "20px",
-                            textAlign: "center",
-                            flexShrink: 0,
-                          }}
-                        >
-                          {count}
-                        </Box>
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
-                <Divider />
-                <MenuItem disabled>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ fontSize: "0.88rem" }}
-                  >
-                    Inactive Statuses
-                  </Typography>
-                </MenuItem>
-                {inactiveStatuses.map((status) => {
                   const count = statusCounts[status] || 0;
                   return (
                     <MenuItem
@@ -2205,7 +2080,9 @@ const Projects = ({ initialFilters = {} }) => {
           loading={loading && !searchLoading}
           error={error}
           // checkboxSelection
-          onRowClick={(params) => navigate(`/projects/${params.row._id}`)}
+          onRowClick={(params) =>
+            navigate(`/reports/project/${params.row._id}`)
+          }
           columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
           paginationMode="client"

@@ -74,7 +74,7 @@ const SampleSummary = React.memo(
           >
             <Box>
               <Typography variant="h5">{sample.fullSampleID}</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body1" color="text.secondary">
                 Cowl {sample.cowlNo}
               </Typography>
             </Box>
@@ -106,7 +106,11 @@ const SampleSummary = React.memo(
             />
           </Box>
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={3}
+            sx={{ mb: 2 }}
+          >
             <FormControl component="fieldset">
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Edges/Distribution
@@ -169,18 +173,15 @@ const SampleSummary = React.memo(
                 />
               </RadioGroup>
             </FormControl>
-          </Stack>
-
-          <Box>
             <Box
               sx={{
                 display: "flex",
-                justifyContent: "space-between",
                 alignItems: "center",
-                mb: 2,
+                justifyContent: "flex-end",
+                flex: 1,
+                minWidth: 0,
               }}
             >
-              <Typography variant="subtitle1">Fibre Counts</Typography>
               <Button
                 variant="contained"
                 size="small"
@@ -189,6 +190,12 @@ const SampleSummary = React.memo(
               >
                 Enter Fibre Counts
               </Button>
+            </Box>
+          </Stack>
+
+          <Box>
+            <Box sx={{ textAlign: "center", mb: 2 }}>
+              <Typography variant="h5">Fibre Counts</Typography>
             </Box>
 
             <Stack direction="row" spacing={4} justifyContent="center">
@@ -256,6 +263,7 @@ const Analysis = () => {
   const [shiftStatus, setShiftStatus] = useState("");
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
   const [activeSampleId, setActiveSampleId] = useState(null);
+  const [validationDialogOpen, setValidationDialogOpen] = useState(false);
 
   // Monitor initial render time
   useEffect(() => {
@@ -847,7 +855,7 @@ const Analysis = () => {
 
       // Navigate to asbestos removal job details page
       if (jobId) {
-        navigate(`/asbestos-removal/${jobId}`);
+        navigate(`/asbestos-removal/jobs/${jobId}/details`);
       } else {
         navigate("/asbestos-removal");
       }
@@ -866,6 +874,14 @@ const Analysis = () => {
   };
 
   const handleOpenFibreCountModal = (sampleId) => {
+    const analysis = sampleAnalyses[sampleId] || {};
+
+    // Check if both edges/distribution and background dust are selected
+    if (!analysis.edgesDistribution || !analysis.backgroundDust) {
+      setValidationDialogOpen(true);
+      return;
+    }
+
     setActiveSampleId(sampleId);
     setFibreCountModalOpen(true);
   };
@@ -873,6 +889,15 @@ const Analysis = () => {
   const handleCloseFibreCountModal = () => {
     setFibreCountModalOpen(false);
     setActiveSampleId(null);
+  };
+
+  // Check if all microscope calibration fields are selected
+  const isCalibrationComplete = () => {
+    return (
+      analysisDetails.microscope &&
+      analysisDetails.testSlide &&
+      analysisDetails.testSlideLines
+    );
   };
 
   // Helper to check if all required fields are filled
@@ -1116,7 +1141,7 @@ const Analysis = () => {
           {/* Analysis Details Section */}
           <Paper sx={{ p: 3 }}>
             <Stack spacing={3}>
-              <Typography variant="h3">Microscope Calibration</Typography>
+              <Typography variant="h5">Microscope Calibration</Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
                 <FormControl component="fieldset">
                   <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -1197,7 +1222,19 @@ const Analysis = () => {
           </Paper>
 
           {/* Sample Forms */}
-          {renderSampleForms()}
+          {isCalibrationComplete() ? (
+            renderSampleForms()
+          ) : (
+            <Paper sx={{ p: 3, textAlign: "center" }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+                Complete Microscope Calibration
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Please select all three microscope calibration options above
+                before proceeding with sample analysis.
+              </Typography>
+            </Paper>
+          )}
 
           <Box
             sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}
@@ -1412,6 +1449,23 @@ const Analysis = () => {
             </DialogContent>
             <DialogActions>
               <Button onClick={handleCloseFibreCountModal}>Close</Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Validation Dialog */}
+          <Dialog
+            open={validationDialogOpen}
+            onClose={() => setValidationDialogOpen(false)}
+          >
+            <DialogTitle>Required Fields Missing</DialogTitle>
+            <DialogContent>
+              <Typography>
+                Please complete both "Edges/Distribution" and "Background Dust"
+                selections before entering fibre counts.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setValidationDialogOpen(false)}>OK</Button>
             </DialogActions>
           </Dialog>
 

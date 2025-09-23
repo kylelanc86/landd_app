@@ -72,7 +72,7 @@ const shiftSchema = new mongoose.Schema({
   },
   descriptionOfWorks: {
     type: String,
-    required: true
+    required: false
   },
   notes: {
     type: String

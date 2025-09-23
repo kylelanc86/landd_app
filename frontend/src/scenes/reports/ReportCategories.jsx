@@ -9,10 +9,8 @@ import {
 } from "@mui/material";
 import {
   Assessment as AssessmentIcon,
-  AirOutlined as AirIcon,
-  CheckCircleOutline as ClearanceIcon,
+  Construction as AsbestosRemovalIcon,
   Science as FibreIcon,
-  Receipt as InvoiceIcon,
 } from "@mui/icons-material";
 import { tokens } from "../../theme/tokens";
 
@@ -25,18 +23,11 @@ const categories = [
     color: "#e57373", // red-300
   },
   {
-    id: "air-monitoring",
-    title: "Air Monitoring Reports",
-    icon: AirIcon,
-    description: "Access air monitoring shift reports",
-    color: "#4fc3f7", // light-blue-300
-  },
-  {
-    id: "clearance",
-    title: "Clearance Reports",
-    icon: ClearanceIcon,
-    description: "View asbestos clearance certificates",
-    color: "#81c784", // green-300
+    id: "asbestos-removal-jobs",
+    title: "Asbestos Removal Jobs",
+    icon: AsbestosRemovalIcon,
+    description: "Access air monitoring shifts and clearance reports",
+    color: "#ff9800", // orange-500
   },
   {
     id: "fibre-id",
@@ -44,13 +35,6 @@ const categories = [
     icon: FibreIcon,
     description: "Access fibre identification reports",
     color: "#ba68c8", // purple-300
-  },
-  {
-    id: "invoices",
-    title: "Invoices",
-    icon: InvoiceIcon,
-    description: "View and download project invoices",
-    color: "#ff8a65", // deep-orange-300
   },
 ];
 
@@ -123,8 +107,7 @@ const ReportCategories = ({ onCategorySelect, selectedProjectId }) => {
                 alignItems: "center",
                 zIndex: 1,
               }}
-            >
-            </Box>
+            ></Box>
           </Card>
         </Grid>
       ))}

@@ -95,9 +95,11 @@ const Item = ({ title, to, icon }) => {
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
       (location.pathname.startsWith("/projects/") ||
-        location.pathname.startsWith("/clients/")) &&
+        location.pathname.startsWith("/clients/") ||
+        location.pathname.startsWith("/users/")) &&
       !to.startsWith("/projects/") &&
-      !to.startsWith("/clients/")
+      !to.startsWith("/clients/") &&
+      !to.startsWith("/users/")
     ) {
       console.log("🔍 Sidebar showing unsaved changes dialog");
       window.pendingNavigation = to;
@@ -218,9 +220,11 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
       (location.pathname.startsWith("/projects/") ||
-        location.pathname.startsWith("/clients/")) &&
+        location.pathname.startsWith("/clients/") ||
+        location.pathname.startsWith("/users/")) &&
       !to.startsWith("/projects/") &&
-      !to.startsWith("/clients/")
+      !to.startsWith("/clients/") &&
+      !to.startsWith("/users/")
     ) {
       console.log("🔍 Sidebar showing unsaved changes dialog");
       window.pendingNavigation = to;
@@ -436,6 +440,9 @@ const Sidebar = () => {
 
         <Box paddingLeft="5%">
           <Item title="Dashboard" to="/" icon={<HomeOutlinedIcon />} />
+          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
+            <Item title="Admin Interface" to="/admin" icon={<SettingsIcon />} />
+          </PermissionGate>
 
           <PermissionGate requiredPermissions={["timesheets.view"]}>
             <Item
@@ -443,7 +450,15 @@ const Sidebar = () => {
               to="/timesheets/monthly"
               icon={<AccessTimeIcon />}
             />
+
+            <Item
+              title="Active Projects"
+              to="/projects"
+              icon={<StorageIcon />}
+            />
           </PermissionGate>
+
+          {/* Collapsible Sections */}
 
           {/* 
           <PermissionGate requiredPermissions={["calendar.view"]}>
@@ -455,13 +470,6 @@ const Sidebar = () => {
           </PermissionGate> */}
 
           <SectionDivider />
-
-          {/* Collapsible Sections */}
-          <CollapsibleSection
-            title="Projects"
-            to="/projects"
-            icon={<StorageIcon />}
-          />
 
           <CollapsibleSection
             title="Clients"
@@ -476,7 +484,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.REPORTS") && (
             <CollapsibleSection
-              title="File Explorer"
+              title="All Projects"
               to="/reports"
               icon={<DescriptionIcon />}
             />
@@ -524,13 +532,7 @@ const Sidebar = () => {
             marginTop: "auto",
           }}
         >
-          {/* Only show section divider if at least one advanced feature is enabled */}
-          {(isFeatureEnabled("ADVANCED.SURVEYS") ||
-            isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") ||
-            isFeatureEnabled("ADVANCED.FIBRE_ID")) && <SectionDivider />}
-          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
-            <Item title="Admin" to="/admin" icon={<SettingsIcon />} />
-          </PermissionGate>
+
         </Box>
       </Menu>
     </ProSidebar>

@@ -248,24 +248,42 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
   try {
     const { projectId } = req.params;
     
-    // Get all jobs for this project
+    // Get all jobs for this project - check both regular Job and AsbestosRemovalJob
     const Job = require('../models/Job');
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
     const Shift = require('../models/Shift');
     
-    const jobs = await Job.find({ projectId: projectId }).populate('projectId', 'name projectID');
+    // Get regular jobs
+    const regularJobs = await Job.find({ projectId: projectId }).populate('projectId', 'name projectID');
+    
+    // Get asbestos removal jobs - only completed ones
+    const asbestosJobs = await AsbestosRemovalJob.find({ 
+      projectId: projectId,
+      status: "completed"
+    }).populate('projectId', 'name projectID');
+    
+    // Combine both job types
+    const allJobs = [...regularJobs, ...asbestosJobs];
+    
+    console.log(`Found ${allJobs.length} jobs for project ${projectId}:`, allJobs.map(job => ({ id: job._id, name: job.name, type: job.constructor.modelName })));
     
     const airMonitoringReports = [];
     
     // Get shifts for each job
-    for (const job of jobs) {
+    for (const job of allJobs) {
       const shifts = await Shift.find({ 
         job: job._id,
         $or: [
           { status: "analysis_complete" },
           { status: "shift_complete" },
+          { status: "complete" },
           { reportApprovedBy: { $exists: true, $ne: null } }
         ]
-      }).populate('job', 'name');
+      }).populate('job', 'name')
+        .populate('supervisor', 'firstName lastName')
+        .populate('defaultSampler', 'firstName lastName');
+      
+      console.log(`Found ${shifts.length} shifts for job ${job._id} (${job.name})`);
       
       shifts.forEach(shift => {
         airMonitoringReports.push({
@@ -275,10 +293,13 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
           status: shift.status,
           reportApprovedBy: shift.reportApprovedBy,
           reportIssueDate: shift.reportIssueDate,
+          supervisor: shift.supervisor,
+          defaultSampler: shift.defaultSampler,
           jobName: job.name,
           jobId: job._id,
           projectName: job.projectId?.name,
-          projectId: job.projectId?._id
+          projectId: job.projectId?._id,
+          asbestosRemovalist: job.asbestosRemovalist || null
         });
       });
     }
@@ -286,6 +307,7 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
     // Sort by date (newest first)
     airMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    console.log(`Returning ${airMonitoringReports.length} air monitoring reports`);
     res.json(airMonitoringReports);
   } catch (error) {
     console.error("Error fetching air monitoring reports:", error);

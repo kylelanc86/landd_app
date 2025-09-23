@@ -22,6 +22,10 @@ import {
   Checkbox,
   Snackbar,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 
 import AddIcon from "@mui/icons-material/Add";
@@ -60,6 +64,7 @@ const emptyForm = {
     fibreIdentification: false,
   },
   canSetJobComplete: false,
+  labSignatory: false,
 };
 
 const EditUserPage = () => {
@@ -76,6 +81,14 @@ const EditUserPage = () => {
     message: "",
     severity: "success",
   });
+
+  // State for tracking form changes and confirmation dialog
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalForm, setOriginalForm] = useState(null);
+  const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] =
+    useState(false);
+  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
 
   // Fetch user data on mount
   useEffect(() => {
@@ -108,7 +121,39 @@ const EditUserPage = () => {
             fibreIdentification: false,
           },
           canSetJobComplete: user.canSetJobComplete || false,
+          labSignatory: user.labSignatory || false,
         });
+
+        // Set original form for change detection
+        setOriginalForm(
+          JSON.parse(
+            JSON.stringify({
+              firstName: user.firstName || "",
+              lastName: user.lastName || "",
+              email: user.email || "",
+              phone: user.phone || "",
+              role: user.role || "employee",
+              isActive: user.isActive,
+              licences: user.licences || [],
+              signature: user.signature || "",
+              workingHours: user.workingHours || {
+                monday: { enabled: false, hours: 0 },
+                tuesday: { enabled: false, hours: 0 },
+                wednesday: { enabled: false, hours: 0 },
+                thursday: { enabled: false, hours: 0 },
+                friday: { enabled: false, hours: 0 },
+                saturday: { enabled: false, hours: 0 },
+                sunday: { enabled: false, hours: 0 },
+              },
+              labApprovals: user.labApprovals || {
+                fibreCounting: false,
+                fibreIdentification: false,
+              },
+              canSetJobComplete: user.canSetJobComplete || false,
+              labSignatory: user.labSignatory || false,
+            })
+          )
+        );
       } catch (error) {
         console.error("Error fetching user:", error);
         setError("Failed to load user data");
@@ -120,6 +165,88 @@ const EditUserPage = () => {
       fetchUserData();
     }
   }, [userId]);
+
+  // Track form changes
+  useEffect(() => {
+    if (originalForm) {
+      const hasChanges = JSON.stringify(form) !== JSON.stringify(originalForm);
+      setHasUnsavedChanges(hasChanges);
+
+      // Set global variables for sidebar navigation
+      window.hasUnsavedChanges = hasChanges;
+      window.currentProjectPath = window.location.pathname;
+      window.showUnsavedChangesDialog = () => {
+        setUnsavedChangesDialogOpen(true);
+      };
+    } else {
+      // Clean up global variables when no original form
+      window.hasUnsavedChanges = false;
+      window.currentProjectPath = null;
+      window.showUnsavedChangesDialog = null;
+    }
+
+    return () => {
+      // Clean up global variables when component unmounts
+      window.hasUnsavedChanges = false;
+      window.currentProjectPath = null;
+      window.showUnsavedChangesDialog = null;
+    };
+  }, [form, originalForm]);
+
+  // Handle page refresh and browser navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+        return "You have unsaved changes. Are you sure you want to leave?";
+      }
+    };
+
+    // Handle browser back/forward buttons
+    const handlePopState = (e) => {
+      if (hasUnsavedChanges) {
+        // Prevent the navigation
+        window.history.pushState(null, "", window.location.pathname);
+        setPendingNavigation("/users");
+        setUnsavedChangesDialogOpen(true);
+      }
+    };
+
+    // Handle refresh button clicks and F5 key
+    const handleRefreshClick = (e) => {
+      // Check if it's a refresh button click or F5 key
+      const isRefreshButton = e.target.closest(
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+      );
+      const isF5Key = e.key === "F5";
+
+      if ((isRefreshButton || isF5Key) && hasUnsavedChanges) {
+        e.preventDefault();
+        e.stopPropagation();
+        setRefreshDialogOpen(true);
+        return false;
+      }
+    };
+
+    // Add a history entry when entering with unsaved changes
+    if (hasUnsavedChanges) {
+      window.history.pushState(null, "", window.location.pathname);
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+    document.addEventListener("click", handleRefreshClick, true);
+    document.addEventListener("keydown", handleRefreshClick, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleRefreshClick, true);
+      document.removeEventListener("keydown", handleRefreshClick, true);
+    };
+  }, [hasUnsavedChanges]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -224,10 +351,15 @@ const EditUserPage = () => {
         workingHours: form.workingHours,
         labApprovals: form.labApprovals,
         canSetJobComplete: form.canSetJobComplete,
+        labSignatory: form.labSignatory,
       };
 
       console.log("Updating user with data:", updateData);
       await userService.update(userId, updateData);
+
+      // Reset unsaved changes flag and update original form
+      setHasUnsavedChanges(false);
+      setOriginalForm(JSON.parse(JSON.stringify(form)));
 
       // Navigate back to users list
       navigate("/users");
@@ -246,7 +378,40 @@ const EditUserPage = () => {
   };
 
   const handleCancel = () => {
-    navigate("/users");
+    if (hasUnsavedChanges) {
+      setPendingNavigation("/users");
+      setUnsavedChangesDialogOpen(true);
+    } else {
+      navigate("/users");
+    }
+  };
+
+  // Confirm navigation and discard changes
+  const confirmNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setHasUnsavedChanges(false);
+    const targetPath = pendingNavigation || "/users";
+    navigate(targetPath);
+    setPendingNavigation(null);
+  };
+
+  // Cancel navigation and stay on page
+  const cancelNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setPendingNavigation(null);
+  };
+
+  // Confirm page refresh and discard changes
+  const confirmRefresh = () => {
+    setRefreshDialogOpen(false);
+    setHasUnsavedChanges(false);
+    window.hasUnsavedChanges = false;
+    window.location.reload();
+  };
+
+  // Cancel page refresh and stay on page
+  const cancelRefresh = () => {
+    setRefreshDialogOpen(false);
   };
 
   const handleSendPasswordReset = async () => {
@@ -526,7 +691,7 @@ const EditUserPage = () => {
               }}
             >
               <Grid container spacing={2}>
-                <Grid item xs={6}>
+                <Grid item xs={4}>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -543,7 +708,7 @@ const EditUserPage = () => {
                     label="Fibre Counting"
                   />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid item xs={4}>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -558,6 +723,20 @@ const EditUserPage = () => {
                       />
                     }
                     label="Fibre Identification"
+                  />
+                </Grid>
+                <Grid item xs={4}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.labSignatory}
+                        onChange={(e) =>
+                          setForm({ ...form, labSignatory: e.target.checked })
+                        }
+                        color="primary"
+                      />
+                    }
+                    label="Lab Signatory"
                   />
                 </Grid>
               </Grid>
@@ -759,6 +938,172 @@ const EditUserPage = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Unsaved Changes Confirmation Dialog */}
+      <Dialog
+        open={unsavedChangesDialogOpen}
+        onClose={cancelNavigation}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              !
+            </Typography>
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Unsaved Changes
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to leave this page
+            without saving? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelNavigation}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmNavigation}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Leave Without Saving
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Page Refresh Confirmation Dialog */}
+      <Dialog
+        open={refreshDialogOpen}
+        onClose={cancelRefresh}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              !
+            </Typography>
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Unsaved Changes
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to refresh this
+            page? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelRefresh}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmRefresh}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Refresh Page
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
