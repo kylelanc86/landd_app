@@ -17,7 +17,6 @@ import {
 import {
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
-  Print as PrintIcon,
   Edit as EditIcon,
 } from "@mui/icons-material";
 import { format } from "date-fns";
@@ -180,6 +179,15 @@ const ReportsList = ({
                       display="block"
                     >
                       {report.additionalInfo}
+                    </Typography>
+                  )}
+                  {report.revision > 0 && (
+                    <Typography
+                      variant="caption"
+                      display="block"
+                      sx={{ mt: 0.5, fontWeight: "medium", color: "#ed6c02" }}
+                    >
+                      Revision {report.revision}
                     </Typography>
                   )}
                 </TableCell>

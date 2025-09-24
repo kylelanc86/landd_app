@@ -16,6 +16,7 @@ import {
   DialogContentText,
   DialogActions,
   Snackbar,
+  TextField,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -63,6 +64,9 @@ const ProjectReports = () => {
     open: false,
     report: null,
   });
+
+  // Revision reason state
+  const [revisionReason, setRevisionReason] = useState("");
 
   // Get project statuses context
   const { activeStatuses, inactiveStatuses, statusColors } =
@@ -186,6 +190,7 @@ const ProjectReports = () => {
                 asbestosRemovalist: report.asbestosRemovalist || "N/A",
                 additionalInfo: `${report.name} (${report.jobName})`,
                 status: report.status,
+                revision: report.revision || 0,
                 type: "shift",
                 data: {
                   shift: {
@@ -195,6 +200,7 @@ const ProjectReports = () => {
                     status: report.status,
                     reportApprovedBy: report.reportApprovedBy,
                     reportIssueDate: report.reportIssueDate,
+                    revision: report.revision || 0,
                   },
                   job: {
                     _id: report.jobId,
@@ -268,6 +274,7 @@ const ProjectReports = () => {
                 asbestosRemovalist: clearance.asbestosRemovalist || "N/A",
                 additionalInfo: `${clearance.clearanceType} Clearance`,
                 status: clearance.status || "Unknown",
+                revision: clearance.revision || 0,
                 type: "clearance",
                 data: clearance,
               }));
@@ -653,17 +660,42 @@ const ProjectReports = () => {
 
   const confirmReviseReport = async () => {
     const report = reviseDialog.report;
+
+    // Validate revision reason for clearance reports only
+    if (report?.type === "clearance" && !revisionReason.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Please provide a reason for revising this clearance report.",
+        severity: "error",
+      });
+      return;
+    }
+
     try {
       if (report.type === "shift") {
-        // For air monitoring reports, we need to reset the associated asbestos removal job
-        const { job } = report.data;
+        // For air monitoring reports, we need to reset both the shift status AND the job status
+        const { shift, job } = report.data;
 
-        if (job && job._id) {
+        if (shift && shift._id && job && job._id) {
+          const { shiftService } = await import("../../services/api");
           const { default: asbestosRemovalJobService } = await import(
             "../../services/asbestosRemovalJobService"
           );
 
-          // Update the asbestos removal job status back to "in_progress"
+          // Get current shift data to increment revision count
+          const currentShift = await shiftService.getById(shift._id);
+          const currentRevision = currentShift.data.revision || 0;
+          const newRevision = currentRevision + 1;
+
+          // Update the shift status back to "ongoing" to allow revision and increment revision count
+          await shiftService.update(shift._id, {
+            status: "ongoing",
+            reportApprovedBy: null,
+            reportIssueDate: null,
+            revision: newRevision, // Increment revision count by 1
+          });
+
+          // Update the asbestos removal job status back to "in_progress" so it appears in the jobs table
           await asbestosRemovalJobService.update(job._id, {
             status: "in_progress",
           });
@@ -672,7 +704,7 @@ const ProjectReports = () => {
           setSnackbar({
             open: true,
             message:
-              "Job status reset to in progress. You can now revise the report.",
+              "Report and job status reset to in progress. You can now revise the report.",
             severity: "success",
           });
 
@@ -680,20 +712,71 @@ const ProjectReports = () => {
           loadReports();
         }
       } else if (report.type === "clearance") {
-        // For clearance reports, reset the clearance status
+        // For clearance reports, reset the clearance status and increment revision count
         const { default: asbestosClearanceService } = await import(
           "../../services/asbestosClearanceService"
         );
+        const { default: asbestosRemovalJobService } = await import(
+          "../../services/asbestosRemovalJobService"
+        );
 
+        // Get current clearance data to increment revision count
+        const currentClearance = await asbestosClearanceService.getById(
+          report.data._id
+        );
+        const currentRevision = currentClearance.revision || 0;
+        const newRevision = currentRevision + 1;
+
+        // Prepare revision reason data
+        const newRevisionReason = {
+          revisionNumber: newRevision,
+          reason: revisionReason.trim(),
+          revisedBy: currentUser._id,
+          revisedAt: new Date(),
+        };
+
+        // Get existing revision reasons and add the new one
+        const existingRevisionReasons = currentClearance.revisionReasons || [];
+        const updatedRevisionReasons = [
+          ...existingRevisionReasons,
+          newRevisionReason,
+        ];
+
+        // Update clearance with new revision and revision reason
         await asbestosClearanceService.update(report.data._id, {
           status: "in progress",
+          revision: newRevision,
+          revisionReasons: updatedRevisionReasons,
         });
+
+        // Find and update the associated asbestos removal job for this project
+        try {
+          const jobsResponse = await asbestosRemovalJobService.getAll();
+          const jobs = jobsResponse.jobs || jobsResponse.data || [];
+          const projectJob = jobs.find(
+            (job) =>
+              (job.projectId === projectId ||
+                job.projectId?._id === projectId) &&
+              job.status === "completed"
+          );
+
+          if (projectJob) {
+            await asbestosRemovalJobService.update(projectJob._id, {
+              status: "in_progress",
+            });
+          }
+        } catch (jobError) {
+          console.error(
+            "Error updating associated asbestos removal job:",
+            jobError
+          );
+        }
 
         // Show success message
         setSnackbar({
           open: true,
           message:
-            "Clearance status reset to in progress. You can now revise the report.",
+            "Clearance and job status reset to in progress. You can now revise the report.",
           severity: "success",
         });
 
@@ -708,11 +791,12 @@ const ProjectReports = () => {
         severity: "error",
       });
     } finally {
-      // Close the dialog
+      // Close the dialog and clear revision reason
       setReviseDialog({
         open: false,
         report: null,
       });
+      setRevisionReason("");
     }
   };
 
@@ -721,6 +805,7 @@ const ProjectReports = () => {
       open: false,
       report: null,
     });
+    setRevisionReason("");
   };
 
   return (
@@ -910,10 +995,25 @@ const ProjectReports = () => {
         <DialogTitle>Revise Report</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to revise this report? This will reset the job
-            status to "in progress" and allow you to make changes to the report.
-            The report will no longer appear in the completed reports list.
+            Are you sure you want to revise this report? This will enable
+            editing of the report in the asbestos removal jobs table and will
+            increase the report's revision count.
           </DialogContentText>
+          {reviseDialog.report?.type === "clearance" && (
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Reason for revision"
+              fullWidth
+              variant="outlined"
+              multiline
+              rows={3}
+              value={revisionReason}
+              onChange={(e) => setRevisionReason(e.target.value)}
+              placeholder="Please provide a reason for revising this clearance report..."
+              sx={{ mt: 2 }}
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={cancelReviseReport} color="secondary">

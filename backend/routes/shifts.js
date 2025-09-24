@@ -147,7 +147,8 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'samplesReceivedDate',
       'descriptionOfWorks',
       'notes',
-      'defaultSampler'
+      'defaultSampler',
+      'revision'
     ];
 
     // Filter out any fields that aren't in allowedUpdates
@@ -240,6 +241,7 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
       return res.status(404).json({ message: 'Shift not found' });
     }
 
+
     // Update all fields from the request body
     Object.assign(shift, req.body);
 
@@ -255,6 +257,8 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
       }
 
       const updatedShift = await shift.save();
+      
+      
       res.json(updatedShift);
     } catch (saveError) {
       return res.status(400).json({ 

@@ -91,6 +91,29 @@ const asbestosClearanceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    revision: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    revisionReasons: [{
+      revisionNumber: {
+        type: Number,
+        required: true,
+      },
+      reason: {
+        type: String,
+        required: true,
+      },
+      revisedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      revisedAt: {
+        type: Date,
+        default: Date.now,
+      },
+    }],
   },
   {
     timestamps: true,

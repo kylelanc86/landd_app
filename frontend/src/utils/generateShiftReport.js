@@ -555,7 +555,7 @@ pdfMake.fonts = {
               {
                 stack: [
                   { text: `Report Reference: ${job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || ''}`, fontSize: 8 },
-                  { text: 'Revision: 0', fontSize: 8 }
+                  { text: `Revision: ${shift?.revision || 0}`, fontSize: 8 }
                 ],
                 alignment: 'left',
               width: '30%',

@@ -76,6 +76,11 @@ const shiftSchema = new mongoose.Schema({
   },
   notes: {
     type: String
+  },
+  revision: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true,

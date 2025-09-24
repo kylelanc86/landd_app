@@ -69,7 +69,8 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
         }
       })
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
+      .populate("updatedBy", "firstName lastName")
+      .populate("revisionReasons.revisedBy", "firstName lastName");
 
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
@@ -127,7 +128,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes, revision, revisionReasons } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -148,6 +149,14 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
     clearance.updatedBy = req.user.id;
+    
+    // Handle revision fields
+    if (revision !== undefined) {
+      clearance.revision = revision;
+    }
+    if (revisionReasons !== undefined) {
+      clearance.revisionReasons = revisionReasons;
+    }
 
     const updatedClearance = await clearance.save();
     
@@ -161,7 +170,8 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
         }
       })
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
+      .populate("updatedBy", "firstName lastName")
+      .populate("revisionReasons.revisedBy", "firstName lastName");
 
     res.json(populatedClearance);
   } catch (error) {
@@ -295,6 +305,7 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
           reportIssueDate: shift.reportIssueDate,
           supervisor: shift.supervisor,
           defaultSampler: shift.defaultSampler,
+          revision: shift.revision || 0,
           jobName: job.name,
           jobId: job._id,
           projectName: job.projectId?.name,

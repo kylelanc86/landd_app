@@ -10,16 +10,7 @@ const auth = require('../middleware/auth');
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
 
-// Performance monitoring
-const backendPerformanceMonitor = {
-  startStage: (stageName, pdfId = 'default') => {
-    console.log(`[${pdfId}] Starting stage: ${stageName}`);
-    return Date.now();
-  },
-  endStage: (stageName, pdfId = 'default') => {
-    console.log(`[${pdfId}] Completed stage: ${stageName}`);
-  }
-};
+// Performance monitoring removed
 
 /**
  * Generate complete HTML content for clearance report using DocRaptor-optimized templates
@@ -46,16 +37,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     
     const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
     const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
-    console.log('Watermark path:', watermarkPath);
-    console.log('Watermark exists:', fs.existsSync(watermarkPath));
-    console.log('Watermark loaded:', watermarkBase64.length > 0);
     
     const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
-    console.log('\n\n>>>>> BACKGROUND_CHECK <<<<<');
-    console.log('Background path:', backgroundPath);
-    console.log('Background exists:', fs.existsSync(backgroundPath));
     const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
-    console.log('Background loaded:', backgroundBase64.length > 0);
 
     // Fetch template content from database
     let templateType;
@@ -95,25 +79,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const templateContent = await getTemplateByType(templateType);
     
     // Debug logging for template content
-    console.log('\n\n>>>>> TEMPLATE_CONTENT_DEBUG <<<<<\n');
-    console.log('Template type:', templateType);
-    console.log('Template content exists:', !!templateContent);
-    if (templateContent) {
-      console.log('Template standardSections exists:', !!templateContent.standardSections);
-      console.log('Available sections:', Object.keys(templateContent.standardSections || {}));
-      console.log('Background information content exists:', !!templateContent.standardSections?.backgroundInformationContent);
-      console.log('Legislative requirements content exists:', !!templateContent.standardSections?.legislativeRequirementsContent);
-      console.log('Inspection exclusions content exists:', !!templateContent.standardSections?.inspectionExclusionsContent);
-      console.log('Clearance certification content exists:', !!templateContent.standardSections?.clearanceCertificationContent);
-      console.log('Non-friable limitations content exists:', !!templateContent.standardSections?.nonFriableClearanceCertificateLimitationsContent);
-    } else {
-      console.log('No template content found!');
-    }
-    console.log('>>>>> END TEMPLATE_CONTENT_DEBUG <<<<<\n\n');
     
     // Special handling for Complex clearance type - bypass default template content
     if (clearanceData.useComplexTemplate || clearanceData.clearanceType === 'Complex') {
-      console.log('[COMPLEX CLEARANCE] Bypassing default template content system');
       // For Complex clearance, we'll use minimal template content and generate custom content
       const complexTemplateContent = {
         standardSections: {
@@ -133,15 +101,6 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     }
 
 
-    // Debug logging for cover page data
-    console.log('\n\n>>>>> COVER_PAGE_CHECK <<<<<\n', {
-      type: clearanceData.clearanceType,
-      site: clearanceData.projectId?.name || clearanceData.siteName,
-      ref: clearanceData.projectId?.projectID,
-      date: clearanceData.clearanceDate,
-      hasLogo: !!logoBase64,
-      hasBackground: !!backgroundBase64
-    });
 
     // Populate cover template with data
     const populatedCover = coverTemplate
@@ -154,6 +113,70 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
 
 
+    // Generate revision history rows
+    const generateRevisionHistory = () => {
+      const revision = clearanceData.revision || 0;
+      const currentDate = new Date().toLocaleDateString('en-GB');
+      const laaName = clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? 
+        `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : 
+        clearanceData.LAA || 'Unknown LAA';
+      
+      if (revision === 0) {
+        // Original report - no revisions
+        return `
+          <tr>
+            <td>Original Issue</td>
+            <td>0</td>
+            <td>${laaName}</td>
+            <td>${currentDate}</td>
+          </tr>
+        `;
+      } else {
+        // Revised report - show revision history with actual reasons
+        let revisionRows = `
+          <tr>
+            <td>Original Issue</td>
+            <td>0</td>
+            <td>${laaName}</td>
+            <td>${currentDate}</td>
+          </tr>
+        `;
+        
+        // Use actual revision reasons if available
+        if (clearanceData.revisionReasons && clearanceData.revisionReasons.length > 0) {
+          clearanceData.revisionReasons.forEach((revisionData) => {
+            const revisionDate = revisionData.revisedAt ? new Date(revisionData.revisedAt).toLocaleDateString('en-GB') : currentDate;
+            const revisedByName = revisionData.revisedBy?.firstName && revisionData.revisedBy?.lastName ? 
+              `${revisionData.revisedBy.firstName} ${revisionData.revisedBy.lastName}` : 
+              laaName;
+            
+            revisionRows += `
+              <tr>
+                <td>${revisionData.reason}</td>
+                <td>${revisionData.revisionNumber}</td>
+                <td>${revisedByName}</td>
+                <td>${revisionDate}</td>
+              </tr>
+            `;
+          });
+        } else {
+          // Fallback to generic revision text if no reasons stored
+          for (let i = 1; i <= revision; i++) {
+            revisionRows += `
+              <tr>
+                <td>Report Revision</td>
+                <td>${i}</td>
+                <td>${laaName}</td>
+                <td>${currentDate}</td>
+              </tr>
+            `;
+          }
+        }
+        
+        return revisionRows;
+      }
+    };
+
     // Populate version control template with data
     const populatedVersionControl = versionControlTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
@@ -163,7 +186,8 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: Asbestos Clearance Report - ${clearanceData.projectId?.name || 'Unknown'} (${clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-      .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
+      .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+      .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateRevisionHistory());
 
     // Generate clearance items table headers
     const generateClearanceItemsHeaders = () => {
@@ -186,11 +210,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     // Generate clearance items table
     const generateClearanceItemsTable = () => {
       const items = clearanceData.items || [];
-      console.log('Clearance items for table:', items);
       
       if (items.length === 0) {
         const colspan = items.some(item => item.levelFloor && item.levelFloor.trim() !== '') ? 4 : 3;
-        console.log('No clearance items found, showing placeholder');
         return `<tr><td colspan="${colspan}" style="text-align: center; font-style: italic;">No clearance items found</td></tr>`;
       }
       
@@ -229,7 +251,6 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         }
       }).join('');
       
-      console.log('Generated table rows:', tableRows);
       return tableRows;
     };
 
@@ -243,7 +264,6 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         item.photograph && item.photograph.trim() !== ''
       );
       
-      console.log('Items with photos:', itemsWithPhotos.length);
       
       if (itemsWithPhotos.length === 0) {
         return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
@@ -354,7 +374,6 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const hasSitePlan = clearanceData.sitePlan && clearanceData.sitePlanFile;
     const hasAirMonitoring = clearanceData.airMonitoring;
     
-    console.log('[DEBUG] Appendix structure - hasSitePlan:', hasSitePlan, 'hasAirMonitoring:', hasAirMonitoring);
     
     // Generate dynamic appendix content
     let appendixContent = '';
@@ -734,85 +753,46 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
  */
 const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
   try {
-    console.log('=== PDF MERGING DEBUG ===');
-    console.log('pdf1Buffer length:', pdf1Buffer.length);
-    console.log('pdf2Base64 length:', pdf2Base64 ? pdf2Base64.length : 'null/undefined');
-    console.log('pdf2Base64 starts with:', pdf2Base64 ? pdf2Base64.substring(0, 50) : 'N/A');
     
     // Create a new PDF document
     const mergedPdf = await PDFDocument.create();
-    console.log('Created merged PDF document');
     
     // Load the first PDF (clearance report or assessment report)
     const pdf1Doc = await PDFDocument.load(pdf1Buffer);
-    console.log('Loaded first PDF, pages:', pdf1Doc.getPageCount());
-    
-    // Debug: Check first PDF page dimensions
-    console.log('=== FIRST PDF DIMENSION DEBUG ===');
-    const firstPdfPages = pdf1Doc.getPages();
-    firstPdfPages.forEach((page, index) => {
-      console.log(`First PDF page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
-    });
-    
     const pdf1Pages = await mergedPdf.copyPages(pdf1Doc, pdf1Doc.getPageIndices());
     pdf1Pages.forEach((page) => mergedPdf.addPage(page));
-    console.log('Added first PDF pages to merged PDF');
     
     // Load the second PDF (air monitoring report or site plan) from base64
     // Handle both pure base64 and data URL formats
     let cleanBase64 = pdf2Base64;
     if (pdf2Base64.startsWith('data:')) {
       cleanBase64 = pdf2Base64.split(',')[1];
-      console.log('Removed data URL prefix from second PDF');
     }
     const pdf2Buffer = Buffer.from(cleanBase64, 'base64');
-    console.log('Converted base64 to buffer, length:', pdf2Buffer.length);
     
     // Load the second PDF with specific options to preserve layout
     const pdf2Doc = await PDFDocument.load(pdf2Buffer, {
       ignoreEncryption: true,
       updateMetadata: false
     });
-    console.log('Loaded second PDF, pages:', pdf2Doc.getPageCount());
     
-    // Debug: Check page dimensions before and after copying
-    console.log('=== PAGE DIMENSION DEBUG ===');
-    const originalPages = pdf2Doc.getPages();
-    originalPages.forEach((page, index) => {
-      console.log(`Original page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
-    });
     
     // Try to fix the coordinate system issue by using a different approach
     // Instead of trying to normalize dimensions, let's try to preserve the original layout
     try {
       const pdf2Pages = await mergedPdf.copyPages(pdf2Doc, pdf2Doc.getPageIndices());
-      console.log('=== COPIED PAGE DIMENSION DEBUG ===');
       pdf2Pages.forEach((page, index) => {
-        console.log(`Copied page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
-        
         // Add the page directly without any modifications
         // This preserves the original coordinate system and layout exactly as generated
         mergedPdf.addPage(page);
       });
-      
-      console.log('Added second PDF pages to merged PDF with original coordinate system preserved');
     } catch (copyError) {
-      console.log('Error copying pages:', copyError.message);
+      console.error('Error copying pages:', copyError.message);
       throw copyError;
     }
     
     // Save the merged PDF
     const mergedPdfBytes = await mergedPdf.save();
-    console.log('Saved merged PDF, total pages:', mergedPdf.getPageCount());
-    
-    // Debug: Check final merged PDF page dimensions
-    console.log('=== FINAL MERGED PDF DIMENSION DEBUG ===');
-    const finalPages = mergedPdf.getPages();
-    finalPages.forEach((page, index) => {
-      console.log(`Final merged page ${index + 1}: width=${page.getWidth()}, height=${page.getHeight()}`);
-    });
-    
-    console.log('=== PDF MERGING COMPLETED ===');
     return Buffer.from(mergedPdfBytes);
   } catch (error) {
     console.error('Error in mergePDFs:', error);
@@ -826,18 +806,6 @@ const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
  */
 router.post('/generate-asbestos-clearance-v2', async (req, res) => {
   const pdfId = `clearance-v2-${Date.now()}`;
-  console.log('\n>>>>> CLEARANCE_TYPE_CHECK:', {
-    type: req.body?.clearanceData?.clearanceType,
-    route: 'generate-asbestos-clearance-v2'
-  });
-  console.log(`[${pdfId}] === CLEARANCE V2 REQUEST RECEIVED ===`);
-  console.log(`[${pdfId}] Request headers:`, req.headers);
-      console.log(`>>>>> STRUCTURE_CHECK:`, {
-      hasData: !!req.body?.clearanceData,
-      type: req.body?.clearanceData?.clearanceType,
-      dataKeys: Object.keys(req.body?.clearanceData || {}).filter(k => !['sitePlanFile', 'airMonitoringReport', 'photograph'].includes(k))
-    });
-  backendPerformanceMonitor.startStage('request-received', pdfId);
   
   try {
     const { clearanceData } = req.body;
@@ -846,26 +814,14 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       return res.status(400).json({ error: 'Clearance data is required' });
     }
 
-    console.log(`[${pdfId}] Generating clearance V2 PDF for data:`, clearanceData);
-    backendPerformanceMonitor.startStage('data-validation', pdfId);
 
     // Validate clearance data
     if (!clearanceData._id && !clearanceData.projectId) {
       return res.status(400).json({ error: 'Invalid clearance data' });
     }
 
-    backendPerformanceMonitor.endStage('data-validation', pdfId);
-    backendPerformanceMonitor.startStage('template-population', pdfId);
-
     // Generate HTML content using new templates
-    console.log(`[${pdfId}] Generating clearance HTML V2...`);
     const htmlContent = await generateClearanceHTMLV2(clearanceData);
-    
-    console.log(`[${pdfId}] HTML content generated, size: ${htmlContent.length} characters`);
-    console.log(`[${pdfId}] HTML preview (first 500 chars):`, htmlContent.substring(0, 500));
-
-    backendPerformanceMonitor.endStage('template-population', pdfId);
-    backendPerformanceMonitor.startStage('docraptor-generation', pdfId);
 
     // Generate filename
     const projectId = clearanceData.projectId?.projectID || clearanceData.project?.projectID || clearanceData.projectId || 'Unknown';
@@ -873,8 +829,6 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
     const filename = `${projectId}: Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
 
-    console.log(`[${pdfId}] Generating PDF with DocRaptor V2...`);
-    
     // Generate PDF using DocRaptor with optimized settings
     const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
       // DocRaptor-specific options for better page handling
@@ -886,54 +840,30 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       }
     });
 
-    backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
-    backendPerformanceMonitor.startStage('response-sending', pdfId);
 
-    console.log(`[${pdfId}] PDF generated successfully, size: ${pdfBuffer.length} bytes`);
 
     // Handle PDF merging for site plan and air monitoring reports
     let finalPdfBuffer = pdfBuffer;
 
     // If there's an air monitoring report, merge it with the generated PDF
     if (clearanceData.airMonitoringReport) {
-      console.log(`[${pdfId}] === AIR MONITORING REPORT DEBUG ===`);
-      console.log(`[${pdfId}] airMonitoringReport exists:`, !!clearanceData.airMonitoringReport);
-      console.log(`[${pdfId}] airMonitoringReport type:`, typeof clearanceData.airMonitoringReport);
-      console.log(`[${pdfId}] airMonitoringReport length:`, clearanceData.airMonitoringReport ? clearanceData.airMonitoringReport.length : 'N/A');
-      console.log(`[${pdfId}] airMonitoringReport starts with:`, clearanceData.airMonitoringReport ? clearanceData.airMonitoringReport.substring(0, 100) : 'N/A');
-      
       try {
         // Now that frontend generates PDFs, airMonitoringReport should always be base64 data
-        console.log(`[${pdfId}] Merging air monitoring report with clearance PDF...`);
         const mergedPdf = await mergePDFs(finalPdfBuffer, clearanceData.airMonitoringReport);
-        console.log(`[${pdfId}] PDFs merged successfully, new size:`, mergedPdf.length);
         finalPdfBuffer = mergedPdf; // Update the final buffer
       } catch (error) {
-        console.error(`[${pdfId}] Error merging air monitoring PDFs:`, error);
-        console.log(`[${pdfId}] Returning PDF without air monitoring report`);
+        console.error(`Error merging air monitoring PDFs:`, error);
       }
-    } else {
-      console.log(`[${pdfId}] No air monitoring report found in data`);
     }
 
     // If there's a site plan PDF, merge it with the generated PDF
     if (clearanceData.sitePlan && clearanceData.sitePlanFile && !clearanceData.sitePlanFile.startsWith('/9j/') && !clearanceData.sitePlanFile.startsWith('iVBORw0KGgo')) {
-      console.log(`[${pdfId}] === SITE PLAN PDF DEBUG ===`);
-      console.log(`[${pdfId}] sitePlanFile exists:`, !!clearanceData.sitePlanFile);
-      console.log(`[${pdfId}] sitePlanFile type:`, typeof clearanceData.sitePlanFile);
-      console.log(`[${pdfId}] sitePlanFile length:`, clearanceData.sitePlanFile ? clearanceData.sitePlanFile.length : 'N/A');
-      
       try {
-        console.log(`[${pdfId}] Merging site plan PDF with clearance PDF...`);
         const mergedPdf = await mergePDFs(finalPdfBuffer, clearanceData.sitePlanFile);
-        console.log(`[${pdfId}] PDFs merged successfully, new size:`, mergedPdf.length);
         finalPdfBuffer = mergedPdf; // Update the final buffer
       } catch (error) {
-        console.error(`[${pdfId}] Error merging site plan PDFs:`, error);
-        console.log(`[${pdfId}] Returning PDF without site plan`);
+        console.error(`Error merging site plan PDFs:`, error);
       }
-    } else {
-      console.log(`[${pdfId}] No site plan PDF found in data or site plan is an image`);
     }
 
     // Set response headers
@@ -943,9 +873,6 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
 
     // Send final PDF buffer
     res.send(finalPdfBuffer);
-
-    backendPerformanceMonitor.endStage('response-sending', pdfId);
-    console.log(`[${pdfId}] Clearance V2 PDF generation completed successfully`);
 
   } catch (error) {
     console.error(`[${pdfId}] Error generating clearance V2 PDF:`, error);
@@ -961,7 +888,6 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
  */
 router.post('/test-v2', async (req, res) => {
   try {
-    console.log('Testing DocRaptor V2 with simple HTML...');
     
     const simpleHTML = `
       <!DOCTYPE html>
@@ -1028,7 +954,6 @@ router.post('/test-v2', async (req, res) => {
  */
 router.post('/test-svg-scaling', async (req, res) => {
   try {
-    console.log('Testing DocRaptor SVG scaling...');
     
     const svgTestHTML = `
       <!DOCTYPE html>
@@ -1113,7 +1038,6 @@ router.post('/test-svg-scaling', async (req, res) => {
  */
 router.post('/test-svg-viewbox', async (req, res) => {
   try {
-    console.log('Testing DocRaptor SVG viewBox and clipping...');
     
     const viewBoxTestHTML = `
       <!DOCTYPE html>
@@ -1194,7 +1118,6 @@ router.post('/test-svg-viewbox', async (req, res) => {
  */
 router.post('/test-svg-coordinates', async (req, res) => {
   try {
-    console.log('Testing DocRaptor SVG coordinate mapping...');
     
     const coordinateTestHTML = `
       <!DOCTYPE html>
@@ -1281,7 +1204,6 @@ router.post('/test-svg-coordinates', async (req, res) => {
  */
 router.post('/test-cover-structure', async (req, res) => {
   try {
-    console.log('Testing minimal cover page structure...');
     
     const coverTestHTML = `
       <!DOCTYPE html>
@@ -1389,7 +1311,6 @@ router.post('/test-cover-structure', async (req, res) => {
  */
 router.post('/test-a4-dimensions-v2', async (req, res) => {
   try {
-    console.log('Testing different A4 dimensions...');
     
     const dimensionTestHTML = `
       <!DOCTYPE html>
@@ -1467,7 +1388,6 @@ router.post('/test-a4-dimensions-v2', async (req, res) => {
  */
 router.post('/test-svg-simple', async (req, res) => {
   try {
-    console.log('Testing SVG without viewBox...');
     
     const simpleTestHTML = `
       <!DOCTYPE html>
@@ -1548,7 +1468,6 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
 
     // Generate PDF with DocRaptor
     backendPerformanceMonitor.startStage('docraptor-generation', pdfId);
-    console.log('Generating PDF with DocRaptor V2...');
     let pdfBuffer = await docRaptorService.generatePDF(html);
     backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
 
@@ -1565,7 +1484,6 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
         finalPdfBuffer = mergedPdf; // Update the final buffer
       } catch (error) {
         console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
-        console.log(`[${pdfId}] Returning PDF without fibre analysis report`);
       }
     }
 
@@ -1576,7 +1494,6 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
     res.send(finalPdfBuffer);
     backendPerformanceMonitor.endStage('response-sending', pdfId);
 
-    console.log(`[${pdfId}] PDF generated successfully, size: ${finalPdfBuffer.length} bytes`);
 
   } catch (error) {
     console.error('Error generating assessment PDF:', error);
@@ -1641,25 +1558,6 @@ const generateAssessmentHTML = async (assessmentData) => {
     
     const templateContent = await getTemplateByType(templateType);
     
-    console.log('=== ASBESTOS ASSESSMENT TEMPLATE DEBUG ===');
-    console.log('Template content fetched:', !!templateContent);
-    if (templateContent) {
-      console.log('Template sections available:', Object.keys(templateContent.standardSections || {}));
-      console.log('Introduction content exists:', !!templateContent.standardSections?.introductionContent);
-      console.log('Survey findings content exists:', !!templateContent.standardSections?.surveyFindingsContent);
-      console.log('Discussion content exists:', !!templateContent.standardSections?.discussionContent);
-      console.log('Risk assessment content exists:', !!templateContent.standardSections?.riskAssessmentContent);
-      console.log('Control measures content exists:', !!templateContent.standardSections?.controlMeasuresContent);
-      console.log('Remediation requirements content exists:', !!templateContent.standardSections?.remediationRequirementsContent);
-      console.log('Legislation content exists:', !!templateContent.standardSections?.legislationContent);
-      console.log('Assessment limitations content exists:', !!templateContent.standardSections?.assessmentLimitationsContent);
-      console.log('Sign-off content exists:', !!templateContent.standardSections?.signOffContent);
-      console.log('Signature placeholder exists:', !!templateContent.standardSections?.signaturePlaceholder);
-      console.log('Footer text exists:', !!templateContent.standardSections?.footerText);
-    } else {
-      console.log('No template content found - will use fallbacks');
-    }
-    console.log('=== END TEMPLATE DEBUG ===');
 
     // Populate cover template with data
     const populatedCover = coverTemplate
