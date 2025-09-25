@@ -149,77 +149,81 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       let projects, total;
 
       if (search) {
-        // Use efficient find with populate instead of expensive aggregation
-        // First, search only in project fields (fast)
-        const searchQuery = {
+        console.log(`[PROJECTS] Starting search for: "${search}"`);
+        console.log(`[PROJECTS] Base query:`, JSON.stringify(query, null, 2));
+        
+        // Use a simpler approach: search projects first, then search clients separately
+        // This ensures we don't miss any results due to aggregation complexity
+        
+        // First: Search project fields
+        const projectSearchQuery = {
           ...query,
           $or: [
             { name: { $regex: search, $options: 'i' } },
             { projectID: { $regex: search, $options: 'i' } }
           ]
         };
-
-        // Get count for pagination
-        const countStartTime = Date.now();
-        total = await Project.countDocuments(searchQuery);
-        const countTime = Date.now() - countStartTime;
-        console.log(`[PROJECTS] Search count query completed in ${countTime}ms`);
-
-        // Get projects with populated client data
-        const dataStartTime = Date.now();
-        projects = await Project.find(searchQuery)
-          .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-          .skip(skip)
-          .limit(parseInt(limit))
+        
+        console.log(`[PROJECTS] Project search query:`, JSON.stringify(projectSearchQuery, null, 2));
+        
+        // Get projects matching project fields
+        const projectMatches = await Project.find(projectSearchQuery)
           .populate('client', 'name')
           .populate('users', 'firstName lastName');
-        const dataTime = Date.now() - dataStartTime;
-        console.log(`[PROJECTS] Search data query completed in ${dataTime}ms`);
-
-        // If we need to search by client name, do a second query and merge results
-        if (search.length >= 2) { // Only for meaningful searches
-          try {
-            const clientSearchStartTime = Date.now();
-            const clientSearchQuery = {
-              ...query,
-              client: { $exists: true }
-            };
-            
-            // Find projects by client name (this will be slower but more comprehensive)
-            const clientProjects = await Project.find(clientSearchQuery)
-              .populate({
-                path: 'client',
-                match: { name: { $regex: search, $options: 'i' } },
-                select: 'name'
-              })
-              .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-              .limit(parseInt(limit) * 2); // Get more to account for filtering
-            
-            // Filter out projects where client population failed
-            const validClientProjects = clientProjects.filter(p => p.client);
-            
-            // Merge with existing results, avoiding duplicates
-            const existingIds = new Set(projects.map(p => p._id.toString()));
-            const newClientProjects = validClientProjects.filter(p => !existingIds.has(p._id.toString()));
-            
-            // Combine and sort results
-            projects = [...projects, ...newClientProjects]
-              .sort((a, b) => {
-                const aVal = a[sortBy];
-                const bVal = b[sortBy];
-                return sortOrder === 'desc' ? 
-                  (bVal > aVal ? 1 : -1) : 
-                  (aVal > bVal ? 1 : -1);
-              })
-              .slice(0, parseInt(limit)); // Limit final results
-            
-            const clientSearchTime = Date.now() - clientSearchStartTime;
-            console.log(`[PROJECTS] Client search completed in ${clientSearchTime}ms`);
-          } catch (clientSearchError) {
-            console.log(`[PROJECTS] Client search failed, using project-only results: ${clientSearchError.message}`);
-            // Continue with project-only results if client search fails
+        
+        console.log(`[PROJECTS] Found ${projectMatches.length} projects matching project fields`);
+        if (projectMatches.length > 0) {
+          console.log(`[PROJECTS] Sample project client data:`, {
+            projectName: projectMatches[0].name,
+            client: projectMatches[0].client,
+            clientName: projectMatches[0].client?.name
+          });
+        }
+        
+        // Second: Search by client name
+        const clientSearchQuery = {
+          ...query,
+          client: { $exists: true }
+        };
+        
+        const clientMatches = await Project.find(clientSearchQuery)
+          .populate({
+            path: 'client',
+            match: { name: { $regex: search, $options: 'i' } },
+            select: 'name'
+          })
+          .populate('users', 'firstName lastName');
+        
+        // Filter out projects where client population failed
+        const validClientMatches = clientMatches.filter(p => p.client);
+        console.log(`[PROJECTS] Found ${validClientMatches.length} projects matching client names`);
+        
+        // Combine results and remove duplicates
+        const allMatches = [...projectMatches];
+        const existingIds = new Set(projectMatches.map(p => p._id.toString()));
+        
+        for (const clientProject of validClientMatches) {
+          if (!existingIds.has(clientProject._id.toString())) {
+            allMatches.push(clientProject);
           }
         }
+        
+        console.log(`[PROJECTS] Combined results: ${allMatches.length} unique projects`);
+        
+        // Sort results
+        allMatches.sort((a, b) => {
+          const aVal = a[sortBy];
+          const bVal = b[sortBy];
+          return sortOrder === 'desc' ? 
+            (bVal > aVal ? 1 : -1) : 
+            (aVal > bVal ? 1 : -1);
+        });
+        
+        // Return all results for client-side pagination and sorting
+        total = allMatches.length;
+        projects = allMatches; // Return all results, let frontend handle pagination
+        
+        console.log(`[PROJECTS] Returning all ${projects.length} projects for client-side pagination`);
       } else {
         // Use regular find for non-search queries
         const countStartTime = Date.now();
@@ -248,7 +252,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           
           return {
             ...projectObj,
-            client: project.client?.name || projectObj.client?.name || '',
+            client: project.client || projectObj.client || null,
             department: projectObj.department || '',
             assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || 
                        projectObj.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || '',
