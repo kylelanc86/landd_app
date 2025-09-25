@@ -105,6 +105,12 @@ const asbestosClearanceService = {
   getAirMonitoringReports: async (projectId) => {
     const response = await axios.get(`${API_BASE_URL}/air-monitoring-reports/${projectId}`);
     return response.data;
+  },
+
+  // Get air monitoring reports for a specific asbestos removal job
+  getAirMonitoringReportsByJob: async (jobId) => {
+    const response = await axios.get(`${API_BASE_URL}/air-monitoring-reports-by-job/${jobId}`);
+    return response.data;
   }
 };
 

@@ -21,10 +21,12 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import Header from "../../../components/Header";
 import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../../theme/tokens";
+import { formatDate } from "../../../utils/dateFormat";
 
 const EFAPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
@@ -94,7 +96,7 @@ const EFAPage = () => {
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
                 <TableCell>{calibration.filterId}</TableCell>
-                <TableCell>{calibration.date}</TableCell>
+                <TableCell>{formatDate(calibration.date)}</TableCell>
                 <TableCell>{calibration.area}</TableCell>
                 <TableCell>
                   <Box
@@ -113,7 +115,7 @@ const EFAPage = () => {
                   </Box>
                 </TableCell>
                 <TableCell>{calibration.technician}</TableCell>
-                <TableCell>{calibration.nextCalibration}</TableCell>
+                <TableCell>{formatDate(calibration.nextCalibration)}</TableCell>
                 <TableCell>
                   <IconButton
                     onClick={() => handleEdit(calibration.id)}

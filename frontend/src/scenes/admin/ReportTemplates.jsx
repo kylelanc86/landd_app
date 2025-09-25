@@ -24,9 +24,6 @@ import {
   Checkbox,
   ListItemText,
   OutlinedInput,
-  FormControlLabel,
-  List,
-  ListItem,
   Tabs,
   Tab,
 } from "@mui/material";
@@ -34,8 +31,6 @@ import {
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
-  Add as AddIcon,
-  Delete as DeleteIcon,
   Preview as PreviewIcon,
   Download as DownloadIcon,
 } from "@mui/icons-material";
@@ -72,7 +67,8 @@ const ReportTemplates = () => {
 
   // Legislation selection state
   const [legislationItems, setLegislationItems] = useState([]);
-  const [selectedLegislation, setSelectedLegislation] = useState([]);
+  const [selectedACTLegislation, setSelectedACTLegislation] = useState([]);
+  const [selectedNSWLegislation, setSelectedNSWLegislation] = useState([]);
   const [legislationLoading, setLegislationLoading] = useState(false);
 
   const reportTypes = [
@@ -91,11 +87,11 @@ const ReportTemplates = () => {
       name: "Friable Asbestos Clearance (Non-Friable Conditions)",
       color: "#FF6B6B",
     },
-    {
-      id: "asbestosAssessment",
-      name: "Asbestos Assessment Report",
-      color: "#FF6B6B",
-    },
+    // {
+    //   id: "asbestosAssessment",
+    //   name: "Asbestos Assessment Report",
+    //   color: "#FF6B6B",
+    // },
     // {
     //   id: "leadAssessment",
     //   name: "Lead Assessment Report",
@@ -287,29 +283,51 @@ const ReportTemplates = () => {
     // Load selected legislation for the current template
     const currentTemplate = templates[selectedTemplate];
     if (currentTemplate && currentTemplate.selectedLegislation) {
-      setSelectedLegislation(currentTemplate.selectedLegislation);
+      // Separate ACT and NSW legislation
+      const actLegislation = currentTemplate.selectedLegislation.filter(
+        (item) => item.jurisdiction === "ACT"
+      );
+      const nswLegislation = currentTemplate.selectedLegislation.filter(
+        (item) => item.jurisdiction === "NSW"
+      );
+
+      setSelectedACTLegislation(actLegislation);
+      setSelectedNSWLegislation(nswLegislation);
 
       // Update preview data with selected legislation
-      const legislationText =
-        currentTemplate.selectedLegislation.length > 0
-          ? currentTemplate.selectedLegislation
+      const actText =
+        actLegislation.length > 0
+          ? actLegislation
               .map((item) => {
                 const title =
                   item.legislationTitle || item.text || "Unknown Legislation";
-                const jurisdiction = item.jurisdiction
-                  ? ` (${item.jurisdiction})`
-                  : "";
-                return `• ${title}${jurisdiction}`;
+                return `• ${title}`;
               })
               .join("\n")
-          : "• No legislation items selected";
+          : "";
+
+      const nswText =
+        nswLegislation.length > 0
+          ? nswLegislation
+              .map((item) => {
+                const title =
+                  item.legislationTitle || item.text || "Unknown Legislation";
+                return `• ${title}`;
+              })
+              .join("\n")
+          : "";
+
+      const legislationText =
+        [actText, nswText].filter((text) => text.length > 0).join("\n") ||
+        "• No legislation items selected";
 
       setPreviewData((prev) => ({
         ...prev,
         LEGISLATION: legislationText,
       }));
     } else {
-      setSelectedLegislation([]);
+      setSelectedACTLegislation([]);
+      setSelectedNSWLegislation([]);
       setPreviewData((prev) => ({
         ...prev,
         LEGISLATION: "• No legislation items selected",
@@ -521,44 +539,32 @@ const ReportTemplates = () => {
     }
   };
 
-  // Handle legislation selection
-  const handleLegislationChange = async (event) => {
+  // Handle ACT legislation selection
+  const handleACTLegislationChange = async (event) => {
     const selectedIds = event.target.value;
-    console.log("DEBUG: Selected IDs:", selectedIds);
-    console.log("DEBUG: Available legislation items:", legislationItems);
+    console.log("DEBUG: Selected ACT IDs:", selectedIds);
 
-    // Convert selected IDs to full legislation objects
-    const selectedItems = legislationItems.filter((item) =>
-      selectedIds.includes(item._id)
+    // Convert selected IDs to full legislation objects (ACT only)
+    const selectedItems = legislationItems.filter(
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "ACT"
     );
-    console.log("DEBUG: Selected items:", selectedItems);
+    console.log("DEBUG: Selected ACT items:", selectedItems);
 
-    setSelectedLegislation(selectedItems);
+    setSelectedACTLegislation(selectedItems);
 
-    // Update preview data with selected legislation
-    const legislationText =
-      selectedItems.length > 0
-        ? selectedItems
-            .map((item) => {
-              const title =
-                item.legislationTitle || item.text || "Unknown Legislation";
-              const jurisdiction = item.jurisdiction
-                ? ` (${item.jurisdiction})`
-                : "";
-              return `• ${title}${jurisdiction}`;
-            })
-            .join("\n")
-        : "• No legislation items selected";
-
-    setPreviewData((prev) => ({
-      ...prev,
-      LEGISLATION: legislationText,
-    }));
+    // Update preview data with all selected legislation
+    updateLegislationPreview();
 
     try {
+      // Combine all selected legislation for saving
+      const allSelectedLegislation = [
+        ...selectedItems,
+        ...selectedNSWLegislation,
+      ];
+
       // Update the template with selected legislation
       await reportTemplateService.updateTemplate(selectedTemplate, {
-        selectedLegislation: selectedItems,
+        selectedLegislation: allSelectedLegislation,
       });
 
       // Update local state
@@ -566,13 +572,13 @@ const ReportTemplates = () => {
         ...prev,
         [selectedTemplate]: {
           ...prev[selectedTemplate],
-          selectedLegislation: selectedItems,
+          selectedLegislation: allSelectedLegislation,
         },
       }));
 
       setSaveStatus({
         show: true,
-        message: "Legislation selection updated successfully!",
+        message: "ACT Legislation selection updated successfully!",
         severity: "success",
       });
 
@@ -581,13 +587,104 @@ const ReportTemplates = () => {
         setSaveStatus({ show: false, message: "", severity: "success" });
       }, 3000);
     } catch (error) {
-      console.error("Error updating legislation selection:", error);
+      console.error("Error updating ACT legislation selection:", error);
       setSaveStatus({
         show: true,
-        message: "Error updating legislation selection. Please try again.",
+        message: "Error updating ACT legislation selection. Please try again.",
         severity: "error",
       });
     }
+  };
+
+  // Handle NSW legislation selection
+  const handleNSWLegislationChange = async (event) => {
+    const selectedIds = event.target.value;
+    console.log("DEBUG: Selected NSW IDs:", selectedIds);
+
+    // Convert selected IDs to full legislation objects (NSW only)
+    const selectedItems = legislationItems.filter(
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "NSW"
+    );
+    console.log("DEBUG: Selected NSW items:", selectedItems);
+
+    setSelectedNSWLegislation(selectedItems);
+
+    // Update preview data with all selected legislation
+    updateLegislationPreview();
+
+    try {
+      // Combine all selected legislation for saving
+      const allSelectedLegislation = [
+        ...selectedACTLegislation,
+        ...selectedItems,
+      ];
+
+      // Update the template with selected legislation
+      await reportTemplateService.updateTemplate(selectedTemplate, {
+        selectedLegislation: allSelectedLegislation,
+      });
+
+      // Update local state
+      setTemplates((prev) => ({
+        ...prev,
+        [selectedTemplate]: {
+          ...prev[selectedTemplate],
+          selectedLegislation: allSelectedLegislation,
+        },
+      }));
+
+      setSaveStatus({
+        show: true,
+        message: "NSW Legislation selection updated successfully!",
+        severity: "success",
+      });
+
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setSaveStatus({ show: false, message: "", severity: "success" });
+      }, 3000);
+    } catch (error) {
+      console.error("Error updating NSW legislation selection:", error);
+      setSaveStatus({
+        show: true,
+        message: "Error updating NSW legislation selection. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  // Update legislation preview text
+  const updateLegislationPreview = () => {
+    const actText =
+      selectedACTLegislation.length > 0
+        ? selectedACTLegislation
+            .map((item) => {
+              const title =
+                item.legislationTitle || item.text || "Unknown Legislation";
+              return `• ${title}`;
+            })
+            .join("\n")
+        : "";
+
+    const nswText =
+      selectedNSWLegislation.length > 0
+        ? selectedNSWLegislation
+            .map((item) => {
+              const title =
+                item.legislationTitle || item.text || "Unknown Legislation";
+              return `• ${title}`;
+            })
+            .join("\n")
+        : "";
+
+    const legislationText =
+      [actText, nswText].filter((text) => text.length > 0).join("\n") ||
+      "• No legislation items selected";
+
+    setPreviewData((prev) => ({
+      ...prev,
+      LEGISLATION: legislationText,
+    }));
   };
 
   const generatePDFPreview = async () => {
@@ -1671,16 +1768,18 @@ const ReportTemplates = () => {
                               Selected Legislation
                             </Typography>
                           </Box>
-                          <FormControl fullWidth>
-                            <InputLabel>Select Legislation Items</InputLabel>
+
+                          {/* ACT Legislation Selection */}
+                          <FormControl fullWidth sx={{ mb: 2 }}>
+                            <InputLabel>Selected ACT Legislation</InputLabel>
                             <Select
                               multiple
-                              value={selectedLegislation.map(
+                              value={selectedACTLegislation.map(
                                 (item) => item._id
                               )}
-                              onChange={handleLegislationChange}
+                              onChange={handleACTLegislationChange}
                               input={
-                                <OutlinedInput label="Select Legislation Items" />
+                                <OutlinedInput label="Selected ACT Legislation" />
                               }
                               renderValue={(selected) => (
                                 <Box
@@ -1699,13 +1798,11 @@ const ReportTemplates = () => {
                                         key={value}
                                         label={
                                           item
-                                            ? `${
-                                                item.legislationTitle ||
-                                                item.text
-                                              } (${item.jurisdiction})`
+                                            ? item.legislationTitle || item.text
                                             : value
                                         }
                                         size="small"
+                                        sx={{ backgroundColor: "#e3f2fd" }}
                                       />
                                     );
                                   })}
@@ -1713,29 +1810,105 @@ const ReportTemplates = () => {
                               )}
                               disabled={legislationLoading}
                             >
-                              {legislationItems.length > 0 ? (
-                                legislationItems.map((item) => (
-                                  <MenuItem key={item._id} value={item._id}>
-                                    <Checkbox
-                                      checked={selectedLegislation.some(
-                                        (selected) => selected._id === item._id
-                                      )}
-                                    />
-                                    <ListItemText
-                                      primary={`${
-                                        item.legislationTitle || item.text
-                                      }`}
-                                      secondary={item.jurisdiction}
-                                    />
-                                  </MenuItem>
-                                ))
+                              {legislationItems.filter(
+                                (item) => item.jurisdiction === "ACT"
+                              ).length > 0 ? (
+                                legislationItems
+                                  .filter((item) => item.jurisdiction === "ACT")
+                                  .map((item) => (
+                                    <MenuItem key={item._id} value={item._id}>
+                                      <Checkbox
+                                        checked={selectedACTLegislation.some(
+                                          (selected) =>
+                                            selected._id === item._id
+                                        )}
+                                      />
+                                      <ListItemText
+                                        primary={
+                                          item.legislationTitle || item.text
+                                        }
+                                        secondary="ACT"
+                                      />
+                                    </MenuItem>
+                                  ))
                               ) : (
                                 <MenuItem disabled>
-                                  <ListItemText primary="No legislation items found" />
+                                  <ListItemText primary="No ACT legislation items found" />
                                 </MenuItem>
                               )}
                             </Select>
                           </FormControl>
+
+                          {/* NSW Legislation Selection */}
+                          <FormControl fullWidth>
+                            <InputLabel>Selected NSW Legislation</InputLabel>
+                            <Select
+                              multiple
+                              value={selectedNSWLegislation.map(
+                                (item) => item._id
+                              )}
+                              onChange={handleNSWLegislationChange}
+                              input={
+                                <OutlinedInput label="Selected NSW Legislation" />
+                              }
+                              renderValue={(selected) => (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  {selected.map((value) => {
+                                    const item = legislationItems.find(
+                                      (item) => item._id === value
+                                    );
+                                    return (
+                                      <Chip
+                                        key={value}
+                                        label={
+                                          item
+                                            ? item.legislationTitle || item.text
+                                            : value
+                                        }
+                                        size="small"
+                                        sx={{ backgroundColor: "#f3e5f5" }}
+                                      />
+                                    );
+                                  })}
+                                </Box>
+                              )}
+                              disabled={legislationLoading}
+                            >
+                              {legislationItems.filter(
+                                (item) => item.jurisdiction === "NSW"
+                              ).length > 0 ? (
+                                legislationItems
+                                  .filter((item) => item.jurisdiction === "NSW")
+                                  .map((item) => (
+                                    <MenuItem key={item._id} value={item._id}>
+                                      <Checkbox
+                                        checked={selectedNSWLegislation.some(
+                                          (selected) =>
+                                            selected._id === item._id
+                                        )}
+                                      />
+                                      <ListItemText
+                                        primary={
+                                          item.legislationTitle || item.text
+                                        }
+                                        secondary="NSW"
+                                      />
+                                    </MenuItem>
+                                  ))
+                              ) : (
+                                <MenuItem disabled>
+                                  <ListItemText primary="No NSW legislation items found" />
+                                </MenuItem>
+                              )}
+                            </Select>
+                          </FormControl>
+
                           {legislationLoading && (
                             <Typography
                               variant="body2"
@@ -1784,7 +1957,7 @@ const ReportTemplates = () => {
                                   component="div"
                                 >
                                   2. Create new legislation items with Title and
-                                  Jurisdiction
+                                  Jurisdiction (ACT or NSW)
                                 </Typography>
                                 <Typography
                                   variant="body2"

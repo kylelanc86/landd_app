@@ -25,6 +25,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import Header from "../../../components/Header";
 import { tokens } from "../../../theme/tokens";
 import airPumpService from "../../../services/airPumpService";
+import { formatDate } from "../../../utils/dateFormat";
 
 const AirPumpPage = () => {
   const theme = useTheme();
@@ -107,53 +108,6 @@ const AirPumpPage = () => {
         return "error";
       default:
         return "default";
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-
-    try {
-      let date;
-
-      // If it's already a Date object
-      if (dateString instanceof Date) {
-        date = dateString;
-      }
-      // If it's a string, try to parse it
-      else if (typeof dateString === "string") {
-        // Handle dd/mm/yyyy format
-        if (dateString.includes("/")) {
-          const parts = dateString.split("/");
-          if (parts.length === 3) {
-            const day = parseInt(parts[0]);
-            const month = parseInt(parts[1]) - 1; // Month is 0-indexed
-            const year = parseInt(parts[2]);
-            date = new Date(year, month, day);
-          } else {
-            date = new Date(dateString);
-          }
-        } else {
-          date = new Date(dateString);
-        }
-      } else {
-        date = new Date(dateString);
-      }
-
-      // Check if the date is valid
-      if (isNaN(date.getTime())) {
-        console.warn("Invalid date:", dateString);
-        return "Invalid Date";
-      }
-
-      return date.toLocaleDateString("en-AU", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      });
-    } catch (error) {
-      console.error("Error formatting date:", dateString, error);
-      return "Error";
     }
   };
 

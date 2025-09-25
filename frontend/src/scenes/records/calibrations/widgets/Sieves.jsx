@@ -4,7 +4,7 @@ import BaseCalibrationWidget from "./BaseCalibrationWidget";
 const Sieves = () => {
   return (
     <BaseCalibrationWidget
-      title="Sieves Calibration"
+      title="Sieves"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/Sieves.png"}
       viewCalibrationsPath="/records/laboratory/calibrations/sieves"
     />

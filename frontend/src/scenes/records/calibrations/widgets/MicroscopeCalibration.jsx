@@ -7,7 +7,7 @@ const MicroscopeCalibration = ({
 }) => {
   return (
     <BaseCalibrationWidget
-      title="Microscope Calibration"
+      title="Microscope Servicing"
       nextCalibrationDue={nextCalibrationDue}
       viewCalibrationsPath="/records/laboratory/calibrations/microscope"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/microscope.png"}

@@ -453,7 +453,7 @@ const NewSample = () => {
 
       setForm((prev) => ({
         ...prev,
-        averageFlowrate: Math.round(avg).toString(),
+        averageFlowrate: avg.toFixed(1),
         status: newStatus,
       }));
     } else {

@@ -1,23 +1,19 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Box,
   Grid,
   Typography,
-  useTheme,
-  IconButton,
   Button,
   Breadcrumbs,
   Link,
 } from "@mui/material";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../../theme/tokens";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import Header from "../../../components/Header";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import { useAuth } from "../../../context/AuthContext";
+import { hasPermission } from "../../../config/permissions";
 import AirPumpCalibration from "./widgets/AirPumpCalibration";
 import FlowmeterCalibration from "./widgets/FlowmeterCalibration";
 import EFA from "./widgets/EFA";
@@ -28,13 +24,21 @@ import PrimaryFlowmeter from "./widgets/PrimaryFlowmeter";
 import PureAsbestos from "./widgets/PureAsbestos";
 import RiLiquid from "./widgets/RiLiquid";
 import Sieves from "./widgets/Sieves";
+import { formatDate } from "../../../utils/dateFormat";
 
 const Calibrations = () => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
 
   const handleBackToHome = () => {
     navigate("/records");
   };
+
+  // Check if user has admin access
+  const canAccessCalibrationFrequency = hasPermission(
+    currentUser,
+    "admin.access"
+  );
 
   return (
     <Box p="20px">
@@ -61,82 +65,105 @@ const Calibrations = () => {
           <Typography color="text.primary">Calibrations</Typography>
         </Breadcrumbs>
 
-        <Button
-          variant="contained"
-          startIcon={<ListAltIcon />}
-          onClick={() => navigate("/records/laboratory/equipment")}
-          sx={{
-            backgroundColor: tokens.primary[700],
-            color: tokens.grey[100],
-            fontSize: "14px",
-            fontWeight: "bold",
-            padding: "10px 20px",
-            "&:hover": {
-              backgroundColor: tokens.primary[800],
-            },
-          }}
-        >
-          Equipment List
-        </Button>
+        <Box display="flex" gap={2}>
+          {canAccessCalibrationFrequency && (
+            <Button
+              variant="contained"
+              startIcon={<ScheduleIcon />}
+              onClick={() =>
+                navigate("/records/laboratory/calibrations/frequency")
+              }
+              sx={{
+                backgroundColor: "#357ECA",
+                color: tokens.grey[100],
+                fontSize: "14px",
+                fontWeight: "bold",
+                padding: "10px 20px",
+                "&:hover": {
+                  backgroundColor: "#3D3DC2",
+                },
+              }}
+            >
+              Calibration Frequency
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<ListAltIcon />}
+            onClick={() => navigate("/records/laboratory/equipment")}
+            sx={{
+              backgroundColor: tokens.primary[700],
+              color: tokens.grey[100],
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                backgroundColor: tokens.primary[800],
+              },
+            }}
+          >
+            Equipment List
+          </Button>
+        </Box>
       </Box>
       <Grid container spacing={3}>
         <Grid item xs={12} md={6} lg={4}>
           <AirPumpCalibration
-            nextCalibrationDue="2024-03-15"
+            nextCalibrationDue={formatDate("2024-03-15")}
             viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <FlowmeterCalibration
-            nextCalibrationDue="2024-03-20"
+            nextCalibrationDue={formatDate("2024-03-20")}
             viewCalibrationsPath="/records/laboratory/calibrations/flowmeter"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <EFA
-            nextCalibrationDue="2024-03-25"
+            nextCalibrationDue={formatDate("2024-03-25")}
             viewCalibrationsPath="/records/laboratory/calibrations/efa"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <MicroscopeCalibration
-            nextCalibrationDue="2024-03-30"
+            nextCalibrationDue={formatDate("2024-03-30")}
             viewCalibrationsPath="/records/laboratory/calibrations/microscope"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <AcetoneVaporiser
-            nextCalibrationDue="2024-04-05"
+            nextCalibrationDue={formatDate("2024-04-05")}
             viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <GraticuleCalibration
-            nextCalibrationDue="2024-04-10"
+            nextCalibrationDue={formatDate("2024-04-10")}
             viewCalibrationsPath="/records/laboratory/calibrations/graticule"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <PrimaryFlowmeter
-            nextCalibrationDue="2024-04-15"
+            nextCalibrationDue={formatDate("2024-04-15")}
             viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <PureAsbestos
-            nextCalibrationDue="2024-04-20"
+            nextCalibrationDue={formatDate("2024-04-20")}
             viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <RiLiquid
-            nextCalibrationDue="2024-04-25"
+            nextCalibrationDue={formatDate("2024-04-25")}
             viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
           />
         </Grid>
         <Grid item xs={12} md={6} lg={4}>
           <Sieves
-            nextCalibrationDue="2024-04-30"
+            nextCalibrationDue={formatDate("2024-04-30")}
             viewCalibrationsPath="/records/laboratory/calibrations/sieves"
           />
         </Grid>

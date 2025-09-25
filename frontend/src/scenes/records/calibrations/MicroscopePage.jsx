@@ -27,10 +27,12 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import Header from "../../../components/Header";
+import { formatDate } from "../../../utils/dateFormat";
 
 const MicroscopePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+
   const [calibrations, setCalibrations] = useState([]);
   const [openModal, setOpenModal] = useState(false);
   const [newRecord, setNewRecord] = useState({
@@ -126,9 +128,11 @@ const MicroscopePage = () => {
             ) : (
               calibrations.map((calibration) => (
                 <TableRow key={calibration.id}>
-                  <TableCell>{calibration.servicingDate}</TableCell>
+                  <TableCell>{formatDate(calibration.servicingDate)}</TableCell>
                   <TableCell>{calibration.microscopeReference}</TableCell>
-                  <TableCell>{calibration.nextCalibrationDue}</TableCell>
+                  <TableCell>
+                    {formatDate(calibration.nextCalibrationDue)}
+                  </TableCell>
                   <TableCell>
                     {calibration.serviceReportUrl && (
                       <Button

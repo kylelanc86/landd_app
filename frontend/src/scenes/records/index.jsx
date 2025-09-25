@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import {
   Box,
   Grid,
@@ -28,13 +28,7 @@ import AirIcon from "@mui/icons-material/Air";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 
-const RecordWidget = ({
-  title,
-  icon,
-  onClick,
-  color = "primary",
-  showComingSoon = false,
-}) => (
+const RecordWidget = ({ title, icon, onClick, color = "primary" }) => (
   <Card
     sx={{
       height: "100%",
@@ -49,13 +43,13 @@ const RecordWidget = ({
     }}
   >
     <CardActionArea
-      onClick={showComingSoon ? undefined : onClick}
+      onClick={onClick}
       sx={{
         height: "100%",
         display: "flex",
         flexDirection: "column",
         alignItems: "stretch",
-        cursor: showComingSoon ? "default" : "pointer",
+        cursor: "pointer",
       }}
     >
       <CardContent sx={{ flexGrow: 1, textAlign: "center", p: 3 }}>
@@ -63,62 +57,15 @@ const RecordWidget = ({
           {React.cloneElement(icon, {
             sx: {
               fontSize: 48,
-              color: showComingSoon ? "grey.400" : `${color}.main`,
+              color: `${color}.main`,
             },
           })}
         </Box>
-        <Typography
-          variant="h6"
-          component="h2"
-          gutterBottom
-          sx={{ color: showComingSoon ? "grey.500" : "inherit" }}
-        >
+        <Typography variant="h6" component="h2" gutterBottom>
           {title}
         </Typography>
       </CardContent>
     </CardActionArea>
-
-    {/* Coming Soon Overlay */}
-    {showComingSoon && (
-      <Box
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.7)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          borderRadius: 1,
-          zIndex: 1,
-        }}
-      >
-        <Typography
-          variant="h6"
-          sx={{
-            color: "white",
-            fontWeight: "bold",
-            textAlign: "center",
-            mb: 1,
-          }}
-        >
-          Coming Soon
-        </Typography>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "white",
-            textAlign: "center",
-            opacity: 0.9,
-          }}
-        >
-          This feature is under development
-        </Typography>
-      </Box>
-    )}
   </Card>
 );
 
@@ -152,63 +99,54 @@ const Records = () => {
       icon: <SchoolIcon />,
       color: "primary",
       onClick: () => navigate("/records/training"),
-      showComingSoon: true,
     },
     {
       title: "Staff Meetings",
       icon: <GroupIcon />,
       color: "secondary",
       onClick: () => navigate("/records/staff-meetings"),
-      showComingSoon: true,
     },
     {
       title: "Document Register",
       icon: <DescriptionIcon />,
       color: "success",
       onClick: () => navigate("/records/document-register"),
-      showComingSoon: true,
     },
     {
       title: "Approved Suppliers",
       icon: <BusinessIcon />,
       color: "info",
       onClick: () => navigate("/records/approved-suppliers"),
-      showComingSoon: true,
     },
     {
       title: "Asset Register",
       icon: <InventoryIcon />,
       color: "warning",
       onClick: () => navigate("/records/asset-register"),
-      showComingSoon: true,
     },
     {
       title: "Incidents & Non-conformances",
       icon: <ReportProblemIcon />,
       color: "error",
       onClick: () => navigate("/records/incidents"),
-      showComingSoon: true,
     },
     {
       title: "OHS & Environmental Targets & Risks",
       icon: <SecurityIcon />,
       color: "primary",
       onClick: () => navigate("/records/ohs-environmental"),
-      showComingSoon: true,
     },
     {
       title: "Impartiality Risks",
       icon: <GavelIcon />,
       color: "secondary",
       onClick: () => navigate("/records/impartiality-risks"),
-      showComingSoon: true,
     },
     {
       title: "Client Feedback",
       icon: <FeedbackIcon />,
       color: "success",
       onClick: () => navigate("/records/feedback"),
-      showComingSoon: true,
     },
   ];
 
@@ -218,42 +156,36 @@ const Records = () => {
       icon: <ScienceIcon />,
       color: "primary",
       onClick: () => navigate("/records/laboratory/equipment"),
-      showComingSoon: false,
     },
     {
       title: "Calibrations",
       icon: <TrendingUpIcon />,
       color: "secondary",
       onClick: () => navigate("/records/laboratory/calibrations"),
-      showComingSoon: true,
     },
     {
       title: "Quality Control",
       icon: <AssignmentIcon />,
       color: "success",
       onClick: () => navigate("/records/quality-control"),
-      showComingSoon: true,
     },
     {
       title: "Indoor Air Quality",
       icon: <AirIcon />,
       color: "info",
       onClick: () => navigate("/records/indoor-air-quality"),
-      showComingSoon: true,
     },
     {
       title: "Blanks",
       icon: <FilterAltIcon />,
       color: "warning",
       onClick: () => navigate("/records/blanks"),
-      showComingSoon: true,
     },
     {
       title: "Audits",
       icon: <AssignmentIcon />,
       color: "error",
       onClick: () => navigate("/records/audits"),
-      showComingSoon: true,
     },
   ];
 

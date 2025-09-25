@@ -492,7 +492,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.RECORDS") && (
             <CollapsibleSection
-              title="RECORDS"
+              title="Records"
               to="/records"
               icon={<FolderCopyIcon />}
             />

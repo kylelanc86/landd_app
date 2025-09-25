@@ -529,21 +529,39 @@ const replacePlaceholders = async (content, data) => {
     '{AIR_MONITORING_RESULTS}': data.airMonitoring ? `Air monitoring was conducted and results were below the clearance indicator of 0.01 fibres per mL.` : '',
     '{LEGISLATION}': (() => {
       if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
-        return data.selectedLegislation.map(item => {
-          const title = item.legislationTitle || item.text || 'Unknown Legislation';
-          const jurisdiction = item.jurisdiction ? ` (${item.jurisdiction})` : '';
-          return `[BULLET]${title}${jurisdiction}`;
-        }).join('\n');
+        // Filter legislation based on clearance jurisdiction if available
+        let filteredLegislation = data.selectedLegislation;
+        if (data.jurisdiction) {
+          filteredLegislation = data.selectedLegislation.filter(item => 
+            item.jurisdiction === data.jurisdiction
+          );
+        }
+        
+        if (filteredLegislation.length > 0) {
+          return filteredLegislation.map(item => {
+            const title = item.legislationTitle || item.text || 'Unknown Legislation';
+            return `[BULLET]${title}`;
+          }).join('\n');
+        }
       }
       return '[BULLET]No legislation items selected';
     })(),
     '[LEGISLATION]': (() => {
       if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
-        return data.selectedLegislation.map(item => {
-          const title = item.legislationTitle || item.text || 'Unknown Legislation';
-          const jurisdiction = item.jurisdiction ? ` (${item.jurisdiction})` : '';
-          return `[BULLET]${title}${jurisdiction}`;
-        }).join('\n');
+        // Filter legislation based on clearance jurisdiction if available
+        let filteredLegislation = data.selectedLegislation;
+        if (data.jurisdiction) {
+          filteredLegislation = data.selectedLegislation.filter(item => 
+            item.jurisdiction === data.jurisdiction
+          );
+        }
+        
+        if (filteredLegislation.length > 0) {
+          return filteredLegislation.map(item => {
+            const title = item.legislationTitle || item.text || 'Unknown Legislation';
+            return `[BULLET]${title}`;
+          }).join('\n');
+        }
       }
       return '[BULLET]No legislation items selected';
     })()

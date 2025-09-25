@@ -1514,7 +1514,7 @@ const Projects = ({ initialFilters = {} }) => {
                   width: "100%",
                 }}
               >
-                {Math.abs(daysDiff)} days overdue
+                {Math.abs(daysDiff)} days
               </Typography>
             );
           } else {
@@ -1535,7 +1535,7 @@ const Projects = ({ initialFilters = {} }) => {
                   width: "100%",
                 }}
               >
-                {daysDiff} days left
+                {daysDiff} days
               </Typography>
             );
           }

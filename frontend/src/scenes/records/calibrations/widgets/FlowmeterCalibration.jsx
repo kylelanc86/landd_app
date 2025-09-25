@@ -4,7 +4,7 @@ import BaseCalibrationWidget from "./BaseCalibrationWidget";
 const FlowmeterCalibration = ({ nextCalibrationDue, viewCalibrationsPath }) => {
   return (
     <BaseCalibrationWidget
-      title="Flowmeter Calibration"
+      title="Site Rotameters"
       nextCalibrationDue={nextCalibrationDue}
       viewCalibrationsPath={viewCalibrationsPath}
       icon={process.env.PUBLIC_URL + "/air-mon-icons/fm.png"}

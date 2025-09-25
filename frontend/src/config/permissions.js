@@ -72,6 +72,7 @@ export const PERMISSIONS = {
   'clients.write_off': 'Write off client accounts',
 
   // Admin permissions
+  'admin.access': 'Access admin-only features',
   'admin.view': 'Access admin features',
   'admin.create': 'Create admin resources',
   'admin.update': 'Update admin resources',

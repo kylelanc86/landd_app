@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Typography, useTheme, Button } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { formatDate } from "../../../../utils/dateFormat";
 
 const BaseCalibrationWidget = ({
   title,
@@ -57,10 +58,14 @@ const BaseCalibrationWidget = ({
 
       <Box mb={2}>
         <Typography variant="body2" color={theme.palette.text.secondary}>
-          Last Calibration: {lastCalibration || "Not calibrated"}
+          Last Calibration:{" "}
+          {lastCalibration ? formatDate(lastCalibration) : "Not calibrated"}
         </Typography>
         <Typography variant="body2" color={theme.palette.text.secondary}>
-          Next Calibration Due: {nextCalibrationDue || "Not scheduled"}
+          Next Calibration Due:{" "}
+          {nextCalibrationDue
+            ? formatDate(nextCalibrationDue)
+            : "Not scheduled"}
         </Typography>
       </Box>
 

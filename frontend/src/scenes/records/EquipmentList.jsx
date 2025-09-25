@@ -29,6 +29,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
+import { formatDate } from "../../utils/dateFormat";
 import { equipmentService } from "../../services/equipmentService";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
@@ -460,7 +461,7 @@ const EquipmentList = () => {
                 return (
                   <Box>
                     <Typography variant="body2">
-                      {new Date(params.row.calibrationDue).toLocaleDateString()}
+                      {formatDate(params.row.calibrationDue)}
                     </Typography>
                     <Chip
                       label={status.status}

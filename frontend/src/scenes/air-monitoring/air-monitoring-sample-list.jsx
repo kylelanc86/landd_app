@@ -36,11 +36,13 @@ import { sampleService, shiftService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import { formatDate, formatTime } from "../../utils/dateUtils";
 import PermissionGate from "../../components/PermissionGate";
+import { useAuth } from "../../context/AuthContext";
 
 const SampleList = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [samples, setSamples] = useState([]);
   const [sortField, setSortField] = useState("fullSampleID");
   const [sortAsc, setSortAsc] = useState(true);
@@ -57,6 +59,12 @@ const SampleList = () => {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [sampleToDelete, setSampleToDelete] = useState(null);
   const [showDescriptionDialog, setShowDescriptionDialog] = useState(false);
+  const [showSamplingCompleteDialog, setShowSamplingCompleteDialog] =
+    useState(false);
+  const [tempDescription, setTempDescription] = useState("");
+  const [showSamplesSubmittedDialog, setShowSamplesSubmittedDialog] =
+    useState(false);
+  const [submittedBySignature, setSubmittedBySignature] = useState("");
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -399,13 +407,33 @@ const SampleList = () => {
   };
 
   // Add handleSampleComplete function
-  const handleSampleComplete = async () => {
+  const handleSampleComplete = () => {
+    // Set the current description as the temp description for editing
+    setTempDescription(descriptionOfWorks);
+    setShowSamplingCompleteDialog(true);
+  };
+
+  // Handle the actual completion after dialog confirmation
+  const handleConfirmSamplingComplete = async () => {
     try {
+      // Update the description if it was modified
+      if (tempDescription !== descriptionOfWorks) {
+        await shiftService.update(shiftId, {
+          descriptionOfWorks: tempDescription,
+        });
+        setDescriptionOfWorks(tempDescription);
+        setDescSaveStatus("Saved");
+      }
+
       // Update shift status
       await shiftService.update(shiftId, { status: "sampling_complete" });
+
       // Refetch shift to update UI
       const shiftResponse = await shiftService.getById(shiftId);
       setShift(shiftResponse.data);
+
+      // Close dialog
+      setShowSamplingCompleteDialog(false);
     } catch (error) {
       console.error("Error updating shift status:", error);
       setError("Failed to update shift status. Please try again.");
@@ -413,28 +441,41 @@ const SampleList = () => {
   };
 
   // Add handler for Samples Submitted to Lab
-  const handleSamplesSubmittedToLab = async () => {
+  const handleSamplesSubmittedToLab = () => {
+    // Automatically set the current user's name
+    const userName = currentUser
+      ? `${currentUser.firstName} ${currentUser.lastName}`
+      : "";
+    setSubmittedBySignature(userName);
+    setShowSamplesSubmittedDialog(true);
+  };
+
+  // Handle the actual submission after dialog confirmation
+  const handleConfirmSamplesSubmitted = async () => {
     try {
       const currentDate = new Date().toISOString();
       await shiftService.update(shiftId, {
         status: "samples_submitted_to_lab",
         samplesReceivedDate: currentDate,
+        submittedBy: submittedBySignature,
       });
       // Refetch shift to update UI
       const shiftResponse = await shiftService.getById(shiftId);
       setShift(shiftResponse.data);
+      // Close dialog
+      setShowSamplesSubmittedDialog(false);
+
+      // Navigate to AsbestosRemovalJobDetails page
+      const jobId = shiftResponse.data?.job?._id || shiftResponse.data?.job;
+      if (jobId) {
+        navigate(`/asbestos-removal/jobs/${jobId}/details`);
+      }
     } catch (error) {
       setError("Failed to update shift status to 'Samples Submitted to Lab'.");
     }
   };
 
   const handleAddSample = () => {
-    // Check if description of works is provided
-    if (!descriptionOfWorks || descriptionOfWorks.trim() === "") {
-      setShowDescriptionDialog(true);
-      return;
-    }
-
     // Reset shift status to ongoing when adding a new sample
     shiftService.update(shiftId, { status: "ongoing" });
     navigate(`/air-monitoring/shift/${shiftId}/samples/new`, {
@@ -509,6 +550,7 @@ const SampleList = () => {
           setDescriptionOfWorks(
             (prev) => prev + (prev ? " " : "") + finalTranscript
           );
+          setDescSaveStatus(""); // Reset save status when description changes
         }
       };
 
@@ -572,8 +614,8 @@ const SampleList = () => {
       {isReportAuthorized && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           This report was finalised by {shift.reportApprovedBy} on{" "}
-          {new Date(shift.reportIssueDate).toLocaleDateString()}. Contact admin
-          if shift data needs revision.
+          {formatDate(shift.reportIssueDate)}. Contact admin if shift data needs
+          revision.
         </Alert>
       )}
 
@@ -739,6 +781,7 @@ const SampleList = () => {
           <TableHead>
             <TableRow>
               <TableCell
+                sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
                 onClick={
                   !isReportAuthorized
                     ? () => handleSort("sampleNumber")
@@ -748,6 +791,7 @@ const SampleList = () => {
                 Sample Number
               </TableCell>
               <TableCell
+                sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("type") : undefined
                 }
@@ -755,6 +799,7 @@ const SampleList = () => {
                 Type
               </TableCell>
               <TableCell
+                sx={{ minWidth: "200px", flex: 2 }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("location") : undefined
                 }
@@ -762,6 +807,7 @@ const SampleList = () => {
                 Location
               </TableCell>
               <TableCell
+                sx={{ minWidth: "70px", maxWidth: "110px" }}
                 onClick={
                   !isReportAuthorized
                     ? () => handleSort("startTime")
@@ -771,6 +817,7 @@ const SampleList = () => {
                 Start Time
               </TableCell>
               <TableCell
+                sx={{ minWidth: "70px", maxWidth: "110px" }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("endTime") : undefined
                 }
@@ -778,6 +825,7 @@ const SampleList = () => {
                 End Time
               </TableCell>
               <TableCell
+                sx={{ minWidth: "100px", maxWidth: "150px" }}
                 onClick={
                   !isReportAuthorized
                     ? () => handleSort("averageFlowrate")
@@ -786,21 +834,41 @@ const SampleList = () => {
               >
                 Flow Rate (L/min)
               </TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell
+                sx={{ width: "180px", minWidth: "200px", maxWidth: "200px" }}
+              >
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedSamples.map((sample) => (
               <TableRow key={sample._id}>
-                <TableCell>{sample.fullSampleID}</TableCell>
-                <TableCell>{sample.type}</TableCell>
-                <TableCell>{sample.location}</TableCell>
-                <TableCell>{formatTime(sample.startTime)}</TableCell>
-                <TableCell>
+                <TableCell
+                  sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
+                >
+                  {sample.fullSampleID}
+                </TableCell>
+                <TableCell
+                  sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                >
+                  {sample.type}
+                </TableCell>
+                <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                  {sample.location}
+                </TableCell>
+                <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
+                  {formatTime(sample.startTime)}
+                </TableCell>
+                <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
                   {sample.endTime ? formatTime(sample.endTime) : "-"}
                 </TableCell>
-                <TableCell>{sample.averageFlowrate || "-"}</TableCell>
-                <TableCell>
+                <TableCell sx={{ minWidth: "100px", maxWidth: "150px" }}>
+                  {sample.averageFlowrate || "-"}
+                </TableCell>
+                <TableCell
+                  sx={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}
+                >
                   <Button
                     variant="outlined"
                     size="small"
@@ -897,29 +965,6 @@ const SampleList = () => {
           )}
       </Box>
 
-      {["samples_submitted_to_lab", "analysis_complete"].includes(
-        shift?.status
-      ) && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
-          <Button
-            variant="contained"
-            onClick={() =>
-              navigate(`/air-monitoring/shift/${shiftId}/analysis`)
-            }
-            disabled={isReportAuthorized}
-            sx={{
-              backgroundColor: theme.palette.success.main,
-              color: theme.palette.success.contrastText,
-              "&:hover": {
-                backgroundColor: theme.palette.success.dark,
-              },
-            }}
-          >
-            SAMPLE ANALYSIS
-          </Button>
-        </Box>
-      )}
-
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
@@ -946,8 +991,8 @@ const SampleList = () => {
         <DialogTitle>Description of Works Required</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ mt: 2, mb: 2 }}>
-            You must provide a description of works before adding samples to
-            this shift.
+            You must save a description of works before adding samples to this
+            shift. Please enter your description and click the "Save" button.
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -979,6 +1024,157 @@ const SampleList = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Sampling Complete Confirmation Dialog */}
+      <Dialog
+        open={showSamplingCompleteDialog}
+        onClose={() => setShowSamplingCompleteDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Complete Sampling</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Please review and confirm the description of works and sample
+            summary before completing sampling.
+          </Typography>
+
+          {/* Description of Works Section */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Description of Works
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={tempDescription}
+              onChange={(e) => setTempDescription(e.target.value)}
+              placeholder="Enter description of works..."
+              variant="outlined"
+            />
+          </Box>
+
+          {/* Sample Summary Section */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Sample Summary ({samples.length} samples)
+            </Typography>
+            {samples.length > 0 ? (
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Sample ID</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Location</TableCell>
+                    <TableCell>Start Time</TableCell>
+                    <TableCell>End Time</TableCell>
+                    <TableCell>Avg Flow Rate</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {[...samples]
+                    .sort((a, b) => {
+                      // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
+                      const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
+                      const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
+                      const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
+                      const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
+                      return aNum - bNum; // Ascending order
+                    })
+                    .map((sample) => (
+                      <TableRow key={sample._id}>
+                        <TableCell>{sample.fullSampleID}</TableCell>
+                        <TableCell>{sample.type || "Unknown"}</TableCell>
+                        <TableCell>
+                          {sample.location || "Not specified"}
+                        </TableCell>
+                        <TableCell>
+                          {sample.startTime
+                            ? formatTime(sample.startTime)
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {sample.endTime ? formatTime(sample.endTime) : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {sample.averageFlowrate
+                            ? `${sample.averageFlowrate} L/min`
+                            : "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No samples added yet
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowSamplingCompleteDialog(false)}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSamplingComplete}
+            variant="contained"
+            color="primary"
+            disabled={!tempDescription.trim()}
+          >
+            Complete Sampling
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Samples Submitted to Lab Confirmation Dialog */}
+      <Dialog
+        open={showSamplesSubmittedDialog}
+        onClose={() => setShowSamplesSubmittedDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Samples Submitted to Lab</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Please confirm that the samples have been physically delivered to
+            the laboratory and sign below to verify.
+          </Typography>
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Signature
+            </Typography>
+            <TextField
+              fullWidth
+              value={submittedBySignature}
+              variant="outlined"
+              disabled
+              helperText="This will be automatically signed with your name"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowSamplesSubmittedDialog(false)}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSamplesSubmitted}
+            variant="contained"
+            color="primary"
+          >
+            Confirm Submission
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteConfirmDialogOpen}

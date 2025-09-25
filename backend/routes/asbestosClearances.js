@@ -217,7 +217,7 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
 // Upload air monitoring report
 router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { reportData } = req.body; // Expecting base64 data
+    const { reportData, shiftDate, shiftId } = req.body; // Expecting base64 data and metadata
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -230,6 +230,8 @@ router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit")
     }
 
     clearance.airMonitoringReport = reportData;
+    clearance.airMonitoringShiftDate = shiftDate;
+    clearance.airMonitoringShiftId = shiftId;
     clearance.updatedBy = req.user.id;
 
     const updatedClearance = await clearance.save();
@@ -322,6 +324,61 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
     res.json(airMonitoringReports);
   } catch (error) {
     console.error("Error fetching air monitoring reports:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Get air monitoring reports for a specific asbestos removal job
+router.get("/air-monitoring-reports-by-job/:jobId", auth, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    
+    const Shift = require('../models/Shift');
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+    
+    console.log(`Searching for air monitoring reports for job ${jobId}`);
+    
+    // Get the asbestos removal job to access the asbestosRemovalist field
+    const asbestosRemovalJob = await AsbestosRemovalJob.findById(jobId);
+    if (!asbestosRemovalJob) {
+      return res.status(404).json({ message: "Asbestos removal job not found" });
+    }
+    
+    // Get shifts for this specific job
+    const shifts = await Shift.find({ 
+      job: jobId,
+      $or: [
+        { status: "analysis_complete" },
+        { status: "shift_complete" },
+        { status: "complete" },
+        { reportApprovedBy: { $exists: true, $ne: null } }
+      ]
+    })
+    .populate('defaultSampler', 'firstName lastName');
+    
+    console.log(`Found ${shifts.length} shifts for job ${jobId}`);
+    
+    const airMonitoringReports = shifts.map(shift => ({
+      _id: shift._id,
+      name: shift.name,
+      date: shift.date,
+      status: shift.status,
+      reportApprovedBy: shift.reportApprovedBy,
+      reportIssueDate: shift.reportIssueDate,
+      asbestosRemovalist: asbestosRemovalJob.asbestosRemovalist,
+      defaultSampler: shift.defaultSampler,
+      descriptionOfWorks: shift.descriptionOfWorks,
+      revision: shift.revision || 0,
+      jobId: jobId
+    }));
+    
+    // Sort by date (newest first)
+    airMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    console.log(`Returning ${airMonitoringReports.length} air monitoring reports for job ${jobId}`);
+    res.json(airMonitoringReports);
+  } catch (error) {
+    console.error("Error fetching air monitoring reports by job:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

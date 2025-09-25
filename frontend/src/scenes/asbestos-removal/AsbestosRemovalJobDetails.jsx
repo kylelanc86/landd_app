@@ -124,6 +124,7 @@ const AsbestosRemovalJobDetails = () => {
     clearanceType: "Non-friable",
     LAA: "",
     asbestosRemovalist: "",
+    jurisdiction: "ACT",
     airMonitoring: false,
     airMonitoringReport: null,
     airMonitoringReportType: "select",
@@ -893,16 +894,22 @@ const AsbestosRemovalJobDetails = () => {
   const handleEditClearance = (clearance, event) => {
     event.stopPropagation();
     setEditingClearance(clearance);
+    const clearanceType = clearance.clearanceType || "Non-friable";
     setClearanceForm({
       projectId: clearance.projectId._id || clearance.projectId,
       clearanceDate: clearance.clearanceDate
         ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
         : "",
       inspectionTime: formatTimeForDisplay(clearance.inspectionTime),
-      clearanceType: clearance.clearanceType || "Non-friable",
+      clearanceType: clearanceType,
       LAA: clearance.LAA || "",
       asbestosRemovalist: clearance.asbestosRemovalist || "",
-      airMonitoring: clearance.airMonitoring || false,
+      jurisdiction: clearance.jurisdiction || "ACT",
+      // Automatically set air monitoring to true for friable and mixed clearances
+      airMonitoring:
+        clearanceType === "Friable" || clearanceType === "Mixed"
+          ? true
+          : clearance.airMonitoring || false,
       airMonitoringReport: clearance.airMonitoringReport || null,
       notes: clearance.notes || "",
       useComplexTemplate: clearance.useComplexTemplate || false,
@@ -938,6 +945,7 @@ const AsbestosRemovalJobDetails = () => {
       clearanceType: "Non-friable",
       LAA: "",
       asbestosRemovalist: job?.asbestosRemovalist || "",
+      jurisdiction: "ACT",
       airMonitoring: false,
       airMonitoringReport: null,
       airMonitoringReportType: "select",
@@ -969,6 +977,7 @@ const AsbestosRemovalJobDetails = () => {
         clearanceType: clearanceForm.clearanceType,
         LAA: clearanceForm.LAA,
         asbestosRemovalist: clearanceForm.asbestosRemovalist,
+        jurisdiction: clearanceForm.jurisdiction,
         airMonitoring: clearanceForm.airMonitoring,
         airMonitoringReport: clearanceForm.airMonitoringReport,
         notes: clearanceForm.notes,
@@ -1272,6 +1281,27 @@ const AsbestosRemovalJobDetails = () => {
                                 <DeleteIcon color="error" />
                               </IconButton>
                             </PermissionGate>
+                            {shift.status === "samples_submitted_to_lab" && (
+                              <Button
+                                variant="contained"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(
+                                    `/air-monitoring/shift/${shift._id}/analysis`
+                                  );
+                                }}
+                                sx={{
+                                  backgroundColor: theme.palette.success.main,
+                                  color: theme.palette.success.contrastText,
+                                  "&:hover": {
+                                    backgroundColor: theme.palette.success.dark,
+                                  },
+                                }}
+                              >
+                                SAMPLE ANALYSIS
+                              </Button>
+                            )}
                             {(shift.status === "analysis_complete" ||
                               shift.status === "shift_complete") && (
                               <>
@@ -1351,7 +1381,7 @@ const AsbestosRemovalJobDetails = () => {
                                       },
                                     }}
                                   >
-                                    Authorise Report
+                                    Authorise
                                   </Button>
                                 )}
                                 {hasPermission(currentUser, "admin.view") && (
@@ -1622,18 +1652,28 @@ const AsbestosRemovalJobDetails = () => {
                   <InputLabel>Clearance Type</InputLabel>
                   <Select
                     value={clearanceForm.clearanceType}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const newClearanceType = e.target.value;
                       setClearanceForm({
                         ...clearanceForm,
-                        clearanceType: e.target.value,
-                      })
-                    }
+                        clearanceType: newClearanceType,
+                        // Automatically set air monitoring based on clearance type
+                        airMonitoring:
+                          newClearanceType === "Friable" ||
+                          newClearanceType === "Mixed"
+                            ? true
+                            : newClearanceType === "Non-friable"
+                            ? false
+                            : clearanceForm.airMonitoring,
+                      });
+                    }}
                     label="Clearance Type"
                   >
                     <MenuItem value="Non-friable">Non-friable</MenuItem>
                     <MenuItem value="Friable">Friable</MenuItem>
-                    <MenuItem value="Mixed">Mixed</MenuItem>
-                    <MenuItem value="Complex">Complex</MenuItem>
+                    <MenuItem value="Mixed">
+                      Friable (Non-Friable Conditions)
+                    </MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1662,18 +1702,69 @@ const AsbestosRemovalJobDetails = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Asbestos Removalist"
-                  value={clearanceForm.asbestosRemovalist}
-                  onChange={(e) =>
-                    setClearanceForm({
-                      ...clearanceForm,
-                      asbestosRemovalist: e.target.value,
-                    })
-                  }
-                  required
-                />
+                <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                  <TextField
+                    fullWidth
+                    label="Asbestos Removalist"
+                    value={clearanceForm.asbestosRemovalist}
+                    onChange={(e) =>
+                      setClearanceForm({
+                        ...clearanceForm,
+                        asbestosRemovalist: e.target.value,
+                      })
+                    }
+                    required
+                  />
+                  <Box sx={{ minWidth: 150 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontSize: "0.75rem",
+                        color: "text.secondary",
+                        display: "block",
+                        mb: 1,
+                      }}
+                    >
+                      Jurisdiction
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                      <FormControlLabel
+                        value="ACT"
+                        control={
+                          <Radio
+                            size="small"
+                            checked={clearanceForm.jurisdiction === "ACT"}
+                            onChange={(e) =>
+                              setClearanceForm({
+                                ...clearanceForm,
+                                jurisdiction: e.target.value,
+                              })
+                            }
+                          />
+                        }
+                        label="ACT"
+                        sx={{ margin: 0 }}
+                      />
+                      <FormControlLabel
+                        value="NSW"
+                        control={
+                          <Radio
+                            size="small"
+                            checked={clearanceForm.jurisdiction === "NSW"}
+                            onChange={(e) =>
+                              setClearanceForm({
+                                ...clearanceForm,
+                                jurisdiction: e.target.value,
+                              })
+                            }
+                          />
+                        }
+                        label="NSW"
+                        sx={{ margin: 0 }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
               </Grid>
               <Grid item xs={12}>
                 <FormControlLabel

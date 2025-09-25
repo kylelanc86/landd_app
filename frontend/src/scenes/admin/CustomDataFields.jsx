@@ -477,8 +477,8 @@ const CustomDataFields = () => {
               text: newItemData.text,
               order: group.fields.length, // Add to end
               isActive: true,
-              createdBy: "currentUser", // This will be replaced by the backend
-              createdAt: new Date(),
+              // Don't include createdBy - let the backend handle it
+              // Don't include createdAt - let the backend handle it
               // Add type-specific fields
               ...(newItemData.legislationTitle && {
                 legislationTitle: newItemData.legislationTitle,

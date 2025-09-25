@@ -100,11 +100,15 @@ export const equipmentService = {
     "Acetone Vaporiser",
     "Air pump",
     "Bubble flowmeter",
+    "Effective Filter Area",
     "Fume Hood",
     "Furnace",
     "Graticule",
+    "HSE Test Slide",
+    "Micrometer",
     "Microscope",
     "Pneumatic tester",
+    "RI Liquids",
     "Site flowmeter"
   ],
 

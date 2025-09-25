@@ -41,6 +41,7 @@ import { useTheme } from "@mui/material/styles";
 import { useNavigate, useParams } from "react-router-dom";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
 import airPumpService from "../../../services/airPumpService";
+import { formatDate } from "../../../utils/dateFormat";
 
 const AirPumpCalibrationPage = () => {
   const theme = useTheme();
@@ -208,10 +209,6 @@ const AirPumpCalibrationPage = () => {
     } catch (err) {
       setError(err.message || "Failed to delete calibration");
     }
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-GB");
   };
 
   const getResultColor = (result) => {

@@ -296,6 +296,35 @@ const ClearanceItems = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    if (!form.roomArea.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Room/Area is required",
+        severity: "error",
+      });
+      return;
+    }
+
+    if (!form.locationDescription.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Location Description is required",
+        severity: "error",
+      });
+      return;
+    }
+
+    if (!form.materialDescription.trim()) {
+      setSnackbar({
+        open: true,
+        message: "Materials Description is required",
+        severity: "error",
+      });
+      return;
+    }
+
     try {
       const itemData = {
         locationDescription: form.locationDescription, // Location Description
@@ -689,10 +718,28 @@ const ClearanceItems = () => {
 
     try {
       setLoadingReports(true);
-      const reports = await asbestosClearanceService.getAirMonitoringReports(
-        clearance.projectId._id
-      );
-      setAirMonitoringReports(reports);
+
+      // Use asbestos removal job ID if available, otherwise fall back to project ID
+      if (asbestosRemovalJobId) {
+        console.log(
+          "Fetching air monitoring reports for job:",
+          asbestosRemovalJobId
+        );
+        const reports =
+          await asbestosClearanceService.getAirMonitoringReportsByJob(
+            asbestosRemovalJobId
+          );
+        setAirMonitoringReports(reports);
+      } else {
+        console.log(
+          "No job ID found, falling back to project ID:",
+          clearance.projectId._id
+        );
+        const reports = await asbestosClearanceService.getAirMonitoringReports(
+          clearance.projectId._id
+        );
+        setAirMonitoringReports(reports);
+      }
     } catch (error) {
       console.error("Error fetching air monitoring reports:", error);
       setSnackbar({
@@ -719,20 +766,18 @@ const ClearanceItems = () => {
       const { generateShiftReport } = await import(
         "../../utils/generateShiftReport"
       );
-      const {
-        shiftService,
-        jobService,
-        sampleService,
-        projectService,
-        clientService,
-      } = await import("../../services/api");
+      const { shiftService, sampleService, projectService, clientService } =
+        await import("../../services/api");
+      const asbestosRemovalJobService = (
+        await import("../../services/asbestosRemovalJobService")
+      ).default;
 
       // Get the shift data
       const shiftResponse = await shiftService.getById(report._id);
       const shift = shiftResponse.data;
 
-      // Get the job data
-      const jobResponse = await jobService.getById(report.jobId);
+      // Get the asbestos removal job data
+      const jobResponse = await asbestosRemovalJobService.getById(report.jobId);
       const job = jobResponse.data;
 
       // Get samples for this shift
@@ -765,6 +810,8 @@ const ClearanceItems = () => {
       // Upload the report to the clearance
       await asbestosClearanceService.uploadAirMonitoringReport(clearanceId, {
         reportData: base64Data,
+        shiftDate: shift.date,
+        shiftId: shift._id,
       });
 
       setSnackbar({
@@ -1167,6 +1214,11 @@ const ClearanceItems = () => {
                 sx={{ fontWeight: "medium" }}
               >
                 ✓ Air Monitoring Report Attached
+                {clearance.airMonitoringShiftDate && (
+                  <Box component="span" sx={{ ml: 1 }}>
+                    Shift Date: {formatDate(clearance.airMonitoringShiftDate)}
+                  </Box>
+                )}
               </Typography>
             )}
             {!clearance.airMonitoringReport && (
@@ -1486,6 +1538,9 @@ const ClearanceItems = () => {
                     onChange={(event, newValue) =>
                       setForm({ ...form, roomArea: newValue || "" })
                     }
+                    onInputChange={(event, newInputValue) =>
+                      setForm({ ...form, roomArea: newInputValue })
+                    }
                     options={customDataFields.roomAreas.map(
                       (item) => item.text
                     )}
@@ -1507,6 +1562,9 @@ const ClearanceItems = () => {
                     onChange={(event, newValue) =>
                       setForm({ ...form, locationDescription: newValue || "" })
                     }
+                    onInputChange={(event, newInputValue) =>
+                      setForm({ ...form, locationDescription: newInputValue })
+                    }
                     options={customDataFields.locationDescriptions.map(
                       (item) => item.text
                     )}
@@ -1525,6 +1583,9 @@ const ClearanceItems = () => {
                     value={form.materialDescription}
                     onChange={(event, newValue) =>
                       setForm({ ...form, materialDescription: newValue || "" })
+                    }
+                    onInputChange={(event, newInputValue) =>
+                      setForm({ ...form, materialDescription: newInputValue })
                     }
                     options={customDataFields.materialsDescriptions.map(
                       (item) => item.text
@@ -1663,6 +1724,11 @@ const ClearanceItems = () => {
                 type="submit"
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
+                disabled={
+                  !form.roomArea.trim() ||
+                  !form.locationDescription.trim() ||
+                  !form.materialDescription.trim()
+                }
                 sx={{
                   minWidth: 120,
                   borderRadius: 2,
@@ -1679,7 +1745,10 @@ const ClearanceItems = () => {
         {/* Air Monitoring Reports Selection Dialog */}
         <Dialog
           open={airMonitoringReportsDialogOpen}
-          onClose={() => setAirMonitoringReportsDialogOpen(false)}
+          onClose={() => {
+            setAirMonitoringReportsDialogOpen(false);
+            setSelectedReport(null);
+          }}
           maxWidth="md"
           fullWidth
           PaperProps={{
@@ -1775,7 +1844,7 @@ const ClearanceItems = () => {
                                 variant="subtitle1"
                                 fontWeight="medium"
                               >
-                                {report.name}
+                                {formatDate(report.date)}
                               </Typography>
                               <Chip
                                 label={
@@ -1796,14 +1865,17 @@ const ClearanceItems = () => {
                               color="text.secondary"
                               mb={0.5}
                             >
-                              Job: {report.jobName}
+                              <Box component="span" fontWeight="bold">
+                                Asbestos Removalist:{" "}
+                              </Box>
+                              {report.asbestosRemovalist || "Not specified"}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                              Date: {formatDate(report.date)}
-                              {report.reportIssueDate &&
-                                ` • Issue Date: ${formatDate(
-                                  report.reportIssueDate
-                                )}`}
+                              <Box component="span" fontWeight="bold">
+                                Description of Works:{" "}
+                              </Box>
+                              {report.descriptionOfWorks ||
+                                "No description provided"}
                             </Typography>
                           </Box>
                           {selectedReport?._id === report._id && (
@@ -1819,7 +1891,10 @@ const ClearanceItems = () => {
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
-              onClick={() => setAirMonitoringReportsDialogOpen(false)}
+              onClick={() => {
+                setAirMonitoringReportsDialogOpen(false);
+                setSelectedReport(null);
+              }}
               variant="outlined"
               sx={{
                 minWidth: 100,
@@ -2002,6 +2077,12 @@ const ClearanceItems = () => {
                     sx={{ mb: 2, fontWeight: "medium" }}
                   >
                     ✓ Air Monitoring Report Currently Attached
+                    {clearance.airMonitoringShiftDate && (
+                      <Box component="span" sx={{ ml: 1 }}>
+                        Shift Date:{" "}
+                        {formatDate(clearance.airMonitoringShiftDate)}
+                      </Box>
+                    )}
                   </Typography>
                 )}
                 <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>

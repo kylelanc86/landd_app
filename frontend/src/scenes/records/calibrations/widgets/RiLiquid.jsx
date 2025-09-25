@@ -4,7 +4,7 @@ import BaseCalibrationWidget from "./BaseCalibrationWidget";
 const RiLiquid = () => {
   return (
     <BaseCalibrationWidget
-      title="RI Liquid Calibration"
+      title="RI Liquids"
       icon={process.env.PUBLIC_URL + "/air-mon-icons/RiLiquid.png"}
       viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
     />

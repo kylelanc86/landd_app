@@ -17,6 +17,8 @@ const timesheetRoutes = require('./routes/timesheets');
 
 const airPumpRoutes = require('./routes/airPumps');
 const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
+const graticuleCalibrationRoutes = require('./routes/graticuleCalibrations');
+const calibrationFrequencyRoutes = require('./routes/calibrationFrequency');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
@@ -140,6 +142,8 @@ app.use('/api/xero', xeroRoutes);
 
     app.use('/api/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
     app.use('/api/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
+    app.use('/api/graticule-calibrations', requireAuth, checkTokenBlacklist, graticuleCalibrationRoutes);
+    app.use('/api/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
     app.use('/api/equipment', requireAuth, checkTokenBlacklist, equipmentRoutes);
     app.use('/api/asbestos-clearances', requireAuth, checkTokenBlacklist, asbestosClearanceRoutes);
     app.use('/api/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);

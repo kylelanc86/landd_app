@@ -26,6 +26,7 @@ import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
 import MonthlyTimesheet from "./scenes/timesheets/monthly";
 import Calibrations from "./scenes/records/calibrations";
+import CalibrationFrequency from "./scenes/records/calibrations/CalibrationFrequency.jsx";
 import AirPumpPage from "./scenes/records/calibrations/AirPumpPage.jsx";
 import AirPumpCalibrationPage from "./scenes/records/calibrations/AirPumpCalibrationPage.jsx";
 import FlowmeterPage from "./scenes/records/calibrations/FlowmeterPage.jsx";
@@ -616,6 +617,16 @@ function App() {
                               }
                             />
                             <Route
+                              path="/records/laboratory/calibrations/frequency"
+                              element={
+                                <ProtectedRoute
+                                  requiredPermissions={["admin.access"]}
+                                >
+                                  <CalibrationFrequency />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
                               path="/records/laboratory/calibrations/primary-flowmeter"
                               element={
                                 <ProtectedRoute
@@ -882,16 +893,30 @@ function App() {
                               />
                             )}
                             {isFeatureEnabled("ADVANCED.RECORDS") && (
-                              <Route
-                                path="/records/laboratory/calibrations"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <Calibrations />
-                                  </PermissionRoute>
-                                }
-                              />
+                              <>
+                                <Route
+                                  path="/records/laboratory/calibrations"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <Calibrations />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/frequency"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["admin.access"]}
+                                    >
+                                      <CalibrationFrequency />
+                                    </PermissionRoute>
+                                  }
+                                />
+                              </>
                             )}
                             {isFeatureEnabled("ADVANCED.RECORDS") && (
                               <Route

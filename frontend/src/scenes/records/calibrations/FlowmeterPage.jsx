@@ -23,10 +23,12 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import { formatDate } from "../../../utils/dateFormat";
 
 const FlowmeterPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+
   const [calibrations, setCalibrations] = useState([
     {
       id: 1,
@@ -116,7 +118,7 @@ const FlowmeterPage = () => {
             {calibrations.map((calibration) => (
               <TableRow key={calibration.id}>
                 <TableCell>{calibration.flowmeterId}</TableCell>
-                <TableCell>{calibration.date}</TableCell>
+                <TableCell>{formatDate(calibration.date)}</TableCell>
                 <TableCell>{calibration.flowRate}</TableCell>
                 <TableCell>
                   <Box
@@ -135,7 +137,7 @@ const FlowmeterPage = () => {
                   </Box>
                 </TableCell>
                 <TableCell>{calibration.technician}</TableCell>
-                <TableCell>{calibration.nextCalibration}</TableCell>
+                <TableCell>{formatDate(calibration.nextCalibration)}</TableCell>
                 <TableCell>
                   <IconButton
                     onClick={() => handleEdit(calibration.id)}
