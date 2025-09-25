@@ -27,6 +27,7 @@ import {
   ListItemText,
   InputAdornment,
   Alert,
+  Snackbar,
   LinearProgress,
   Popover,
   List,
@@ -170,6 +171,11 @@ const Projects = ({ initialFilters = {} }) => {
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   // Get project statuses from custom data fields
   const {
@@ -1373,15 +1379,11 @@ const Projects = ({ initialFilters = {} }) => {
               <Typography
                 variant="body2"
                 sx={{
-                  whiteSpace: "normal",
-                  wordWrap: "break-word",
-                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                   width: "100%",
                   color: "black",
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
                 }}
               >
                 {projectName}
@@ -1400,6 +1402,39 @@ const Projects = ({ initialFilters = {} }) => {
                     WebkitBoxOrient: "vertical",
                     overflow: "hidden",
                     mt: 0.25,
+                    cursor: "pointer",
+                    "&:hover": {
+                      color: "primary.main",
+                      textDecoration: "underline",
+                    },
+                  }}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      // Search for client by name to get the ID
+                      const response = await clientService.getAll({
+                        search: clientName,
+                        limit: 1,
+                      });
+                      const clients = response.data.clients || response.data;
+                      const client = clients.find((c) => c.name === clientName);
+                      if (client && client._id) {
+                        navigate(`/clients/${client._id}`);
+                      } else {
+                        setSnackbar({
+                          open: true,
+                          message: "Client not found",
+                          severity: "warning",
+                        });
+                      }
+                    } catch (error) {
+                      console.error("Error finding client:", error);
+                      setSnackbar({
+                        open: true,
+                        message: "Failed to find client",
+                        severity: "error",
+                      });
+                    }
                   }}
                 >
                   Client: {clientName}
@@ -1435,7 +1470,7 @@ const Projects = ({ initialFilters = {} }) => {
                   width: "100%",
                 }}
               >
-                No due date
+                -
               </Typography>
             );
           }
@@ -1506,22 +1541,22 @@ const Projects = ({ initialFilters = {} }) => {
           }
         },
       },
-      {
-        field: "department",
-        headerName: "Department",
-        flex: 1,
-      },
+      // {
+      //   field: "department",
+      //   headerName: "Department",
+      //   flex: 1,
+      // },
       {
         field: "workOrder",
         headerName: "Work Order/Job Reference",
         flex: 1,
-        minWidth: 150,
+        minWidth: 100,
       },
       {
         field: "status",
         headerName: "Status",
         flex: 1,
-        minWidth: 180,
+        minWidth: 160,
         maxWidth: 200,
         renderCell: (params) => (
           <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
@@ -1535,6 +1570,16 @@ const Projects = ({ initialFilters = {} }) => {
                 fontSize: "0.75rem",
                 userSelect: "none",
                 position: "relative",
+                whiteSpace: "normal",
+                wordBreak: "break-word",
+                lineHeight: 1.2,
+                textAlign: "left",
+                width: "100%",
+                boxSizing: "border-box",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
               }}
             >
               {params.value}
@@ -2125,6 +2170,14 @@ const Projects = ({ initialFilters = {} }) => {
             "& .MuiDataGrid-row:hover": {
               backgroundColor: "#e3f2fd",
             },
+            "& .MuiDataGrid-row": {
+              minHeight: "44px !important",
+            },
+            "& .MuiDataGrid-cell": {
+              display: "flex",
+              alignItems: "center",
+              padding: "4px 16px",
+            },
           }}
         />
       </Box>
@@ -2652,6 +2705,23 @@ const Projects = ({ initialFilters = {} }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+        sx={{ zIndex: 9999 }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

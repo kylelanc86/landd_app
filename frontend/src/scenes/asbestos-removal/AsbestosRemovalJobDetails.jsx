@@ -64,6 +64,7 @@ import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateFormat";
 import { hasPermission } from "../../config/permissions";
+import PermissionGate from "../../components/PermissionGate";
 
 const AsbestosRemovalJobDetails = () => {
   const theme = useTheme();
@@ -112,6 +113,9 @@ const AsbestosRemovalJobDetails = () => {
   const [newShiftDate, setNewShiftDate] = useState("");
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetShiftId, setResetShiftId] = useState(null);
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [deleteType, setDeleteType] = useState(null); // 'clearance' or 'shift'
 
   const [clearanceForm, setClearanceForm] = useState({
     projectId: "",
@@ -782,6 +786,46 @@ const AsbestosRemovalJobDetails = () => {
     setResetShiftId(null);
   };
 
+  const confirmDelete = async () => {
+    if (!itemToDelete || !deleteType) return;
+
+    try {
+      if (deleteType === "clearance") {
+        await asbestosClearanceService.delete(itemToDelete._id);
+        setSnackbar({
+          open: true,
+          message: "Clearance deleted successfully",
+          severity: "success",
+        });
+      } else if (deleteType === "shift") {
+        await shiftService.delete(itemToDelete._id);
+        setSnackbar({
+          open: true,
+          message: "Air monitoring shift deleted successfully",
+          severity: "success",
+        });
+      }
+      fetchJobDetails(); // Refresh the data
+    } catch (error) {
+      console.error(`Error deleting ${deleteType}:`, error);
+      setSnackbar({
+        open: true,
+        message: `Failed to delete ${deleteType}`,
+        severity: "error",
+      });
+    } finally {
+      setDeleteConfirmDialogOpen(false);
+      setItemToDelete(null);
+      setDeleteType(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmDialogOpen(false);
+    setItemToDelete(null);
+    setDeleteType(null);
+  };
+
   const handleSamplesClick = (shift) => {
     // Don't allow access to samples if report is authorized
     if (shift.reportApprovedBy) {
@@ -866,26 +910,11 @@ const AsbestosRemovalJobDetails = () => {
     setClearanceDialogOpen(true);
   };
 
-  const handleDeleteClearance = async (clearance, event) => {
+  const handleDeleteClearance = (clearance, event) => {
     event.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete this clearance?`)) {
-      try {
-        await asbestosClearanceService.delete(clearance._id);
-        setSnackbar({
-          open: true,
-          message: "Clearance deleted successfully",
-          severity: "success",
-        });
-        fetchJobDetails(); // Refresh the data
-      } catch (error) {
-        console.error("Error deleting clearance:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to delete clearance",
-          severity: "error",
-        });
-      }
-    }
+    setItemToDelete(clearance);
+    setDeleteType("clearance");
+    setDeleteConfirmDialogOpen(true);
   };
 
   const handleEditShift = (shift, event) => {
@@ -894,30 +923,11 @@ const AsbestosRemovalJobDetails = () => {
     navigate(`/air-monitoring/shifts/${shift._id}/edit`);
   };
 
-  const handleDeleteShift = async (shift, event) => {
+  const handleDeleteShift = (shift, event) => {
     event.stopPropagation();
-    if (
-      window.confirm(
-        `Are you sure you want to delete this air monitoring shift?`
-      )
-    ) {
-      try {
-        await shiftService.delete(shift._id);
-        setSnackbar({
-          open: true,
-          message: "Air monitoring shift deleted successfully",
-          severity: "success",
-        });
-        fetchJobDetails(); // Refresh the data
-      } catch (error) {
-        console.error("Error deleting shift:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to delete air monitoring shift",
-          severity: "error",
-        });
-      }
-    }
+    setItemToDelete(shift);
+    setDeleteType("shift");
+    setDeleteConfirmDialogOpen(true);
   };
 
   const resetClearanceForm = () => {
@@ -1247,16 +1257,21 @@ const AsbestosRemovalJobDetails = () => {
                             >
                               <EditIcon color="primary" />
                             </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteShift(shift, e);
-                              }}
-                              title="Delete Shift"
+                            <PermissionGate
+                              requiredPermissions={["admin.view"]}
+                              fallback={null}
                             >
-                              <DeleteIcon color="error" />
-                            </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteShift(shift, e);
+                                }}
+                                title="Delete Shift (Admin Only)"
+                              >
+                                <DeleteIcon color="error" />
+                              </IconButton>
+                            </PermissionGate>
                             {(shift.status === "analysis_complete" ||
                               shift.status === "shift_complete") && (
                               <>
@@ -1435,14 +1450,21 @@ const AsbestosRemovalJobDetails = () => {
                           >
                             <EditIcon color="primary" />
                           </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => handleDeleteClearance(clearance, e)}
-                            title="Delete Clearance"
-                            sx={{ mr: 1 }}
+                          <PermissionGate
+                            requiredPermissions={["admin.view"]}
+                            fallback={null}
                           >
-                            <DeleteIcon color="error" />
-                          </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={(e) =>
+                                handleDeleteClearance(clearance, e)
+                              }
+                              title="Delete Clearance (Admin Only)"
+                              sx={{ mr: 1 }}
+                            >
+                              <DeleteIcon color="error" />
+                            </IconButton>
+                          </PermissionGate>
                           {clearance.status === "complete" && (
                             <IconButton
                               size="small"
@@ -1907,6 +1929,126 @@ const AsbestosRemovalJobDetails = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmDialogOpen}
+        onClose={cancelDelete}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Delete{" "}
+            {deleteType === "clearance" ? "Clearance" : "Air Monitoring Shift"}
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            Are you sure you want to delete this {deleteType}? This action
+            cannot be undone.
+          </Typography>
+          {itemToDelete && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+              {deleteType === "clearance" ? (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    <strong>Clearance Date:</strong>{" "}
+                    {itemToDelete.clearanceDate
+                      ? new Date(itemToDelete.clearanceDate).toLocaleDateString(
+                          "en-AU"
+                        )
+                      : "Not specified"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Type:</strong>{" "}
+                    {itemToDelete.clearanceType || "Not specified"}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    <strong>Shift Date:</strong>{" "}
+                    {itemToDelete.date
+                      ? new Date(itemToDelete.date).toLocaleDateString("en-AU")
+                      : "Not specified"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Description:</strong>{" "}
+                    {itemToDelete.descriptionOfWorks || "Not specified"}
+                  </Typography>
+                </>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelDelete}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDelete}
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Delete {deleteType === "clearance" ? "Clearance" : "Shift"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

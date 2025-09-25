@@ -35,6 +35,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { sampleService, shiftService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import { formatDate, formatTime } from "../../utils/dateUtils";
+import PermissionGate from "../../components/PermissionGate";
 
 const SampleList = () => {
   const theme = useTheme();
@@ -53,6 +54,8 @@ const SampleList = () => {
   const [descSaveStatus, setDescSaveStatus] = useState("");
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [sampleToDelete, setSampleToDelete] = useState(null);
   const [showDescriptionDialog, setShowDescriptionDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -196,16 +199,39 @@ const SampleList = () => {
     }
   };
 
-  const handleDelete = async (sampleId) => {
-    if (window.confirm("Are you sure you want to delete this sample?")) {
-      try {
-        await sampleService.delete(sampleId);
-        setSamples(samples.filter((sample) => sample._id !== sampleId));
-      } catch (err) {
-        console.error("Error deleting sample:", err);
-        setError("Failed to delete sample. Please try again.");
-      }
+  const handleDelete = (sampleId) => {
+    const sample = samples.find((s) => s._id === sampleId);
+    setSampleToDelete(sample);
+    setDeleteConfirmDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!sampleToDelete) return;
+
+    try {
+      await sampleService.delete(sampleToDelete._id);
+      setSamples(samples.filter((sample) => sample._id !== sampleToDelete._id));
+      setSnackbar({
+        open: true,
+        message: "Sample deleted successfully",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Error deleting sample:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete sample. Please try again.",
+        severity: "error",
+      });
+    } finally {
+      setDeleteConfirmDialogOpen(false);
+      setSampleToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmDialogOpen(false);
+    setSampleToDelete(null);
   };
 
   const handleDownloadCSV = async () => {
@@ -788,12 +814,18 @@ const SampleList = () => {
                   >
                     Edit Sample
                   </Button>
-                  <IconButton
-                    onClick={() => handleDelete(sample._id)}
-                    disabled={isReportAuthorized}
+                  <PermissionGate
+                    requiredPermissions={["admin.view"]}
+                    fallback={null}
                   >
-                    <DeleteIcon />
-                  </IconButton>
+                    <IconButton
+                      onClick={() => handleDelete(sample._id)}
+                      disabled={isReportAuthorized}
+                      title="Delete (Admin Only)"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </PermissionGate>
                 </TableCell>
               </TableRow>
             ))}
@@ -944,6 +976,96 @@ const SampleList = () => {
             color="primary"
           >
             Go to Description Field
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmDialogOpen}
+        onClose={cancelDelete}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
+            }}
+          >
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Delete Sample
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            Are you sure you want to delete this air monitoring sample? This
+            action cannot be undone.
+          </Typography>
+          {sampleToDelete && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <strong>Sample ID:</strong> {sampleToDelete.fullSampleID}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <strong>Type:</strong> {sampleToDelete.type}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Location:</strong> {sampleToDelete.location}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelDelete}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDelete}
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Delete Sample
           </Button>
         </DialogActions>
       </Dialog>

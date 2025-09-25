@@ -39,7 +39,7 @@ import {
   TableRow,
   Collapse,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ErrorIcon from "@mui/icons-material/Error";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -130,6 +130,10 @@ const ProjectInformation = () => {
   const [users, setUsers] = useState([]);
   const [newClientDialogOpen, setNewClientDialogOpen] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+  const [clientDetailsDialogOpen, setClientDetailsDialogOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientDetails, setClientDetails] = useState(null);
+  const [loadingClientDetails, setLoadingClientDetails] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -1029,6 +1033,28 @@ const ProjectInformation = () => {
     }));
   };
 
+  const handleClientClick = async (client) => {
+    if (!client || !client._id) return;
+
+    setSelectedClient(client);
+    setClientDetailsDialogOpen(true);
+    setLoadingClientDetails(true);
+
+    try {
+      const response = await clientService.getById(client._id);
+      setClientDetails(response.data);
+    } catch (error) {
+      console.error("Error fetching client details:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to load client details",
+        severity: "error",
+      });
+    } finally {
+      setLoadingClientDetails(false);
+    }
+  };
+
   const searchClients = async (searchTerm) => {
     if (!searchTerm || searchTerm.trim().length === 0) {
       setClientSearchResults([]);
@@ -1765,6 +1791,17 @@ const ProjectInformation = () => {
                         label="Client"
                         required
                         placeholder="Start typing to search clients..."
+                        onClick={() => {
+                          if (form.client) {
+                            handleClientClick(form.client);
+                          }
+                        }}
+                        sx={{
+                          cursor: form.client ? "pointer" : "default",
+                          "& .MuiInputBase-input": {
+                            cursor: form.client ? "pointer" : "default",
+                          },
+                        }}
                         InputProps={{
                           ...params.InputProps,
                           endAdornment: (
@@ -1777,6 +1814,11 @@ const ProjectInformation = () => {
                           ),
                         }}
                       />
+                    )}
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props}>
+                        <Typography variant="body2">{option.name}</Typography>
+                      </Box>
                     )}
                   />
                   <Button
@@ -2939,6 +2981,257 @@ const ProjectInformation = () => {
           project={form}
         />
       )}
+
+      {/* Client Details Dialog */}
+      <Dialog
+        open={clientDetailsDialogOpen}
+        onClose={() => setClientDetailsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              {selectedClient?.name?.charAt(0) || "C"}
+            </Typography>
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Client Details
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          {loadingClientDetails ? (
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              minHeight="200px"
+            >
+              <CircularProgress />
+            </Box>
+          ) : clientDetails ? (
+            <Stack spacing={3}>
+              {/* Basic Information */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: "primary.main" }}>
+                  Basic Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Client Name
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.name || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Invoice Email
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.invoiceEmail || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Payment Terms
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.paymentTerms || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Status
+                    </Typography>
+                    <Chip
+                      label={clientDetails.isActive ? "Active" : "Inactive"}
+                      color={clientDetails.isActive ? "success" : "default"}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+
+              {/* Primary Contact */}
+              {(clientDetails.contact1Name ||
+                clientDetails.contact1Phone ||
+                clientDetails.contact1Email) && (
+                <Box>
+                  <Typography
+                    variant="h6"
+                    sx={{ mb: 2, color: "primary.main" }}
+                  >
+                    Primary Contact
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Name
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact1Name || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Phone
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact1Phone || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Email
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact1Email || "Not specified"}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Secondary Contact */}
+              {(clientDetails.contact2Name ||
+                clientDetails.contact2Phone ||
+                clientDetails.contact2Email) && (
+                <Box>
+                  <Typography
+                    variant="h6"
+                    sx={{ mb: 2, color: "primary.main" }}
+                  >
+                    Secondary Contact
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Name
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact2Name || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Phone
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact2Phone || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Email
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact2Email || "Not specified"}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Additional Information */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: "primary.main" }}>
+                  Additional Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      ABN
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.abn || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Address
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.address || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  {clientDetails.written_off && (
+                    <Grid item xs={12}>
+                      <Chip
+                        label="WRITTEN OFF"
+                        color="error"
+                        variant="filled"
+                        sx={{ fontWeight: "bold" }}
+                      />
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+            </Stack>
+          ) : (
+            <Alert severity="error">
+              Failed to load client details. Please try again.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            component={Link}
+            to={`/clients/${selectedClient?._id}`}
+            variant="contained"
+            color="primary"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+            onClick={() => setClientDetailsDialogOpen(false)}
+          >
+            Full Client Details Page
+          </Button>
+          <Button
+            onClick={() => setClientDetailsDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

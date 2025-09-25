@@ -36,6 +36,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import ArchiveIcon from "@mui/icons-material/Archive";
+import WorkIcon from "@mui/icons-material/Work";
 import { formatPhoneNumber } from "../../utils/formatters";
 import { debounce } from "lodash";
 
@@ -326,16 +327,6 @@ const Clients = () => {
         ),
       },
       {
-        field: "contact1Name",
-        headerName: "Primary Contact",
-        flex: 1,
-        renderCell: (params) => (
-          <Typography sx={{ fontSize: "0.875rem" }}>
-            {params.row.contact1Name}
-          </Typography>
-        ),
-      },
-      {
         field: "contact1Number",
         headerName: "Primary Phone",
         flex: 1,
@@ -346,16 +337,7 @@ const Clients = () => {
           </Typography>
         ),
       },
-      {
-        field: "address",
-        headerName: "Address",
-        flex: 1,
-        renderCell: (params) => (
-          <Typography sx={{ fontSize: "0.875rem" }}>
-            {params.row.address}
-          </Typography>
-        ),
-      },
+
       // ...(canWriteOff
       //   ? [
       //       {
@@ -387,31 +369,39 @@ const Clients = () => {
         field: "actions",
         headerName: "Actions",
         flex: 1,
+        minWidth: 230,
+        maxWidth: 230,
         renderCell: (params) => (
           <Box>
             <IconButton
-              onClick={() =>
+              onClick={(e) => {
+                e.stopPropagation();
                 navigate(
                   `/invoices?client=${encodeURIComponent(params.row.name)}`
-                )
-              }
+                );
+              }}
               title="View Invoices"
             >
               <AttachMoneyIcon />
             </IconButton>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => navigate(`/clients/${params.row._id}`)}
-              title="View Details"
-              sx={{ mr: 1 }}
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(
+                  `/reports?search=${encodeURIComponent(params.row.name)}`
+                );
+              }}
+              title="View Jobs"
             >
-              Details
-            </Button>
+              <WorkIcon />
+            </IconButton>
             {/* Archive button - only show for admin and manager users */}
             {(isAdmin || isManager) && (
               <IconButton
-                onClick={() => handleArchiveClick(params.row)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleArchiveClick(params.row);
+                }}
                 title="Archive Client"
                 color="warning"
                 sx={{ mr: 1 }}
@@ -422,7 +412,10 @@ const Clients = () => {
             {/* Delete button - only show for admin and manager users */}
             {(isAdmin || isManager) && (
               <IconButton
-                onClick={() => handleDeleteClick(params.row)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(params.row);
+                }}
                 title="Delete Client"
                 color="error"
               >
@@ -639,6 +632,9 @@ const Clients = () => {
           "& .MuiDataGrid-row:nth-of-type(odd)": {
             backgroundColor: "#ffffff",
           },
+          "& .MuiDataGrid-row": {
+            cursor: "pointer",
+          },
           "& .MuiDataGrid-row:hover": {
             backgroundColor: "#e3f2fd",
           },
@@ -674,6 +670,10 @@ const Clients = () => {
           getRowClassName={(params) =>
             params.row.written_off ? "written-off-row" : ""
           }
+          onRowClick={(params) => {
+            // Navigate to client details page
+            navigate(`/clients/${params.id}`);
+          }}
         />
       </Box>
 

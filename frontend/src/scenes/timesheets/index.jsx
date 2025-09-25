@@ -1079,7 +1079,7 @@ const Timesheets = () => {
         {/* Enhanced Calendar Container with alternating shading */}
         <Box
           sx={{
-            height: "765px", // Reduced by 10% from 850px
+            height: "625px", // Reduced by 10% from 850px
             p: 3,
             background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
             "& .fc": {

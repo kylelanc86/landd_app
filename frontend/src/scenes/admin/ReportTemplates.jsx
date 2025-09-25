@@ -78,17 +78,17 @@ const ReportTemplates = () => {
   const reportTypes = [
     {
       id: "asbestosClearanceNonFriable",
-      name: "Non-Friable Asbestos Clearance Report",
+      name: "Non-Friable Asbestos Clearance",
       color: "#FF6B6B",
     },
     {
       id: "asbestosClearanceFriable",
-      name: "Friable Asbestos Clearance Report",
+      name: "Friable Asbestos Clearance",
       color: "#FF6B6B",
     },
     {
       id: "asbestosClearanceMixed",
-      name: "Mixed Asbestos Clearance Report",
+      name: "Friable Asbestos Clearance (Non-Friable Conditions)",
       color: "#FF6B6B",
     },
     {

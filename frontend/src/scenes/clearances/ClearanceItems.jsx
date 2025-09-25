@@ -109,6 +109,27 @@ const ClearanceItems = () => {
   });
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [stream, setStream] = useState(null);
+  const [videoRef, setVideoRef] = useState(null);
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Set up video stream when camera dialog opens
+  useEffect(() => {
+    if (cameraDialogOpen && stream && videoRef) {
+      videoRef.srcObject = stream;
+    }
+  }, [cameraDialogOpen, stream, videoRef]);
+
+  // Clean up stream when component unmounts or dialog closes
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [stream]);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
@@ -343,31 +364,42 @@ const ClearanceItems = () => {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (item) => {
-    if (window.confirm("Are you sure you want to delete this item?")) {
-      try {
-        await asbestosClearanceService.deleteItem(clearanceId, item._id);
-        setSnackbar({
-          open: true,
-          message: "Item deleted successfully",
-          severity: "success",
-        });
-        await fetchData();
+  const handleDelete = (item) => {
+    setItemToDelete(item);
+    setDeleteConfirmDialogOpen(true);
+  };
 
-        // Update clearance type based on remaining items
-        const updatedItems = await asbestosClearanceService.getItems(
-          clearanceId
-        );
-        await updateClearanceTypeFromItems(updatedItems);
-      } catch (err) {
-        console.error("Error deleting item:", err);
-        setSnackbar({
-          open: true,
-          message: "Failed to delete item",
-          severity: "error",
-        });
-      }
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      await asbestosClearanceService.deleteItem(clearanceId, itemToDelete._id);
+      setSnackbar({
+        open: true,
+        message: "Item deleted successfully",
+        severity: "success",
+      });
+      await fetchData();
+
+      // Update clearance type based on remaining items
+      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
+      await updateClearanceTypeFromItems(updatedItems);
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete item",
+        severity: "error",
+      });
+    } finally {
+      setDeleteConfirmDialogOpen(false);
+      setItemToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmDialogOpen(false);
+    setItemToDelete(null);
   };
 
   const resetForm = () => {
@@ -518,14 +550,116 @@ const ClearanceItems = () => {
     }
   };
 
-  const handleTakePhoto = () => {
-    // Create a file input for camera access
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment"; // Use back camera
-    input.onchange = handlePhotoUpload;
-    input.click();
+  const handleTakePhoto = async () => {
+    // Check if the device supports camera access
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Fallback to file input with camera capture
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.capture = "environment"; // Use back camera on mobile devices
+      input.onchange = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          handlePhotoUpload({ target: { files: [file] } });
+        }
+      };
+      input.click();
+      return;
+    }
+
+    try {
+      // First try to get back camera
+      let mediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment", // Use back camera
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch (backCameraError) {
+        console.log(
+          "Back camera not available, trying any camera:",
+          backCameraError
+        );
+        // Fallback to any available camera
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      }
+
+      console.log("Camera stream obtained:", mediaStream);
+      setStream(mediaStream);
+      setCameraDialogOpen(true);
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      let errorMessage =
+        "Failed to access camera. Please check permissions or use upload instead.";
+
+      if (error.name === "NotAllowedError") {
+        errorMessage =
+          "Camera access denied. Please allow camera permissions and try again.";
+      } else if (error.name === "NotFoundError") {
+        errorMessage =
+          "No camera found on this device. Please use upload instead.";
+      } else if (error.name === "NotSupportedError") {
+        errorMessage =
+          "Camera access is not supported on this device. Please use upload instead.";
+      }
+
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: "error",
+      });
+    }
+  };
+
+  const handleCapturePhoto = () => {
+    if (videoRef) {
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      // Set canvas dimensions to match video
+      canvas.width = videoRef.videoWidth;
+      canvas.height = videoRef.videoHeight;
+
+      // Draw the current video frame to canvas
+      context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+
+      // Convert canvas to blob
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            // Create a file from the blob
+            const file = new File([blob], "camera-photo.jpg", {
+              type: "image/jpeg",
+            });
+            handlePhotoUpload({ target: { files: [file] } });
+          }
+        },
+        "image/jpeg",
+        0.8
+      );
+    }
+
+    // Close camera dialog and stop stream
+    handleCloseCamera();
+  };
+
+  const handleCloseCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setCameraDialogOpen(false);
   };
 
   const handleRemovePhoto = () => {
@@ -1091,14 +1225,7 @@ const ClearanceItems = () => {
                 }}
                 multiline
                 rows={3}
-                placeholder="Enter job-specific exclusions that will be added to the Inspection Exclusions section of the report..."
-                // helperText={
-                //   clearance?.jobSpecificExclusions && !savingExclusions
-                //     ? "This text will be appended to the standard Inspection Exclusions section in the clearance report."
-                //     : savingExclusions
-                //     ? "Saving..."
-                //     : "This text will be appended to the standard Inspection Exclusions section in the clearance report."
-                // }
+                placeholder="Enter job-specific exclusions/caveats"
                 InputProps={{
                   endAdornment: savingExclusions ? (
                     <CircularProgress size={20} sx={{ mr: 1 }} />
@@ -1255,14 +1382,19 @@ const ClearanceItems = () => {
                           >
                             <EditIcon />
                           </IconButton>
-                          <IconButton
-                            onClick={() => handleDelete(item)}
-                            color="error"
-                            size="small"
-                            title="Delete"
+                          <PermissionGate
+                            requiredPermissions={["admin.view"]}
+                            fallback={null}
                           >
-                            <DeleteIcon />
-                          </IconButton>
+                            <IconButton
+                              onClick={() => handleDelete(item)}
+                              color="error"
+                              size="small"
+                              title="Delete (Admin Only)"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </PermissionGate>
                         </TableCell>
                       </TableRow>
                     );
@@ -2133,6 +2265,243 @@ const ClearanceItems = () => {
             {snackbar.message}
           </Alert>
         </Snackbar>
+
+        {/* Camera Dialog */}
+        <Dialog
+          open={cameraDialogOpen}
+          onClose={handleCloseCamera}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <PhotoCameraIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Take Photo
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: "300px",
+                backgroundColor: "#000",
+                borderRadius: 2,
+                overflow: "hidden",
+                position: "relative",
+              }}
+            >
+              {stream ? (
+                <video
+                  ref={(ref) => {
+                    setVideoRef(ref);
+                    if (ref && stream) {
+                      ref.srcObject = stream;
+                      console.log("Video element set up with stream:", stream);
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                  onLoadedMetadata={() => {
+                    console.log("Video metadata loaded");
+                  }}
+                  onCanPlay={() => {
+                    console.log("Video can play");
+                  }}
+                  onError={(e) => {
+                    console.error("Video error:", e);
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                    color: "white",
+                  }}
+                >
+                  <CircularProgress color="inherit" />
+                  <Typography variant="body1">Starting camera...</Typography>
+                </Box>
+              )}
+            </Box>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2, textAlign: "center" }}
+            >
+              Position the item within the frame and click "Capture" to take the
+              photo.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={handleCloseCamera}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCapturePhoto}
+              variant="contained"
+              color="primary"
+              startIcon={<PhotoCameraIcon />}
+              disabled={!stream}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Capture Photo
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog
+          open={deleteConfirmDialogOpen}
+          onClose={cancelDelete}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "error.main",
+                color: "white",
+              }}
+            >
+              <DeleteIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Delete Item
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to delete this clearance item? This action
+              cannot be undone.
+            </Typography>
+            {itemToDelete && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Location:</strong> {itemToDelete.locationDescription}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Room/Area:</strong>{" "}
+                  {itemToDelete.roomArea || "Not specified"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Material:</strong> {itemToDelete.materialDescription}
+                </Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={cancelDelete}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDelete}
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Delete Item
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </PermissionGate>
   );
