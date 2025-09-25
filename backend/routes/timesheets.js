@@ -95,7 +95,7 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
       const timesheets = await Timesheet.find(query)
         .sort({ date: 1, startTime: 1 })
         .populate('userId', 'firstName lastName')
-        .populate('projectId', 'name')
+        .populate('projectId', 'name projectID')
         .populate('finalisedBy', 'firstName lastName');
       
       console.log('Found timesheets:', {

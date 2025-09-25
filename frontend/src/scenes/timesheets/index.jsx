@@ -163,6 +163,11 @@ const Timesheets = () => {
           description: entry.description || "",
           isAdminWork: entry.isAdminWork || false,
           isBreak: entry.isBreak || false,
+          // Preserve populated project data for display
+          projectData:
+            entry.projectId && typeof entry.projectId === "object"
+              ? entry.projectId
+              : null,
         };
 
         return processedEntry;
@@ -558,7 +563,9 @@ const Timesheets = () => {
       endDateTime.setHours(endHours, endMinutes, 0);
 
       const projectId = entry.projectId?._id || entry.projectId;
-      const project = projects.find((p) => p._id === projectId);
+      // Use populated project data first, fallback to projects array lookup
+      const project =
+        entry.projectData || projects.find((p) => p._id === projectId);
       const projectName = project?.name || "Unknown Project";
 
       let title = "";
@@ -604,6 +611,7 @@ const Timesheets = () => {
           description: entry.description,
           projectId: projectId,
           projectName,
+          projectData: entry.projectData,
           isAdminWork: entry.isAdminWork,
           isBreak: entry.isBreak,
           projectInputType: entry.projectInputType,
@@ -1276,11 +1284,16 @@ const Timesheets = () => {
             eventContent={(eventInfo) => {
               const duration = eventInfo.event.end - eventInfo.event.start;
               const isShortEntry = duration <= 30 * 60 * 1000; // 30 minutes or less
-              const project = eventInfo.event.extendedProps.projectId
-                ? projects.find(
-                    (p) => p._id === eventInfo.event.extendedProps.projectId
-                  )
-                : null;
+              const isMediumEntry =
+                duration > 30 * 60 * 1000 && duration <= 60 * 60 * 1000; // 30-60 minutes
+              // Use populated project data from extendedProps if available, otherwise lookup in projects array
+              const project =
+                eventInfo.event.extendedProps.projectData ||
+                (eventInfo.event.extendedProps.projectId
+                  ? projects.find(
+                      (p) => p._id === eventInfo.event.extendedProps.projectId
+                    )
+                  : null);
               const isProcessing = processingEntries.has(eventInfo.event.id);
               const isSuccess = successEntries.has(eventInfo.event.id);
 
@@ -1302,7 +1315,9 @@ const Timesheets = () => {
                 if (!project) {
                   return "Unknown Project";
                 }
-                return `${project.projectID}: ${project.name} - ${
+                return `${project.projectID || "Unknown ID"}: ${
+                  project.name
+                } - ${
                   eventInfo.event.extendedProps.projectInputType?.replace(
                     "_",
                     " "
@@ -1314,7 +1329,7 @@ const Timesheets = () => {
                 }`;
               };
 
-              // For short entries, display content and time on one line
+              // For short entries (≤30 min), display content and time on one line
               if (isShortEntry) {
                 return (
                   <Box
@@ -1408,7 +1423,104 @@ const Timesheets = () => {
                 );
               }
 
-              // For longer entries, use the original multi-line layout
+              // For medium entries (30-60 min), use compact multi-line layout
+              if (isMediumEntry) {
+                return (
+                  <Box
+                    sx={{
+                      p: 0.5, // Reduced padding for medium entries
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      position: "relative",
+                      opacity: isProcessing ? 0.7 : 1,
+                      transition: "opacity 0.2s ease-in-out",
+                      "& .event-title": {
+                        fontSize: "0.75rem", // Slightly smaller font for medium entries
+                        fontWeight: 600,
+                        lineHeight: 1.1, // Tighter line height
+                        color: theme.palette.common.white,
+                        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                      },
+                      "& .event-subtitle": {
+                        fontSize: "0.65rem", // Smaller subtitle
+                        opacity: 0.9,
+                        marginTop: "1px", // Reduced margin
+                      },
+                      "& .event-time": {
+                        fontSize: "0.7rem", // Smaller time font
+                        opacity: 0.8,
+                        marginTop: "1px", // Reduced margin
+                        fontWeight: 500,
+                      },
+                    }}
+                  >
+                    {isProcessing && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 0,
+                          right: 0,
+                          width: 0,
+                          height: 0,
+                          borderStyle: "solid",
+                          borderWidth: "0 15px 15px 0", // Smaller processing indicator
+                          borderColor: `transparent ${theme.palette.warning.main} transparent transparent`,
+                          zIndex: 1,
+                        }}
+                      />
+                    )}
+                    <Typography className="event-title" noWrap>
+                      {formatEventContent()}
+                    </Typography>
+                    {eventInfo.event.extendedProps.description && (
+                      <Typography className="event-subtitle" noWrap>
+                        {eventInfo.event.extendedProps.description}
+                      </Typography>
+                    )}
+                    <Typography className="event-time">
+                      {format(eventInfo.event.start, "HH:mm")} -{" "}
+                      {format(eventInfo.event.end, "HH:mm")}
+                    </Typography>
+                    {isProcessing && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%)",
+                          width: "12px", // Smaller spinner
+                          height: "12px",
+                          border: `2px solid ${theme.palette.warning.main}`,
+                          borderTop: `2px solid transparent`,
+                          borderRadius: "50%",
+                          animation: "spin 1s linear infinite",
+                          zIndex: 2,
+                        }}
+                      />
+                    )}
+                    {isSuccess && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: `${theme.palette.success.main}20`,
+                          border: `2px solid ${theme.palette.success.main}`,
+                          borderRadius: "12px",
+                          zIndex: 1,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
+                  </Box>
+                );
+              }
+
+              // For longer entries (>60 min), use the original multi-line layout
               return (
                 <Box
                   sx={{
