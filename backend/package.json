@@ -30,6 +30,7 @@
     "pdfshift": "^2.0.1",
     "puppeteer": "^21.0.0",
     "saslprep": "^1.0.3",
+    "sharp": "^0.34.4",
     "simple-update-notifier": "^1.1.0",
     "xero-node": "^13.0.0"
   },

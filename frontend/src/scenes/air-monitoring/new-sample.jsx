@@ -53,6 +53,7 @@ const NewSample = () => {
     averageFlowrate: "",
     notes: "",
     isFieldBlank: false,
+    isNegAirExhaust: false,
     sampler: "",
     status: "pending",
   });
@@ -429,12 +430,25 @@ const NewSample = () => {
         [name]: checked,
         location: checked ? "Field blank" : prev.location,
       }));
-    } else {
+      return;
+    }
+
+    if (name === "isNegAirExhaust") {
       setForm((prev) => ({
         ...prev,
-        [name]: value,
+        [name]: checked,
+        // Clear flowrate fields when checked
+        initialFlowrate: checked ? "" : prev.initialFlowrate,
+        finalFlowrate: checked ? "" : prev.finalFlowrate,
+        averageFlowrate: checked ? "" : prev.averageFlowrate,
       }));
+      return;
     }
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   // Calculate average flowrate when initial or final flowrate changes
@@ -513,11 +527,12 @@ const NewSample = () => {
       }
     }
 
-    if (!form.isFieldBlank && !form.flowmeter) {
+    if (!form.isFieldBlank && !form.isNegAirExhaust && !form.flowmeter) {
       // Only require flowmeter if user has explicitly set isFieldBlank to false
       // During initial load, isFieldBlank defaults to false but shouldn't block sample number calculation
       if (form.isFieldBlank === false) {
-        errors.flowmeter = "Flowmeter is required for non-field blank samples";
+        errors.flowmeter =
+          "Flowmeter is required for non-field blank and non-neg air exhaust samples";
       }
     }
 
@@ -535,7 +550,7 @@ const NewSample = () => {
       if (!form.startTime) {
         errors.startTime = "Start time is required";
       }
-      if (!form.initialFlowrate) {
+      if (!form.isNegAirExhaust && !form.initialFlowrate) {
         errors.initialFlowrate = "Initial flowrate is required";
       }
     }
@@ -718,16 +733,28 @@ const NewSample = () => {
               }
             />
           </Box>
-          <FormControlLabel
-            control={
-              <Checkbox
-                name="isFieldBlank"
-                checked={form.isFieldBlank}
-                onChange={handleChange}
-              />
-            }
-            label="Field Blank"
-          />
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="isFieldBlank"
+                  checked={form.isFieldBlank}
+                  onChange={handleChange}
+                />
+              }
+              label="Field Blank"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="isNegAirExhaust"
+                  checked={form.isNegAirExhaust}
+                  onChange={handleChange}
+                />
+              }
+              label="Neg Air Exhaust"
+            />
+          </Box>
           {!form.isFieldBlank && (
             <>
               <FormControl fullWidth required error={!!fieldErrors.type}>

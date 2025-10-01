@@ -81,6 +81,40 @@ const shiftSchema = new mongoose.Schema({
     type: Number,
     default: 0,
     min: 0
+  },
+  sitePlan: {
+    type: Boolean,
+    default: false
+  },
+  sitePlanData: {
+    type: {
+      center: {
+        lat: { type: Number, required: true },
+        lng: { type: Number, required: true }
+      },
+      zoom: { type: Number, default: 15 },
+      markers: [{
+        position: {
+          lat: { type: Number, required: true },
+          lng: { type: Number, required: true }
+        },
+        label: { type: String, default: 'X' },
+        type: { 
+          type: String, 
+          enum: ['sampling_point', 'equipment', 'access_point', 'other'],
+          default: 'sampling_point'
+        },
+        description: { type: String }
+      }],
+      bounds: {
+        north: { type: Number },
+        south: { type: Number },
+        east: { type: Number },
+        west: { type: Number }
+      },
+      staticMapUrl: { type: String }
+    },
+    required: false
   }
 }, {
   timestamps: true,

@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -30,7 +31,6 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Snackbar,
   Table,
   TableBody,
   TableCell,
@@ -136,11 +136,7 @@ const ProjectInformation = () => {
   const [loadingClientDetails, setLoadingClientDetails] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   // Error dialog state
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
@@ -1045,11 +1041,7 @@ const ProjectInformation = () => {
       setClientDetails(response.data);
     } catch (error) {
       console.error("Error fetching client details:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to load client details",
-        severity: "error",
-      });
+      showSnackbar("Failed to load client details", "error");
     } finally {
       setLoadingClientDetails(false);
     }
@@ -1383,13 +1375,12 @@ const ProjectInformation = () => {
       console.log("🔍 Success!");
 
       // Show success message
-      setSnackbar({
-        open: true,
-        message: isEditMode
+      showSnackbar(
+        isEditMode
           ? "Project updated successfully!"
           : "Project created successfully!",
-        severity: "success",
-      });
+        "success"
+      );
 
       // Reset unsaved changes flag and update original form
       setHasUnsavedChanges(false);
@@ -1466,20 +1457,15 @@ const ProjectInformation = () => {
         paymentTerms: "Standard (30 days)",
         written_off: false,
       });
-      setSnackbar({
-        open: true,
-        message: "Client created successfully!",
-        severity: "success",
-      });
+      showSnackbar("Client created successfully!", "success");
     } catch (err) {
       console.error("Error creating client:", err);
-      setSnackbar({
-        open: true,
-        message: `Error creating client: ${
+      showSnackbar(
+        `Error creating client: ${
           err.response?.data?.message || "Unknown error"
         }`,
-        severity: "error",
-      });
+        "error"
+      );
     } finally {
       setCreatingClient(false);
     }
@@ -2802,32 +2788,6 @@ const ProjectInformation = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        sx={{
-          position: "fixed",
-          zIndex: 9999999,
-          bottom: "20px !important",
-          right: "20px !important",
-          left: "252px !important", // 232px sidebar width + 20px margin
-          transform: "none !important",
-          width: "auto",
-          maxWidth: "400px",
-        }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
 
       {/* Project Audit Trail */}
       {isEditMode && (

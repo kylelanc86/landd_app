@@ -5,6 +5,16 @@ const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const mongoose = require('mongoose');
+const axios = require('axios');
+
+// Debug middleware to log all requests to shifts routes
+router.use((req, res, next) => {
+  console.log('=== SHIFTS ROUTE HIT ===');
+  console.log('Method:', req.method);
+  console.log('Path:', req.path);
+  console.log('Full URL:', req.url);
+  next();
+});
 
 // Get all shifts
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
@@ -60,6 +70,94 @@ router.post('/jobs', auth, checkPermission(['jobs.view']), async (req, res) => {
     res.json(shifts);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Proxy endpoint for Google Maps Static API to avoid CORS issues
+router.get('/proxy-static-map', auth, checkPermission(['jobs.view']), async (req, res) => {
+  console.log('=== PROXY ENDPOINT HIT ===');
+  console.log('Request URL:', req.url);
+  console.log('Request query:', req.query);
+  console.log('User:', req.user);
+  try {
+    const { url, crop } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ message: 'URL parameter is required' });
+    }
+
+    // Validate that it's a Google Maps Static API URL
+    if (!url.includes('maps.googleapis.com/maps/api/staticmap')) {
+      return res.status(400).json({ message: 'Invalid URL - must be Google Maps Static API' });
+    }
+
+    console.log('Proxying Google Maps Static API request:', url);
+    console.log('Crop requested:', crop);
+    
+    const response = await axios.get(url, {
+      responseType: 'arraybuffer',
+      headers: {
+        'User-Agent': 'LandD-App/1.0'
+      }
+    });
+
+    console.log('Google Maps API response status:', response.status);
+    console.log('Google Maps API response headers:', response.headers);
+    console.log('Response data size:', response.data.length);
+
+    // Check if the response is actually an image
+    if (response.data.length < 1000) {
+      // Likely an error response, let's see what it contains
+      const errorText = Buffer.from(response.data).toString('utf-8');
+      console.log('Small response body (likely error):', errorText);
+      return res.status(400).json({ 
+        message: 'Google Maps API returned error response',
+        error: errorText 
+      });
+    }
+
+    let imageBuffer = response.data;
+
+    // If crop is requested, crop the bottom portion to remove Google footer
+    if (crop === 'true') {
+      try {
+        const sharp = require('sharp');
+        // Get image metadata to determine actual size
+        const metadata = await sharp(response.data).metadata();
+        console.log('Original image dimensions:', metadata.width, 'x', metadata.height);
+        
+        // Crop the bottom ~20% to remove Google footer/watermark
+        const cropHeight = Math.floor(metadata.height * 0.8);
+        
+        imageBuffer = await sharp(response.data)
+          .extract({ left: 0, top: 0, width: metadata.width, height: cropHeight })
+          .toBuffer();
+        console.log('Image cropped successfully to:', metadata.width, 'x', cropHeight);
+      } catch (cropError) {
+        console.error('Error cropping image:', cropError);
+        console.error('Crop error details:', cropError.message);
+        // If cropping fails, return original image
+        console.log('Returning original uncropped image due to crop error');
+      }
+    }
+
+    // Set appropriate headers for image response
+    res.set({
+      'Content-Type': response.headers['content-type'] || 'image/png',
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      'Access-Control-Allow-Origin': req.headers.origin || '*',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    });
+
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Error proxying static map:', error);
+    res.status(500).json({ 
+      message: 'Failed to fetch static map image',
+      error: error.message 
+    });
   }
 });
 
@@ -148,7 +246,9 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'descriptionOfWorks',
       'notes',
       'defaultSampler',
-      'revision'
+      'revision',
+      'sitePlan',
+      'sitePlanData'
     ];
 
     // Filter out any fields that aren't in allowedUpdates
@@ -284,6 +384,53 @@ router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) =
     }
     res.json({ message: 'Shift deleted' });
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Save site plan data for a shift
+router.patch('/:id/site-plan', auth, checkPermission(['jobs.edit']), async (req, res) => {
+  try {
+    const { sitePlan, sitePlanData } = req.body;
+    
+    const shift = await Shift.findById(req.params.id);
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    // Update site plan fields
+    shift.sitePlan = sitePlan;
+    if (sitePlanData) {
+      shift.sitePlanData = sitePlanData;
+    } else if (!sitePlan) {
+      // If sitePlan is false, clear the sitePlanData
+      shift.sitePlanData = undefined;
+    }
+
+    await shift.save();
+    res.json(shift);
+  } catch (error) {
+    console.error('Error saving site plan:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get site plan data for a shift
+router.get('/:id/site-plan', auth, checkPermission(['jobs.view']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id)
+      .select('sitePlan sitePlanData');
+    
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    res.json({
+      sitePlan: shift.sitePlan,
+      sitePlanData: shift.sitePlanData
+    });
+  } catch (error) {
+    console.error('Error fetching site plan:', error);
     res.status(500).json({ message: error.message });
   }
 });

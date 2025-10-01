@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -29,7 +30,6 @@ import {
   CircularProgress,
   Card,
   CardContent,
-  Snackbar,
   Autocomplete,
   Radio,
   RadioGroup,
@@ -72,11 +72,7 @@ const AsbestosClearance = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClearance, setEditingClearance] = useState(null);
   const [generatingPDF, setGeneratingPDF] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const [form, setForm] = useState({
     projectId: "",
@@ -323,18 +319,10 @@ const AsbestosClearance = () => {
     try {
       if (editingClearance) {
         await asbestosClearanceService.update(editingClearance._id, form);
-        setSnackbar({
-          open: true,
-          message: "Clearance updated successfully",
-          severity: "success",
-        });
+        showSnackbar("Clearance updated successfully", "success");
       } else {
         await asbestosClearanceService.create(form);
-        setSnackbar({
-          open: true,
-          message: "Clearance created successfully",
-          severity: "success",
-        });
+        showSnackbar("Clearance created successfully", "success");
       }
 
       setDialogOpen(false);
@@ -343,11 +331,7 @@ const AsbestosClearance = () => {
       fetchData();
     } catch (err) {
       console.error("Error saving clearance:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to save clearance",
-        severity: "error",
-      });
+      showSnackbar("Failed to save clearance", "error");
     }
   };
 
@@ -396,19 +380,11 @@ const AsbestosClearance = () => {
     if (window.confirm("Are you sure you want to delete this clearance?")) {
       try {
         await asbestosClearanceService.delete(clearance._id);
-        setSnackbar({
-          open: true,
-          message: "Clearance deleted successfully",
-          severity: "success",
-        });
+        showSnackbar("Clearance deleted successfully", "success");
         fetchData();
       } catch (err) {
         console.error("Error deleting clearance:", err);
-        setSnackbar({
-          open: true,
-          message: "Failed to delete clearance",
-          severity: "error",
-        });
+        showSnackbar("Failed to delete clearance", "error");
       }
     }
   };
@@ -427,20 +403,15 @@ const AsbestosClearance = () => {
         await asbestosClearanceService.update(clearance._id, {
           status: "closed",
         });
-        setSnackbar({
-          open: true,
-          message: "Job closed successfully and removed from table",
-          severity: "success",
-        });
+        showSnackbar(
+          "Job closed successfully and removed from table",
+          "success"
+        );
         // Refresh the data to remove the closed job from the table
         fetchData();
       } catch (err) {
         console.error("Error closing job:", err);
-        setSnackbar({
-          open: true,
-          message: "Failed to close job",
-          severity: "error",
-        });
+        showSnackbar("Failed to close job", "error");
       }
     }
   };
@@ -465,20 +436,15 @@ const AsbestosClearance = () => {
       );
       console.log("PDF generation completed, fileName:", fileName);
 
-      setSnackbar({
-        open: true,
-        message: `PDF generated successfully! Check your downloads folder for: ${
+      showSnackbar(
+        `PDF generated successfully! Check your downloads folder for: ${
           fileName.filename || fileName
         }`,
-        severity: "success",
-      });
+        "success"
+      );
     } catch (err) {
       console.error("Error generating PDF:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to generate PDF",
-        severity: "error",
-      });
+      showSnackbar("Failed to generate PDF", "error");
     } finally {
       console.log("Setting generatingPDF to false");
       setGeneratingPDF(false);
@@ -1092,6 +1058,14 @@ const AsbestosClearance = () => {
                                       projectID: selectedReport.projectId,
                                     },
                                     returnPdfData: true,
+                                    sitePlanData: selectedReport.shift?.sitePlan
+                                      ? {
+                                          sitePlan:
+                                            selectedReport.shift.sitePlan,
+                                          sitePlanData:
+                                            selectedReport.shift.sitePlanData,
+                                        }
+                                      : null,
                                   });
 
                                   setForm({
@@ -1305,21 +1279,6 @@ const AsbestosClearance = () => {
             </DialogActions>
           </form>
         </Dialog>
-
-        {/* Snackbar for notifications */}
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        >
-          <Alert
-            onClose={() => setSnackbar({ ...snackbar, open: false })}
-            severity={snackbar.severity}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
       </Box>
     </PermissionGate>
   );

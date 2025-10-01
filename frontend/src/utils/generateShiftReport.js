@@ -1,4 +1,5 @@
 import pdfMake from "pdfmake/build/pdfmake";
+import api from '../services/api';
 
 // Helper functions (formatDate, formatTime, getSampleNumber, loadImageAsBase64, formatReportedConcentration) remain unchanged
 // Helper to format date as DD/MM/YYYY
@@ -36,21 +37,50 @@ function getSampleNumber(sampleID) {
 async function loadImageAsBase64(imagePath) {
   try {
     console.log(`Attempting to load image: ${imagePath}`);
-    const response = await fetch(imagePath);
-    console.log(`Response status for ${imagePath}:`, response.status);
     
-    if (!response.ok) {
+    let response;
+    
+    // Check if this is an API call (needs authentication) or a static asset
+    if (imagePath.startsWith('/api/')) {
+      // For API calls, use the existing API instance to get proper authentication
+      // Remove the /api prefix since the API instance already has it in baseURL
+      const apiPath = imagePath.substring(4); // Remove '/api' from the beginning
+      console.log(`API URL: ${api.defaults.baseURL}${apiPath}`);
+      response = await api.get(apiPath, { responseType: 'blob' });
+      console.log(`Response status for ${imagePath}:`, response.status);
+    } else {
+      // For static assets (logos), use fetch with frontend URL
+      const baseUrl = process.env.NODE_ENV === 'development' ? "http://localhost:3000" : window.location.origin;
+      const fullUrl = imagePath.startsWith('http') ? imagePath : `${baseUrl}${imagePath}`;
+      
+      console.log(`Static URL: ${fullUrl}`);
+      response = await fetch(fullUrl);
+      console.log(`Response status for ${imagePath}:`, response.status);
+    }
+    
+    if (!response.ok && !response.status) {
       console.error(`Failed to fetch ${imagePath}:`, response.status, response.statusText);
       return null;
     }
     
-    const blob = await response.blob();
+    // Handle blob from either fetch or axios
+    const blob = response.data || await response.blob();
     console.log(`Blob size for ${imagePath}:`, blob.size);
+    console.log(`Blob type for ${imagePath}:`, blob.type);
+    
+    // Debug: Check if the response is actually an image
+    if (blob.size < 1000) {
+      console.warn(`Small blob size (${blob.size} bytes) - might be an error response`);
+      // Try to read as text to see what error message we're getting
+      const text = await blob.text();
+      console.log(`Response content:`, text);
+    }
     
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        console.log(`Successfully loaded ${imagePath} as base64`);
+        console.log(`Successfully loaded ${imagePath} as base64, length:`, reader.result.length);
+        console.log(`Base64 preview:`, reader.result.substring(0, 100) + '...');
         resolve(reader.result);
       };
       reader.onerror = (error) => {
@@ -64,6 +94,22 @@ async function loadImageAsBase64(imagePath) {
     return null;
   }
 }
+
+// Helper function to add sample type indicator to location
+const formatSampleLocation = (sample) => {
+  if (!sample.location) return 'N/A';
+  
+  const location = sample.location;
+  const sampleType = sample.type; // Use 'type' field, not 'sampleType'
+  
+  if (sampleType && sampleType.toLowerCase() === 'exposure') {
+    return `${location} (E)`;
+  } else if (sampleType && sampleType.toLowerCase() === 'clearance') {
+    return `${location} (C)`;
+  }
+  
+  return location;
+};
 
 // Add this helper function at the top of the file
 const formatReportedConcentration = (sample) => {
@@ -104,7 +150,8 @@ const formatReportedConcentration = (sample) => {
   return reportedConc;
 };
 
-export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false }) {
+export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false, sitePlanData = null }) {
+  console.log("generateShiftReport called with sitePlanData:", sitePlanData);
   // Debug logging
   console.log('generateShiftReport called with:', { shift, job, samples, project, openInNewTab, returnPdfData });
   console.log('job type:', typeof job, 'job value:', job);
@@ -140,6 +187,28 @@ pdfMake.fonts = {
   // Load logos
   const companyLogo = await loadImageAsBase64('/logo.png');
   const nataLogo = await loadImageAsBase64('/NATA_logo.png');
+
+  // Load site plan image if available
+  let sitePlanImage = null;
+  if (sitePlanData?.sitePlanData?.staticMapUrl) {
+    console.log("=== SITE PLAN IMAGE LOADING START ===");
+    console.log("Loading site plan image from:", sitePlanData.sitePlanData.staticMapUrl);
+    try {
+      sitePlanImage = await loadImageAsBase64(sitePlanData.sitePlanData.staticMapUrl);
+      if (sitePlanImage) {
+        console.log("Successfully loaded site plan image, length:", sitePlanImage.length);
+      } else {
+        console.log("Failed to load site plan image - returned null");
+        sitePlanImage = null;
+      }
+    } catch (error) {
+      console.error("Failed to load site plan image:", error);
+      sitePlanImage = null;
+    }
+    console.log("=== SITE PLAN IMAGE LOADING END ===");
+  } else {
+    console.log("No site plan data or static map URL available");
+  }
 
   // Sort samples
   const sortedSamples = [...samples].sort((a, b) => {
@@ -304,6 +373,13 @@ pdfMake.fonts = {
                 ],
                 [
                   {
+                    text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
+                    style: 'tableContent',
+                    margin: [0, 0, 0, 2]
+                  }
+                ],
+                [
+                  {
                     columns: [
                       {
                         text: [ { text: 'Sampled by: ', bold: true }, { text: shift?.supervisor ? `${shift.supervisor.firstName} ${shift.supervisor.lastName}` : shift?.defaultSampler ? `${shift.defaultSampler.firstName} ${shift.defaultSampler.lastName}` : 'N/A' } ],
@@ -417,8 +493,9 @@ pdfMake.fonts = {
                           { text: '1. Samples taken from the direct flow of negative air units are reported as a fibre count only', style: 'notes' },
                           { text: '2. The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL', style: 'notes' },
                           { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
-                          { text: '4. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
-                          { text: '5. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                          { text: '4. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                          { text: '5. The results of the testing relate only to the samples as supplied to the laboratory.', style: 'notes' },
+                          { text: '6. (E) = Exposure Monitoring, (C) = Clearance Monitoring.', style: 'notes' },
                         ],
                         margin: [0, 0, 0, 3],
                       }
@@ -448,65 +525,29 @@ pdfMake.fonts = {
             margin: [0, 0, 0, 10],
           },
           
-          // Description of Works Section
-          {
-            table: {
-              headerRows: 0,
-              widths: ['100%'],
-              body: [
-                [
-                  {
-                    text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
-                    style: 'tableContent',
-                    margin: [0, 0, 0, 2]
-                  }
-                ]
-              ]
-            },
-            layout: {
-              hLineWidth: function(i, node) {
-                return 1;
-              },
-              vLineWidth: function(i, node) {
-                return 1;
-              },
-              hLineColor: function(i, node) {
-                return 'gray';
-              },
-              vLineColor: function(i, node) {
-                return 'gray';
-              },
-              paddingLeft: function(i, node) { return 4; },
-              paddingRight: function(i, node) { return 4; },
-              paddingTop: function(i, node) { return 2; },
-              paddingBottom: function(i, node) { return 2; },
-            },
-            margin: [0, 0, 0, 10],
-          },
-          
           // Sample Results Table
 
           {
             table: {
               headerRows: 1,
-              widths: ['16%', '29%', '7%', '7%', '10%', '9%', '9%', '13%'],
+              widths: ['16%', '35%', '7%', '7%', '9%', '7%', '7%', '12%'],
               body: [
                                   [
                     { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                     { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                     { text: 'Time On', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                     { text: 'Time Off', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Ave flow (mL/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Fibres Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Reported Concentration (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
+                    { text: 'Ave flow (L/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                    { text: 'Reported Conc. (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                   ],
                                   ...sortedSamples.map(sample => [
                     { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
-                    { text: sample.location || 'N/A', style: 'tableContent' },
+                    { text: formatSampleLocation(sample), style: 'tableContent' },
                     { text: sample.startTime ? formatTime(sample.startTime) : '-', style: 'tableContent' },
                     { text: sample.endTime ? formatTime(sample.endTime) : '-', style: 'tableContent' },
-                    { text: (sample.averageFlowrate)*1000 || '-', style: 'tableContent' },
+                    { text: sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-', style: 'tableContent' },
                     { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
                     { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' },
                   { 
@@ -539,6 +580,190 @@ pdfMake.fonts = {
           },
         ]
       },
+
+      // Site Plan Page (if site plan data exists)
+      ...(sitePlanData?.sitePlan && sitePlanData?.sitePlanData ? [
+        {
+          text: '',
+          pageBreak: 'before'
+        },
+        {
+          stack: [
+            // Header for Site Plan page
+            {
+              columns: [
+                { image: companyLogo, width: 165 },
+                {
+                  stack: [
+                    { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
+                    { text: '4/6 Dacre Street, Mitchell ACT 2911', style: 'subheader' },
+                    { text: 'W: www.landd.com.au', style: 'subheader' },
+                  ],
+                  alignment: 'right',
+                },
+              ],
+              margin: [0, 0, 0, 4],
+            },
+            
+            // Green border beneath header
+            {
+              canvas: [
+                {
+                  type: 'line',
+                  x1: 0, y1: 0, x2: 520, y2: 0,
+                  lineWidth: 2,
+                  lineColor: '#16b12b'
+                }
+              ],
+              margin: [0, 0, 0, 20]
+            },
+            
+            { text: 'SITE PLAN', style: 'header', margin: [0, 0, 0, 20], alignment: 'center' },
+            
+            // Site plan diagram with North indicator overlay
+            {
+              columns: [
+                { width: '*', text: '' }, // Left spacer
+                {
+                  width: 500,
+                  stack: [
+                    {
+                      image: sitePlanImage,
+                      width: 500,
+                      margin: [0, 0, 0, 0]
+                    },
+                    {
+                      // North indicator positioned at top-right of image
+                      absolutePosition: { x: 490, y: 180 },
+                      stack: [
+                        {
+                          canvas: [
+                            // White background circle
+                            {
+                              type: 'ellipse',
+                              x: 0,
+                              y: 5,
+                              r1: 20,
+                              r2: 20,
+                              color: 'white',
+                              fillOpacity: 0.9
+                            },
+                            // Arrow pointing up
+                            {
+                              type: 'line',
+                              x1: 0,
+                              y1: 8,
+                              x2: 0,
+                              y2: -8,
+                              lineWidth: 2,
+                              lineColor: '#333333'
+                            },
+                            // Arrow head left
+                            {
+                              type: 'line',
+                              x1: 1,
+                              y1: -8,
+                              x2: -4,
+                              y2: -4,
+                              lineWidth: 2,
+                              lineColor: '#333333'
+                            },
+                            // Arrow head right
+                            {
+                              type: 'line',
+                              x1: -1,
+                              y1: -8,
+                              x2: 4,
+                              y2: -4,
+                              lineWidth: 2,
+                              lineColor: '#333333'
+                            }
+                          ]
+                        },
+                        {
+                          text: 'N',
+                          color: '#333333',
+                          fontSize: 12,
+                          bold: true,
+                          absolutePosition: { x: 485, y: 188 }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                { width: '*', text: '' } // Right spacer
+              ],
+              columnGap: 0,
+              margin: [0, 0, 0, 15]
+            },
+
+            // Sampling locations table below the map
+            {
+              table: {
+                headerRows: 1,
+                widths: ['100%'],
+                body: [
+                  [
+                    { text: 'SAMPLING LOCATIONS', style: 'tableHeader', fillColor: '#f0f0f0' }
+                  ],
+                  [
+                    {
+                      stack: [
+                        ...sitePlanData.sitePlanData.markers
+                          .filter(marker => marker.type === 'sampling_point')
+                          .map((marker, index) => {
+                            const letter = String.fromCharCode(65 + index); // A, B, C, etc.
+                            const sampleNumber = marker.sampleNumber || marker.label || 'N/A';
+                            
+                            // Find the actual sample to get its location/description
+                            const sample = samples.find(s => s.sampleNumber === sampleNumber || s.fullSampleID === sampleNumber);
+                            const sampleLocation = sample?.location || marker.description || 'Sampling location';
+                            const fullSampleID = sample?.fullSampleID || sampleNumber;
+                            
+                            return {
+                              text: [ 
+                                { text: `${letter}: `, bold: true, color: '#ff4444' }, 
+                                { text: `${sampleLocation} - ${fullSampleID}` } 
+                              ], 
+                              style: 'tableContent', 
+                              margin: [0, 0, 0, 2] 
+                            };
+                          })
+                      ]
+                    }
+                  ]
+                ]
+              },
+              layout: {
+                hLineWidth: function(i, node) {
+                  return (i === 0 || i === node.table.body.length) ? 1 : 0.5;
+                },
+                vLineWidth: function(i, node) {
+                  return 1;
+                },
+                hLineColor: function(i, node) {
+                  return (i === 0 || i === node.table.body.length) ? '#000000' : '#cccccc';
+                },
+                vLineColor: function(i, node) {
+                  return '#000000';
+                }
+              },
+              margin: [0, 0, 0, 10]
+            },
+
+            // Note about map
+            {
+              text: [
+                { text: 'Note: ', bold: true },
+                { text: 'Sample locations are approximates. Marker letters correspond to the locations listed in the sampling locations table above.' }
+              ],
+              style: 'notes',
+              alignment: 'left',
+              margin: [0, 0, 0, 0]
+            }
+          ]
+        }
+      ] : [])
     ],
     footer: (function(nataLogo, job, sortedSamples, companyLogo) {
       return function(currentPage, pageCount) {

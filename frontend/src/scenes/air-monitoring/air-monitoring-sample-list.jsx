@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -17,7 +18,6 @@ import {
   useTheme,
   Breadcrumbs,
   Link,
-  Snackbar,
   Alert,
   Dialog,
   DialogTitle,
@@ -32,11 +32,13 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import MicIcon from "@mui/icons-material/Mic";
 import DownloadIcon from "@mui/icons-material/Download";
+import MapIcon from "@mui/icons-material/Map";
 import { sampleService, shiftService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import { formatDate, formatTime } from "../../utils/dateUtils";
 import PermissionGate from "../../components/PermissionGate";
 import { useAuth } from "../../context/AuthContext";
+import SitePlanMap from "../../components/SitePlanMap";
 
 const SampleList = () => {
   const theme = useTheme();
@@ -65,11 +67,9 @@ const SampleList = () => {
   const [showSamplesSubmittedDialog, setShowSamplesSubmittedDialog] =
     useState(false);
   const [submittedBySignature, setSubmittedBySignature] = useState("");
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
+  const [sitePlanData, setSitePlanData] = useState(null);
+  const { showSnackbar } = useSnackbar();
 
   // Check if report is authorized
   const isReportAuthorized = shift?.reportApprovedBy;
@@ -118,6 +118,15 @@ const SampleList = () => {
         const shiftResponse = await shiftService.getById(shiftId);
         console.log("Shift response data:", shiftResponse.data);
         setShift(shiftResponse.data);
+
+        // Load site plan data if available
+        try {
+          const sitePlanResponse = await shiftService.getSitePlan(shiftId);
+          setSitePlanData(sitePlanResponse.data);
+        } catch (error) {
+          console.log("No site plan data found for shift:", error);
+          setSitePlanData(null);
+        }
 
         // Fetch job data if available
         const jobId = shiftResponse.data?.job?._id || shiftResponse.data?.job;
@@ -219,18 +228,10 @@ const SampleList = () => {
     try {
       await sampleService.delete(sampleToDelete._id);
       setSamples(samples.filter((sample) => sample._id !== sampleToDelete._id));
-      setSnackbar({
-        open: true,
-        message: "Sample deleted successfully",
-        severity: "success",
-      });
+      showSnackbar("Sample deleted successfully", "success");
     } catch (err) {
       console.error("Error deleting sample:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete sample. Please try again.",
-        severity: "error",
-      });
+      showSnackbar("Failed to delete sample. Please try again.", "error");
     } finally {
       setDeleteConfirmDialogOpen(false);
       setSampleToDelete(null);
@@ -313,11 +314,7 @@ const SampleList = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error downloading CSV:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to download CSV.",
-        severity: "error",
-      });
+      showSnackbar("Failed to download CSV.", "error");
     }
   };
 
@@ -481,6 +478,26 @@ const SampleList = () => {
     navigate(`/air-monitoring/shift/${shiftId}/samples/new`, {
       state: { nextSampleNumber },
     });
+  };
+
+  const handleOpenSitePlan = () => {
+    setSitePlanDialogOpen(true);
+  };
+
+  const handleCloseSitePlan = () => {
+    setSitePlanDialogOpen(false);
+  };
+
+  const handleSaveSitePlan = async (sitePlanData) => {
+    try {
+      await shiftService.saveSitePlan(shiftId, sitePlanData);
+      setSitePlanData(sitePlanData);
+      showSnackbar("Site plan saved successfully", "success");
+      setSitePlanDialogOpen(false);
+    } catch (error) {
+      console.error("Error saving site plan:", error);
+      showSnackbar("Failed to save site plan. Please try again.", "error");
+    }
   };
 
   const handleDescriptionChange = (e) => {
@@ -745,20 +762,67 @@ const SampleList = () => {
         justifyContent="space-between"
         alignItems="center"
       >
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddSample}
-          disabled={isReportAuthorized}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
-            },
-          }}
-        >
-          Add Sample
-        </Button>
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddSample}
+            disabled={isReportAuthorized}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Add Sample
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<MapIcon />}
+            onClick={handleOpenSitePlan}
+            disabled={isReportAuthorized}
+            sx={{
+              borderColor: theme.palette.secondary.main,
+              color: theme.palette.secondary.main,
+              "&:hover": {
+                borderColor: theme.palette.secondary.dark,
+                backgroundColor: theme.palette.secondary.light,
+              },
+            }}
+          >
+            {sitePlanData?.sitePlan ? "Edit Site Plan" : "Add Site Plan"}
+          </Button>
+          {sitePlanData?.sitePlan && (
+            <Button
+              variant="outlined"
+              startIcon={<DeleteIcon />}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Are you sure you want to delete this site plan? This action cannot be undone."
+                  )
+                ) {
+                  handleSaveSitePlan({
+                    sitePlan: false,
+                    sitePlanData: null,
+                  });
+                }
+              }}
+              disabled={isReportAuthorized}
+              sx={{
+                borderColor: theme.palette.error.main,
+                color: theme.palette.error.main,
+                "&:hover": {
+                  borderColor: theme.palette.error.dark,
+                  backgroundColor: theme.palette.error.light,
+                },
+              }}
+            >
+              Delete Site Plan
+            </Button>
+          )}
+        </Box>
         <Button
           variant="outlined"
           startIcon={<DownloadIcon />}
@@ -964,22 +1028,6 @@ const SampleList = () => {
             </Button>
           )}
       </Box>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
 
       {/* Description Required Dialog */}
       <Dialog
@@ -1265,6 +1313,16 @@ const SampleList = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Site Plan Dialog */}
+      <SitePlanMap
+        open={sitePlanDialogOpen}
+        onClose={handleCloseSitePlan}
+        shiftId={shiftId}
+        initialData={sitePlanData}
+        onSave={handleSaveSitePlan}
+        projectId={job?.projectId?.projectID}
+      />
     </Box>
   );
 };

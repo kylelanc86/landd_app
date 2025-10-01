@@ -294,7 +294,10 @@ export const shiftService = {
   getByJobs: (jobIds) => api.post('/air-monitoring-shifts/jobs', { jobIds }),
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
-  delete: (id) => api.delete(`/air-monitoring-shifts/${id}`)
+  delete: (id) => api.delete(`/air-monitoring-shifts/${id}`),
+  // Site plan methods
+  getSitePlan: (id) => api.get(`/air-monitoring-shifts/${id}/site-plan`),
+  saveSitePlan: (id, data) => api.patch(`/air-monitoring-shifts/${id}/site-plan`, data)
 };
 
 // Invoice service

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -20,8 +21,6 @@ import {
   Breadcrumbs,
   Link,
   Checkbox,
-  Snackbar,
-  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -72,11 +71,7 @@ const AddUserPage = () => {
   const { currentUser } = useAuth();
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   // State for tracking form changes and confirmation dialog
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -236,11 +231,7 @@ const AddUserPage = () => {
       // Validate the file
       const validationResult = await validateSignatureFile(file);
       if (!validationResult.isValid) {
-        setSnackbar({
-          open: true,
-          message: validationResult.error,
-          severity: "error",
-        });
+        showSnackbar(validationResult.error, "error");
         return;
       }
 
@@ -249,22 +240,14 @@ const AddUserPage = () => {
       setForm({ ...form, signature: compressedImage });
     } catch (error) {
       console.error("Error processing signature:", error);
-      setSnackbar({
-        open: true,
-        message: "Error processing signature image",
-        severity: "error",
-      });
+      showSnackbar("Error processing signature image", "error");
     }
   };
 
   const handleAddUser = async (e) => {
     e.preventDefault();
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Please fill in all required fields",
-        severity: "warning",
-      });
+      showSnackbar("Please fill in all required fields", "warning");
       return;
     }
 
@@ -288,25 +271,21 @@ const AddUserPage = () => {
       await userService.create(userData);
 
       // Show success message and navigate back to users list
-      setSnackbar({
-        open: true,
-        message:
-          "User created successfully! A welcome email with password setup instructions has been sent to the user's email address.",
-        severity: "success",
-      });
+      showSnackbar(
+        "User created successfully! A welcome email with password setup instructions has been sent to the user's email address.",
+        "success"
+      );
 
       // Reset unsaved changes flag
       setHasUnsavedChanges(false);
       navigate("/users");
     } catch (error) {
       console.error("Error creating user:", error);
-      setSnackbar({
-        open: true,
-        message:
-          "Failed to create user: " +
+      showSnackbar(
+        "Failed to create user: " +
           (error.response?.data?.message || error.message),
-        severity: "error",
-      });
+        "error"
+      );
     } finally {
       setSaving(false);
     }
@@ -802,22 +781,6 @@ const AddUserPage = () => {
           </Box>
         </form>
       </Paper>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
 
       {/* Unsaved Changes Confirmation Dialog */}
       <Dialog

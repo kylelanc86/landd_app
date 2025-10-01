@@ -1,11 +1,17 @@
 const mongoose = require('mongoose');
 
 const graticuleCalibrationSchema = new mongoose.Schema({
+  calibrationId: {
+    type: String,
+    required: false,
+    trim: true,
+    unique: true,
+    sparse: true // Allows multiple null values
+  },
   graticuleId: {
     type: String,
     required: true,
-    trim: true,
-    unique: true
+    trim: true
   },
   date: {
     type: Date,
@@ -55,18 +61,31 @@ const graticuleCalibrationSchema = new mongoose.Schema({
 });
 
 // Pre-save middleware to calculate next calibration date
-graticuleCalibrationSchema.pre('save', function(next) {
-  // Calculate next calibration due date (6 months from calibration date)
-  if (this.date) {
-    const nextDue = new Date(this.date);
-    nextDue.setMonth(nextDue.getMonth() + 6);
-    this.nextCalibration = nextDue;
+graticuleCalibrationSchema.pre('save', async function(next) {
+  // Calculate next calibration due date using the equipment's calibration frequency
+  if (this.date && this.graticuleId) {
+    try {
+      const Equipment = mongoose.model('Equipment');
+      const equipment = await Equipment.findOne({ equipmentReference: this.graticuleId });
+      
+      if (equipment && equipment.calibrationFrequency) {
+        const nextDue = new Date(this.date);
+        nextDue.setMonth(nextDue.getMonth() + equipment.calibrationFrequency);
+        this.nextCalibration = nextDue;
+      }
+    } catch (error) {
+      // If lookup fails, fall back to 12 months
+      const nextDue = new Date(this.date);
+      nextDue.setMonth(nextDue.getMonth() + 12);
+      this.nextCalibration = nextDue;
+    }
   }
 
   next();
 });
 
 // Index for efficient querying
+graticuleCalibrationSchema.index({ calibrationId: 1 });
 graticuleCalibrationSchema.index({ graticuleId: 1 });
 graticuleCalibrationSchema.index({ date: -1 });
 graticuleCalibrationSchema.index({ microscopeId: 1 });

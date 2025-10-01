@@ -37,6 +37,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import { sampleService, shiftService } from "../../services/api";
 import { userService } from "../../services/api";
+import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 
@@ -48,6 +49,8 @@ const SampleSummary = React.memo(
   ({
     sample,
     analysis,
+    analysisDetails,
+    getMicroscopeConstantInfo,
     onAnalysisChange,
     onFibreCountChange,
     onKeyDown,
@@ -77,6 +80,20 @@ const SampleSummary = React.memo(
               <Typography variant="body1" color="text.secondary">
                 Cowl {sample.cowlNo}
               </Typography>
+              {analysisDetails.microscope && (
+                <Chip
+                  label={`Constant: ${
+                    getMicroscopeConstantInfo(
+                      analysisDetails.microscope,
+                      sample.filterSize
+                    ).source
+                  }`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ mt: 0.5 }}
+                />
+              )}
             </Box>
             <Chip
               label={
@@ -244,6 +261,7 @@ const Analysis = () => {
   const { shiftId } = useParams();
   const navigate = useNavigate();
   const [samples, setSamples] = useState([]);
+  const [pcmCalibrations, setPcmCalibrations] = useState([]);
   const [analysisDetails, setAnalysisDetails] = useState({
     microscope: "",
     testSlide: "",
@@ -265,13 +283,6 @@ const Analysis = () => {
   const [activeSampleId, setActiveSampleId] = useState(null);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
 
-  // Monitor initial render time
-  useEffect(() => {
-    const renderStart = performance.now();
-    setIsRendered(true);
-    console.log(`Initial render took ${performance.now() - renderStart}ms`);
-  }, []);
-
   // Load samples and in-progress analysis data
   useEffect(() => {
     let isMounted = true;
@@ -286,11 +297,13 @@ const Analysis = () => {
         // Always fetch fresh data
         const samplesResponse = await sampleService.getByShift(shiftId);
         const shiftResponse = await shiftService.getById(shiftId);
+        const pcmCalibrationsResponse = await pcmMicroscopeService.getAll();
 
         if (!isMounted) return;
 
-        // Set shift status
+        // Set shift status and PCM calibrations
         setShiftStatus(shiftResponse.data.status);
+        setPcmCalibrations(pcmCalibrationsResponse);
 
         console.log(`API fetch took ${performance.now() - fetchStart}ms`);
         console.log("Sample count:", samplesResponse.data.length);
@@ -666,13 +679,81 @@ const Analysis = () => {
     return Math.round((end - start) / (1000 * 60));
   };
 
+  // Get the appropriate microscope constant based on microscope and filter size
+  const getMicroscopeConstant = (microscopeReference, filterSize) => {
+    if (!microscopeReference || !filterSize || pcmCalibrations.length === 0) {
+      return 50000; // Fallback to default value
+    }
+
+    // Find the latest PCM calibration for the selected microscope
+    const latestPcmCalibration = pcmCalibrations
+      .filter((cal) => cal.microscopeReference === microscopeReference)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    if (!latestPcmCalibration) {
+      return 50000; // Fallback if no calibration found
+    }
+
+    // Return the appropriate constant based on filter size
+    if (filterSize === "25mm") {
+      return latestPcmCalibration.constant25mm || 50000;
+    } else if (filterSize === "13mm") {
+      return latestPcmCalibration.constant13mm || 50000;
+    }
+
+    return 50000; // Fallback
+  };
+
+  // Get microscope constant info for display
+  const getMicroscopeConstantInfo = (microscopeReference, filterSize) => {
+    if (!microscopeReference || !filterSize || pcmCalibrations.length === 0) {
+      return { constant: 50000, source: "Default (50000)" };
+    }
+
+    // Find the latest PCM calibration for the selected microscope
+    const latestPcmCalibration = pcmCalibrations
+      .filter((cal) => cal.microscopeReference === microscopeReference)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    if (!latestPcmCalibration) {
+      return {
+        constant: 50000,
+        source: `Default (no calibration for ${microscopeReference})`,
+      };
+    }
+
+    // Return the appropriate constant info based on filter size
+    if (filterSize === "25mm") {
+      const constant = latestPcmCalibration.constant25mm || 50000;
+      return {
+        constant,
+        source: `25mm (${constant}) from ${new Date(
+          latestPcmCalibration.date
+        ).toLocaleDateString()}`,
+      };
+    } else if (filterSize === "13mm") {
+      const constant = latestPcmCalibration.constant13mm || 50000;
+      return {
+        constant,
+        source: `13mm (${constant}) from ${new Date(
+          latestPcmCalibration.date
+        ).toLocaleDateString()}`,
+      };
+    }
+
+    return { constant: 50000, source: "Default (invalid filter size)" };
+  };
+
   const calculateConcentration = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
     const sample = samples.find((s) => s._id === sampleId);
 
     if (!analysis || !sample) return null;
 
-    const microscopeConstant = 50000; // This will be dynamic based on microscope selection in future
+    const microscopeConstant = getMicroscopeConstant(
+      analysisDetails.microscope,
+      sample.filterSize
+    );
     const fibresCounted = parseFloat(analysis.fibresCounted) || 0;
     const fieldsCounted = parseInt(analysis.fieldsCounted) || 0;
     const averageFlowrate = parseFloat(sample.averageFlowrate) || 0;
@@ -996,6 +1077,8 @@ const Analysis = () => {
             key={sample._id}
             sample={sample}
             analysis={sampleAnalyses[sample._id]}
+            analysisDetails={analysisDetails}
+            getMicroscopeConstantInfo={getMicroscopeConstantInfo}
             onAnalysisChange={handleSampleAnalysisChange}
             onFibreCountChange={handleFibreCountChange}
             onKeyDown={handleKeyDown}
@@ -1035,6 +1118,8 @@ const Analysis = () => {
           key={sample._id}
           sample={sample}
           analysis={sampleAnalyses[sample._id]}
+          analysisDetails={analysisDetails}
+          getMicroscopeConstantInfo={getMicroscopeConstantInfo}
           onAnalysisChange={handleSampleAnalysisChange}
           onFibreCountChange={handleFibreCountChange}
           onKeyDown={handleKeyDown}
@@ -1154,15 +1239,15 @@ const Analysis = () => {
                     onChange={handleAnalysisDetailsChange}
                   >
                     <FormControlLabel
-                      value="PCM1"
+                      value="LD-PCM1"
                       control={<Radio />}
-                      label="PCM1"
+                      label="LD-PCM1"
                       disabled={shiftStatus === "analysis_complete"}
                     />
                     <FormControlLabel
-                      value="PCM2"
+                      value="LD-PCM2"
                       control={<Radio />}
-                      label="PCM2"
+                      label="LDPCM2"
                       disabled={shiftStatus === "analysis_complete"}
                     />
                   </RadioGroup>

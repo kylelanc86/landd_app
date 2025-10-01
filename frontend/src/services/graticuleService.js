@@ -71,5 +71,25 @@ export const graticuleService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  // Get all archived graticule calibrations
+  getAllArchivedCalibrations: async (params = {}) => {
+    try {
+      const response = await api.get(`${BASE_URL}/archived`, { params });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get archived graticule calibrations for specific equipment
+  getArchivedByEquipment: async (equipmentId, params = {}) => {
+    try {
+      const response = await api.get(`${BASE_URL}/archived/${equipmentId}`, { params });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };

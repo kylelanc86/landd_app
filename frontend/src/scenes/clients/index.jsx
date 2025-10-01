@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, memo, useRef } from "react";
 import { usePermissions } from "../../hooks/usePermissions";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Button,
@@ -22,8 +23,6 @@ import {
   Checkbox,
   Divider,
   LinearProgress,
-  Snackbar,
-  Alert,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
@@ -61,11 +60,7 @@ const Clients = () => {
   });
   const [rowCount, setRowCount] = useState(0);
   const [isFetching, setIsFetching] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const searchInputRef = useRef(null);
 
@@ -221,13 +216,12 @@ const Clients = () => {
       setClientToDelete(null);
     } catch (err) {
       if (err.response) {
-        setSnackbar({
-          open: true,
-          message: `Error deleting client: ${
+        showSnackbar(
+          `Error deleting client: ${
             err.response.data.message || "Unknown error"
           }`,
-          severity: "error",
-        });
+          "error"
+        );
       }
     }
   }, [clientToDelete]);
@@ -245,24 +239,18 @@ const Clients = () => {
       );
       setArchiveDialogOpen(false);
       setClientToArchive(null);
-      setSnackbar({
-        open: true,
-        message: `${clientToArchive.name} has been archived successfully`,
-        severity: "success",
-      });
+      showSnackbar(
+        `${clientToArchive.name} has been archived successfully`,
+        "success"
+      );
     } catch (err) {
       if (err.response) {
-        setSnackbar({
-          open: true,
-          message: err.response.data.message || "Failed to archive client",
-          severity: "error",
-        });
+        showSnackbar(
+          err.response.data.message || "Failed to archive client",
+          "error"
+        );
       } else {
-        setSnackbar({
-          open: true,
-          message: "Failed to archive client",
-          severity: "error",
-        });
+        showSnackbar("Failed to archive client", "error");
       }
     }
   }, [clientToArchive]);
@@ -841,22 +829,6 @@ const Clients = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

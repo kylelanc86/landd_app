@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -24,7 +25,6 @@ import {
   Select,
   MenuItem,
   Alert,
-  Snackbar,
   CircularProgress,
   Chip,
   Breadcrumbs,
@@ -64,11 +64,7 @@ const ClearanceItems = () => {
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const [form, setForm] = useState({
     locationDescription: "",
@@ -299,29 +295,17 @@ const ClearanceItems = () => {
 
     // Validate required fields
     if (!form.roomArea.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Room/Area is required",
-        severity: "error",
-      });
+      showSnackbar("Room/Area is required", "error");
       return;
     }
 
     if (!form.locationDescription.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Location Description is required",
-        severity: "error",
-      });
+      showSnackbar("Location Description is required", "error");
       return;
     }
 
     if (!form.materialDescription.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Materials Description is required",
-        severity: "error",
-      });
+      showSnackbar("Materials Description is required", "error");
       return;
     }
 
@@ -344,18 +328,10 @@ const ClearanceItems = () => {
           editingItem._id,
           itemData
         );
-        setSnackbar({
-          open: true,
-          message: "Item updated successfully",
-          severity: "success",
-        });
+        showSnackbar("Item updated successfully", "success");
       } else {
         await asbestosClearanceService.addItem(clearanceId, itemData);
-        setSnackbar({
-          open: true,
-          message: "Item created successfully",
-          severity: "success",
-        });
+        showSnackbar("Item created successfully", "success");
       }
 
       setDialogOpen(false);
@@ -368,11 +344,7 @@ const ClearanceItems = () => {
       await updateClearanceTypeFromItems(updatedItems);
     } catch (err) {
       console.error("Error saving item:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to save item",
-        severity: "error",
-      });
+      showSnackbar("Failed to save item", "error");
     }
   };
 
@@ -403,11 +375,7 @@ const ClearanceItems = () => {
 
     try {
       await asbestosClearanceService.deleteItem(clearanceId, itemToDelete._id);
-      setSnackbar({
-        open: true,
-        message: "Item deleted successfully",
-        severity: "success",
-      });
+      showSnackbar("Item deleted successfully", "success");
       await fetchData();
 
       // Update clearance type based on remaining items
@@ -415,11 +383,7 @@ const ClearanceItems = () => {
       await updateClearanceTypeFromItems(updatedItems);
     } catch (err) {
       console.error("Error deleting item:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete item",
-        severity: "error",
-      });
+      showSnackbar("Failed to delete item", "error");
     } finally {
       setDeleteConfirmDialogOpen(false);
       setItemToDelete(null);
@@ -643,11 +607,7 @@ const ClearanceItems = () => {
           "Camera access is not supported on this device. Please use upload instead.";
       }
 
-      setSnackbar({
-        open: true,
-        message: errorMessage,
-        severity: "error",
-      });
+      showSnackbar(errorMessage, "error");
     }
   };
 
@@ -708,11 +668,7 @@ const ClearanceItems = () => {
 
   const fetchAirMonitoringReports = async () => {
     if (!clearance?.projectId?._id) {
-      setSnackbar({
-        open: true,
-        message: "No project found for this clearance",
-        severity: "error",
-      });
+      showSnackbar("No project found for this clearance", "error");
       return;
     }
 
@@ -742,11 +698,7 @@ const ClearanceItems = () => {
       }
     } catch (error) {
       console.error("Error fetching air monitoring reports:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to fetch air monitoring reports",
-        severity: "error",
-      });
+      showSnackbar("Failed to fetch air monitoring reports", "error");
     } finally {
       setLoadingReports(false);
     }
@@ -802,6 +754,12 @@ const ClearanceItems = () => {
         samples: samples,
         projectId: project,
         returnPdfData: true, // This will return the PDF data URL instead of downloading
+        sitePlanData: shift.sitePlan
+          ? {
+              sitePlan: shift.sitePlan,
+              sitePlanData: shift.sitePlanData,
+            }
+          : null,
       });
 
       // Extract base64 data from data URL
@@ -814,22 +772,17 @@ const ClearanceItems = () => {
         shiftId: shift._id,
       });
 
-      setSnackbar({
-        open: true,
-        message: "Air monitoring report selected and uploaded successfully",
-        severity: "success",
-      });
+      showSnackbar(
+        "Air monitoring report selected and uploaded successfully",
+        "success"
+      );
 
       setAirMonitoringReportsDialogOpen(false);
       setSelectedReport(null);
       fetchData(); // Refresh clearance data
     } catch (error) {
       console.error("Error selecting air monitoring report:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to select air monitoring report",
-        severity: "error",
-      });
+      showSnackbar("Failed to select air monitoring report", "error");
     } finally {
       setGeneratingAirMonitoringPDF(false);
     }
@@ -844,11 +797,7 @@ const ClearanceItems = () => {
 
   const handleUploadAirMonitoringReport = async () => {
     if (!airMonitoringFile) {
-      setSnackbar({
-        open: true,
-        message: "Please select a file to upload",
-        severity: "error",
-      });
+      showSnackbar("Please select a file to upload", "error");
       return;
     }
 
@@ -863,22 +812,14 @@ const ClearanceItems = () => {
         reportData: base64Data,
       });
 
-      setSnackbar({
-        open: true,
-        message: "Air monitoring report uploaded successfully",
-        severity: "success",
-      });
+      showSnackbar("Air monitoring report uploaded successfully", "success");
 
       setAirMonitoringDialogOpen(false);
       setAirMonitoringFile(null);
       fetchData(); // Refresh clearance data
     } catch (error) {
       console.error("Error uploading air monitoring report:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to upload air monitoring report",
-        severity: "error",
-      });
+      showSnackbar("Failed to upload air monitoring report", "error");
     } finally {
       setUploadingReport(false);
     }
@@ -896,20 +837,12 @@ const ClearanceItems = () => {
           airMonitoringReport: null,
         });
 
-        setSnackbar({
-          open: true,
-          message: "Air monitoring report removed successfully",
-          severity: "success",
-        });
+        showSnackbar("Air monitoring report removed successfully", "success");
 
         fetchData(); // Refresh clearance data
       } catch (error) {
         console.error("Error removing air monitoring report:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to remove air monitoring report",
-          severity: "error",
-        });
+        showSnackbar("Failed to remove air monitoring report", "error");
       }
     }
   };
@@ -923,11 +856,7 @@ const ClearanceItems = () => {
 
   const handleUploadSitePlan = async () => {
     if (!sitePlanFile) {
-      setSnackbar({
-        open: true,
-        message: "Please select a file first",
-        severity: "error",
-      });
+      showSnackbar("Please select a file first", "error");
       return;
     }
 
@@ -947,22 +876,14 @@ const ClearanceItems = () => {
             sitePlanFile: base64Data,
           });
 
-          setSnackbar({
-            open: true,
-            message: "Site plan uploaded successfully",
-            severity: "success",
-          });
+          showSnackbar("Site plan uploaded successfully", "success");
 
           setSitePlanDialogOpen(false);
           setSitePlanFile(null);
           fetchData(); // Refresh clearance data
         } catch (error) {
           console.error("Error uploading site plan:", error);
-          setSnackbar({
-            open: true,
-            message: "Failed to upload site plan",
-            severity: "error",
-          });
+          showSnackbar("Failed to upload site plan", "error");
         } finally {
           setUploadingSitePlan(false);
         }
@@ -970,11 +891,7 @@ const ClearanceItems = () => {
       reader.readAsDataURL(sitePlanFile);
     } catch (error) {
       console.error("Error processing site plan file:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to process site plan file",
-        severity: "error",
-      });
+      showSnackbar("Failed to process site plan file", "error");
       setUploadingSitePlan(false);
     }
   };
@@ -987,20 +904,12 @@ const ClearanceItems = () => {
           sitePlanFile: null,
         });
 
-        setSnackbar({
-          open: true,
-          message: "Site plan removed successfully",
-          severity: "success",
-        });
+        showSnackbar("Site plan removed successfully", "success");
 
         fetchData(); // Refresh clearance data
       } catch (error) {
         console.error("Error removing site plan:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to remove site plan",
-          severity: "error",
-        });
+        showSnackbar("Failed to remove site plan", "error");
       }
     }
   };
@@ -1019,11 +928,7 @@ const ClearanceItems = () => {
         status: "complete",
       });
       setJobCompleted(true);
-      setSnackbar({
-        open: true,
-        message: "Job completed successfully!",
-        severity: "success",
-      });
+      showSnackbar("Job completed successfully!", "success");
       fetchData(); // Refresh the data to show updated status
 
       console.log(
@@ -1076,11 +981,7 @@ const ClearanceItems = () => {
       }
     } catch (error) {
       console.error("Error completing job:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to complete job",
-        severity: "error",
-      });
+      showSnackbar("Failed to complete job", "error");
     } finally {
       setCompleteDialogOpen(false);
     }
@@ -1096,19 +997,11 @@ const ClearanceItems = () => {
         status: "in progress",
       });
       setJobCompleted(false);
-      setSnackbar({
-        open: true,
-        message: "Clearance reopened successfully!",
-        severity: "success",
-      });
+      showSnackbar("Clearance reopened successfully!", "success");
       fetchData(); // Refresh the data to show updated status
     } catch (error) {
       console.error("Error reopening job:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to reopen clearance",
-        severity: "error",
-      });
+      showSnackbar("Failed to reopen clearance", "error");
     } finally {
       setReopenDialogOpen(false);
     }
@@ -1294,22 +1187,20 @@ const ClearanceItems = () => {
                       jobSpecificExclusions:
                         clearance?.jobSpecificExclusions || "",
                     });
-                    setSnackbar({
-                      open: true,
-                      message: "Job specific exclusions saved successfully",
-                      severity: "success",
-                    });
+                    showSnackbar(
+                      "Job specific exclusions saved successfully",
+                      "success"
+                    );
                     setExclusionsLastSaved(new Date());
                   } catch (error) {
                     console.error(
                       "Error saving job specific exclusions:",
                       error
                     );
-                    setSnackbar({
-                      open: true,
-                      message: "Failed to save job specific exclusions",
-                      severity: "error",
-                    });
+                    showSnackbar(
+                      "Failed to save job specific exclusions",
+                      "error"
+                    );
                   } finally {
                     setSavingExclusions(false);
                   }
@@ -2331,21 +2222,6 @@ const ClearanceItems = () => {
             </Button>
           </DialogActions>
         </Dialog>
-
-        {/* Snackbar for notifications */}
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        >
-          <Alert
-            onClose={() => setSnackbar({ ...snackbar, open: false })}
-            severity={snackbar.severity}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
 
         {/* Camera Dialog */}
         <Dialog

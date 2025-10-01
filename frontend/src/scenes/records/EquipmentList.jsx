@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
   useTheme,
-  Paper,
   Button,
   IconButton,
   Dialog,
@@ -18,7 +17,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Chip,
   Breadcrumbs,
   Link,
 } from "@mui/material";
@@ -27,16 +25,14 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
 import { formatDate } from "../../utils/dateFormat";
 import { equipmentService } from "../../services/equipmentService";
+import { calibrationFrequencyService } from "../../services/calibrationFrequencyService";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
 const EquipmentList = () => {
   const theme = useTheme();
-  const colors = tokens;
   const navigate = useNavigate();
 
   const [equipment, setEquipment] = useState([]);
@@ -45,6 +41,7 @@ const EquipmentList = () => {
   const [addDialog, setAddDialog] = useState(false);
   const [editDialog, setEditDialog] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [calibrationFrequencies, setCalibrationFrequencies] = useState([]);
   const [form, setForm] = useState({
     equipmentReference: "",
     equipmentType: "",
@@ -67,7 +64,39 @@ const EquipmentList = () => {
     navigate("/records");
   };
 
-  const fetchEquipment = async () => {
+  const fetchCalibrationFrequencies = async () => {
+    try {
+      const [fixedResponse, variableResponse] = await Promise.all([
+        calibrationFrequencyService.getFixedFrequencies(),
+        calibrationFrequencyService.getVariableFrequencies(),
+      ]);
+
+      const fixedFrequencies = fixedResponse.data || [];
+      const variableFrequencies = variableResponse.data || [];
+
+      // Combine both types of frequencies for easier lookup
+      const allFrequencies = [
+        ...fixedFrequencies.map((freq) => ({
+          ...freq,
+          type: "fixed",
+          displayText: `Every ${freq.frequencyValue} ${freq.frequencyUnit}`,
+        })),
+        ...variableFrequencies.map((freq) => ({
+          ...freq,
+          type: "variable",
+          displayText: freq.calibrationRequirements,
+        })),
+      ];
+
+      setCalibrationFrequencies(allFrequencies);
+    } catch (err) {
+      console.error("Error fetching calibration frequencies:", err);
+      // Don't set error state for calibration frequencies as it's not critical
+      setCalibrationFrequencies([]);
+    }
+  };
+
+  const fetchEquipment = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -89,20 +118,64 @@ const EquipmentList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
   };
 
   useEffect(() => {
+    fetchCalibrationFrequencies();
     fetchEquipment();
-  }, [filters]);
+  }, [fetchEquipment]);
+
+  // Listen for equipment data updates from other components
+  useEffect(() => {
+    const handleEquipmentDataUpdate = (event) => {
+      console.log(
+        "Equipment data updated, refreshing Equipment List:",
+        event.detail
+      );
+      fetchEquipment(); // Refresh equipment data
+      fetchCalibrationFrequencies(); // Also refresh calibration frequencies
+    };
+
+    window.addEventListener("equipmentDataUpdated", handleEquipmentDataUpdate);
+
+    return () => {
+      window.removeEventListener(
+        "equipmentDataUpdated",
+        handleEquipmentDataUpdate
+      );
+    };
+  }, [fetchEquipment]);
 
   const handleAddEquipment = async (e) => {
     e.preventDefault();
     try {
-      await equipmentService.create(form);
+      // Auto-populate calibration frequency based on equipment type
+      const frequencyOptions = getCalibrationFrequencyOptions(
+        form.equipmentType
+      );
+
+      // Auto-calculate calibration dates if not provided (using obviously wrong defaults)
+      const defaultDate = "1900-01-01";
+
+      const formData = {
+        ...form,
+        calibrationFrequency:
+          frequencyOptions.length > 0
+            ? frequencyOptions[0].frequencyValue
+            : null,
+        // Use obviously wrong default dates to indicate they need proper calculation
+        lastCalibration: form.lastCalibration || defaultDate,
+        calibrationDue:
+          frequencyOptions.length > 0
+            ? form.calibrationDue || defaultDate
+            : null,
+      };
+
+      await equipmentService.create(formData);
 
       setAddDialog(false);
       setForm({
@@ -146,7 +219,29 @@ const EquipmentList = () => {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     try {
-      await equipmentService.update(selectedEquipment._id, form);
+      // Auto-populate calibration frequency based on equipment type
+      const frequencyOptions = getCalibrationFrequencyOptions(
+        form.equipmentType
+      );
+
+      // Auto-calculate calibration due if not provided
+
+      // Ensure we have valid dates for required fields (using obviously wrong defaults)
+      const defaultDate = "1900-01-01";
+      const lastCalibrationDate = form.lastCalibration || defaultDate;
+      const calibrationDueDate = form.calibrationDue || defaultDate;
+
+      const formData = {
+        ...form,
+        calibrationFrequency:
+          frequencyOptions.length > 0
+            ? frequencyOptions[0].frequencyValue
+            : null,
+        lastCalibration: lastCalibrationDate,
+        calibrationDue: frequencyOptions.length > 0 ? calibrationDueDate : null,
+      };
+
+      await equipmentService.update(selectedEquipment._id, formData);
 
       setEditDialog(false);
       setSelectedEquipment(null);
@@ -181,18 +276,21 @@ const EquipmentList = () => {
     }
   };
 
-  const getCalibrationStatus = (calibrationDue) => {
-    const dueDate = new Date(calibrationDue);
-    const today = new Date();
-    const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+  // Calculate days until calibration is due
+  const calculateDaysUntilCalibration = (calibrationDue) => {
+    if (!calibrationDue) return null;
 
-    if (daysUntilDue < 0) {
-      return { status: "Overdue", color: theme.palette.error.main };
-    } else if (daysUntilDue <= 30) {
-      return { status: "Due Soon", color: theme.palette.warning.main };
-    } else {
-      return { status: "OK", color: theme.palette.success.main };
-    }
+    const today = new Date();
+    const dueDate = new Date(calibrationDue);
+
+    // Reset time to start of day for accurate day calculation
+    today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const timeDiff = dueDate.getTime() - today.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    return daysDiff;
   };
 
   const getStatusColor = (status) => {
@@ -206,6 +304,12 @@ const EquipmentList = () => {
       default:
         return theme.palette.grey[500];
     }
+  };
+
+  const getCalibrationFrequencyOptions = (equipmentType) => {
+    return calibrationFrequencies.filter(
+      (freq) => freq.equipmentType.toLowerCase() === equipmentType.toLowerCase()
+    );
   };
 
   if (loading) {
@@ -457,22 +561,43 @@ const EquipmentList = () => {
                 if (!params.row.calibrationDue) {
                   return "-";
                 }
-                const status = getCalibrationStatus(params.row.calibrationDue);
+                const daysUntil = calculateDaysUntilCalibration(
+                  params.row.calibrationDue
+                );
+
+                let daysText;
+                let daysColor;
+
+                if (daysUntil === 0) {
+                  daysText = "Due Today";
+                  daysColor = theme.palette.warning.main;
+                } else if (daysUntil < 0) {
+                  daysText = `${Math.abs(daysUntil)} days overdue`;
+                  daysColor = theme.palette.error.main;
+                } else {
+                  daysText = `${daysUntil} days`;
+                  daysColor =
+                    daysUntil <= 30
+                      ? theme.palette.warning.main
+                      : theme.palette.success.main;
+                }
+
                 return (
                   <Box>
-                    <Typography variant="body2">
+                    <Typography
+                      variant="body2"
+                      fontWeight="medium"
+                      sx={{ color: daysColor }}
+                    >
+                      {daysText}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontSize: "0.7rem" }}
+                    >
                       {formatDate(params.row.calibrationDue)}
                     </Typography>
-                    <Chip
-                      label={status.status}
-                      size="small"
-                      sx={{
-                        backgroundColor: status.color,
-                        color: theme.palette.common.white,
-                        fontSize: "0.7rem",
-                        height: "20px",
-                      }}
-                    />
                   </Box>
                 );
               },
@@ -626,36 +751,48 @@ const EquipmentList = () => {
                 label="Last Calibration Date"
                 type="date"
                 value={form.lastCalibration}
-                onChange={(e) =>
-                  setForm({ ...form, lastCalibration: e.target.value })
-                }
-                required
+                disabled
                 fullWidth
                 InputLabelProps={{ shrink: true }}
+                helperText="Automatically calculated from calibration records"
               />
               <TextField
                 label="Calibration Due Date"
                 type="date"
                 value={form.calibrationDue}
-                onChange={(e) =>
-                  setForm({ ...form, calibrationDue: e.target.value })
-                }
-                required
+                disabled
                 fullWidth
                 InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                label="Calibration Frequency (months)"
-                type="number"
-                value={form.calibrationFrequency}
-                onChange={(e) =>
-                  setForm({ ...form, calibrationFrequency: e.target.value })
-                }
-                required
-                fullWidth
-                inputProps={{ min: 1, max: 60 }}
+                helperText="Automatically calculated from calibration records"
               />
             </Stack>
+
+            {/* Calibration Frequency Display */}
+            {form.equipmentType && (
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  backgroundColor: theme.palette.grey[100],
+                  borderRadius: 1,
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
+                  Calibration Frequency:
+                </Typography>
+                <Typography variant="body2">
+                  {getCalibrationFrequencyOptions(form.equipmentType).length > 0
+                    ? getCalibrationFrequencyOptions(form.equipmentType)
+                        .map((freq) => freq.displayText)
+                        .join(", ")
+                    : "No calibration frequency configured for this equipment type"}
+                </Typography>
+              </Box>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setAddDialog(false)}>Cancel</Button>
@@ -667,10 +804,7 @@ const EquipmentList = () => {
                 !form.equipmentType ||
                 !form.section ||
                 !form.brandModel ||
-                !form.status ||
-                !form.lastCalibration ||
-                !form.calibrationDue ||
-                !form.calibrationFrequency
+                !form.status
               }
             >
               Add Equipment
@@ -782,36 +916,48 @@ const EquipmentList = () => {
                 label="Last Calibration Date"
                 type="date"
                 value={form.lastCalibration}
-                onChange={(e) =>
-                  setForm({ ...form, lastCalibration: e.target.value })
-                }
-                required
+                disabled
                 fullWidth
                 InputLabelProps={{ shrink: true }}
+                helperText="Automatically calculated from calibration records"
               />
               <TextField
                 label="Calibration Due Date"
                 type="date"
                 value={form.calibrationDue}
-                onChange={(e) =>
-                  setForm({ ...form, calibrationDue: e.target.value })
-                }
-                required
+                disabled
                 fullWidth
                 InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                label="Calibration Frequency (months)"
-                type="number"
-                value={form.calibrationFrequency}
-                onChange={(e) =>
-                  setForm({ ...form, calibrationFrequency: e.target.value })
-                }
-                required
-                fullWidth
-                inputProps={{ min: 1, max: 60 }}
+                helperText="Automatically calculated from calibration records"
               />
             </Stack>
+
+            {/* Calibration Frequency Display */}
+            {form.equipmentType && (
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  backgroundColor: theme.palette.grey[100],
+                  borderRadius: 1,
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
+                  Calibration Frequency:
+                </Typography>
+                <Typography variant="body2">
+                  {getCalibrationFrequencyOptions(form.equipmentType).length > 0
+                    ? getCalibrationFrequencyOptions(form.equipmentType)
+                        .map((freq) => freq.displayText)
+                        .join(", ")
+                    : "No calibration frequency configured for this equipment type"}
+                </Typography>
+              </Box>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEditDialog(false)}>Cancel</Button>
@@ -823,10 +969,7 @@ const EquipmentList = () => {
                 !form.equipmentType ||
                 !form.section ||
                 !form.brandModel ||
-                !form.status ||
-                !form.lastCalibration ||
-                !form.calibrationDue ||
-                !form.calibrationFrequency
+                !form.status
               }
             >
               Save Changes

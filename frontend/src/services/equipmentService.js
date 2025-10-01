@@ -101,6 +101,7 @@ export const equipmentService = {
     "Air pump",
     "Bubble flowmeter",
     "Effective Filter Area",
+    "Filter Holder",
     "Fume Hood",
     "Furnace",
     "Graticule",

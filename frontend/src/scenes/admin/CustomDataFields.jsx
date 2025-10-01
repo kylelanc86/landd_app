@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -20,7 +21,6 @@ import {
   Breadcrumbs,
   Link,
   Alert,
-  Snackbar,
   MenuItem,
 } from "@mui/material";
 import {
@@ -69,11 +69,7 @@ const CustomDataFields = () => {
   const [newStatusColor, setNewStatusColor] = useState("#1976d2");
   const [currentTab, setCurrentTab] = useState("");
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const handleBackToAdmin = () => {
     navigate("/admin");
@@ -125,21 +121,6 @@ const CustomDataFields = () => {
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
-
-  const showSnackbar = (message, severity = "success") => {
-    setSnackbar({
-      open: true,
-      message,
-      severity,
-    });
-  };
-
-  const closeSnackbar = () => {
-    setSnackbar({
-      ...snackbar,
-      open: false,
-    });
-  };
 
   // Helper function to sort data alphabetically
   const sortDataAlphabetically = (data) => {
@@ -1215,22 +1196,6 @@ const CustomDataFields = () => {
             </Button>
           </DialogActions>
         </Dialog>
-
-        {/* Snackbar for notifications */}
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={closeSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        >
-          <Alert
-            onClose={closeSnackbar}
-            severity={snackbar.severity}
-            sx={{ width: "100%" }}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
       </Box>
     </Box>
   );

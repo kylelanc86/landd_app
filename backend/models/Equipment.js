@@ -16,6 +16,7 @@ const equipmentSchema = new mongoose.Schema(
         "Air pump",
         "Bubble flowmeter",
         "Effective Filter Area",
+        "Filter Holder",
         "Fume Hood",
         "Furnace",
         "Graticule",
@@ -49,11 +50,11 @@ const equipmentSchema = new mongoose.Schema(
     },
     calibrationDue: {
       type: Date,
-      required: true,
+      required: false,
     },
     calibrationFrequency: {
       type: Number,
-      required: true,
+      required: false,
       min: 1,
       max: 60, // Assuming max 60 months (5 years)
     },

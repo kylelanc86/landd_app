@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -20,8 +21,6 @@ import {
   Breadcrumbs,
   Link,
   Checkbox,
-  Snackbar,
-  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -76,11 +75,7 @@ const EditUserPage = () => {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   // State for tracking form changes and confirmation dialog
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -311,11 +306,7 @@ const EditUserPage = () => {
       // Validate the file
       const validationResult = await validateSignatureFile(file);
       if (!validationResult.isValid) {
-        setSnackbar({
-          open: true,
-          message: validationResult.error,
-          severity: "error",
-        });
+        showSnackbar(validationResult.error, "error");
         return;
       }
 
@@ -324,11 +315,7 @@ const EditUserPage = () => {
       setForm({ ...form, signature: compressedImage });
     } catch (error) {
       console.error("Error processing signature:", error);
-      setSnackbar({
-        open: true,
-        message: "Error processing signature image",
-        severity: "error",
-      });
+      showSnackbar("Error processing signature image", "error");
     }
   };
 
@@ -365,13 +352,11 @@ const EditUserPage = () => {
       navigate("/users");
     } catch (error) {
       console.error("Error updating user:", error);
-      setSnackbar({
-        open: true,
-        message:
-          "Failed to update user: " +
+      showSnackbar(
+        "Failed to update user: " +
           (error.response?.data?.message || error.message),
-        severity: "error",
-      });
+        "error"
+      );
     } finally {
       setSaving(false);
     }
@@ -418,20 +403,14 @@ const EditUserPage = () => {
     try {
       setSendingReset(true);
       await userService.sendPasswordResetEmail(form.email);
-      setSnackbar({
-        open: true,
-        message: "Password reset email sent successfully!",
-        severity: "success",
-      });
+      showSnackbar("Password reset email sent successfully!", "success");
     } catch (error) {
       console.error("Error sending password reset email:", error);
-      setSnackbar({
-        open: true,
-        message:
-          "Failed to send password reset email: " +
+      showSnackbar(
+        "Failed to send password reset email: " +
           (error.response?.data?.message || error.message),
-        severity: "error",
-      });
+        "error"
+      );
     } finally {
       setSendingReset(false);
     }
@@ -922,22 +901,6 @@ const EditUserPage = () => {
           </Box>
         </form>
       </Paper>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
 
       {/* Unsaved Changes Confirmation Dialog */}
       <Dialog

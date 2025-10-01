@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -35,7 +36,6 @@ import {
   RadioGroup,
   FormLabel,
   Autocomplete,
-  Snackbar,
   IconButton,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -103,11 +103,7 @@ const AsbestosRemovalJobDetails = () => {
 
   // PDF generation state
   const [generatingPDF, setGeneratingPDF] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
@@ -442,11 +438,7 @@ const AsbestosRemovalJobDetails = () => {
       await asbestosRemovalJobService.update(jobId, { status: "completed" });
 
       // Show success message
-      setSnackbar({
-        open: true,
-        message: "Job marked as completed successfully",
-        severity: "success",
-      });
+      showSnackbar("Job marked as completed successfully", "success");
 
       // Navigate back to jobs page
       navigate("/asbestos-removal");
@@ -522,21 +514,36 @@ const AsbestosRemovalJobDetails = () => {
         project.client = clientResponse.data;
       }
 
+      console.log(
+        "AsbestosRemovalJobDetails - Latest shift data:",
+        latestShift
+      );
+      console.log(
+        "AsbestosRemovalJobDetails - Site plan flag:",
+        latestShift.sitePlan
+      );
+      console.log(
+        "AsbestosRemovalJobDetails - Site plan data:",
+        latestShift.sitePlanData
+      );
+
       generateShiftReport({
         shift: latestShift,
         job: jobResponse.data,
         samples: samplesWithAnalysis,
         project,
         openInNewTab: !shift.reportApprovedBy, // download if authorised, open if not
+        sitePlanData: latestShift.sitePlan
+          ? {
+              sitePlan: latestShift.sitePlan,
+              sitePlanData: latestShift.sitePlanData,
+            }
+          : null,
       });
       setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
     } catch (err) {
       console.error("Error generating report:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to generate report.",
-        severity: "error",
-      });
+      showSnackbar("Failed to generate report.", "error");
     }
   };
 
@@ -613,31 +620,31 @@ const AsbestosRemovalJobDetails = () => {
           samples: samplesWithAnalysis,
           project,
           openInNewTab: false, // Always download when authorised
+          sitePlanData: updatedShiftData.sitePlan
+            ? {
+                sitePlan: updatedShiftData.sitePlan,
+                sitePlanData: updatedShiftData.sitePlanData,
+              }
+            : null,
         });
 
-        setSnackbar({
-          open: true,
-          message: "Report authorised and downloaded successfully.",
-          severity: "success",
-        });
+        showSnackbar(
+          "Report authorised and downloaded successfully.",
+          "success"
+        );
 
         // Refresh the shifts data
         fetchJobDetails();
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
-        setSnackbar({
-          open: true,
-          message: "Report authorised but failed to generate download.",
-          severity: "warning",
-        });
+        showSnackbar(
+          "Report authorised but failed to generate download.",
+          "warning"
+        );
       }
     } catch (error) {
       console.error("Error authorising report:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to authorise report. Please try again.",
-        severity: "error",
-      });
+      showSnackbar("Failed to authorise report. Please try again.", "error");
     }
   };
 
@@ -707,11 +714,7 @@ const AsbestosRemovalJobDetails = () => {
 
       handleCloseShiftDialog();
 
-      setSnackbar({
-        open: true,
-        message: "Air monitoring shift created successfully",
-        severity: "success",
-      });
+      showSnackbar("Air monitoring shift created successfully", "success");
     } catch (error) {
       console.error("Error creating shift:", error);
       console.error("Error response:", error.response?.data);
@@ -722,11 +725,7 @@ const AsbestosRemovalJobDetails = () => {
         error.message ||
         "Failed to create shift. Please try again.";
 
-      setSnackbar({
-        open: true,
-        message: errorMessage,
-        severity: "error",
-      });
+      showSnackbar(errorMessage, "error");
     }
   };
 
@@ -765,18 +764,10 @@ const AsbestosRemovalJobDetails = () => {
       setResetDialogOpen(false);
       setResetShiftId(null);
 
-      setSnackbar({
-        open: true,
-        message: "Shift status reset to ongoing successfully.",
-        severity: "success",
-      });
+      showSnackbar("Shift status reset to ongoing successfully.", "success");
     } catch (err) {
       console.error("Error resetting shift status:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to reset shift status.",
-        severity: "error",
-      });
+      showSnackbar("Failed to reset shift status.", "error");
       setResetDialogOpen(false);
       setResetShiftId(null);
     }
@@ -793,27 +784,15 @@ const AsbestosRemovalJobDetails = () => {
     try {
       if (deleteType === "clearance") {
         await asbestosClearanceService.delete(itemToDelete._id);
-        setSnackbar({
-          open: true,
-          message: "Clearance deleted successfully",
-          severity: "success",
-        });
+        showSnackbar("Clearance deleted successfully", "success");
       } else if (deleteType === "shift") {
         await shiftService.delete(itemToDelete._id);
-        setSnackbar({
-          open: true,
-          message: "Air monitoring shift deleted successfully",
-          severity: "success",
-        });
+        showSnackbar("Air monitoring shift deleted successfully", "success");
       }
       fetchJobDetails(); // Refresh the data
     } catch (error) {
       console.error(`Error deleting ${deleteType}:`, error);
-      setSnackbar({
-        open: true,
-        message: `Failed to delete ${deleteType}`,
-        severity: "error",
-      });
+      showSnackbar(`Failed to delete ${deleteType}`, "error");
     } finally {
       setDeleteConfirmDialogOpen(false);
       setItemToDelete(null);
@@ -830,12 +809,10 @@ const AsbestosRemovalJobDetails = () => {
   const handleSamplesClick = (shift) => {
     // Don't allow access to samples if report is authorized
     if (shift.reportApprovedBy) {
-      setSnackbar({
-        open: true,
-        message:
-          "Cannot access samples while report is authorized. Please reset the shift status to access samples.",
-        severity: "warning",
-      });
+      showSnackbar(
+        "Cannot access samples while report is authorized. Please reset the shift status to access samples.",
+        "warning"
+      );
       return;
     }
     console.log("Samples button clicked for shift:", shift._id);
@@ -871,20 +848,15 @@ const AsbestosRemovalJobDetails = () => {
       );
       console.log("PDF generation completed, fileName:", fileName);
 
-      setSnackbar({
-        open: true,
-        message: `PDF generated successfully! Check your downloads folder for: ${
+      showSnackbar(
+        `PDF generated successfully! Check your downloads folder for: ${
           fileName.filename || fileName
         }`,
-        severity: "success",
-      });
+        "success"
+      );
     } catch (err) {
       console.error("Error generating PDF:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to generate PDF",
-        severity: "error",
-      });
+      showSnackbar("Failed to generate PDF", "error");
     } finally {
       console.log("Setting generatingPDF to false");
       setGeneratingPDF(false);
@@ -2003,23 +1975,6 @@ const AsbestosRemovalJobDetails = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-        sx={{ zIndex: 9999 }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
 
       {/* Delete Confirmation Dialog */}
       <Dialog

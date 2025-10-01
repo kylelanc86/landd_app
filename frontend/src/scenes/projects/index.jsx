@@ -21,13 +21,12 @@ import {
   DialogActions,
   TextField,
   Menu,
+  Alert,
   Divider,
   Checkbox,
   ListItemButton,
   ListItemText,
   InputAdornment,
-  Alert,
-  Snackbar,
   LinearProgress,
   Popover,
   List,
@@ -45,6 +44,7 @@ import InfoIcon from "@mui/icons-material/Info";
 
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
+import { useSnackbar } from "../../context/SnackbarContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { useTheme } from "@mui/material";
@@ -171,11 +171,7 @@ const Projects = ({ initialFilters = {} }) => {
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   // Get project statuses from custom data fields
   const {
@@ -1421,19 +1417,11 @@ const Projects = ({ initialFilters = {} }) => {
                       if (client && client._id) {
                         navigate(`/clients/${client._id}`);
                       } else {
-                        setSnackbar({
-                          open: true,
-                          message: "Client not found",
-                          severity: "warning",
-                        });
+                        showSnackbar("Client not found", "warning");
                       }
                     } catch (error) {
                       console.error("Error finding client:", error);
-                      setSnackbar({
-                        open: true,
-                        message: "Failed to find client",
-                        severity: "error",
-                      });
+                      showSnackbar("Failed to find client", "error");
                     }
                   }}
                 >
@@ -2705,23 +2693,6 @@ const Projects = ({ initialFilters = {} }) => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
-        sx={{ zIndex: 9999 }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

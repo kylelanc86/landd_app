@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -15,7 +16,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Snackbar,
   TextField,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -52,12 +52,7 @@ const ProjectReports = () => {
   const [newStatus, setNewStatus] = useState("");
   const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
 
-  // Snackbar state
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "info",
-  });
+  const { showSnackbar } = useSnackbar();
 
   // Revise dialog state
   const [reviseDialog, setReviseDialog] = useState({
@@ -443,6 +438,12 @@ const ProjectReports = () => {
           samples: samplesWithAnalysis,
           project: projectData,
           openInNewTab: true,
+          sitePlanData: enhancedShift.sitePlan
+            ? {
+                sitePlan: enhancedShift.sitePlan,
+                sitePlanData: enhancedShift.sitePlanData,
+              }
+            : null,
         });
       } else if (report.type === "clearance") {
         // Generate clearance report PDF using the new template system
@@ -599,6 +600,12 @@ const ProjectReports = () => {
           samples: samplesWithAnalysis,
           project: projectData,
           openInNewTab: false,
+          sitePlanData: enhancedShift.sitePlan
+            ? {
+                sitePlan: enhancedShift.sitePlan,
+                sitePlanData: enhancedShift.sitePlanData,
+              }
+            : null,
         });
       } else if (report.type === "clearance") {
         // Generate clearance report PDF using the new template system
@@ -663,11 +670,10 @@ const ProjectReports = () => {
 
     // Validate revision reason for clearance reports only
     if (report?.type === "clearance" && !revisionReason.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Please provide a reason for revising this clearance report.",
-        severity: "error",
-      });
+      showSnackbar(
+        "Please provide a reason for revising this clearance report.",
+        "error"
+      );
       return;
     }
 
@@ -701,12 +707,10 @@ const ProjectReports = () => {
           });
 
           // Show success message
-          setSnackbar({
-            open: true,
-            message:
-              "Report and job status reset to in progress. You can now revise the report.",
-            severity: "success",
-          });
+          showSnackbar(
+            "Report and job status reset to in progress. You can now revise the report.",
+            "success"
+          );
 
           // Reload reports to reflect the change
           loadReports();
@@ -773,23 +777,17 @@ const ProjectReports = () => {
         }
 
         // Show success message
-        setSnackbar({
-          open: true,
-          message:
-            "Clearance and job status reset to in progress. You can now revise the report.",
-          severity: "success",
-        });
+        showSnackbar(
+          "Clearance and job status reset to in progress. You can now revise the report.",
+          "success"
+        );
 
         // Reload reports to reflect the change
         loadReports();
       }
     } catch (error) {
       console.error("Error revising report:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to revise report. Please try again.",
-        severity: "error",
-      });
+      showSnackbar("Failed to revise report. Please try again.", "error");
     } finally {
       // Close the dialog and clear revision reason
       setReviseDialog({
@@ -1028,21 +1026,6 @@ const ProjectReports = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

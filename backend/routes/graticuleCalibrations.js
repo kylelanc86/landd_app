@@ -5,6 +5,39 @@ const GraticuleCalibration = require('../models/GraticuleCalibration');
 const Equipment = require('../models/Equipment');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const CalibrationArchiveService = require('../services/calibrationArchiveService');
+
+// Helper function to update graticule equipment calibration data
+const updateGraticuleEquipmentCalibration = async (graticuleId, calibrationDate, nextCalibrationDate) => {
+  try {
+    await Equipment.findOneAndUpdate(
+      { equipmentReference: graticuleId },
+      {
+        lastCalibration: calibrationDate,
+        calibrationDue: nextCalibrationDate
+      }
+    );
+  } catch (error) {
+    console.error('Error updating graticule equipment calibration data:', error);
+    // Don't throw error as this is not critical to the main operation
+  }
+};
+
+// Helper function to clear graticule equipment calibration data
+const clearGraticuleEquipmentCalibration = async (graticuleId) => {
+  try {
+    await Equipment.findOneAndUpdate(
+      { equipmentReference: graticuleId },
+      {
+        lastCalibration: null,
+        calibrationDue: null
+      }
+    );
+  } catch (error) {
+    console.error('Error clearing graticule equipment calibration data:', error);
+    // Don't throw error as this is not critical to the main operation
+  }
+};
 
 // Get all graticule calibrations with optional filtering
 router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) => {
@@ -74,6 +107,46 @@ router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) =
   }
 });
 
+// Get all archived calibrations across all equipment
+router.get('/archived', auth, checkPermission(['calibrations.view']), async (req, res) => {
+  try {
+    const options = {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      sortBy: req.query.sortBy || 'archivedAt',
+      sortOrder: req.query.sortOrder || 'desc',
+      graticuleId: req.query.graticuleId,
+      status: req.query.status,
+      technician: req.query.technician
+    };
+
+    const result = await CalibrationArchiveService.getAllArchivedCalibrations(options);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching all archived calibrations:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get archived graticule calibrations for a specific equipment
+router.get('/archived/:equipmentId', auth, checkPermission(['calibrations.view']), async (req, res) => {
+  try {
+    const { equipmentId } = req.params;
+    const options = {
+      page: req.query.page || 1,
+      limit: req.query.limit || 50,
+      sortBy: req.query.sortBy || 'date',
+      sortOrder: req.query.sortOrder || 'desc'
+    };
+
+    const result = await CalibrationArchiveService.getArchivedGraticuleCalibrations(equipmentId, options);
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching archived graticule calibrations:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get single graticule calibration record
 router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res) => {
   try {
@@ -116,6 +189,9 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
       calibratedBy: req.user.id
     };
 
+    // Remove graticuleEquipmentId since we're using graticuleId as equipment reference
+    delete calibrationData.graticuleEquipmentId;
+
     // If microscopeId is provided, get the microscope reference
     if (calibrationData.microscopeId) {
       const microscope = await Equipment.findById(calibrationData.microscopeId);
@@ -124,8 +200,54 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
       }
     }
 
+    // Archive old calibrations before creating the new one
+    if (calibrationData.graticuleId && calibrationData.date) {
+      try {
+        const archiveResult = await CalibrationArchiveService.archiveOldGraticuleCalibrations(
+          calibrationData.graticuleId,
+          calibrationData.date,
+          req.user.id
+        );
+        console.log('Archive result:', archiveResult);
+      } catch (archiveError) {
+        console.error('Warning: Failed to archive old calibrations:', archiveError);
+        // Continue with creating the new calibration even if archiving fails
+      }
+    }
+
+    console.log('Creating calibration with data:', JSON.stringify(calibrationData, null, 2));
+    console.log('Data types:', {
+      graticuleId: typeof calibrationData.graticuleId,
+      date: typeof calibrationData.date,
+      scale: typeof calibrationData.scale,
+      status: typeof calibrationData.status,
+      technician: typeof calibrationData.technician,
+      nextCalibration: typeof calibrationData.nextCalibration,
+      calibratedBy: typeof calibrationData.calibratedBy
+    });
+
+    // Check for existing calibrations with same graticuleId
+    const existingCalibration = await GraticuleCalibration.findOne({
+      graticuleId: calibrationData.graticuleId
+    });
+    
+    if (existingCalibration) {
+      console.log('Found existing calibration:', existingCalibration._id);
+      console.log('Existing calibration date:', existingCalibration.date);
+    } else {
+      console.log('No existing calibration found with same graticuleId');
+    }
+
     const calibration = new GraticuleCalibration(calibrationData);
     const savedCalibration = await calibration.save();
+    console.log('Calibration saved successfully:', savedCalibration._id);
+
+    // Update the graticule equipment's calibration date and due date
+    await updateGraticuleEquipmentCalibration(
+      calibrationData.graticuleId,
+      calibrationData.date,
+      savedCalibration.nextCalibration
+    );
 
     const populatedCalibration = await GraticuleCalibration.findById(savedCalibration._id)
       .populate('calibratedBy', 'firstName lastName')
@@ -134,6 +256,14 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
     res.status(201).json(populatedCalibration);
   } catch (error) {
     console.error('Error creating graticule calibration:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    if (error.errors) {
+      console.error('Validation errors:', error.errors);
+    }
     res.status(400).json({ message: error.message });
   }
 });
@@ -163,6 +293,15 @@ router.put('/:id', auth, checkPermission(['calibrations.edit']), async (req, res
 
     const updatedCalibration = await calibration.save();
 
+    // Update the graticule equipment's calibration date and due date if calibration date changed
+    if (req.body.date) {
+      await updateGraticuleEquipmentCalibration(
+        calibration.graticuleId,
+        req.body.date,
+        updatedCalibration.nextCalibration
+      );
+    }
+
     const populatedCalibration = await GraticuleCalibration.findById(updatedCalibration._id)
       .populate('calibratedBy', 'firstName lastName')
       .populate('microscopeId', 'equipmentReference brandModel');
@@ -182,7 +321,26 @@ router.delete('/:id', auth, checkPermission(['calibrations.delete']), async (req
       return res.status(404).json({ message: 'Graticule calibration record not found' });
     }
 
+    const graticuleId = calibration.graticuleId;
     await calibration.deleteOne();
+
+    // Find the most recent remaining calibration for this graticule
+    const mostRecentCalibration = await GraticuleCalibration.findOne({ graticuleId })
+      .sort({ date: -1 });
+
+    // Update the graticule equipment's calibration data
+    if (mostRecentCalibration) {
+      // Update with the most recent calibration data
+      await updateGraticuleEquipmentCalibration(
+        graticuleId,
+        mostRecentCalibration.date,
+        mostRecentCalibration.nextCalibration
+      );
+    } else {
+      // No calibrations left, clear the calibration data
+      await clearGraticuleEquipmentCalibration(graticuleId);
+    }
+
     res.json({ message: 'Graticule calibration record deleted successfully' });
   } catch (error) {
     console.error('Error deleting graticule calibration:', error);
@@ -273,5 +431,6 @@ router.get('/stats', auth, checkPermission(['calibrations.view']), async (req, r
     res.status(500).json({ message: error.message });
   }
 });
+
 
 module.exports = router;

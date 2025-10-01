@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Box,
   Grid,
@@ -6,6 +6,8 @@ import {
   Button,
   Breadcrumbs,
   Link,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import { tokens } from "../../../theme/tokens";
 import { useNavigate } from "react-router-dom";
@@ -17,21 +19,27 @@ import { hasPermission } from "../../../config/permissions";
 import AirPumpCalibration from "./widgets/AirPumpCalibration";
 import FlowmeterCalibration from "./widgets/FlowmeterCalibration";
 import EFA from "./widgets/EFA";
-import MicroscopeCalibration from "./widgets/MicroscopeCalibration";
+import MicroscopeCalibration from "./widgets/PCMMicroscopeCalibration";
 import AcetoneVaporiser from "./widgets/AcetoneVaporiser";
 import GraticuleCalibration from "./widgets/GraticuleCalibration";
 import PrimaryFlowmeter from "./widgets/PrimaryFlowmeter";
 import PureAsbestos from "./widgets/PureAsbestos";
 import RiLiquid from "./widgets/RiLiquid";
 import Sieves from "./widgets/Sieves";
+import Furnace from "./widgets/Furnace";
 import { formatDate } from "../../../utils/dateFormat";
 
 const Calibrations = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const [activeTab, setActiveTab] = useState(0);
 
   const handleBackToHome = () => {
     navigate("/records");
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
 
   // Check if user has admin access
@@ -106,68 +114,95 @@ const Calibrations = () => {
           </Button>
         </Box>
       </Box>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6} lg={4}>
-          <AirPumpCalibration
-            nextCalibrationDue={formatDate("2024-03-15")}
-            viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
-          />
+
+      {/* Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+        <Tabs value={activeTab} onChange={handleTabChange}>
+          <Tab label="Internal Calibrations" />
+          <Tab label="External Calibrations/Servicing" />
+        </Tabs>
+      </Box>
+
+      {/* Tab Panels */}
+      {activeTab === 0 && (
+        <Grid container spacing={3}>
+          {/* Air Monitors */}
+          <Grid item xs={12} md={6} lg={4}>
+            <AirPumpCalibration
+              nextCalibrationDue={formatDate("2024-03-15")}
+              viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
+            />
+          </Grid>
+          {/* Site Rotameters */}
+          <Grid item xs={12} md={6} lg={4}>
+            <FlowmeterCalibration
+              nextCalibrationDue={formatDate("2024-03-20")}
+              viewCalibrationsPath="/records/laboratory/calibrations/flowmeter"
+            />
+          </Grid>
+          {/* Acetone Vaporiser */}
+          <Grid item xs={12} md={6} lg={4}>
+            <AcetoneVaporiser
+              nextCalibrationDue={formatDate("2024-04-05")}
+              viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
+            />
+          </Grid>
+          {/* RI Liquids */}
+          <Grid item xs={12} md={6} lg={4}>
+            <RiLiquid
+              nextCalibrationDue={formatDate("2024-04-25")}
+              viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
+            />
+          </Grid>
+          {/* PCM Graticules */}
+          <Grid item xs={12} md={6} lg={4}>
+            <GraticuleCalibration viewCalibrationsPath="/records/laboratory/calibrations/graticule" />
+          </Grid>
+          {/* Effective Filter Area */}
+          <Grid item xs={12} md={6} lg={4}>
+            <EFA
+              viewCalibrationsPath="/records/laboratory/calibrations/efa"
+            />
+          </Grid>
         </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <FlowmeterCalibration
-            nextCalibrationDue={formatDate("2024-03-20")}
-            viewCalibrationsPath="/records/laboratory/calibrations/flowmeter"
-          />
+      )}
+
+      {activeTab === 1 && (
+        <Grid container spacing={3}>
+          {/* Microscope */}
+          <Grid item xs={12} md={6} lg={4}>
+            <MicroscopeCalibration
+              nextCalibrationDue={formatDate("2024-03-30")}
+              viewCalibrationsPath="/records/laboratory/calibrations/microscope"
+            />
+          </Grid>
+          {/* Primary Flowmeter */}
+          <Grid item xs={12} md={6} lg={4}>
+            <PrimaryFlowmeter
+              nextCalibrationDue={formatDate("2024-04-15")}
+              viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
+            />
+          </Grid>
+          {/* Sieves */}
+          <Grid item xs={12} md={6} lg={4}>
+            <Sieves
+              nextCalibrationDue={formatDate("2024-04-30")}
+              viewCalibrationsPath="/records/laboratory/calibrations/sieves"
+            />
+          </Grid>
+          {/* Pure Asbestos */}
+          <Grid item xs={12} md={6} lg={4}>
+            <PureAsbestos
+              nextCalibrationDue={formatDate("2024-04-20")}
+              viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
+            />
+          </Grid>
+          {/* Furnace */}
+          <Grid item xs={12} md={6} lg={4}>
+            <Furnace />
+          </Grid>
         </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <EFA
-            nextCalibrationDue={formatDate("2024-03-25")}
-            viewCalibrationsPath="/records/laboratory/calibrations/efa"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <MicroscopeCalibration
-            nextCalibrationDue={formatDate("2024-03-30")}
-            viewCalibrationsPath="/records/laboratory/calibrations/microscope"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <AcetoneVaporiser
-            nextCalibrationDue={formatDate("2024-04-05")}
-            viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <GraticuleCalibration
-            nextCalibrationDue={formatDate("2024-04-10")}
-            viewCalibrationsPath="/records/laboratory/calibrations/graticule"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <PrimaryFlowmeter
-            nextCalibrationDue={formatDate("2024-04-15")}
-            viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <PureAsbestos
-            nextCalibrationDue={formatDate("2024-04-20")}
-            viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <RiLiquid
-            nextCalibrationDue={formatDate("2024-04-25")}
-            viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <Sieves
-            nextCalibrationDue={formatDate("2024-04-30")}
-            viewCalibrationsPath="/records/laboratory/calibrations/sieves"
-          />
-        </Grid>
-      </Grid>
+      )}
     </Box>
   );
 };
