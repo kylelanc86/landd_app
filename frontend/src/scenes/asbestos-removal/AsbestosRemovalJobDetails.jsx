@@ -121,6 +121,7 @@ const AsbestosRemovalJobDetails = () => {
     LAA: "",
     asbestosRemovalist: "",
     jurisdiction: "ACT",
+    secondaryHeader: "",
     airMonitoring: false,
     airMonitoringReport: null,
     airMonitoringReportType: "select",
@@ -877,12 +878,7 @@ const AsbestosRemovalJobDetails = () => {
       LAA: clearance.LAA || "",
       asbestosRemovalist: clearance.asbestosRemovalist || "",
       jurisdiction: clearance.jurisdiction || "ACT",
-      // Automatically set air monitoring to true for friable and mixed clearances
-      airMonitoring:
-        clearanceType === "Friable" || clearanceType === "Mixed"
-          ? true
-          : clearance.airMonitoring || false,
-      airMonitoringReport: clearance.airMonitoringReport || null,
+      secondaryHeader: clearance.secondaryHeader || "",
       notes: clearance.notes || "",
       useComplexTemplate: clearance.useComplexTemplate || false,
     });
@@ -918,9 +914,7 @@ const AsbestosRemovalJobDetails = () => {
       LAA: "",
       asbestosRemovalist: job?.asbestosRemovalist || "",
       jurisdiction: "ACT",
-      airMonitoring: false,
-      airMonitoringReport: null,
-      airMonitoringReportType: "select",
+      secondaryHeader: "",
       notes: "",
       useComplexTemplate: false,
     });
@@ -950,8 +944,7 @@ const AsbestosRemovalJobDetails = () => {
         LAA: clearanceForm.LAA,
         asbestosRemovalist: clearanceForm.asbestosRemovalist,
         jurisdiction: clearanceForm.jurisdiction,
-        airMonitoring: clearanceForm.airMonitoring,
-        airMonitoringReport: clearanceForm.airMonitoringReport,
+        secondaryHeader: clearanceForm.secondaryHeader,
         notes: clearanceForm.notes,
       };
 
@@ -1625,18 +1618,9 @@ const AsbestosRemovalJobDetails = () => {
                   <Select
                     value={clearanceForm.clearanceType}
                     onChange={(e) => {
-                      const newClearanceType = e.target.value;
                       setClearanceForm({
                         ...clearanceForm,
-                        clearanceType: newClearanceType,
-                        // Automatically set air monitoring based on clearance type
-                        airMonitoring:
-                          newClearanceType === "Friable" ||
-                          newClearanceType === "Mixed"
-                            ? true
-                            : newClearanceType === "Non-friable"
-                            ? false
-                            : clearanceForm.airMonitoring,
+                        clearanceType: e.target.value,
                       });
                     }}
                     label="Clearance Type"
@@ -1739,19 +1723,18 @@ const AsbestosRemovalJobDetails = () => {
                 </Box>
               </Grid>
               <Grid item xs={12}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={clearanceForm.airMonitoring}
-                      onChange={(e) =>
-                        setClearanceForm({
-                          ...clearanceForm,
-                          airMonitoring: e.target.checked,
-                        })
-                      }
-                    />
+                <TextField
+                  fullWidth
+                  label="Secondary Header (Optional)"
+                  value={clearanceForm.secondaryHeader}
+                  onChange={(e) =>
+                    setClearanceForm({
+                      ...clearanceForm,
+                      secondaryHeader: e.target.value,
+                    })
                   }
-                  label="Air Monitoring Required"
+                  placeholder="Enter secondary header text"
+                  helperText="This will appear as a smaller header beneath the site name on the cover page"
                 />
               </Grid>
               <Grid item xs={12}>

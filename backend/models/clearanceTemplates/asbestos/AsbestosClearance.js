@@ -25,6 +25,15 @@ const asbestosClearanceSchema = new mongoose.Schema(
       enum: ["Non-friable", "Friable", "Mixed", "Complex"],
       required: true,
     },
+    jurisdiction: {
+      type: String,
+      enum: ["ACT", "NSW"],
+      required: true,
+    },
+    secondaryHeader: {
+      type: String,
+      required: false,
+    },
     LAA: {
       type: String,
       required: true,
@@ -46,6 +55,10 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     sitePlanFile: {
       type: String, // Will store the file path or base64 data
+    },
+    sitePlanSource: {
+      type: String,
+      enum: ["uploaded", "drawn"],
     },
     jobSpecificExclusions: {
       type: String, // Job-specific exclusions text
@@ -76,9 +89,24 @@ const asbestosClearanceSchema = new mongoose.Schema(
         enum: ["non-friable", "friable"],
         required: true,
       },
-      photograph: {
-        type: String, // Base64 image data
-      },
+      photographs: [{
+        data: {
+          type: String, // Base64 image data
+          required: true,
+        },
+        includeInReport: {
+          type: Boolean,
+          default: true, // By default, include photos in report
+        },
+        uploadedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        photoNumber: {
+          type: Number,
+          required: false,
+        },
+      }],
       notes: {
         type: String,
       },

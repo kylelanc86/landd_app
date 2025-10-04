@@ -86,7 +86,7 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
@@ -94,12 +94,15 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       inspectionTime,
       status: status || "in progress",
       clearanceType,
+      jurisdiction: jurisdiction || "ACT",
+      secondaryHeader: secondaryHeader || "",
       LAA,
       asbestosRemovalist,
       airMonitoring: airMonitoring || false,
       airMonitoringReport: airMonitoringReport || null,
       sitePlan: sitePlan || false,
       sitePlanFile: sitePlanFile || null,
+      ...(sitePlanSource && { sitePlanSource }),
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
       createdBy: req.user.id,
@@ -128,7 +131,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes, revision, revisionReasons } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes, revision, revisionReasons } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -140,12 +143,19 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.inspectionTime = inspectionTime || clearance.inspectionTime;
     clearance.status = status || clearance.status;
     clearance.clearanceType = clearanceType || clearance.clearanceType;
+    clearance.jurisdiction = jurisdiction || clearance.jurisdiction;
+    clearance.secondaryHeader = secondaryHeader !== undefined ? secondaryHeader : clearance.secondaryHeader;
     clearance.LAA = LAA || clearance.LAA;
     clearance.asbestosRemovalist = asbestosRemovalist || clearance.asbestosRemovalist;
     clearance.airMonitoring = airMonitoring !== undefined ? airMonitoring : clearance.airMonitoring;
     clearance.airMonitoringReport = airMonitoringReport !== undefined ? airMonitoringReport : clearance.airMonitoringReport;
     clearance.sitePlan = sitePlan !== undefined ? sitePlan : clearance.sitePlan;
     clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
+    if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
+      clearance.sitePlanSource = sitePlanSource;
+    } else if (sitePlanSource === null) {
+      clearance.sitePlanSource = undefined; // Remove the field instead of setting to null
+    }
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
     clearance.updatedBy = req.user.id;
@@ -217,16 +227,16 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
 // Upload air monitoring report
 router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { reportData, shiftDate, shiftId } = req.body; // Expecting base64 data and metadata
+    const { reportData, shiftDate, shiftId, airMonitoring } = req.body; // Expecting base64 data and metadata
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
-    // Validate that air monitoring is enabled
-    if (!clearance.airMonitoring) {
-      return res.status(400).json({ message: "Air monitoring must be enabled to upload a report" });
+    // Enable air monitoring when uploading a report (new approach)
+    if (airMonitoring !== undefined) {
+      clearance.airMonitoring = airMonitoring;
     }
 
     clearance.airMonitoringReport = reportData;
@@ -539,6 +549,113 @@ router.delete("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), asyn
     res.json(populatedClearance);
   } catch (error) {
     console.error("Error deleting clearance item:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Add photo to clearance item
+router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { photoData, includeInReport = true } = req.body;
+
+    if (!photoData) {
+      return res.status(400).json({ message: "Photo data is required" });
+    }
+
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    // Initialize photographs array if it doesn't exist
+    if (!item.photographs) {
+      item.photographs = [];
+    }
+
+    // Calculate next photo number for this item
+    const existingPhotoNumbers = item.photographs.map(p => p.photoNumber || 0);
+    const nextPhotoNumber = existingPhotoNumbers.length > 0 ? Math.max(...existingPhotoNumbers) + 1 : 1;
+    
+    // If this is the first photo and no photo numbers exist, start from 1
+    const actualPhotoNumber = item.photographs.length === 0 ? 1 : nextPhotoNumber;
+
+    // Add new photo
+    item.photographs.push({
+      data: photoData,
+      includeInReport: includeInReport,
+      uploadedAt: new Date(),
+      photoNumber: actualPhotoNumber,
+    });
+
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.status(201).json(item);
+  } catch (error) {
+    console.error("Error adding photo to clearance item:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Delete photo from clearance item
+router.delete("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photoIndex = item.photographs.findIndex(photo => photo._id.toString() === req.params.photoId);
+    if (photoIndex === -1) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    item.photographs.splice(photoIndex, 1);
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.json({ message: "Photo deleted successfully", item });
+  } catch (error) {
+    console.error("Error deleting photo from clearance item:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Toggle photo inclusion in report
+router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    photo.includeInReport = !photo.includeInReport;
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.json({ message: "Photo inclusion toggled successfully", item });
+  } catch (error) {
+    console.error("Error toggling photo inclusion:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

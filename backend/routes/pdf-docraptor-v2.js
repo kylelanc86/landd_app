@@ -10,13 +10,64 @@ const auth = require('../middleware/auth');
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
 
+// Custom date formatting function for CLEARANCE_DATE placeholder only
+const formatClearanceDate = (dateString) => {
+  if (!dateString) return 'Unknown';
+  const date = new Date(dateString);
+  const day = date.getDate().toString().padStart(2, '0');
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const month = monthNames[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+};
+
 // Performance monitoring removed
 
 /**
  * Generate complete HTML content for clearance report using DocRaptor-optimized templates
  */
-const generateClearanceHTMLV2 = async (clearanceData) => {
+// Generate conditional attachment text based on what attachments are present
+const generateAttachmentText = (clearanceData) => {
+  const hasPhotos = clearanceData.items && clearanceData.items.some(item => 
+    item.photographs && item.photographs.some(photo => photo.includeInReport)
+  );
+  const hasSitePlan = clearanceData.sitePlan && clearanceData.sitePlanFile;
+  const hasAirMonitoring = clearanceData.airMonitoring && clearanceData.airMonitoringReport;
+
+  // No photos, site plan, or air monitoring report
+  if (!hasPhotos && !hasSitePlan && !hasAirMonitoring) {
+    return ''; // No text
+  }
+
+  // No site plan or air monitoring report (only photos)
+  if (!hasSitePlan && !hasAirMonitoring) {
+    return 'Photographs of the Asbestos Removal Area are presented in Appendix A.';
+  }
+
+  // Site plan but no air monitoring report
+  if (hasSitePlan && !hasAirMonitoring) {
+    return 'Photographs of the Asbestos Removal Area are presented in Appendix A and a site plan is presented in Appendix B.';
+  }
+
+  // Site plan and air monitoring report attached
+  if (hasSitePlan && hasAirMonitoring) {
+    return 'Photographs of the Asbestos Removal Area are presented in Appendix A and a site plan is presented in Appendix B. The air monitoring report for these works is presented in Appendix C.';
+  }
+
+  // Only air monitoring report (no site plan)
+  if (!hasSitePlan && hasAirMonitoring) {
+    return 'Photographs of the Asbestos Removal Area are presented in Appendix A. The air monitoring report for these works is presented in Appendix C.';
+  }
+
+  return ''; // Fallback
+};
+
+const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
   try {
+    console.log("=== PDF GENERATION STARTED ===");
+    console.log("ClearanceData received:", clearanceData);
+    console.log("ClearanceData items:", clearanceData?.items);
     
     // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosClearance');
@@ -106,8 +157,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const populatedCover = coverTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[SECONDARY_HEADER\]/g, clearanceData.secondaryHeader || '')
       .replace(/\[JOB_REFERENCE\]/g, clearanceData.projectId?.projectID || 'Unknown')
-      .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`)
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
@@ -182,9 +234,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
-      .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: Asbestos Clearance Report - ${clearanceData.projectId?.name || 'Unknown'} (${clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: Asbestos Clearance Report - ${clearanceData.projectId?.name || 'Unknown'} (${formatClearanceDate(clearanceData.clearanceDate)}).pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
       .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateRevisionHistory());
@@ -195,15 +247,15 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       
       // If no items, show basic headers without Level/Floor
       if (items.length === 0) {
-        return '<th>Item Description</th><th>Material Type</th><th>Asbestos Type</th>';
+        return '<th>Item Description</th><th style="width: 18%;">Material Type</th><th style="width: 12%;">Asbestos Type</th><th style="width: 10%;">Photo No.</th>';
       }
       
       const hasLevelFloor = items.some(item => item.levelFloor && item.levelFloor.trim() !== '');
       
       if (hasLevelFloor) {
-        return '<th>Level/Floor</th><th>Item Description</th><th>Material Type</th><th>Asbestos Type</th>';
+        return '<th>Level/Floor</th><th>Item Description</th><th style="width: 18%;">Material Type</th><th style="width: 12%;">Asbestos Type</th><th style="width: 10%;">Photo No.</th>';
       } else {
-        return '<th>Item Description</th><th>Material Type</th><th>Asbestos Type</th>';
+        return '<th>Item Description</th><th style="width: 18%;">Material Type</th><th style="width: 12%;">Asbestos Type</th><th style="width: 10%;">Photo No.</th>';
       }
     };
 
@@ -212,11 +264,32 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       const items = clearanceData.items || [];
       
       if (items.length === 0) {
-        const colspan = items.some(item => item.levelFloor && item.levelFloor.trim() !== '') ? 4 : 3;
+        const colspan = items.some(item => item.levelFloor && item.levelFloor.trim() !== '') ? 5 : 4;
         return `<tr><td colspan="${colspan}" style="text-align: center; font-style: italic;">No clearance items found</td></tr>`;
       }
       
-      const tableRows = items.map((item, index) => {
+      // First, collect all photos across all items to assign sequential numbers
+      let globalPhotoCounter = 1;
+      const itemsWithPhotoNumbers = items.map((item, index) => {
+        const photos = item.photographs || [];
+        const includedPhotos = photos.filter(p => p.includeInReport);
+        
+        const itemWithSequentialPhotos = {
+          ...item,
+          sequentialPhotoNumbers: []
+        };
+        
+        if (includedPhotos.length > 0) {
+          includedPhotos.forEach(() => {
+            itemWithSequentialPhotos.sequentialPhotoNumbers.push(globalPhotoCounter);
+            globalPhotoCounter++;
+          });
+        }
+        
+        return itemWithSequentialPhotos;
+      });
+
+      const tableRows = itemsWithPhotoNumbers.map((item, index) => {
         // Format asbestos type properly
         const formattedAsbestosType = item.asbestosType 
           ? item.asbestosType.charAt(0).toUpperCase() + item.asbestosType.slice(1).replace('-', '-')
@@ -232,6 +305,18 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         const locationDescription = item.locationDescription || 'Unknown Location';
         const itemDescription = `${roomArea} - ${locationDescription}`;
         
+        // Generate photo numbers text using sequential numbers
+        let photoNumbersText = 'No photos';
+        if (item.sequentialPhotoNumbers.length > 0) {
+          if (item.sequentialPhotoNumbers.length === 1) {
+            photoNumbersText = item.sequentialPhotoNumbers[0].toString();
+          } else {
+            const firstNumber = item.sequentialPhotoNumbers[0];
+            const lastNumber = item.sequentialPhotoNumbers[item.sequentialPhotoNumbers.length - 1];
+            photoNumbersText = firstNumber === lastNumber ? firstNumber.toString() : `${firstNumber}-${lastNumber}`;
+          }
+        }
+        
         // Only show Level/Floor column if at least one item has it
         const hasLevelFloor = items.some(item => item.levelFloor && item.levelFloor.trim() !== '');
         
@@ -241,12 +326,14 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
             <td>${itemDescription}</td>
             <td>${materialType}</td>
             <td>${formattedAsbestosType}</td>
+            <td>${photoNumbersText}</td>
           </tr>`;
         } else {
           return `<tr>
             <td>${itemDescription}</td>
             <td>${materialType}</td>
             <td>${formattedAsbestosType}</td>
+            <td>${photoNumbersText}</td>
           </tr>`;
         }
       }).join('');
@@ -259,30 +346,59 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       // Use actual clearance items if provided, otherwise use sample data
       const clearanceItems = clearanceData.items || clearanceData.clearanceItems || clearanceData.removalItems || clearanceData.asbestosItems || [];
       
-      // Filter out items that don't have photographs
-      const itemsWithPhotos = clearanceItems.filter(item => 
-        item.photograph && item.photograph.trim() !== ''
-      );
+      console.log("=== PDF GENERATION DEBUG ===");
+      console.log("ClearanceData items:", clearanceData.items);
+      console.log("ClearanceItems found:", clearanceItems);
+      console.log("ClearanceItems length:", clearanceItems.length);
       
+      // Collect all photos that should be included in the report
+      const photosForReport = [];
       
-      if (itemsWithPhotos.length === 0) {
+      clearanceItems.forEach((item, index) => {
+        console.log(`Item ${index}:`, item);
+        console.log(`Item ${index} photographs array:`, item.photographs);
+        
+        // Add photographs that are marked for inclusion in report
+        if (item.photographs && Array.isArray(item.photographs)) {
+          console.log(`Item ${index} has ${item.photographs.length} photos in array`);
+          item.photographs.forEach((photo, photoIndex) => {
+            console.log(`Photo ${photoIndex} in item ${index}:`, photo);
+            console.log(`Photo ${photoIndex} includeInReport:`, photo.includeInReport);
+            if (photo.includeInReport) {
+              console.log(`Adding photo ${photoIndex} from item ${index} to report`);
+              photosForReport.push({
+                photoUrl: photo.data,
+                levelFloor: item.levelFloor,
+                roomArea: item.roomArea,
+                materialDescription: item.locationDescription
+              });
+            }
+          });
+        }
+      });
+      
+      console.log("Total photos for report:", photosForReport.length);
+      console.log("Photos for report:", photosForReport);
+      
+      if (photosForReport.length === 0) {
+        console.log("No photos found - returning placeholder");
         return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
       }
       
       // Generate pages with 2 photos each using template
       const pages = [];
       
-      for (let i = 0; i < itemsWithPhotos.length; i += 2) {
-        const pagePhotos = itemsWithPhotos.slice(i, i + 2);
-        const photoItems = pagePhotos.map((item, pageIndex) => {
+      for (let i = 0; i < photosForReport.length; i += 2) {
+        const pagePhotos = photosForReport.slice(i, i + 2);
+        const photoItems = pagePhotos.map((photo, pageIndex) => {
           const photoNumber = i + pageIndex + 1;
           return photoItemTemplate
-            .replace(/\[PHOTO_URL\]/g, item.photograph)
+            .replace(/\[PHOTO_URL\]/g, photo.photoUrl)
             .replace(/\[PHOTO_NUMBER\]/g, photoNumber.toString())
-            .replace(/\[LEVEL_FLOOR\]/g, item.levelFloor || 'Not specified')
-            .replace(/\[LEVEL_FLOOR_DISPLAY\]/g, item.levelFloor ? 'block' : 'none')
-            .replace(/\[ROOM_AREA\]/g, item.roomArea || 'Unknown Room/Area')
-            .replace(/\[MATERIAL_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location');
+            .replace(/\[LEVEL_FLOOR\]/g, photo.levelFloor || 'Not specified')
+            .replace(/\[LEVEL_FLOOR_DISPLAY\]/g, photo.levelFloor ? 'block' : 'none')
+            .replace(/\[ROOM_AREA\]/g, photo.roomArea || 'Unknown Room/Area')
+            .replace(/\[MATERIAL_DESCRIPTION\]/g, photo.materialDescription || 'Unknown Location');
         }).join('');
         
         // Use the photo page template and replace all placeholders
@@ -295,7 +411,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         pages.push(page);
         
         // Add page break between pages (but not after the last page)
-        if (i + 2 < itemsWithPhotos.length) {
+        if (i + 2 < photosForReport.length) {
           pages.push('<div class="page-break"></div>');
         }
       }
@@ -319,7 +435,7 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     const populatedInspectionDetails = inspectionDetailsTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-      .replace(/\[CLEARANCE_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[ASBESTOS_TYPE\]/g, clearanceData.clearanceType || 'Non-friable')
@@ -338,7 +454,8 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       .replace(/\[INSPECTION_EXCLUSIONS_CONTENT\]/g, inspectionExclusionsContent)
       .replace(/\[CLEARANCE_CERTIFICATION_TITLE\]/g, templateContent?.standardSections?.clearanceCertificationTitle || 'CLEARANCE CERTIFICATION')
       .replace(/\[CLEARANCE_CERTIFICATION_CONTENT\]/g, clearanceCertificationContent)
-      .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent);
+      .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent)
+      .replace(/\[ATTACHMENTS\]/g, generateAttachmentText(clearanceData));
 
     // Prepare background information template content placeholders (async operations)
     const backgroundInformationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, templateData) : 'Background information content not found';
@@ -380,7 +497,9 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
     
     // Check if we have any photographs
     const clearanceItems = clearanceData.items || clearanceData.clearanceItems || clearanceData.removalItems || clearanceData.asbestosItems || [];
-    const hasPhotographs = clearanceItems.some(item => item.photograph && item.photograph.trim() !== '');
+    const hasPhotographs = clearanceItems.some(item => 
+      item.photographs && Array.isArray(item.photographs) && item.photographs.length > 0
+    );
 
     // Include Appendix A only if we have photographs
     if (hasPhotographs) {
@@ -392,6 +511,8 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
 
       // Generate photos section completely independently (no template mixing)
+      console.log("=== ABOUT TO GENERATE PHOTOS SECTION ===");
+      console.log("ClearanceData at photos generation:", clearanceData);
       const photosSection = generateClearancePhotographsContent();
 
       appendixContent += `
@@ -422,11 +543,15 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
       // Add site plan content page if it's an image
       const isSitePlanImage = clearanceData.sitePlanFile && (
         clearanceData.sitePlanFile.startsWith('/9j/') || 
-        clearanceData.sitePlanFile.startsWith('iVBORw0KGgo')
+        clearanceData.sitePlanFile.startsWith('iVBORw0KGgo') ||
+        clearanceData.sitePlanFile.startsWith('data:image/')
       );
       
       if (isSitePlanImage) {
+        console.log(`[${pdfId}] Generating site plan content page for image data`);
         const sitePlanContentPage = generateSitePlanContentPage(clearanceData, 'B', logoBase64);
+        console.log(`[${pdfId}] Site plan content page length: ${sitePlanContentPage.length} characters`);
+        console.log(`[${pdfId}] Site plan content contains page-break-after: ${sitePlanContentPage.includes('page-break-after')}`);
         appendixContent += `
             <!-- Appendix B Site Plan Content Page -->
             ${sitePlanContentPage}
@@ -591,6 +716,22 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
             margin: 0;
           }
 
+          /* Site plan page header and footer styling */
+          .site-plan-page .header {
+            width: 100vh !important;
+            box-sizing: border-box !important;
+          }
+
+          .site-plan-page .footer {
+            width: calc(100vh - 96px) !important;
+            box-sizing: border-box !important;
+            position: absolute !important;
+            left: 48px !important;
+            right: auto !important;
+            bottom: 16px !important;
+            margin: 0 !important;
+          }
+
           .logo {
             width: 243px;
             height: auto;
@@ -649,6 +790,61 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
             object-fit: contain !important;
             display: block !important;
           }
+
+          /* Landscape orientation for site plan pages */
+          .site-plan-page {
+            page-break-before: always;
+            page-break-after: avoid !important;
+            page-break-inside: avoid;
+            transform: rotate(0deg);
+            width: 100vh !important;
+            height: 100vw !important;
+            box-sizing: border-box !important;
+          }
+
+          /* Force no page break after site plan pages */
+          .site-plan-page + * {
+            page-break-before: avoid !important;
+          }
+
+          /* Prevent any automatic page breaks after landscape pages */
+          .site-plan-page:last-child {
+            page-break-after: avoid !important;
+          }
+
+          /* Use named page for landscape site plan pages */
+          @page site-plan-landscape {
+            size: A4 landscape;
+          }
+
+          .site-plan-page {
+            page: site-plan-landscape;
+          }
+
+          /* Reduce content padding for site plan pages */
+          .site-plan-page .content {
+            padding: 5px 24px 10px 24px !important;
+            min-height: auto !important;
+            height: auto !important;
+            max-height: calc(100vh - 150px) !important;
+            overflow: hidden !important;
+          }
+
+          /* Site plan container styling */
+          .site-plan-container {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 10px !important;
+            width: calc(100vh - 80px) !important;
+            max-width: calc(100vh - 80px) !important;
+            box-sizing: border-box !important;
+          }
+
+          .site-plan-container img {
+            border-radius: 4px;
+            max-height: calc(100vw - 200px) !important;
+            object-fit: contain !important;
+          }
+
         </style>
       </head>
       <body>
@@ -666,7 +862,6 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
         
         <!-- Background Information Page -->
           ${populatedBackgroundInformation}
-        ${appendixContent ? '<div class="page-break"></div>' : ''}
         
         <!-- Appendix Content -->
         ${appendixContent}
@@ -691,17 +886,31 @@ const generateClearanceHTMLV2 = async (clearanceData) => {
 const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fileField = 'sitePlanFile', title = 'SITE PLAN', figureTitle = 'Asbestos Removal Site Plan') => {
   // Determine the file type and create appropriate HTML
   const fileData = data[fileField];
-  const fileType = fileData.startsWith('/9j/') ? 'image/jpeg' : 
-                  fileData.startsWith('iVBORw0KGgo') ? 'image/png' : 
-                  'application/pdf';
+  
+  // Check if it's already a data URL
+  const isDataUrl = fileData.startsWith('data:');
+  
+  let fileType, imageSrc;
+  
+  if (isDataUrl) {
+    // It's already a complete data URL
+    imageSrc = fileData;
+    fileType = 'image';
+  } else {
+    // It's base64 data without the data URL prefix
+    fileType = fileData.startsWith('/9j/') ? 'image/jpeg' : 
+               fileData.startsWith('iVBORw0KGgo') ? 'image/png' : 
+               'application/pdf';
+    imageSrc = `data:${fileType};base64,${fileData}`;
+  }
   
   let content = '';
   
-  if (fileType.startsWith('image/')) {
-    // For images, embed directly with caption
+  if (fileType.startsWith('image/') || isDataUrl) {
+    // For images, embed directly with caption in a grey bordered box
     content = `
-      <div class="file-container" style="width: calc(100% - 96px); margin: 0 auto; padding: 0;">
-        <img src="data:${fileType};base64,${fileData}" 
+      <div class="site-plan-container" style="width: calc(100vh - 80px); margin: 0 auto; padding: 10px; border: 2px solid #ccc; background-color: #f9f9f9; border-radius: 8px; max-width: calc(100vh - 80px); box-sizing: border-box;">
+        <img src="${imageSrc}" 
              alt="${title}" 
              style="width: 100%; height: auto; object-fit: contain; display: block;" />
         <div style="font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 10px;">
@@ -723,7 +932,7 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
   }
   
   return `
-        <div class="page">
+        <div class="page site-plan-page">
           <div class="header">
             <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Company Logo" />
             <div class="company-details">
@@ -808,7 +1017,13 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
   const pdfId = `clearance-v2-${Date.now()}`;
   
   try {
+    console.log("=== PDF GENERATION ENDPOINT CALLED ===");
+    console.log("Request body:", req.body);
+    
     const { clearanceData } = req.body;
+    
+    console.log("ClearanceData extracted:", clearanceData);
+    console.log("ClearanceData items:", clearanceData?.items);
     
     if (!clearanceData) {
       return res.status(400).json({ error: 'Clearance data is required' });
@@ -821,7 +1036,19 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     }
 
     // Generate HTML content using new templates
-    const htmlContent = await generateClearanceHTMLV2(clearanceData);
+    const htmlContent = await generateClearanceHTMLV2(clearanceData, pdfId);
+
+    // DIAGNOSTIC: Log HTML content length and structure
+    console.log(`[${pdfId}] HTML Content Length: ${htmlContent.length} characters`);
+    console.log(`[${pdfId}] HTML contains site-plan-page: ${htmlContent.includes('site-plan-page')}`);
+    console.log(`[${pdfId}] HTML contains site-plan-landscape: ${htmlContent.includes('site-plan-landscape')}`);
+    console.log(`[${pdfId}] HTML contains page-break-after: ${htmlContent.includes('page-break-after')}`);
+    
+    // DIAGNOSTIC: Count page elements
+    const pageCount = (htmlContent.match(/<div class="page/g) || []).length;
+    const sitePlanPageCount = (htmlContent.match(/site-plan-page/g) || []).length;
+    console.log(`[${pdfId}] Total pages in HTML: ${pageCount}`);
+    console.log(`[${pdfId}] Site plan pages: ${sitePlanPageCount}`);
 
     // Generate filename
     const projectId = clearanceData.projectId?.projectID || clearanceData.project?.projectID || clearanceData.projectId || 'Unknown';
@@ -834,12 +1061,24 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       // DocRaptor-specific options for better page handling
       page_size: 'A4',
       prince_options: {
-        page_margin: '0',
+        page_margin: '0.5in',
         media: 'print',
         html_mode: 'quirks'  // Force consistent rendering
       }
     });
 
+    // DIAGNOSTIC: Log PDF generation results
+    console.log(`[${pdfId}] DocRaptor PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+
+    // DIAGNOSTIC: Save HTML to file for inspection (temporary debugging)
+    if (process.env.NODE_ENV === 'development') {
+      const fs = require('fs');
+      const path = require('path');
+      const htmlFilePath = path.join(__dirname, '..', 'debug', `clearance-${pdfId}.html`);
+      fs.mkdirSync(path.dirname(htmlFilePath), { recursive: true });
+      fs.writeFileSync(htmlFilePath, htmlContent);
+      console.log(`[${pdfId}] HTML content saved to: ${htmlFilePath}`);
+    }
 
 
     // Handle PDF merging for site plan and air monitoring reports
@@ -856,8 +1095,8 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       }
     }
 
-    // If there's a site plan PDF, merge it with the generated PDF
-    if (clearanceData.sitePlan && clearanceData.sitePlanFile && !clearanceData.sitePlanFile.startsWith('/9j/') && !clearanceData.sitePlanFile.startsWith('iVBORw0KGgo')) {
+    // If there's a site plan PDF (not an image), merge it with the generated PDF
+    if (clearanceData.sitePlan && clearanceData.sitePlanFile && !clearanceData.sitePlanFile.startsWith('/9j/') && !clearanceData.sitePlanFile.startsWith('iVBORw0KGgo') && !clearanceData.sitePlanFile.startsWith('data:image/')) {
       try {
         const mergedPdf = await mergePDFs(finalPdfBuffer, clearanceData.sitePlanFile);
         finalPdfBuffer = mergedPdf; // Update the final buffer
@@ -1862,7 +2101,8 @@ const generateAssessmentHTML = async (assessmentData) => {
       // Add site plan content page if it's an image
       const isSitePlanImage = assessmentData.sitePlanFile && (
         assessmentData.sitePlanFile.startsWith('/9j/') || 
-        assessmentData.sitePlanFile.startsWith('iVBORw0KGgo')
+        assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
+        assessmentData.sitePlanFile.startsWith('data:image/')
       );
 
       if (isSitePlanImage) {

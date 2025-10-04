@@ -46,7 +46,8 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:3000',
-      'https://app.landd.com.au'
+      'https://app.landd.com.au',
+      'https://landd-app-dev-front.onrender.com',
     ];
     
     // Allow requests with no origin (like mobile apps or curl requests)
