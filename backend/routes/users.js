@@ -179,7 +179,7 @@ router.post('/', auth, async (req, res) => {
 // Update user
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, isActive, licences, signature, workingHours, labApprovals, canSetJobComplete, labSignatory } = req.body;
+    const { firstName, lastName, email, role, phone, isActive, licences, signature, chargeOutRate, workingHours, labApprovals, canSetJobComplete, labSignatory } = req.body;
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -196,6 +196,7 @@ router.put('/:id', auth, async (req, res) => {
     if (typeof isActive === 'boolean') user.isActive = isActive;
     if (licences !== undefined) user.licences = licences;
     if (signature !== undefined) user.signature = signature;
+    if (chargeOutRate !== undefined) user.chargeOutRate = parseFloat(chargeOutRate) || 0;
     if (workingHours !== undefined) user.workingHours = workingHours;
     if (labApprovals !== undefined) user.labApprovals = labApprovals;
     if (canSetJobComplete !== undefined) user.canSetJobComplete = canSetJobComplete;

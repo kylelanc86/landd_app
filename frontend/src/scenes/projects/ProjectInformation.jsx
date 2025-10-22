@@ -192,6 +192,7 @@ const ProjectInformation = () => {
     users: [],
     categories: [],
     notes: "",
+    budget: 0,
     isLargeProject: false,
     projectContact: {
       name: "",
@@ -562,15 +563,11 @@ const ProjectInformation = () => {
 
   const generateNextProjectId = useCallback(async () => {
     try {
-      const response = await projectService.getAll();
+      // Fetch all projects with a high limit to ensure we get the actual highest project ID
+      const response = await projectService.getAll({ limit: 10000 });
 
       // Handle nested response structure where projects might be in response.data.data
       const projects = response.data?.data || response.data;
-
-      // Log sample project structure
-      if (projects && Array.isArray(projects) && projects.length > 0) {
-      } else {
-      }
 
       // Ensure we have a valid projects array
       if (!Array.isArray(projects)) {
@@ -1129,7 +1126,12 @@ const ProjectInformation = () => {
     setRefreshDialogOpen(false);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSaveAndContinue = async (e) => {
+    e.preventDefault();
+    await handleSubmit(e, false); // Pass false to indicate don't navigate away
+  };
+
+  const handleSubmit = async (e, shouldNavigate = true) => {
     e.preventDefault();
 
     // Prevent multiple submissions
@@ -1308,7 +1310,7 @@ const ProjectInformation = () => {
         // Verify project ID is still unique before creating
         console.log("🔍 Verifying project ID uniqueness...");
         try {
-          const projects = await projectService.getAll();
+          const projects = await projectService.getAll({ limit: 10000 });
           const existingProjects = projects.data?.data || projects.data;
           const isDuplicate = existingProjects.some(
             (p) => p.projectID === projectId
@@ -1358,9 +1360,11 @@ const ProjectInformation = () => {
           responseId: response.data?._id,
         });
 
-        // Navigate to projects page after successful creation
-        navigate("/projects");
-        return; // Exit early to avoid the navigate("/projects") call
+        // Navigate to projects page after successful creation if shouldNavigate is true
+        if (shouldNavigate) {
+          navigate("/projects");
+        }
+        return; // Exit early
       }
 
       const operationEndTime = performance.now();
@@ -1388,8 +1392,10 @@ const ProjectInformation = () => {
         setOriginalForm(JSON.parse(JSON.stringify(form)));
         // Refresh audit trail after update
         await fetchAuditTrail(form._id);
-        // Navigate to projects page after successful update
-        navigate("/projects");
+        // Navigate to projects page after successful update if shouldNavigate is true
+        if (shouldNavigate) {
+          navigate("/projects");
+        }
       }
     } catch (error) {
       const operationEndTime = performance.now();
@@ -1622,7 +1628,14 @@ const ProjectInformation = () => {
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <Typography variant="h6" color="text.secondary">
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontSize: "1.56rem",
+                      color: "#2e7d32",
+                      fontWeight: 500,
+                    }}
+                  >
                     Project ID:{" "}
                     {isEditMode
                       ? form.projectID
@@ -1630,7 +1643,7 @@ const ProjectInformation = () => {
                       ? form.projectID
                       : isGeneratingId
                       ? "Generating..."
-                      : "Will be auto-generated"}
+                      : "Generated on Save"}
                   </Typography>
                   {!isEditMode && (
                     <Typography
@@ -1894,7 +1907,8 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              {/* Due Date, Status, and Work Order on same line */}
+              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   label="Due Date"
@@ -1912,25 +1926,7 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Department</InputLabel>
-                  <Select
-                    name="department"
-                    value={form.department}
-                    onChange={handleChange}
-                    label="Department"
-                  >
-                    {DEPARTMENTS.map((dept) => (
-                      <MenuItem key={dept} value={dept}>
-                        {dept}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <FormControl fullWidth required>
                   <InputLabel>Status</InputLabel>
                   <Select
@@ -1976,6 +1972,36 @@ const ProjectInformation = () => {
                 </FormControl>
               </Grid>
 
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Work Order/Job Reference"
+                  name="workOrder"
+                  value={form.workOrder}
+                  onChange={handleChange}
+                  placeholder="Enter work order or job reference number"
+                />
+              </Grid>
+
+              {/* Department and Categories on next line */}
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Department</InputLabel>
+                  <Select
+                    name="department"
+                    value={form.department}
+                    onChange={handleChange}
+                    label="Department"
+                  >
+                    {DEPARTMENTS.map((dept) => (
+                      <MenuItem key={dept} value={dept}>
+                        {dept}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
               <Grid item xs={12} md={6}>
                 <Autocomplete
                   multiple
@@ -2002,14 +2028,16 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Work Order/Job Reference"
-                  name="workOrder"
-                  value={form.workOrder}
+                  label="Project Budget ($)"
+                  name="budget"
+                  type="number"
+                  value={form.budget || 0}
                   onChange={handleChange}
-                  placeholder="Enter work order or job reference number"
+                  inputProps={{ min: 0, step: 0.01 }}
+                  helperText="Budget amount for project cost tracking and reporting"
                 />
               </Grid>
 
@@ -2021,20 +2049,31 @@ const ProjectInformation = () => {
                   value={form.notes}
                   onChange={handleChange}
                   multiline
-                  rows={4}
+                  rows={6}
+                  InputProps={{
+                    sx: {
+                      fontSize: "0.875rem",
+                      lineHeight: 1.3,
+                    },
+                  }}
+                  InputLabelProps={{
+                    sx: {
+                      fontSize: "0.875rem",
+                    },
+                  }}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography
                   variant="subtitle1"
-                  sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  sx={{ mt: 1, mb: 0, fontWeight: "bold" }}
                 >
                   Project Contact
                 </Typography>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
                 <TextField
                   fullWidth
                   label="Contact Name"
@@ -2045,7 +2084,7 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
                 <TextField
                   fullWidth
                   label="Contact Number"
@@ -2056,7 +2095,7 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
                 <TextField
                   fullWidth
                   label="Contact Email"
@@ -2071,13 +2110,13 @@ const ProjectInformation = () => {
               <Grid item xs={12}>
                 <Typography
                   variant="subtitle1"
-                  sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  sx={{ mt: 1, mb: 0, fontWeight: "bold" }}
                 >
                   Project Team
                 </Typography>
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid item xs={12} sx={{ pt: 0.5 }}>
                 <Autocomplete
                   multiple
                   options={users}
@@ -2140,12 +2179,20 @@ const ProjectInformation = () => {
                       Cancel
                     </Button>
                     <Button
+                      variant="outlined"
+                      color="primary"
+                      onClick={handleSaveAndContinue}
+                      disabled={saving}
+                    >
+                      Save and Continue
+                    </Button>
+                    <Button
                       type="submit"
                       variant="contained"
                       color="primary"
                       disabled={saving}
                     >
-                      {isEditMode ? "Update Project" : "Create Project"}
+                      {isEditMode ? "Update and Exit" : "Create and Exit"}
                     </Button>
                   </Box>
                 </Box>

@@ -49,6 +49,7 @@ const emptyForm = {
   isActive: true,
   licences: [],
   signature: "",
+  chargeOutRate: 0,
   workingHours: {
     monday: { enabled: false, hours: 0 },
     tuesday: { enabled: false, hours: 0 },
@@ -102,6 +103,7 @@ const EditUserPage = () => {
           isActive: user.isActive,
           licences: user.licences || [],
           signature: user.signature || "",
+          chargeOutRate: user.chargeOutRate || 0,
           workingHours: user.workingHours || {
             monday: { enabled: false, hours: 0 },
             tuesday: { enabled: false, hours: 0 },
@@ -335,6 +337,7 @@ const EditUserPage = () => {
             licence.state && licence.licenceNumber && licence.licenceType
         ), // Only include valid licences
         signature: form.signature || "",
+        chargeOutRate: parseFloat(form.chargeOutRate) || 0,
         workingHours: form.workingHours,
         labApprovals: form.labApprovals,
         canSetJobComplete: form.canSetJobComplete,
@@ -530,7 +533,17 @@ const EditUserPage = () => {
           </Stack>
 
           <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-            <FormControl fullWidth>
+            <TextField
+              label="Charge Out Rate ($/hr)"
+              name="chargeOutRate"
+              type="number"
+              value={form.chargeOutRate || 0}
+              onChange={handleChange}
+              inputProps={{ min: 0, step: 0.01 }}
+              sx={{ flex: 1 }}
+              helperText="Hourly rate for project cost calculations"
+            />
+            <FormControl sx={{ flex: 1 }}>
               <InputLabel>User Level</InputLabel>
               <Select
                 label="User Level"

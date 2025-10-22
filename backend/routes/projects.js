@@ -358,7 +358,8 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
         number: "",
         email: ""
       },
-      notes: req.body.notes || ""
+      notes: req.body.notes || "",
+      budget: parseFloat(req.body.budget) || 0
     });
     
     console.log('Project instance created:', project);
@@ -627,6 +628,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.isLargeProject = req.body.isLargeProject !== undefined ? req.body.isLargeProject : project.isLargeProject;
     project.projectContact = req.body.projectContact || project.projectContact;
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
+    project.budget = req.body.budget !== undefined ? parseFloat(req.body.budget) || 0 : project.budget;
 
     // Fix any string dates that might have been sent from frontend
     if (req.body.updatedAt && typeof req.body.updatedAt === 'string') {

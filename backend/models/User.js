@@ -223,6 +223,12 @@ const userSchema = new mongoose.Schema({
         }
       }
     }
+  },
+  chargeOutRate: {
+    type: Number,
+    required: false,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true

@@ -373,6 +373,21 @@ router.post("/", auth, async (req, res) => {
     const newTimesheet = await timesheet.save();
     console.log('Timesheet saved successfully:', newTimesheet);
     
+    // Add timesheet entry to project if it's project work
+    if (projectId && !isAdminWork && !isBreak) {
+      try {
+        await Project.findByIdAndUpdate(
+          projectId,
+          { $addToSet: { timesheetEntries: newTimesheet._id } },
+          { new: true }
+        );
+        console.log(`Added timesheet ${newTimesheet._id} to project ${projectId}`);
+      } catch (projectError) {
+        console.error('Error adding timesheet to project:', projectError);
+        // Don't fail the timesheet creation if project update fails
+      }
+    }
+    
     res.status(201).json(newTimesheet);
   } catch (error) {
     console.error("Error creating timesheet:", error);
@@ -390,6 +405,21 @@ router.delete("/:id", auth, async (req, res) => {
 
     if (!timesheet) {
       return res.status(404).json({ message: "Timesheet entry not found" });
+    }
+
+    // Remove from project if it had one
+    if (timesheet.projectId && !timesheet.isAdminWork && !timesheet.isBreak) {
+      try {
+        await Project.findByIdAndUpdate(
+          timesheet.projectId,
+          { $pull: { timesheetEntries: req.params.id } },
+          { new: true }
+        );
+        console.log(`Removed timesheet ${req.params.id} from project ${timesheet.projectId}`);
+      } catch (projectError) {
+        console.error('Error removing timesheet from project:', projectError);
+        // Don't fail the deletion if project update fails
+      }
     }
 
     await timesheet.deleteOne();
@@ -456,15 +486,53 @@ router.put("/:id", auth, async (req, res) => {
       updateData.projectInputType = null;
     }
 
-    // Find and update the timesheet
+    // Fetch the old timesheet first to check for project changes
+    const oldTimesheet = await Timesheet.findOne({ 
+      _id: req.params.id, 
+      userId: req.user._id 
+    });
+
+    if (!oldTimesheet) {
+      return res.status(404).json({ message: "Timesheet entry not found" });
+    }
+
+    const oldProjectId = oldTimesheet.projectId ? oldTimesheet.projectId.toString() : null;
+    const newProjectId = projectId || null;
+
+    // Update the timesheet
     const timesheet = await Timesheet.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
       updateData,
       { new: true }
     );
 
-    if (!timesheet) {
-      return res.status(404).json({ message: "Timesheet entry not found" });
+    // Handle project updates
+    // Remove from old project if it had one and (project changed OR became admin/break)
+    if (oldProjectId && (oldProjectId !== newProjectId || isAdminWork || isBreak)) {
+      try {
+        await Project.findByIdAndUpdate(
+          oldProjectId,
+          { $pull: { timesheetEntries: req.params.id } },
+          { new: true }
+        );
+        console.log(`Removed timesheet ${req.params.id} from old project ${oldProjectId}`);
+      } catch (projectError) {
+        console.error('Error removing timesheet from old project:', projectError);
+      }
+    }
+
+    // Add to new project if it's project work and (project changed OR was previously admin/break)
+    if (newProjectId && !isAdminWork && !isBreak && oldProjectId !== newProjectId) {
+      try {
+        await Project.findByIdAndUpdate(
+          newProjectId,
+          { $addToSet: { timesheetEntries: req.params.id } },
+          { new: true }
+        );
+        console.log(`Added timesheet ${req.params.id} to new project ${newProjectId}`);
+      } catch (projectError) {
+        console.error('Error adding timesheet to new project:', projectError);
+      }
     }
 
     console.log('Timesheet updated successfully:', timesheet);
@@ -585,7 +653,7 @@ router.put("/status/:date", auth, async (req, res) => {
         }
       }
 
-      // If status is finalised and no entries exist, create a default entry
+      // If status is finalised, validate that at least 7.5 hours have been entered
       if (status === "finalised") {
         try {
           const existingEntries = await Timesheet.find({
@@ -593,22 +661,36 @@ router.put("/status/:date", auth, async (req, res) => {
             date: date
           });
 
-          if (existingEntries.length === 0) {
-            const newEntry = new Timesheet({
-              userId: targetUserId,
-              date: date,
-              startTime: "09:00",
-              endTime: "17:00",
-              description: "Auto-generated entry for finalised status",
-              isAdminWork: true,
-              status: "finalised"
+          // Calculate total time for the day
+          let totalMinutes = 0;
+          existingEntries.forEach((entry) => {
+            if (!entry.isBreak) {
+              const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
+              const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+              const startTotalMinutes = startHours * 60 + startMinutes;
+              const endTotalMinutes = endHours * 60 + endMinutes;
+              let duration = endTotalMinutes - startTotalMinutes;
+              if (duration < 0) duration += 24 * 60;
+              totalMinutes += duration;
+            }
+          });
+
+          const totalHours = totalMinutes / 60;
+          
+          // Require at least 7.5 hours to finalize
+          if (totalHours < 7.5) {
+            console.log('Cannot finalize - insufficient hours:', totalHours);
+            return res.status(400).json({ 
+              message: `Cannot finalize timesheet. At least 7.5 hours required, but only ${totalHours.toFixed(1)} hours entered.` 
             });
-            await newEntry.save();
-            console.log('Created new entry for finalised status:', newEntry);
           }
+
+          console.log('Finalizing timesheet with', totalHours, 'hours');
         } catch (error) {
-          console.error('Error creating default entry for finalised status:', error);
-          // Continue execution even if creation fails
+          console.error('Error validating hours for finalise:', error);
+          return res.status(500).json({ 
+            message: "Error validating timesheet hours" 
+          });
         }
       }
 

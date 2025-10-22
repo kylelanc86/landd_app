@@ -16,7 +16,8 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import WarningIcon from "@mui/icons-material/Warning";
 
 import { DataGrid } from "@mui/x-data-grid";
 
@@ -110,10 +111,6 @@ const Users = () => {
     } catch (error) {
       console.error("Error updating user status:", error);
     }
-  };
-
-  const handleViewTimesheets = (userId) => {
-    navigate(`/timesheets/review?userId=${userId}`);
   };
 
   const columns = [
@@ -233,15 +230,6 @@ const Users = () => {
           >
             {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
           </IconButton>
-          {hasPermission(currentUser, "timesheets.approve") &&
-            params.row._id !== currentUser._id && (
-              <IconButton
-                onClick={() => handleViewTimesheets(params.row._id)}
-                title="View Timesheets"
-              >
-                <AccessTimeIcon />
-              </IconButton>
-            )}
         </Box>
       ),
       sortable: false,
@@ -258,20 +246,37 @@ const Users = () => {
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
           User Management
         </Typography>
-        {/* Only show Add User button for admin users */}
-        {currentUser.role === "admin" && (
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => navigate("/users/add")}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              "&:hover": { backgroundColor: theme.palette.secondary.dark },
-            }}
-          >
-            Add User
-          </Button>
-        )}
+        <Box display="flex" gap={2}>
+          {/* Show Timesheet Review button for users with timesheet approval permission */}
+          {hasPermission(currentUser, "timesheets.approve") && (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate("/timesheets/review")}
+              startIcon={<AssignmentIcon />}
+              sx={{
+                backgroundColor: theme.palette.success.main,
+                "&:hover": { backgroundColor: theme.palette.success.dark },
+              }}
+            >
+              Timesheet Review
+            </Button>
+          )}
+          {/* Only show Add User button for admin users */}
+          {currentUser.role === "admin" && (
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={() => navigate("/users/add")}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                "&:hover": { backgroundColor: theme.palette.secondary.dark },
+              }}
+            >
+              Add User
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* Users Table with Toggle */}
@@ -381,7 +386,7 @@ const Users = () => {
             {statusChangeType ? (
               <CheckCircleIcon sx={{ fontSize: 20 }} />
             ) : (
-              <AccessTimeIcon sx={{ fontSize: 20 }} />
+              <WarningIcon sx={{ fontSize: 20 }} />
             )}
           </Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
@@ -421,7 +426,7 @@ const Users = () => {
               variant="contained"
               color={statusChangeType ? "success" : "error"}
               startIcon={
-                statusChangeType ? <CheckCircleIcon /> : <AccessTimeIcon />
+                statusChangeType ? <CheckCircleIcon /> : <WarningIcon />
               }
               sx={{
                 minWidth: 120,

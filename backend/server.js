@@ -154,6 +154,7 @@ app.use('/api/xero', xeroRoutes);
     app.use('/api/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);
     app.use('/api/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
     app.use('/api/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
+    app.use('/api/uploaded-reports', requireAuth, checkTokenBlacklist, require('./routes/uploadedReports'));
 
     app.use('/api/report-templates', requireAuth, checkTokenBlacklist, reportTemplateRoutes);
     app.use('/api/pdf-docraptor-v2', requireAuth, checkTokenBlacklist, pdfDocRaptorV2Routes);

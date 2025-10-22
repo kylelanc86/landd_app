@@ -355,7 +355,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
       "Employee Name": `${entry.userId?.firstName} ${entry.userId?.lastName}`,
       "Start Time": entry.startTime,
       "End Time": entry.endTime,
-      "Total Hours": entry.totalHours,
+      "Time Logged": entry.totalHours,
       Description: entry.description,
       Type: "Timesheet Entry",
       Category: "Timesheet",
@@ -486,7 +486,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
                         <TableCell>Employee</TableCell>
                         <TableCell>Start Time</TableCell>
                         <TableCell>End Time</TableCell>
-                        <TableCell>Total Hours</TableCell>
+                        <TableCell>Time Logged</TableCell>
                         <TableCell>Description</TableCell>
                       </TableRow>
                     </TableHead>
@@ -514,6 +514,51 @@ const ProjectLogModal = ({ open, onClose, project }) => {
                           </TableCell>
                         </TableRow>
                       ))}
+                      {timesheets.length > 0 && (
+                        <TableRow
+                          sx={{
+                            backgroundColor: "rgba(0, 0, 0, 0.04)",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          <TableCell colSpan={4} align="right">
+                            <Typography
+                              variant="subtitle2"
+                              sx={{ fontWeight: "bold" }}
+                            >
+                              Total Hours:
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              variant="subtitle2"
+                              sx={{ fontWeight: "bold" }}
+                            >
+                              {timesheets
+                                .reduce((total, entry) => {
+                                  const hours =
+                                    entry.totalHours ||
+                                    (entry.startTime && entry.endTime
+                                      ? parseFloat(
+                                          calculateHours(
+                                            entry.startTime,
+                                            entry.endTime
+                                          )
+                                        )
+                                      : 0);
+                                  return (
+                                    total +
+                                    (typeof hours === "number"
+                                      ? hours
+                                      : parseFloat(hours) || 0)
+                                  );
+                                }, 0)
+                                .toFixed(2)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                      )}
                       {!timesheets.length && (
                         <TableRow>
                           <TableCell colSpan={6} align="center">

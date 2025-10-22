@@ -1274,8 +1274,10 @@ const Timesheets = () => {
                 : "";
             }}
             eventContent={(eventInfo) => {
+              // Calculate duration and determine if entry should use compact layout
               const duration = eventInfo.event.end - eventInfo.event.start;
-              const isShortEntry = duration <= 30 * 60 * 1000; // 30 minutes or less
+              const isShortEntry = duration <= 30 * 60 * 1000; // Entries 30 minutes or less get reduced text size
+              const isVeryShortEntry = duration < 15 * 60 * 1000; // Entries less than 15 minutes get no vertical padding
               const project = eventInfo.event.extendedProps.projectId
                 ? projects.find(
                     (p) => p._id === eventInfo.event.extendedProps.projectId
@@ -1314,12 +1316,13 @@ const Timesheets = () => {
                 }`;
               };
 
-              // For short entries, display content and time on one line
+              // For short entries (30 minutes or less), display content and time on one line with reduced text size
               if (isShortEntry) {
                 return (
                   <Box
                     sx={{
-                      p: 1,
+                      px: 0.75,
+                      py: isVeryShortEntry ? 0 : 0.75,
                       height: "100%",
                       display: "flex",
                       flexDirection: "row",
@@ -1329,23 +1332,28 @@ const Timesheets = () => {
                       opacity: isProcessing ? 0.7 : 1,
                       transition: "opacity 0.2s ease-in-out",
                       "& .event-content": {
-                        fontSize: "0.7rem",
+                        fontSize: "0.65rem",
                         fontWeight: 600,
-                        lineHeight: 1.2,
+                        lineHeight: 1.1,
                         color: theme.palette.common.white,
                         textShadow: "0 1px 2px rgba(0,0,0,0.3)",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
+                        flex: 1,
+                        minWidth: 0,
+                        margin: 0,
                       },
                       "& .event-time": {
-                        fontSize: "0.9rem",
-                        opacity: 0.9,
-                        fontWeight: 500,
+                        fontSize: "0.65rem",
+                        opacity: 0.95,
+                        fontWeight: 700,
                         color: theme.palette.common.white,
                         textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-                        marginLeft: "8px",
+                        marginLeft: isVeryShortEntry ? "4px" : "6px",
                         flexShrink: 0,
+                        whiteSpace: "nowrap",
+                        margin: 0,
                       },
                     }}
                   >
@@ -1574,6 +1582,42 @@ const Timesheets = () => {
         <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  label="Start Time"
+                  type="time"
+                  value={formData.startTime}
+                  onChange={(e) =>
+                    setFormData({ ...formData, startTime: e.target.value })
+                  }
+                  required
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  inputProps={{
+                    step: 300, // 5 min
+                  }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  label="Finish Time"
+                  type="time"
+                  value={formData.endTime}
+                  onChange={(e) =>
+                    setFormData({ ...formData, endTime: e.target.value })
+                  }
+                  required
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  inputProps={{
+                    step: 300, // 5 min
+                  }}
+                />
+              </Grid>
               <Grid item xs={12}>
                 <TextField
                   select

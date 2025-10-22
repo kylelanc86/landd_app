@@ -38,13 +38,21 @@ const categories = [
   },
 ];
 
-const ReportCategories = ({ onCategorySelect, selectedProjectId }) => {
+const ReportCategories = ({
+  onCategorySelect,
+  selectedProjectId,
+  availableCategories = [],
+}) => {
   const theme = useTheme();
-  const colors = tokens;
+
+  // Filter categories to only show those with available reports
+  const filteredCategories = categories.filter((category) =>
+    availableCategories.includes(category.id)
+  );
 
   return (
     <Grid container spacing={3}>
-      {categories.map((category) => (
+      {filteredCategories.map((category) => (
         <Grid item xs={12} sm={6} md={4} key={category.id}>
           <Card
             onClick={() => onCategorySelect(category.id)}

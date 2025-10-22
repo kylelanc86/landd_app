@@ -17,12 +17,15 @@ import {
   DialogContentText,
   DialogActions,
   TextField,
+  InputLabel,
+  Grid,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Cancel";
+import UploadIcon from "@mui/icons-material/Upload";
 import ReportCategories from "./ReportCategories";
 import ReportsList from "./ReportsList";
 import { useNavigate } from "react-router-dom";
@@ -46,6 +49,18 @@ const ProjectReports = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [logModalOpen, setLogModalOpen] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState([]);
+  const [checkingReports, setCheckingReports] = useState(true);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadForm, setUploadForm] = useState({
+    reportType: "",
+    reportDate: new Date().toISOString().split("T")[0],
+    description: "",
+    asbestosRemovalist: "",
+    status: "completed",
+    file: null,
+  });
+  const [uploading, setUploading] = useState(false);
 
   // Status editing state
   const [isEditingStatus, setIsEditingStatus] = useState(false);
@@ -89,6 +104,161 @@ const ProjectReports = () => {
     };
     loadProject();
   }, [projectId]);
+
+  // Check which report categories have data for this project
+  const checkAvailableCategories = useCallback(async () => {
+    if (!projectId) return;
+
+    setCheckingReports(true);
+    const available = [];
+
+    try {
+      // Check asbestos assessment reports
+      try {
+        const assessmentReports =
+          await reportService.getAsbestosAssessmentReports(projectId);
+        if (
+          assessmentReports &&
+          Array.isArray(assessmentReports) &&
+          assessmentReports.length > 0
+        ) {
+          available.push("asbestos-assessment");
+        }
+      } catch (error) {
+        console.log("No asbestos assessment reports found");
+      }
+
+      // Check asbestos removal jobs (air monitoring + clearances)
+      try {
+        // Check air monitoring reports
+        const airMonitoringResponse = await fetch(
+          `${
+            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+          }/asbestos-clearances/air-monitoring-reports/${projectId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        let hasAirMonitoring = false;
+        if (airMonitoringResponse.ok) {
+          const airMonitoringReports = await airMonitoringResponse.json();
+          hasAirMonitoring =
+            airMonitoringReports && airMonitoringReports.length > 0;
+        }
+
+        // Check clearances
+        const { default: asbestosClearanceService } = await import(
+          "../../services/asbestosClearanceService"
+        );
+        const { default: asbestosRemovalJobService } = await import(
+          "../../services/asbestosRemovalJobService"
+        );
+
+        // Check if there are completed asbestos removal jobs
+        const completedJobsResponse = await asbestosRemovalJobService.getAll();
+        const completedJobs =
+          completedJobsResponse.jobs || completedJobsResponse.data || [];
+        const hasCompletedJobs = completedJobs.some(
+          (job) =>
+            (job.projectId === projectId || job.projectId?._id === projectId) &&
+            job.status === "completed"
+        );
+
+        let hasClearances = false;
+        if (hasCompletedJobs) {
+          const clearancesResponse = await asbestosClearanceService.getAll();
+          let projectClearances = [];
+
+          if (clearancesResponse && Array.isArray(clearancesResponse)) {
+            projectClearances = clearancesResponse.filter(
+              (clearance) =>
+                clearance.projectId === projectId ||
+                clearance.projectId?._id === projectId
+            );
+          } else if (
+            clearancesResponse.clearances &&
+            Array.isArray(clearancesResponse.clearances)
+          ) {
+            projectClearances = clearancesResponse.clearances.filter(
+              (clearance) =>
+                clearance.projectId === projectId ||
+                clearance.projectId?._id === projectId
+            );
+          }
+
+          hasClearances = projectClearances.length > 0;
+        }
+
+        if (hasAirMonitoring || hasClearances) {
+          available.push("asbestos-removal-jobs");
+        }
+      } catch (error) {
+        console.log("No asbestos removal job reports found");
+      }
+
+      // Check fibre ID reports
+      try {
+        const fibreIdReports = await reportService.getFibreIdReports(projectId);
+        if (
+          fibreIdReports &&
+          Array.isArray(fibreIdReports) &&
+          fibreIdReports.length > 0
+        ) {
+          available.push("fibre-id");
+        }
+      } catch (error) {
+        console.log("No fibre ID reports found");
+      }
+
+      // Check uploaded reports
+      try {
+        const uploadedReportsResponse = await fetch(
+          `${
+            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+          }/uploaded-reports/project/${projectId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        if (uploadedReportsResponse.ok) {
+          const uploadedReports = await uploadedReportsResponse.json();
+
+          // Add categories based on uploaded report types
+          const uploadedCategories = uploadedReports.map(
+            (report) => report.reportType
+          );
+          const uniqueUploadedCategories = [...new Set(uploadedCategories)];
+
+          uniqueUploadedCategories.forEach((category) => {
+            if (!available.includes(category)) {
+              available.push(category);
+            }
+          });
+        }
+      } catch (error) {
+        console.log("No uploaded reports found");
+      }
+
+      setAvailableCategories(available);
+    } catch (error) {
+      console.error("Error checking available categories:", error);
+      setAvailableCategories([]);
+    } finally {
+      setCheckingReports(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (projectId) {
+      checkAvailableCategories();
+    }
+  }, [projectId, checkAvailableCategories]);
 
   // Handle status update
   const handleStatusUpdate = async () => {
@@ -300,6 +470,46 @@ const ProjectReports = () => {
           break;
       }
 
+      // Add uploaded reports for the selected category
+      try {
+        const uploadedReportsResponse = await fetch(
+          `${
+            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+          }/uploaded-reports/project/${projectId}?reportType=${selectedCategory}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        if (uploadedReportsResponse.ok) {
+          const uploadedReports = await uploadedReportsResponse.json();
+
+          // Map uploaded reports to standard report format
+          const mappedUploadedReports = uploadedReports.map((report) => ({
+            id: report._id,
+            date: report.reportDate,
+            description: report.description || report.originalFileName,
+            additionalInfo:
+              `Uploaded by ${report.uploadedBy?.firstName || ""} ${
+                report.uploadedBy?.lastName || ""
+              }`.trim() || "Unknown",
+            status: report.status,
+            type: "uploaded",
+            data: report,
+            asbestosRemovalist: report.asbestosRemovalist || "N/A",
+          }));
+
+          reportsData.push(...mappedUploadedReports);
+        }
+      } catch (error) {
+        console.log(
+          "No uploaded reports found for category:",
+          selectedCategory
+        );
+      }
+
       // Sort reports by date (newest first)
       reportsData.sort((a, b) => new Date(b.date) - new Date(a.date));
       setReports(reportsData);
@@ -489,6 +699,12 @@ const ProjectReports = () => {
       } else if (report.type === "fibre_id") {
         // Navigate to the fibre ID job details page
         navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
+      } else if (report.type === "uploaded") {
+        // Download the uploaded report file
+        const downloadUrl = `${
+          process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+        }/uploaded-reports/download/${report.data._id}`;
+        window.open(downloadUrl, "_blank");
       }
     } catch (err) {
       console.error("Error viewing report:", err);
@@ -650,6 +866,20 @@ const ProjectReports = () => {
       } else if (report.type === "fibre_id") {
         // For fibre ID reports, we'll navigate to the fibre ID job details page where download is available
         navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
+      } else if (report.type === "uploaded") {
+        // For uploaded reports, directly download the file
+        const downloadUrl = `${
+          process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+        }/uploaded-reports/download/${report.data._id}`;
+
+        // Create a temporary link element to trigger download
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = report.data.originalFileName;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
     } catch (err) {
       console.error("Error downloading report:", err);
@@ -806,6 +1036,68 @@ const ProjectReports = () => {
     setRevisionReason("");
   };
 
+  // Handle report upload
+  const handleUploadReport = async () => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadForm.file);
+      formData.append("reportType", uploadForm.reportType);
+      formData.append("reportDate", uploadForm.reportDate);
+      formData.append("description", uploadForm.description);
+      formData.append("status", uploadForm.status);
+      formData.append("projectId", projectId);
+
+      // Add type-specific fields
+      if (uploadForm.reportType === "clearance") {
+        formData.append("asbestosRemovalist", uploadForm.asbestosRemovalist);
+      }
+
+      const response = await fetch(
+        `${
+          process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+        }/uploaded-reports/upload`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to upload report");
+      }
+
+      await response.json();
+
+      showSnackbar("Report uploaded successfully", "success");
+
+      // Close dialog and reset form
+      setUploadDialogOpen(false);
+      setUploadForm({
+        reportType: "",
+        reportDate: new Date().toISOString().split("T")[0],
+        description: "",
+        asbestosRemovalist: "",
+        status: "completed",
+        file: null,
+      });
+
+      // Refresh available categories and reports
+      await checkAvailableCategories();
+      if (selectedCategory) {
+        await loadReports();
+      }
+    } catch (error) {
+      console.error("Error uploading report:", error);
+      showSnackbar("Failed to upload report. Please try again.", "error");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
@@ -933,14 +1225,22 @@ const ProjectReports = () => {
             )}
           </Box>
 
-          <Button
-            variant="outlined"
-            startIcon={<AssessmentIcon />}
-            onClick={() => setLogModalOpen(true)}
-            sx={{ ml: 2 }}
-          >
-            View Project Log
-          </Button>
+          <Box sx={{ display: "flex", gap: 2, ml: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<UploadIcon />}
+              onClick={() => setUploadDialogOpen(true)}
+            >
+              Upload Report
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AssessmentIcon />}
+              onClick={() => setLogModalOpen(true)}
+            >
+              View Project Log
+            </Button>
+          </Box>
         </Box>
       </Box>
 
@@ -952,11 +1252,37 @@ const ProjectReports = () => {
       )}
 
       {/* Categories or Reports List */}
-      {!selectedCategory ? (
-        <ReportCategories
-          onCategorySelect={setSelectedCategory}
-          selectedProjectId={projectId}
-        />
+      {checkingReports ? (
+        <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : !selectedCategory ? (
+        availableCategories.length > 0 ? (
+          <ReportCategories
+            onCategorySelect={setSelectedCategory}
+            selectedProjectId={projectId}
+            availableCategories={availableCategories}
+          />
+        ) : (
+          <Box sx={{ textAlign: "center", p: 4 }}>
+            <Typography variant="h5" gutterBottom>
+              No Reports Available
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              This project doesn't have any reports yet.
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => navigate("/projects")}
+              sx={{ mr: 2 }}
+            >
+              Back to Projects
+            </Button>
+            <Button variant="outlined" onClick={() => setLogModalOpen(true)}>
+              View Project Log
+            </Button>
+          </Box>
+        )
       ) : (
         <>
           <Button onClick={() => setSelectedCategory(null)} sx={{ mb: 3 }}>
@@ -1023,6 +1349,163 @@ const ProjectReports = () => {
             variant="contained"
           >
             Revise Report
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Upload Report Dialog */}
+      <Dialog
+        open={uploadDialogOpen}
+        onClose={() => setUploadDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Upload Report</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={3} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth required>
+                <InputLabel>Report Type</InputLabel>
+                <Select
+                  value={uploadForm.reportType}
+                  onChange={(e) =>
+                    setUploadForm({ ...uploadForm, reportType: e.target.value })
+                  }
+                  label="Report Type"
+                >
+                  <MenuItem value="asbestos-assessment">
+                    Asbestos Assessment Report
+                  </MenuItem>
+                  <MenuItem value="asbestos-removal-jobs">
+                    Asbestos Removal Report
+                  </MenuItem>
+                  <MenuItem value="clearance">
+                    Asbestos Clearance Report
+                  </MenuItem>
+                  <MenuItem value="fibre-id">Fibre ID Analysis Report</MenuItem>
+                  <MenuItem value="other">Other Report</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Report Date"
+                type="date"
+                value={uploadForm.reportDate}
+                onChange={(e) =>
+                  setUploadForm({ ...uploadForm, reportDate: e.target.value })
+                }
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={uploadForm.status}
+                  onChange={(e) =>
+                    setUploadForm({ ...uploadForm, status: e.target.value })
+                  }
+                  label="Status"
+                >
+                  <MenuItem value="completed">Completed</MenuItem>
+                  <MenuItem value="in_progress">In Progress</MenuItem>
+                  <MenuItem value="draft">Draft</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Description"
+                multiline
+                rows={3}
+                value={uploadForm.description}
+                onChange={(e) =>
+                  setUploadForm({ ...uploadForm, description: e.target.value })
+                }
+                placeholder="Enter a description of the report..."
+              />
+            </Grid>
+
+            {uploadForm.reportType === "clearance" && (
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Asbestos Removalist"
+                  value={uploadForm.asbestosRemovalist}
+                  onChange={(e) =>
+                    setUploadForm({
+                      ...uploadForm,
+                      asbestosRemovalist: e.target.value,
+                    })
+                  }
+                  placeholder="Name of the asbestos removalist company"
+                />
+              </Grid>
+            )}
+
+            <Grid item xs={12}>
+              <Button
+                variant="outlined"
+                component="label"
+                fullWidth
+                sx={{ py: 2 }}
+              >
+                {uploadForm.file
+                  ? uploadForm.file.name
+                  : "Choose File to Upload"}
+                <input
+                  type="file"
+                  hidden
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={(e) =>
+                    setUploadForm({
+                      ...uploadForm,
+                      file: e.target.files[0],
+                    })
+                  }
+                />
+              </Button>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setUploadDialogOpen(false);
+              setUploadForm({
+                reportType: "",
+                reportDate: new Date().toISOString().split("T")[0],
+                description: "",
+                asbestosRemovalist: "",
+                status: "completed",
+                file: null,
+              });
+            }}
+            disabled={uploading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUploadReport}
+            variant="contained"
+            disabled={
+              uploading ||
+              !uploadForm.reportType ||
+              !uploadForm.reportDate ||
+              !uploadForm.file
+            }
+            startIcon={
+              uploading ? <CircularProgress size={20} /> : <UploadIcon />
+            }
+          >
+            {uploading ? "Uploading..." : "Upload Report"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -17,6 +17,11 @@ import {
   TableRow,
   Button,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -62,9 +67,152 @@ const Reports = () => {
     pageSize: 50,
     page: 0,
   });
+  const [noReportsDialog, setNoReportsDialog] = useState({
+    open: false,
+    project: null,
+  });
 
   // Debounce search term to reduce API calls
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  // Function to check if a project has any reports
+  const checkProjectHasReports = useCallback(async (project) => {
+    try {
+      const { default: reportService } = await import(
+        "../../services/reportService"
+      );
+
+      // Check asbestos assessment reports
+      try {
+        const assessmentReports =
+          await reportService.getAsbestosAssessmentReports(project._id);
+        if (
+          assessmentReports &&
+          Array.isArray(assessmentReports) &&
+          assessmentReports.length > 0
+        ) {
+          return true;
+        }
+      } catch (error) {
+        // No assessment reports
+      }
+
+      // Check air monitoring reports
+      try {
+        const airMonitoringResponse = await fetch(
+          `${
+            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+          }/asbestos-clearances/air-monitoring-reports/${project._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        if (airMonitoringResponse.ok) {
+          const airMonitoringReports = await airMonitoringResponse.json();
+          if (airMonitoringReports && airMonitoringReports.length > 0) {
+            return true;
+          }
+        }
+      } catch (error) {
+        // No air monitoring reports
+      }
+
+      // Check clearances
+      try {
+        const { default: asbestosClearanceService } = await import(
+          "../../services/asbestosClearanceService"
+        );
+        const { default: asbestosRemovalJobService } = await import(
+          "../../services/asbestosRemovalJobService"
+        );
+
+        const completedJobsResponse = await asbestosRemovalJobService.getAll();
+        const completedJobs =
+          completedJobsResponse.jobs || completedJobsResponse.data || [];
+        const hasCompletedJobs = completedJobs.some(
+          (job) =>
+            (job.projectId === project._id ||
+              job.projectId?._id === project._id) &&
+            job.status === "completed"
+        );
+
+        if (hasCompletedJobs) {
+          const clearancesResponse = await asbestosClearanceService.getAll();
+          let projectClearances = [];
+
+          if (clearancesResponse && Array.isArray(clearancesResponse)) {
+            projectClearances = clearancesResponse.filter(
+              (clearance) =>
+                clearance.projectId === project._id ||
+                clearance.projectId?._id === project._id
+            );
+          } else if (
+            clearancesResponse.clearances &&
+            Array.isArray(clearancesResponse.clearances)
+          ) {
+            projectClearances = clearancesResponse.clearances.filter(
+              (clearance) =>
+                clearance.projectId === project._id ||
+                clearance.projectId?._id === project._id
+            );
+          }
+
+          if (projectClearances.length > 0) {
+            return true;
+          }
+        }
+      } catch (error) {
+        // No clearances
+      }
+
+      // Check fibre ID reports
+      try {
+        const fibreIdReports = await reportService.getFibreIdReports(
+          project._id
+        );
+        if (
+          fibreIdReports &&
+          Array.isArray(fibreIdReports) &&
+          fibreIdReports.length > 0
+        ) {
+          return true;
+        }
+      } catch (error) {
+        // No fibre ID reports
+      }
+
+      // Check uploaded reports
+      try {
+        const uploadedReportsResponse = await fetch(
+          `${
+            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+          }/uploaded-reports/project/${project._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        if (uploadedReportsResponse.ok) {
+          const uploadedReports = await uploadedReportsResponse.json();
+          if (uploadedReports && uploadedReports.length > 0) {
+            return true;
+          }
+        }
+      } catch (error) {
+        // No uploaded reports
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error checking project reports:", error);
+      return false;
+    }
+  }, []);
 
   // Function to load search results
   const loadSearchResults = useCallback(
@@ -268,19 +416,10 @@ const Reports = () => {
             onClick={(e) => {
               e.stopPropagation();
               const project = params.row;
-              const updatedSearches = [
-                project,
-                ...recentSearches.filter((p) => p._id !== project._id),
-              ].slice(0, 20);
-              setRecentSearches(updatedSearches);
-              localStorage.setItem(
-                "recentProjectSearches",
-                JSON.stringify(updatedSearches)
-              );
-              navigate(`/reports/project/${project._id}`);
+              navigate(`/projects/${project._id}`);
             }}
           >
-            Reports
+            Job Details
           </Button>
           <Button
             variant="outlined"
@@ -382,7 +521,46 @@ const Reports = () => {
                 </TableHead>
                 <TableBody>
                   {recentSearches.map((project) => (
-                    <TableRow key={project._id} hover>
+                    <TableRow
+                      key={project._id}
+                      hover
+                      onClick={async () => {
+                        console.log("Recent project row clicked:", project);
+
+                        // Check if project has reports before navigating
+                        const hasReports = await checkProjectHasReports(
+                          project
+                        );
+
+                        if (hasReports) {
+                          // Add to recent searches when clicked
+                          const updatedSearches = [
+                            project,
+                            ...recentSearches.filter(
+                              (p) => p._id !== project._id
+                            ),
+                          ].slice(0, 20);
+                          setRecentSearches(updatedSearches);
+                          localStorage.setItem(
+                            "recentProjectSearches",
+                            JSON.stringify(updatedSearches)
+                          );
+                          navigate(`/reports/project/${project._id}`);
+                        } else {
+                          // Show dialog for projects with no reports
+                          setNoReportsDialog({
+                            open: true,
+                            project: project,
+                          });
+                        }
+                      }}
+                      sx={{
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "rgba(0, 0, 0, 0.04)",
+                        },
+                      }}
+                    >
                       <TableCell>{project.projectID}</TableCell>
                       <TableCell>
                         <Box>
@@ -414,22 +592,10 @@ const Reports = () => {
                             size="small"
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Add to recent searches when clicked
-                              const updatedSearches = [
-                                project,
-                                ...recentSearches.filter(
-                                  (p) => p._id !== project._id
-                                ),
-                              ].slice(0, 20);
-                              setRecentSearches(updatedSearches);
-                              localStorage.setItem(
-                                "recentProjectSearches",
-                                JSON.stringify(updatedSearches)
-                              );
-                              navigate(`/reports/project/${project._id}`);
+                              navigate(`/projects/${project._id}`);
                             }}
                           >
-                            Reports
+                            Job Details
                           </Button>
                           <Button
                             size="small"
@@ -477,6 +643,8 @@ const Reports = () => {
                 loading={searching}
                 paginationMode="client"
                 sortingMode="client"
+                disableRowSelectionOnClick={true}
+                disableColumnMenu={false}
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
                 pageSizeOptions={[25, 50, 100]}
@@ -488,26 +656,67 @@ const Reports = () => {
                     sortModel: [{ field: "projectID", sort: "desc" }],
                   },
                 }}
-                onRowClick={(params) => {
+                onCellClick={async (params, event) => {
+                  console.log("Cell clicked:", params.row, params.field);
+
+                  // Only handle clicks on non-action columns
+                  if (params.field === "actions") {
+                    console.log("Click was on actions column, ignoring");
+                    return;
+                  }
+
+                  // Check if the click was on a button or interactive element
+                  if (event.target.closest("button")) {
+                    console.log("Click was on a button, ignoring row click");
+                    return;
+                  }
+
                   const project = params.row;
-                  // Add to recent searches when clicked
-                  const updatedSearches = [
-                    project,
-                    ...recentSearches.filter((p) => p._id !== project._id),
-                  ].slice(0, 20);
-                  setRecentSearches(updatedSearches);
-                  localStorage.setItem(
-                    "recentProjectSearches",
-                    JSON.stringify(updatedSearches)
-                  );
-                  navigate(`/reports/project/${project._id}`);
+
+                  // Check if project has reports before navigating
+                  const hasReports = await checkProjectHasReports(project);
+
+                  if (hasReports) {
+                    // Add to recent searches when clicked
+                    const updatedSearches = [
+                      project,
+                      ...recentSearches.filter((p) => p._id !== project._id),
+                    ].slice(0, 20);
+                    setRecentSearches(updatedSearches);
+                    localStorage.setItem(
+                      "recentProjectSearches",
+                      JSON.stringify(updatedSearches)
+                    );
+                    navigate(`/reports/project/${project._id}`);
+                  } else {
+                    // Show dialog for projects with no reports
+                    setNoReportsDialog({
+                      open: true,
+                      project: project,
+                    });
+                  }
                 }}
                 sx={{
-                  "& .MuiDataGrid-row": {
+                  "& .MuiDataGrid-root": {
                     cursor: "pointer",
+                  },
+                  "& .MuiDataGrid-main": {
+                    cursor: "pointer",
+                  },
+                  "& .MuiDataGrid-row": {
+                    cursor: "pointer !important",
                     "&:hover": {
-                      backgroundColor: "rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "rgba(0, 0, 0, 0.04) !important",
                     },
+                  },
+                  "& .MuiDataGrid-cell": {
+                    cursor: "pointer !important",
+                    "&:hover": {
+                      backgroundColor: "rgba(0, 0, 0, 0.02) !important",
+                    },
+                  },
+                  "& .MuiDataGrid-cellContent": {
+                    cursor: "pointer !important",
                   },
                 }}
               />
@@ -529,6 +738,39 @@ const Reports = () => {
         onClose={() => setDetailsModalOpen(false)}
         project={selectedProject}
       />
+
+      {/* No Reports Dialog */}
+      <Dialog
+        open={noReportsDialog.open}
+        onClose={() => setNoReportsDialog({ open: false, project: null })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>No Reports Available</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            The project "{noReportsDialog.project?.projectID}:{" "}
+            {noReportsDialog.project?.name}" doesn't have any reports yet.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setNoReportsDialog({ open: false, project: null })}
+            color="primary"
+          >
+            OK
+          </Button>
+          <Button
+            onClick={() =>
+              navigate(`/projects/${noReportsDialog.project?._id}`)
+            }
+            variant="contained"
+            color="primary"
+          >
+            View Project Details
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
