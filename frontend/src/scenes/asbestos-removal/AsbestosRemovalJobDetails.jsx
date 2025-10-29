@@ -46,7 +46,9 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { tokens } from "../../theme/tokens";
+import api from "../../services/api";
 import {
   jobService,
   shiftService,
@@ -107,6 +109,7 @@ const AsbestosRemovalJobDetails = () => {
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
+  const [editingShift, setEditingShift] = useState(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetShiftId, setResetShiftId] = useState(null);
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
@@ -122,11 +125,13 @@ const AsbestosRemovalJobDetails = () => {
     asbestosRemovalist: "",
     jurisdiction: "ACT",
     secondaryHeader: "",
+    vehicleEquipmentDescription: "",
     airMonitoring: false,
     airMonitoringReport: null,
     airMonitoringReportType: "select",
     notes: "",
     useComplexTemplate: false,
+    jobSpecificExclusions: "",
   });
 
   const fetchAsbestosAssessors = useCallback(async () => {
@@ -664,11 +669,6 @@ const AsbestosRemovalJobDetails = () => {
     setClearanceDialogOpen(true);
   };
 
-  const handleCloseShiftDialog = () => {
-    setShiftDialogOpen(false);
-    setNewShiftDate("");
-  };
-
   const handleSetToday = () => {
     const today = new Date();
     const year = today.getFullYear();
@@ -826,6 +826,40 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
+  const handleDownloadCOC = async (shift, event) => {
+    event.stopPropagation();
+
+    try {
+      // Use axios to fetch the PDF with authentication
+      const response = await api.get(
+        `/air-monitoring-shifts/${shift._id}/chain-of-custody`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      // Create a blob URL from the response
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+
+      // Create a temporary link and trigger download
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Chain_of_Custody_${shift._id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+
+      // Clean up
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      showSnackbar("Chain of Custody downloaded successfully", "success");
+    } catch (error) {
+      console.error("Error downloading COC:", error);
+      showSnackbar("Failed to download Chain of Custody", "error");
+    }
+  };
+
   const handleGeneratePDF = async (clearance, event) => {
     // Prevent row click when clicking PDF icon
     event.stopPropagation();
@@ -879,8 +913,10 @@ const AsbestosRemovalJobDetails = () => {
       asbestosRemovalist: clearance.asbestosRemovalist || "",
       jurisdiction: clearance.jurisdiction || "ACT",
       secondaryHeader: clearance.secondaryHeader || "",
+      vehicleEquipmentDescription: clearance.vehicleEquipmentDescription || "",
       notes: clearance.notes || "",
       useComplexTemplate: clearance.useComplexTemplate || false,
+      jobSpecificExclusions: clearance.jobSpecificExclusions || "",
     });
     setClearanceDialogOpen(true);
   };
@@ -894,8 +930,32 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleEditShift = (shift, event) => {
     event.stopPropagation();
-    // Navigate to shift edit page or open edit modal
-    navigate(`/air-monitoring/shifts/${shift._id}/edit`);
+    setEditingShift(shift);
+    const shiftDate = shift.date
+      ? new Date(shift.date).toISOString().split("T")[0]
+      : "";
+    setNewShiftDate(shiftDate);
+    setShiftDialogOpen(true);
+  };
+
+  const handleUpdateShiftDate = async () => {
+    if (!editingShift || !newShiftDate) return;
+
+    try {
+      await shiftService.update(editingShift._id, { date: newShiftDate });
+      await fetchJobDetails();
+      showSnackbar("Shift date updated successfully", "success");
+      handleCloseShiftDialog();
+    } catch (error) {
+      console.error("Error updating shift date:", error);
+      showSnackbar("Failed to update shift date", "error");
+    }
+  };
+
+  const handleCloseShiftDialog = () => {
+    setShiftDialogOpen(false);
+    setNewShiftDate("");
+    setEditingShift(null);
   };
 
   const handleDeleteShift = (shift, event) => {
@@ -903,6 +963,20 @@ const AsbestosRemovalJobDetails = () => {
     setItemToDelete(shift);
     setDeleteType("shift");
     setDeleteConfirmDialogOpen(true);
+  };
+
+  const handleReopenShift = async (shift) => {
+    try {
+      await shiftService.reopen(shift._id);
+      showSnackbar("Shift reopened successfully", "success");
+      await fetchJobDetails();
+    } catch (error) {
+      console.error("Error reopening shift:", error);
+      showSnackbar(
+        "Failed to reopen shift. Only admins can reopen shifts.",
+        "error"
+      );
+    }
   };
 
   const resetClearanceForm = () => {
@@ -915,8 +989,10 @@ const AsbestosRemovalJobDetails = () => {
       asbestosRemovalist: job?.asbestosRemovalist || "",
       jurisdiction: "ACT",
       secondaryHeader: "",
+      vehicleEquipmentDescription: "",
       notes: "",
       useComplexTemplate: false,
+      jobSpecificExclusions: "",
     });
   };
 
@@ -929,6 +1005,15 @@ const AsbestosRemovalJobDetails = () => {
     }
     if (!clearanceForm.LAA.trim()) {
       setError("LAA is required");
+      return;
+    }
+
+    // Validate Vehicle/Equipment Description when Vehicle/Equipment is selected
+    if (
+      clearanceForm.clearanceType === "Vehicle/Equipment" &&
+      !clearanceForm.vehicleEquipmentDescription.trim()
+    ) {
+      setError("Vehicle/Equipment Description is required");
       return;
     }
 
@@ -945,7 +1030,9 @@ const AsbestosRemovalJobDetails = () => {
         asbestosRemovalist: clearanceForm.asbestosRemovalist,
         jurisdiction: clearanceForm.jurisdiction,
         secondaryHeader: clearanceForm.secondaryHeader,
+        vehicleEquipmentDescription: clearanceForm.vehicleEquipmentDescription,
         notes: clearanceForm.notes,
+        jobSpecificExclusions: clearanceForm.jobSpecificExclusions,
       };
 
       let response;
@@ -1227,7 +1314,7 @@ const AsbestosRemovalJobDetails = () => {
                                 e.stopPropagation();
                                 handleEditShift(shift, e);
                               }}
-                              title="Edit Shift"
+                              title="Edit Shift Date"
                             >
                               <EditIcon color="primary" />
                             </IconButton>
@@ -1245,27 +1332,58 @@ const AsbestosRemovalJobDetails = () => {
                               >
                                 <DeleteIcon color="error" />
                               </IconButton>
+                              {(shift.status === "analysis_complete" ||
+                                shift.status === "shift_complete") && (
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReopenShift(shift);
+                                  }}
+                                  title="Reopen Shift for Editing (Admin Only)"
+                                >
+                                  <RefreshIcon color="warning" />
+                                </IconButton>
+                              )}
                             </PermissionGate>
                             {shift.status === "samples_submitted_to_lab" && (
-                              <Button
-                                variant="contained"
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(
-                                    `/air-monitoring/shift/${shift._id}/analysis`
-                                  );
-                                }}
-                                sx={{
-                                  backgroundColor: theme.palette.success.main,
-                                  color: theme.palette.success.contrastText,
-                                  "&:hover": {
-                                    backgroundColor: theme.palette.success.dark,
-                                  },
-                                }}
-                              >
-                                SAMPLE ANALYSIS
-                              </Button>
+                              <>
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  onClick={(e) => handleDownloadCOC(shift, e)}
+                                  sx={{
+                                    backgroundColor: theme.palette.info.main,
+                                    color: theme.palette.info.contrastText,
+                                    mr: 1,
+                                    "&:hover": {
+                                      backgroundColor: theme.palette.info.dark,
+                                    },
+                                  }}
+                                >
+                                  COC
+                                </Button>
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(
+                                      `/air-monitoring/shift/${shift._id}/analysis`
+                                    );
+                                  }}
+                                  sx={{
+                                    backgroundColor: theme.palette.success.main,
+                                    color: theme.palette.success.contrastText,
+                                    "&:hover": {
+                                      backgroundColor:
+                                        theme.palette.success.dark,
+                                    },
+                                  }}
+                                >
+                                  SAMPLE ANALYSIS
+                                </Button>
+                              </>
                             )}
                             {(shift.status === "analysis_complete" ||
                               shift.status === "shift_complete") && (
@@ -1618,17 +1736,40 @@ const AsbestosRemovalJobDetails = () => {
                   <Select
                     value={clearanceForm.clearanceType}
                     onChange={(e) => {
-                      setClearanceForm({
+                      const clearanceType = e.target.value;
+                      const newForm = {
                         ...clearanceForm,
-                        clearanceType: e.target.value,
-                      });
+                        clearanceType,
+                      };
+
+                      // Add default text to job specific exclusions for Friable (Non-Friable Conditions)
+                      if (
+                        clearanceType === "Friable (Non-Friable Conditions)"
+                      ) {
+                        newForm.jobSpecificExclusions =
+                          "The friable asbestos was removed using methods which kept the asbestos enclosed and therefore without disturbance of the material. As a result, the removal was undertaken under non-friable asbestos removal conditions.";
+                      }
+
+                      // Set asbestos removalist to "-" when Vehicle/Equipment is selected
+                      if (clearanceType === "Vehicle/Equipment") {
+                        newForm.asbestosRemovalist = "-";
+                      } else if (clearanceForm.asbestosRemovalist === "-") {
+                        // Reset to job's asbestos removalist if switching away from Vehicle/Equipment
+                        newForm.asbestosRemovalist =
+                          job?.asbestosRemovalist || "";
+                      }
+
+                      setClearanceForm(newForm);
                     }}
                     label="Clearance Type"
                   >
                     <MenuItem value="Non-friable">Non-friable</MenuItem>
                     <MenuItem value="Friable">Friable</MenuItem>
-                    <MenuItem value="Mixed">
+                    <MenuItem value="Friable (Non-Friable Conditions)">
                       Friable (Non-Friable Conditions)
+                    </MenuItem>
+                    <MenuItem value="Vehicle/Equipment">
+                      Vehicle/Equipment
                     </MenuItem>
                   </Select>
                 </FormControl>
@@ -1722,6 +1863,24 @@ const AsbestosRemovalJobDetails = () => {
                   </Box>
                 </Box>
               </Grid>
+              {clearanceForm.clearanceType === "Vehicle/Equipment" && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Vehicle/Equipment Description"
+                    value={clearanceForm.vehicleEquipmentDescription}
+                    onChange={(e) =>
+                      setClearanceForm({
+                        ...clearanceForm,
+                        vehicleEquipmentDescription: e.target.value,
+                      })
+                    }
+                    placeholder="Enter vehicle/equipment description"
+                    helperText="This will replace the project name on the cover page"
+                    required
+                  />
+                </Grid>
+              )}
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -1821,7 +1980,9 @@ const AsbestosRemovalJobDetails = () => {
             <MonitorIcon sx={{ fontSize: 20 }} />
           </Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            Add New Air Monitoring Shift
+            {editingShift
+              ? "Edit Air Monitoring Shift"
+              : "Add New Air Monitoring Shift"}
           </Typography>
         </DialogTitle>
         <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
@@ -1861,7 +2022,7 @@ const AsbestosRemovalJobDetails = () => {
             Cancel
           </Button>
           <Button
-            onClick={handleShiftSubmit}
+            onClick={editingShift ? handleUpdateShiftDate : handleShiftSubmit}
             variant="contained"
             startIcon={<MonitorIcon />}
             disabled={!newShiftDate}
@@ -1872,7 +2033,7 @@ const AsbestosRemovalJobDetails = () => {
               fontWeight: 500,
             }}
           >
-            Add Shift
+            {editingShift ? "Update Shift" : "Add Shift"}
           </Button>
         </DialogActions>
       </Dialog>

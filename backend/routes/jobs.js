@@ -31,6 +31,7 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
     const populatedJobs = await AirMonitoringJob.find()
       .populate({
         path: 'projectId',
+        select: 'name projectID client projectContact workOrder status category categories department notes',
         populate: {
           path: 'client'
         }
@@ -64,6 +65,7 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
     const job = await AirMonitoringJob.findById(req.params.id)
       .populate({
         path: 'projectId',
+        select: 'name projectID client projectContact workOrder status category categories department notes',
         populate: {
           path: 'client'
         }

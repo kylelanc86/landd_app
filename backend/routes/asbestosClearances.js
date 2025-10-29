@@ -86,7 +86,7 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes, vehicleEquipmentDescription } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
@@ -105,6 +105,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       ...(sitePlanSource && { sitePlanSource }),
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
+      vehicleEquipmentDescription,
       createdBy: req.user.id,
     });
 
@@ -131,7 +132,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes, revision, revisionReasons } = req.body;
+    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes, revision, revisionReasons, vehicleEquipmentDescription } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -158,6 +159,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     }
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
+    clearance.vehicleEquipmentDescription = vehicleEquipmentDescription !== undefined ? vehicleEquipmentDescription : clearance.vehicleEquipmentDescription;
     clearance.updatedBy = req.user.id;
     
     // Handle revision fields

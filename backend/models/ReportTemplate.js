@@ -7,7 +7,8 @@ const reportTemplateSchema = new mongoose.Schema(
       enum: [
         "asbestosClearanceFriable",
         "asbestosClearanceNonFriable",
-        "asbestosClearanceMixed",
+        "asbestosClearanceFriableNonFriableConditions",
+        "asbestosClearanceVehicle",
         "leadAssessment",
         "asbestosAssessment",
       ],
@@ -63,7 +64,6 @@ const reportTemplateSchema = new mongoose.Schema(
       clearanceCertificationContent: String,
       signOffContent: String,
       signaturePlaceholder: String,
-      footerText: String,
       
       // Template-specific sections
       // Asbestos Clearance specific
@@ -71,8 +71,10 @@ const reportTemplateSchema = new mongoose.Schema(
       friableClearanceCertificateLimitationsContent: String,
       nonFriableClearanceCertificateLimitationsTitle: String,
       nonFriableClearanceCertificateLimitationsContent: String,
-      mixedClearanceCertificateLimitationsTitle: String,
-      mixedClearanceCertificateLimitationsContent: String,
+      friableNonFriableConditionsCertificateLimitationsTitle: String,
+      friableNonFriableConditionsCertificateLimitationsContent: String,
+      vehicleCertificateLimitationsTitle: String,
+      vehicleCertificateLimitationsContent: String,
       
       // Asbestos Assessment specific
       introductionTitle: String,

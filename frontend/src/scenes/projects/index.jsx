@@ -1389,14 +1389,11 @@ const Projects = ({ initialFilters = {} }) => {
                   variant="body2"
                   color="text.secondary"
                   sx={{
-                    whiteSpace: "normal",
-                    wordWrap: "break-word",
-                    lineHeight: 1.2,
-                    width: "100%",
-                    display: "-webkit-box",
-                    WebkitLineClamp: 1,
-                    WebkitBoxOrient: "vertical",
+                    whiteSpace: "nowrap",
                     overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "inline-block",
+                    maxWidth: "fit-content",
                     mt: 0.25,
                     cursor: "pointer",
                     "&:hover": {
@@ -2114,7 +2111,9 @@ const Projects = ({ initialFilters = {} }) => {
           error={error}
           // checkboxSelection
           onRowClick={(params) =>
-            navigate(`/reports/project/${params.row._id}`)
+            navigate(`/reports/project/${params.row._id}`, {
+              state: { from: "projects" },
+            })
           }
           columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}

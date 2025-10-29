@@ -207,19 +207,21 @@ const userSchema = new mongoose.Schema({
           "readyForInvoicing",
           "invoiceSent",
           "awaitingPayment",
+          "allActive",
         ]
       },
       visibleWidgets: {
         type: Object,
         default: {
           dailyTimesheet: true,
-          inProgress: true,
-          samplesSubmitted: true,
-          labComplete: true,
-          reportReview: true,
-          readyForInvoicing: true,
-          invoiceSent: true,
-          awaitingPayment: true,
+          inProgress: false,
+          samplesSubmitted: false,
+          labComplete: false,
+          reportReview: false,
+          readyForInvoicing: false,
+          invoiceSent: false,
+          awaitingPayment: false,
+          allActive: false,
         }
       }
     }

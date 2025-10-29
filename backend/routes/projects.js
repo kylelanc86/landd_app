@@ -509,6 +509,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
           requiredPermission: 'canSetJobComplete'
         });
       }
+      
+      // When status is set to "Job complete", clear the end date
+      req.body.endDate = null;
     }
     
     // Update project fields

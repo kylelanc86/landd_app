@@ -155,6 +155,9 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
   // Debug logging
   console.log('generateShiftReport called with:', { shift, job, samples, project, openInNewTab, returnPdfData });
   console.log('job type:', typeof job, 'job value:', job);
+  console.log('Project data:', JSON.stringify(project, null, 2));
+  console.log('Project projectContact:', project?.projectContact);
+  console.log('Available project fields:', Object.keys(project || {}));
   
   // Ensure job is an object
   if (typeof job !== 'object' || job === null) {
@@ -307,10 +310,10 @@ pdfMake.fonts = {
                 [
                   {
                     stack: [
-                      { text: [ { text: 'Client Name: ', bold: true }, { text: job?.projectId?.client?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Client Contact: ', bold: true }, { text: job?.projectId?.client?.contact1Name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Email: ', bold: true }, { text: job?.projectId?.client?.contact1Email || job?.projectId?.client?.invoiceEmail || job?.projectId?.client?.contact2Email || 'N/A' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Site Name: ', bold: true }, { text: job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Client Name: ', bold: true }, { text: project?.client?.name || job?.projectId?.client?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Client Contact: ', bold: true }, { text: project?.projectContact?.name || job?.projectId?.projectContact?.name || job?.projectId?.client?.contact1Name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: project?.projectContact?.email || job?.projectId?.projectContact?.email || job?.projectId?.client?.contact1Email || job?.projectId?.client?.invoiceEmail || job?.projectId?.client?.contact2Email || 'N/A' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Site Name: ', bold: true }, { text: project?.name || job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {

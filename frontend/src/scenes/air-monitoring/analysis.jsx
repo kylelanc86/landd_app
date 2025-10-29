@@ -35,11 +35,14 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { sampleService, shiftService } from "../../services/api";
 import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
+import { useAuth } from "../../context/AuthContext";
+import { useSnackbar } from "../../context/SnackbarContext";
 
 const SAMPLES_KEY = "ldc_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_analysis_progress";
@@ -260,6 +263,8 @@ const Analysis = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const { showSnackbar } = useSnackbar();
   const [samples, setSamples] = useState([]);
   const [pcmCalibrations, setPcmCalibrations] = useState([]);
   const [analysisDetails, setAnalysisDetails] = useState({
@@ -727,17 +732,13 @@ const Analysis = () => {
       const constant = latestPcmCalibration.constant25mm || 50000;
       return {
         constant,
-        source: `25mm (${constant}) from ${new Date(
-          latestPcmCalibration.date
-        ).toLocaleDateString()}`,
+        source: `25mm (${constant})`,
       };
     } else if (filterSize === "13mm") {
       const constant = latestPcmCalibration.constant13mm || 50000;
       return {
         constant,
-        source: `13mm (${constant}) from ${new Date(
-          latestPcmCalibration.date
-        ).toLocaleDateString()}`,
+        source: `13mm (${constant})`,
       };
     }
 
@@ -943,6 +944,22 @@ const Analysis = () => {
     } catch (error) {
       console.error("Error finalizing analysis:", error);
       setError("Failed to finalize analysis. Please try again.");
+    }
+  };
+
+  const handleReopenShift = async () => {
+    try {
+      await shiftService.reopen(shiftId);
+      showSnackbar("Shift reopened successfully", "success");
+      // Fetch fresh shift data to update the status
+      const shiftResponse = await shiftService.getById(shiftId);
+      setShiftStatus(shiftResponse.data.status);
+    } catch (error) {
+      console.error("Error reopening shift:", error);
+      showSnackbar(
+        "Failed to reopen shift. Only admins can reopen shifts.",
+        "error"
+      );
     }
   };
 
@@ -1370,6 +1387,22 @@ const Analysis = () => {
                 </Button>
               </>
             )}
+            {shiftStatus === "analysis_complete" &&
+              currentUser?.role === "admin" && (
+                <Button
+                  variant="contained"
+                  startIcon={<RefreshIcon />}
+                  onClick={handleReopenShift}
+                  sx={{
+                    backgroundColor: "#f57c00",
+                    "&:hover": {
+                      backgroundColor: "#e65100",
+                    },
+                  }}
+                >
+                  Reopen Shift (Admin)
+                </Button>
+              )}
           </Box>
 
           {/* Fibre Count Modal */}

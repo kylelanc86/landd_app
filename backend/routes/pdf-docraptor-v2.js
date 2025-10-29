@@ -107,7 +107,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         const hasNonFriable = clearanceData.items.some(item => item.asbestosType === 'Non-friable');
         
         if (hasFriable && hasNonFriable) {
-          clearanceType = 'Mixed';
+          clearanceType = 'Friable (Non-Friable Conditions)';
         } else if (hasFriable) {
           clearanceType = 'Friable';
         } else {
@@ -118,10 +118,12 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       // Map clearance type to template type
       if (clearanceType === 'Friable') {
         templateType = 'asbestosClearanceFriable';
+      } else if (clearanceType === 'Friable (Non-Friable Conditions)') {
+        templateType = 'asbestosClearanceFriableNonFriableConditions';
+      } else if (clearanceType === 'Vehicle/Equipment') {
+        templateType = 'asbestosClearanceVehicle';
       } else if (clearanceType === 'Non-friable') {
         templateType = 'asbestosClearanceNonFriable';
-      } else if (clearanceType === 'Mixed') {
-        templateType = 'asbestosClearanceMixed';
       } else {
         templateType = 'asbestosClearanceNonFriable'; // Default fallback
       }
@@ -153,10 +155,30 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
 
 
 
+    // Determine the site address/name for the cover page
+    let siteAddress = clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site';
+    // If Vehicle/Equipment clearance, use vehicle equipment description instead
+    if (clearanceData.clearanceType === 'Vehicle/Equipment' && clearanceData.vehicleEquipmentDescription) {
+      siteAddress = clearanceData.vehicleEquipmentDescription;
+    }
+
+    // Determine the report title based on clearance type
+    let reportTitle = 'ASBESTOS REMOVAL<br />CLEARANCE<br />CERTIFICATE';
+    if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+      reportTitle = 'INSPECTION CERTIFICATE';
+    } else if (clearanceData.clearanceType === 'Friable') {
+      reportTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    } else if (clearanceData.clearanceType === 'Non-friable') {
+      reportTitle = 'NON-FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    } else if (clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
+      reportTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    }
+
     // Populate cover template with data
     const populatedCover = coverTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[REPORT_TITLE\]/g, reportTitle)
+      .replace(/\[SITE_ADDRESS\]/g, siteAddress)
       .replace(/\[SECONDARY_HEADER\]/g, clearanceData.secondaryHeader || '')
       .replace(/\[JOB_REFERENCE\]/g, clearanceData.projectId?.projectID || 'Unknown')
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
@@ -229,14 +251,39 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       }
     };
 
+    // Determine filename for version control (use vehicle description for Vehicle/Equipment)
+    let filenameSiteName = clearanceData.projectId?.name || 'Unknown';
+    if (clearanceData.clearanceType === 'Vehicle/Equipment' && clearanceData.vehicleEquipmentDescription) {
+      filenameSiteName = clearanceData.vehicleEquipmentDescription;
+    }
+    
+    // Determine version control title (simple format without <br> tags)
+    let versionControlTitle = 'ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+      versionControlTitle = 'INSPECTION CERTIFICATE';
+    } else if (clearanceData.clearanceType === 'Friable') {
+      versionControlTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    } else if (clearanceData.clearanceType === 'Non-friable') {
+      versionControlTitle = 'NON-FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    } else if (clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
+      versionControlTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+    }
+    
+    // Determine filename for version control page (should match the actual filename)
+    let reportTypeNameVC = 'Asbestos Clearance Report';
+    if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+      reportTypeNameVC = 'Inspection Certificate';
+    }
+    
     // Populate version control template with data
     const populatedVersionControl = versionControlTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+      .replace(/\[REPORT_TITLE\]/g, versionControlTitle)
+      .replace(/\[SITE_ADDRESS\]/g, siteAddress)
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: Asbestos Clearance Report - ${clearanceData.projectId?.name || 'Unknown'} (${formatClearanceDate(clearanceData.clearanceDate)}).pdf`)
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)}).pdf`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
       .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateRevisionHistory());
@@ -244,6 +291,11 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     // Generate clearance items table headers
     const generateClearanceItemsHeaders = () => {
       const items = clearanceData.items || [];
+      
+      // For Vehicle/Equipment clearances, only show 2 columns
+      if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+        return '<th>Item Description</th><th style="width: 15%;">Photo No.</th>';
+      }
       
       // If no items, show basic headers without Level/Floor
       if (items.length === 0) {
@@ -264,7 +316,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       const items = clearanceData.items || [];
       
       if (items.length === 0) {
-        const colspan = items.some(item => item.levelFloor && item.levelFloor.trim() !== '') ? 5 : 4;
+        const colspan = clearanceData.clearanceType === 'Vehicle/Equipment' ? 2 : (items.some(item => item.levelFloor && item.levelFloor.trim() !== '') ? 5 : 4);
         return `<tr><td colspan="${colspan}" style="text-align: center; font-style: italic;">No clearance items found</td></tr>`;
       }
       
@@ -290,6 +342,28 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       });
 
       const tableRows = itemsWithPhotoNumbers.map((item, index) => {
+        // For Vehicle/Equipment, show simplified table
+        if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+          const itemDescription = item.materialDescription || 'No description';
+          
+          // Generate photo numbers text using sequential numbers
+          let photoNumbersText = 'No photos';
+          if (item.sequentialPhotoNumbers.length > 0) {
+            if (item.sequentialPhotoNumbers.length === 1) {
+              photoNumbersText = item.sequentialPhotoNumbers[0].toString();
+            } else {
+              const firstNumber = item.sequentialPhotoNumbers[0];
+              const lastNumber = item.sequentialPhotoNumbers[item.sequentialPhotoNumbers.length - 1];
+              photoNumbersText = firstNumber === lastNumber ? firstNumber.toString() : `${firstNumber}-${lastNumber}`;
+            }
+          }
+          
+          return `<tr>
+            <td>${itemDescription}</td>
+            <td>${photoNumbersText}</td>
+          </tr>`;
+        }
+        
         // Format asbestos type properly
         const formattedAsbestosType = item.asbestosType 
           ? item.asbestosType.charAt(0).toUpperCase() + item.asbestosType.slice(1).replace('-', '-')
@@ -366,11 +440,17 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             console.log(`Photo ${photoIndex} includeInReport:`, photo.includeInReport);
             if (photo.includeInReport) {
               console.log(`Adding photo ${photoIndex} from item ${index} to report`);
+              
+              // For Vehicle/Equipment, use materialDescription as the item description
+              const itemDescription = clearanceData.clearanceType === 'Vehicle/Equipment' 
+                ? item.materialDescription 
+                : item.locationDescription;
+              
               photosForReport.push({
                 photoUrl: photo.data,
                 levelFloor: item.levelFloor,
                 roomArea: item.roomArea,
-                materialDescription: item.locationDescription
+                materialDescription: itemDescription
               });
             }
           });
@@ -392,13 +472,32 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         const pagePhotos = photosForReport.slice(i, i + 2);
         const photoItems = pagePhotos.map((photo, pageIndex) => {
           const photoNumber = i + pageIndex + 1;
-          return photoItemTemplate
+          
+          // For Vehicle/Equipment, show only materialDescription, not "N/A - description"
+          let photoLocation;
+          if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+            photoLocation = photo.materialDescription || 'Unknown Item';
+          } else {
+            photoLocation = `${photo.roomArea || 'Unknown Room/Area'} - ${photo.materialDescription || 'Unknown Location'}`;
+          }
+          
+          // IMPORTANT: Replace the combined placeholder FIRST before individual placeholders
+          // Otherwise the individual replacements happen first and the combined won't match
+          let photoItem = photoItemTemplate
             .replace(/\[PHOTO_URL\]/g, photo.photoUrl)
             .replace(/\[PHOTO_NUMBER\]/g, photoNumber.toString())
             .replace(/\[LEVEL_FLOOR\]/g, photo.levelFloor || 'Not specified')
-            .replace(/\[LEVEL_FLOOR_DISPLAY\]/g, photo.levelFloor ? 'block' : 'none')
+            .replace(/\[LEVEL_FLOOR_DISPLAY\]/g, photo.levelFloor ? 'block' : 'none');
+          
+          // Replace the combined location placeholder
+          photoItem = photoItem.replace(/\[ROOM_AREA\] - \[MATERIAL_DESCRIPTION\]/g, photoLocation);
+          
+          // Then replace individual placeholders (for backwards compatibility)
+          photoItem = photoItem
             .replace(/\[ROOM_AREA\]/g, photo.roomArea || 'Unknown Room/Area')
             .replace(/\[MATERIAL_DESCRIPTION\]/g, photo.materialDescription || 'Unknown Location');
+          
+          return photoItem;
         }).join('');
         
         // Use the photo page template and replace all placeholders
@@ -462,9 +561,22 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const legislativeRequirementsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.legislativeRequirementsContent, templateData) : 'Legislative requirements content not found';
     
     // Handle limitations based on clearance type (like the old PDF route)
-    const clearanceCertificateLimitationsContent = clearanceData.clearanceType === 'Friable'
-      ? (templateContent ? await replacePlaceholders(templateContent.standardSections.friableClearanceCertificateLimitationsContent, templateData) : 'Friable clearance certificate limitations content not available')
-      : (templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, templateData) : 'Non-friable clearance certificate limitations content not available');
+    let clearanceCertificateLimitationsContent;
+    let clearanceCertificateLimitationsTitle;
+    
+    if (clearanceData.clearanceType === 'Friable') {
+      clearanceCertificateLimitationsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.friableClearanceCertificateLimitationsContent, templateData) : 'Friable clearance certificate limitations content not available';
+      clearanceCertificateLimitationsTitle = templateContent?.standardSections?.friableClearanceCertificateLimitationsTitle || 'Friable Clearance Certificate Limitations';
+    } else if (clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
+      clearanceCertificateLimitationsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.friableNonFriableConditionsCertificateLimitationsContent, templateData) : 'Friable (Non-Friable Conditions) clearance certificate limitations content not available';
+      clearanceCertificateLimitationsTitle = templateContent?.standardSections?.friableNonFriableConditionsCertificateLimitationsTitle || 'CLEARANCE CERTIFICATE LIMITATIONS';
+    } else if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+      clearanceCertificateLimitationsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.vehicleCertificateLimitationsContent, templateData) : 'Vehicle/Equipment clearance certificate limitations content not available';
+      clearanceCertificateLimitationsTitle = templateContent?.standardSections?.vehicleCertificateLimitationsTitle || 'Vehicle/Equipment Inspection Limitations';
+    } else {
+      clearanceCertificateLimitationsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.nonFriableClearanceCertificateLimitationsContent, templateData) : 'Non-friable clearance certificate limitations content not available';
+      clearanceCertificateLimitationsTitle = templateContent?.standardSections?.nonFriableClearanceCertificateLimitationsTitle || 'Non-Friable Clearance Certificate Limitations';
+    }
 
     // Populate background information template with data
     const populatedBackgroundInformation = backgroundInformationTemplate
@@ -476,9 +588,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[BACKGROUND_INFORMATION_CONTENT\]/g, backgroundInformationContent)
       .replace(/\[LEGISLATIVE_REQUIREMENTS_TITLE\]/g, templateContent?.standardSections?.legislativeRequirementsTitle || 'LEGISLATIVE REQUIREMENTS')
       .replace(/\[LEGISLATIVE_REQUIREMENTS_CONTENT\]/g, legislativeRequirementsContent)
-      .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE\]/g, clearanceData.clearanceType === 'Friable' 
-        ? (templateContent?.standardSections?.friableClearanceCertificateLimitationsTitle || 'Friable Clearance Certificate Limitations')
-        : (templateContent?.standardSections?.nonFriableClearanceCertificateLimitationsTitle || 'Non-Friable Clearance Certificate Limitations'))
+      .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE\]/g, clearanceCertificateLimitationsTitle)
       .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT\]/g, clearanceCertificateLimitationsContent);
 
     // Extract just the page content from each template
@@ -1052,9 +1162,22 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
 
     // Generate filename
     const projectId = clearanceData.projectId?.projectID || clearanceData.project?.projectID || clearanceData.projectId || 'Unknown';
-    const siteName = clearanceData.projectId?.name || clearanceData.project?.name || clearanceData.siteName || 'Unknown';
+    let siteName = clearanceData.projectId?.name || clearanceData.project?.name || clearanceData.siteName || 'Unknown';
+    
+    // If Vehicle/Equipment clearance, use vehicle equipment description for filename
+    if (clearanceData.clearanceType === 'Vehicle/Equipment' && clearanceData.vehicleEquipmentDescription) {
+      siteName = clearanceData.vehicleEquipmentDescription;
+    }
+    
     const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
-    const filename = `${projectId}: Asbestos Clearance Report - ${siteName} (${clearanceDate}).pdf`;
+    
+    // Use different report type name in filename based on clearance type
+    let reportTypeName = 'Asbestos Clearance Report';
+    if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+      reportTypeName = 'Inspection Certificate';
+    }
+    
+    const filename = `${projectId}: ${reportTypeName} - ${siteName} (${clearanceDate}).pdf`;
 
     // Generate PDF using DocRaptor with optimized settings
     const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
@@ -1775,7 +1898,7 @@ const generateAssessmentHTML = async (assessmentData) => {
         const hasNonFriable = clearanceData.items.some(item => item.asbestosType === 'Non-friable');
         
         if (hasFriable && hasNonFriable) {
-          clearanceType = 'Mixed';
+          clearanceType = 'Friable (Non-Friable Conditions)';
         } else if (hasFriable) {
           clearanceType = 'Friable';
         } else {
@@ -1786,10 +1909,12 @@ const generateAssessmentHTML = async (assessmentData) => {
       // Map clearance type to template type
       if (clearanceType === 'Friable') {
         templateType = 'asbestosClearanceFriable';
+      } else if (clearanceType === 'Friable (Non-Friable Conditions)') {
+        templateType = 'asbestosClearanceFriableNonFriableConditions';
+      } else if (clearanceType === 'Vehicle') {
+        templateType = 'asbestosClearanceVehicle';
       } else if (clearanceType === 'Non-friable') {
         templateType = 'asbestosClearanceNonFriable';
-      } else if (clearanceType === 'Mixed') {
-        templateType = 'asbestosClearanceMixed';
       } else {
         templateType = 'asbestosClearanceNonFriable'; // Default fallback
       }

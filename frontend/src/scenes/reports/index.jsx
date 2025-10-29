@@ -545,7 +545,9 @@ const Reports = () => {
                             "recentProjectSearches",
                             JSON.stringify(updatedSearches)
                           );
-                          navigate(`/reports/project/${project._id}`);
+                          navigate(`/reports/project/${project._id}`, {
+                            state: { from: "reports" },
+                          });
                         } else {
                           // Show dialog for projects with no reports
                           setNoReportsDialog({

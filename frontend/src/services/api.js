@@ -294,6 +294,7 @@ export const shiftService = {
   getByJobs: (jobIds) => api.post('/air-monitoring-shifts/jobs', { jobIds }),
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
+  reopen: (id) => api.patch(`/air-monitoring-shifts/${id}/reopen`),
   delete: (id) => api.delete(`/air-monitoring-shifts/${id}`),
   // Site plan methods
   getSitePlan: (id) => api.get(`/air-monitoring-shifts/${id}/site-plan`),

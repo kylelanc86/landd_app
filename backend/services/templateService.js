@@ -15,14 +15,6 @@ const getDefaultTemplateContent = (templateType) => {
         inspectionExclusionsContent: "The following areas were excluded from this clearance inspection: [BR][BR]\n\n• Areas not accessible due to structural constraints [BR]\n• Areas where access was restricted for safety reasons [BR]\n• Areas outside the scope of the asbestos removal works [BR][BR]\n\nThese exclusions do not affect the validity of the clearance for the areas that were inspected."
       }
     },
-    asbestosClearanceMixed: {
-      standardSections: {
-        backgroundInformationContent: "Asbestos is a naturally occurring mineral that was widely used in building materials until the late 1980s. When asbestos-containing materials (ACMs) are disturbed, they can release asbestos fibres into the air, which, if inhaled, can cause serious health problems including lung cancer, mesothelioma, and asbestosis. [BR][BR]\n\nThis site contained both friable and non-friable asbestos-containing materials. Friable materials can be easily crumbled and pose the highest risk, while non-friable materials are generally more stable but can still release fibres when disturbed. [BR][BR]\n\nThis clearance inspection was conducted following the removal of both friable and non-friable asbestos-containing materials from the site to ensure that the area is safe for re-occupation.",
-        legislativeRequirementsContent: "The clearance inspection was conducted in accordance with the following legislative requirements: [BR][BR]\n\n• Work Health and Safety Act 2011 (Cth) and associated Regulations [BR]\n• Work Health and Safety (Asbestos) Regulations 2011 [BR]\n• Australian Standard AS 4964-2004: Method for the qualitative identification of asbestos in bulk samples [BR]\n• Code of Practice: How to Safely Remove Asbestos [BR][BR]\n\nThese regulations require that a licensed asbestos assessor conduct a clearance inspection following the removal of asbestos to ensure the area is safe for re-occupation.",
-        clearanceCertificateLimitationsContent: "This clearance certificate is subject to the following limitations: [BR][BR]\n\n• The clearance inspection was conducted on the date specified and may not reflect conditions at other times [BR]\n• The inspection was limited to the areas specified in the scope of works [BR]\n• Future disturbance of remaining asbestos-containing materials may require additional clearance inspections [BR]\n• This certificate does not cover any asbestos-containing materials that were not part of the removal works [BR][BR]\n\nAny future work that may disturb asbestos-containing materials should be conducted by licensed asbestos removalists in accordance with applicable regulations.",
-        inspectionExclusionsContent: "The following areas were excluded from this clearance inspection: [BR][BR]\n\n• Areas not accessible due to structural constraints [BR]\n• Areas where access was restricted for safety reasons [BR]\n• Areas outside the scope of the asbestos removal works [BR][BR]\n\nThese exclusions do not affect the validity of the clearance for the areas that were inspected."
-      }
-    },
     asbestosClearanceNonFriable: {
       standardSections: {
         backgroundInformationContent: "Asbestos is a naturally occurring mineral that was widely used in building materials until the late 1980s. When asbestos-containing materials (ACMs) are disturbed, they can release asbestos fibres into the air, which, if inhaled, can cause serious health problems including lung cancer, mesothelioma, and asbestosis. [BR][BR]\n\nNon-friable asbestos materials are those that are bonded with other materials such as cement, resin, or bitumen, making them less likely to release fibres unless significantly disturbed. However, these materials can still pose a risk if damaged or deteriorated. [BR][BR]\n\nThis clearance inspection was conducted following the removal of non-friable asbestos-containing materials from the site to ensure that the area is safe for re-occupation.",
@@ -88,8 +80,10 @@ const getTemplateByType = async (templateType) => {
         title = "NON-FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
       } else if (templateType === "asbestosClearanceFriable") {
         title = "FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
-      } else if (templateType === "asbestosClearanceMixed") {
-        title = "MIXED ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      } else if (templateType === "asbestosClearanceFriableNonFriableConditions") {
+        title = "FRIABLE (NON-FRIABLE CONDITIONS) ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
+      } else if (templateType === "asbestosClearanceVehicle") {
+        title = "ASBESTOS INSPECTION CERTIFICATE";
       } else if (templateType === "asbestosClearanceComplex") {
         title = "COMPLEX ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
       } else if (templateType === "asbestosAssessment") {
@@ -129,8 +123,6 @@ const getTemplateByType = async (templateType) => {
           signOffContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           signaturePlaceholder: "[DYNAMIC_CONTENT_NOT_LOADED]",
-          
-          footerText: "[DYNAMIC_CONTENT_NOT_LOADED]",
         };
         
         template = new ReportTemplate({
@@ -164,8 +156,6 @@ const getTemplateByType = async (templateType) => {
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
           
           signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
-          
-          footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
         };
         
         template = new ReportTemplate({
@@ -177,17 +167,17 @@ const getTemplateByType = async (templateType) => {
           },
           standardSections
         });
-      } else if (templateType === "asbestosClearanceMixed") {
-        // Mixed clearance content (same as Friable initially)
+      } else if (templateType === "asbestosClearanceFriableNonFriableConditions") {
+        // Friable (Non-Friable Conditions) clearance content
         standardSections = {
-          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING MIXED ASBESTOS CLEARANCE INSPECTIONS",
-          backgroundInformationContent: "A mixed asbestos clearance inspection is conducted when both friable and non-friable asbestos-containing materials have been removed from a site. This inspection ensures that all asbestos materials have been properly removed and the area is safe for re-occupation. The inspection is conducted by a Licensed Asbestos Assessor (LAA) in accordance with the Work Health and Safety Act 2011 and the Work Health and Safety Regulation 2011.\n\nThe clearance inspection involves a thorough visual examination of the asbestos removal area and surrounding areas to ensure no visible asbestos residue remains from either friable or non-friable asbestos removal works. This process is essential to protect the health and safety of workers and occupants who will re-enter the area following asbestos removal works.",
+          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING FRIABLE (NON-FRIABLE CONDITIONS) CLEARANCE INSPECTIONS",
+          backgroundInformationContent: "A friable (non-friable conditions) asbestos clearance inspection is conducted when friable asbestos has been removed from a site, but under non-friable conditions and lower risk circumstances. This inspection ensures that all asbestos materials have been properly removed and the area is safe for re-occupation. The inspection is conducted by a Licensed Asbestos Assessor (LAA) in accordance with the Work Health and Safety Act 2011 and the Work Health and Safety Regulation 2011.\n\nThis clearance type is applicable when friable asbestos has been removed but the work was conducted under controlled conditions that did not require the same level of containment as standard friable asbestos removal.",
           
           legislativeRequirementsTitle: "LEGISLATIVE REQUIREMENTS",
-          legislativeRequirementsContent: "The clearance inspection is conducted in accordance with the following legislative requirements:\n\n• Work Health and Safety Act 2011 (Cth)\n• Work Health and Safety Regulation 2011 (Cth)\n• Code of Practice: How to Safely Remove Asbestos (Safe Work Australia)\n• Code of Practice: How to Manage and Control Asbestos in the Workplace (Safe Work Australia)\n\nThese regulations require that a Licensed Asbestos Assessor conduct a clearance inspection following the removal of both friable and non-friable asbestos to ensure the area is safe for re-occupation.",
+          legislativeRequirementsContent: "The clearance inspection is conducted in accordance with the following legislative requirements:\n\n• Work Health and Safety Act 2011 (Cth)\n• Work Health and Safety Regulation 2011 (Cth)\n• Code of Practice: How to Safely Remove Asbestos (Safe Work Australia)\n• Code of Practice: How to Manage and Control Asbestos in the Workplace (Safe Work Australia)\n\nThese regulations require that a Licensed Asbestos Assessor conduct a clearance inspection following the removal of asbestos to ensure the area is safe for re-occupation.",
           
-          mixedClearanceCertificateLimitationsTitle: "MIXED ASBESTOS CLEARANCE CERTIFICATE LIMITATIONS",
-          mixedClearanceCertificateLimitationsContent: "This clearance certificate is subject to the following limitations:\n\n• The inspection is limited to the areas specified in the asbestos removal plan\n• The clearance is based on visual inspection only and does not include air monitoring unless specifically requested\n• The certificate is valid only for the specific asbestos removal works described in this report\n• Any subsequent modifications to the area may invalidate this clearance certificate\n• The clearance does not cover areas not accessible during the inspection\n• The certificate covers both friable and non-friable asbestos removal works as specified",
+          friableNonFriableConditionsCertificateLimitationsTitle: "CLEARANCE CERTIFICATE LIMITATIONS",
+          friableNonFriableConditionsCertificateLimitationsContent: "This clearance certificate is subject to the following limitations:\n\n• The inspection is limited to the areas specified in the asbestos removal plan\n• The clearance is based on visual inspection only and does not include air monitoring unless specifically requested\n• The certificate is valid only for the specific asbestos removal works described in this report\n• Any subsequent modifications to the area may invalidate this clearance certificate\n• The clearance does not cover areas not accessible during the inspection\n• The certificate covers friable asbestos removal conducted under non-friable conditions",
           
           inspectionDetailsTitle: "INSPECTION DETAILS",
           inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
@@ -199,8 +189,39 @@ const getTemplateByType = async (templateType) => {
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
           
           signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
+        };
+        
+        template = new ReportTemplate({
+          templateType,
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Clearance Inspection Report"
+          },
+          standardSections
+        });
+      } else if (templateType === "asbestosClearanceVehicle") {
+        // Vehicle/Equipment clearance content
+        standardSections = {
+          backgroundInformationTitle: "BACKGROUND INFORMATION REGARDING VEHICLE/EQUIPMENT ASBESTOS CLEARANCE INSPECTIONS",
+          backgroundInformationContent: "A vehicle/equipment asbestos clearance inspection is conducted following the removal of asbestos-containing materials from vehicles or equipment to ensure that all asbestos materials have been properly removed and the vehicle or equipment is safe for use. This inspection is conducted by a Licensed Asbestos Assessor (LAA) in accordance with the Work Health and Safety Act 2011 and the Work Health and Safety Regulation 2011.\n\nVehicles and equipment contaminated with asbestos require thorough decontamination and clearance inspection before they can be safely used. This process ensures that no asbestos fibres remain in the vehicle or equipment that could pose a risk to operators or occupants.",
           
-          footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
+          legislativeRequirementsTitle: "LEGISLATIVE REQUIREMENTS",
+          legislativeRequirementsContent: "The clearance inspection is conducted in accordance with the following legislative requirements:\n\n• Work Health and Safety Act 2011 (Cth)\n• Work Health and Safety Regulation 2011 (Cth)\n• Code of Practice: How to Safely Remove Asbestos (Safe Work Australia)\n• Code of Practice: How to Manage and Control Asbestos in the Workplace (Safe Work Australia)\n\nThese regulations require that a Licensed Asbestos Assessor conduct a clearance inspection following the removal of asbestos from vehicles or equipment to ensure they are safe for use.",
+          
+          vehicleCertificateLimitationsTitle: "VEHICLE/EQUIPMENT ASBESTOS CLEARANCE CERTIFICATE LIMITATIONS",
+          vehicleCertificateLimitationsContent: "This clearance certificate is subject to the following limitations:\n\n• The inspection is limited to the vehicle/equipment and areas specified in the asbestos removal plan\n• The clearance is based on visual inspection only and does not include air monitoring unless specifically requested\n• The certificate is valid only for the specific asbestos removal works described in this report\n• Any subsequent modifications or additional contamination may invalidate this clearance certificate\n• The clearance does not cover areas of the vehicle/equipment not accessible during the inspection\n• The certificate specifically covers vehicle/equipment asbestos removal works only",
+          
+          inspectionDetailsTitle: "INSPECTION DETAILS",
+          inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from the vehicle/equipment (herein referred to as 'the Vehicle/Equipment').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D conducted the inspection at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
+          
+          inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
+          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas of the vehicle/equipment not accessible during the inspection\n• Areas where access was restricted for safety reasons\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n\n{JOB_SPECIFIC_EXCLUSIONS}",
+          
+          clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
+          clearanceCertificationContent: "An inspection of the vehicle/equipment and the surrounding areas was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the inspected areas of the vehicle/equipment.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the vehicle/equipment does not pose a risk to health and safety from exposure to asbestos and may be returned to service.",
+          
+          signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
         };
         
         template = new ReportTemplate({
@@ -256,8 +277,6 @@ const getTemplateByType = async (templateType) => {
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
           
           signOffContent: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{LAA_NAME}\nLicensed Asbestos Assessor - {LAA_LICENSE}",
-          
-          footerText: "{REPORT_TYPE} Clearance Certificate: {SITE_NAME}"
         };
         
         template = new ReportTemplate({
@@ -497,6 +516,8 @@ const replacePlaceholders = async (content, data) => {
     '[AUTHOR_NAME]': data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.LAA || 'Unknown Author',
     '{JOB_REFERENCE}': data.projectId?.projectID || data.project?.projectID || 'Unknown Reference',
     '[JOB_REFERENCE]': data.projectId?.projectID || data.project?.projectID || 'Unknown Reference',
+    '{VEHICLE_DESCRIPTION}': data.vehicleEquipmentDescription || 'Vehicle/Equipment',
+    '[VEHICLE_DESCRIPTION]': data.vehicleEquipmentDescription || 'Vehicle/Equipment',
     '{APPENDIX_REFERENCES}': (() => {
       const hasSitePlan = data.sitePlan && data.sitePlanFile;
       const hasAirMonitoring = data.airMonitoring;

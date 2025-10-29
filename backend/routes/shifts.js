@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Shift = require('../models/Shift');
+const Sample = require('../models/Sample');
 const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
@@ -375,6 +376,48 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
   }
 });
 
+// Reopen a shift for editing (admin only)
+router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id);
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    // Check if shift is in a state that can be reopened
+    if (!['analysis_complete', 'shift_complete', 'samples_submitted_to_lab'].includes(shift.status)) {
+      return res.status(400).json({ 
+        message: `Cannot reopen shift with status: ${shift.status}` 
+      });
+    }
+
+    // Reopen by setting status back to a state that allows editing
+    // For shifts that are completed at analysis level, go back to sampling_complete
+    // For shifts that are fully complete, go back to analysis_complete
+    let newStatus = 'sampling_complete';
+    if (shift.status === 'shift_complete') {
+      newStatus = 'analysis_complete';
+    }
+
+    shift.status = newStatus;
+    
+    // Clear report approval fields to indicate the shift needs re-approval
+    if (shift.status === 'analysis_complete') {
+      shift.reportApprovedBy = '';
+      shift.reportIssueDate = null;
+    }
+
+    const updatedShift = await shift.save();
+    res.json({
+      message: 'Shift reopened successfully',
+      shift: updatedShift
+    });
+  } catch (error) {
+    console.error('Error reopening shift:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Delete a shift
 router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
@@ -431,6 +474,246 @@ router.get('/:id/site-plan', auth, checkPermission(['jobs.view']), async (req, r
     });
   } catch (error) {
     console.error('Error fetching site plan:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Generate Chain of Custody PDF for a shift
+router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id)
+      .populate({
+        path: 'job',
+        select: 'jobID name projectId status asbestosRemovalist description projectName client',
+        populate: {
+          path: 'projectId',
+          select: 'projectID name client',
+          populate: {
+            path: 'client',
+            select: 'name contact1Name contact1Email address'
+          }
+        }
+      });
+
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    // Get samples directly from Sample collection
+    const samples = await Sample.find({ shift: req.params.id })
+      .select('sampleNumber cowlNo fullSampleID')
+      .sort({ fullSampleID: 1 });
+    
+    console.log('Samples found:', samples.length);
+    console.log('Sample data:', JSON.stringify(samples, null, 2));
+
+    // Generate a simple HTML-based COC document
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Load logo
+    const logoPath = path.join(__dirname, '../assets/logo.png');
+    let logoBase64 = '';
+    try {
+      logoBase64 = fs.readFileSync(logoPath).toString('base64');
+    } catch (error) {
+      console.warn('Could not load logo:', error.message);
+    }
+
+    // Get project and client info
+    const project = shift.job?.projectId;
+    const client = project?.client;
+    const projectName = project?.name || 'Unknown Project';
+    const projectID = project?.projectID || 'LDJxxxx';
+    const clientName = client?.name || 'Unknown Client';
+
+    // Format shift date
+    const shiftDate = shift.date ? new Date(shift.date).toLocaleDateString('en-GB') : 'N/A';
+    
+    // Get submission info
+    let submittedBy = shift.submittedBy;
+    if (!submittedBy && req.user) {
+      // Fallback to current user if submittedBy is not set
+      submittedBy = `${req.user.firstName} ${req.user.lastName}`;
+    }
+    if (!submittedBy) {
+      submittedBy = 'Not provided';
+    }
+    
+    const submissionDate = shift.samplesReceivedDate 
+      ? new Date(shift.samplesReceivedDate).toLocaleDateString('en-GB') 
+      : shiftDate;
+    
+    console.log('Shift submittedBy:', shift.submittedBy);
+    console.log('Final submittedBy:', submittedBy);
+
+    // Create simple HTML document
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Chain of Custody - ${projectID}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+    .logo {
+      max-width: 200px;
+      max-height: 80px;
+    }
+    .company-info {
+      text-align: right;
+      font-size: 12px;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      border-bottom: 3px solid #16b12b;
+      padding-bottom: 10px;
+      margin-bottom: 30px;
+    }
+    .info-section {
+      margin-bottom: 30px;
+    }
+    .info-row {
+      display: flex;
+      margin-bottom: 10px;
+    }
+    .info-label {
+      font-weight: bold;
+      width: 200px;
+    }
+    .info-value {
+      flex: 1;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 12px;
+      text-align: left;
+    }
+    th {
+      background-color: #16b12b;
+      color: white;
+    }
+    .signature-section {
+      margin-top: 50px;
+    }
+    .signature-row {
+      display: flex;
+      justify-content: flex-start;
+      margin-top: 30px;
+    }
+    .signature-box {
+      width: 300px;
+      border-top: 1px solid #333;
+      padding-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+    <div class="company-info">
+      Lancaster & Dickenson Consulting Pty Ltd<br />
+      4/6 Dacre Street, Mitchell ACT 2911<br />
+      enquiries@landd.com.au<br />
+      (02) 6241 2779
+    </div>
+  </div>
+
+  <h1>CHAIN OF CUSTODY</h1>
+
+  <div class="info-section">
+    <div class="info-row">
+      <div class="info-label">Client:</div>
+      <div class="info-value">${clientName}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Project:</div>
+      <div class="info-value">${projectName}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">L&D Reference:</div>
+      <div class="info-value">${projectID}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Shift Date:</div>
+      <div class="info-value">${shiftDate}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Number of Samples:</div>
+      <div class="info-value">${samples.length}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Sample Number</th>
+        <th>Cowl Number</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${samples.map((sample) => `
+        <tr>
+          <td>${sample.fullSampleID || sample.sampleNumber || 'N/A'}</td>
+          <td>${sample.cowlNo || 'N/A'}</td>
+        </tr>
+      `).join('')}
+      ${samples.length < 10 ? Array(10 - samples.length).fill('<tr><td></td><td></td></tr>').join('') : ''}
+    </tbody>
+  </table>
+
+  <div class="signature-section">
+    <div class="signature-row">
+      <div class="signature-box">
+        <strong>Submitted By:</strong><br />${submittedBy}<br /><br />
+        <strong>Date:</strong><br />${submissionDate}
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // Use puppeteer to generate PDF
+    const puppeteer = require('puppeteer');
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '0.5in',
+        right: '0.5in',
+        bottom: '0.5in',
+        left: '0.5in'
+      }
+    });
+
+    await browser.close();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${projectID}: Chain of Custody - ${shiftDate}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating Chain of Custody PDF:', error);
     res.status(500).json({ message: error.message });
   }
 });

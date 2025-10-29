@@ -22,7 +22,7 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     clearanceType: {
       type: String,
-      enum: ["Non-friable", "Friable", "Mixed", "Complex"],
+      enum: ["Non-friable", "Friable", "Friable (Non-Friable Conditions)", "Vehicle/Equipment"],
       required: true,
     },
     jurisdiction: {
@@ -65,6 +65,10 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     notes: {
       type: String,
+    },
+    vehicleEquipmentDescription: {
+      type: String,
+      required: false,
     },
     // Array of clearance items embedded directly in the clearance job
     items: [{

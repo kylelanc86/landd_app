@@ -91,16 +91,37 @@ const Dashboard = () => {
 
   // Load widget preferences from user preferences or use defaults
   // All additional widgets are false by default - users must explicitly select them
-  const [visibleWidgets, setVisibleWidgets] = useState({
-    dailyTimesheet: true, // Required widget (always true)
-    inProgress: false, // Additional widget 1 (user must select)
-    samplesSubmitted: false, // Additional widget 2 (user must select)
-    labComplete: false, // Additional widget 3 (user must select)
-    reportReview: false, // Additional widget 4 (user must select)
-    readyForInvoicing: false, // Additional widget 5 (user must select)
-    invoiceSent: false, // Additional widget 6 (user must select)
-    awaitingPayment: false, // Additional widget 7 (user must select)
-    allActive: false, // Additional widget 8 (user must select)
+  const [visibleWidgets, setVisibleWidgets] = useState(() => {
+    // Initialize from localStorage if available while API loads
+    const savedWidgets = localStorage.getItem("dashboardWidgets");
+    if (savedWidgets) {
+      try {
+        return { ...JSON.parse(savedWidgets), dailyTimesheet: true };
+      } catch {
+        return {
+          dailyTimesheet: true,
+          inProgress: false,
+          samplesSubmitted: false,
+          labComplete: false,
+          reportReview: false,
+          readyForInvoicing: false,
+          invoiceSent: false,
+          awaitingPayment: false,
+          allActive: false,
+        };
+      }
+    }
+    return {
+      dailyTimesheet: true, // Required widget (always true)
+      inProgress: false, // Additional widget 1 (user must select)
+      samplesSubmitted: false, // Additional widget 2 (user must select)
+      labComplete: false, // Additional widget 3 (user must select)
+      reportReview: false, // Additional widget 4 (user must select)
+      readyForInvoicing: false, // Additional widget 5 (user must select)
+      invoiceSent: false, // Additional widget 6 (user must select)
+      awaitingPayment: false, // Additional widget 7 (user must select)
+      allActive: false, // Additional widget 8 (user must select)
+    };
   });
 
   const [stats, setStats] = useState({
@@ -167,7 +188,22 @@ const Dashboard = () => {
             // Ensure daily timesheet is always enabled (required widget)
             prefs.dailyTimesheet = true;
             console.log("Setting visible widgets from preferences:", prefs);
-            setVisibleWidgets(prefs);
+
+            // Merge with default to ensure all widgets have a value
+            const merged = {
+              dailyTimesheet: true,
+              inProgress: false,
+              samplesSubmitted: false,
+              labComplete: false,
+              reportReview: false,
+              readyForInvoicing: false,
+              invoiceSent: false,
+              awaitingPayment: false,
+              allActive: false,
+              ...prefs,
+            };
+
+            setVisibleWidgets(merged);
           } else {
             // No preferences found - use default state (only dailyTimesheet enabled)
             console.log("No widget preferences found, using defaults");
@@ -214,9 +250,24 @@ const Dashboard = () => {
         if (savedWidgets) {
           try {
             const parsed = JSON.parse(savedWidgets);
-            parsed.dailyTimesheet = true; // Ensure daily timesheet is always enabled
-            console.log("Using localStorage fallback:", parsed);
-            setVisibleWidgets(parsed);
+
+            // Merge with defaults to ensure all widgets exist
+            const merged = {
+              dailyTimesheet: true,
+              inProgress: false,
+              samplesSubmitted: false,
+              labComplete: false,
+              reportReview: false,
+              readyForInvoicing: false,
+              invoiceSent: false,
+              awaitingPayment: false,
+              allActive: false,
+              ...parsed,
+              dailyTimesheet: true, // Force daily timesheet to always be true
+            };
+
+            console.log("Using localStorage fallback:", merged);
+            setVisibleWidgets(merged);
           } catch (parseError) {
             console.error(
               "Error parsing saved widget preferences:",
@@ -446,6 +497,16 @@ const Dashboard = () => {
   // Debug: Log when visibleWidgets changes
   useEffect(() => {
     console.log("visibleWidgets changed:", visibleWidgets);
+    console.log(
+      "Visible count:",
+      Object.values(visibleWidgets).filter(Boolean).length
+    );
+    console.log(
+      "All widgets state:",
+      Object.entries(visibleWidgets)
+        .map(([key, val]) => `${key}: ${val}`)
+        .join(", ")
+    );
   }, [visibleWidgets]);
 
   // Get ordered and visible widgets - limit to 3 additional widgets + daily timesheet = 4 total
@@ -1021,9 +1082,11 @@ const Dashboard = () => {
             {gridItems
               .filter((item) => item.id !== "dailyTimesheet") // Exclude daily timesheet from selection
               .map((item) => {
-                const isChecked = visibleWidgets[item.id] || false;
+                // Check if this widget is currently visible
+                const isChecked = visibleWidgets[item.id] === true;
                 const currentCount =
                   Object.values(visibleWidgets).filter(Boolean).length;
+
                 // Can toggle if: already checked (can uncheck) OR not at limit of 4 total widgets
                 const canToggle = isChecked || currentCount < 4;
 
@@ -1031,8 +1094,8 @@ const Dashboard = () => {
                   isChecked,
                   currentCount,
                   canToggle,
-                  visibleWidgets: visibleWidgets[item.id],
-                  allVisibleWidgets: visibleWidgets,
+                  visibleWidgetsValue: visibleWidgets[item.id],
+                  widgetState: visibleWidgets,
                 });
 
                 return (

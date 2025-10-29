@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -43,6 +43,7 @@ import { useAuth } from "../../context/AuthContext";
 const ProjectReports = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [project, setProject] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [reports, setReports] = useState([]);
@@ -1098,16 +1099,21 @@ const ProjectReports = () => {
     }
   };
 
+  // Determine where user came from based on location state
+  const cameFromProjects = location.state?.from === "projects";
+  const backPath = cameFromProjects ? "/projects" : "/reports";
+  const backText = cameFromProjects ? "Back to Projects" : "Back to Reports";
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/projects")}
+          onClick={() => navigate(backPath)}
           sx={{ mb: 2 }}
         >
-          Back to Projects
+          {backText}
         </Button>
 
         <Box
@@ -1273,10 +1279,10 @@ const ProjectReports = () => {
             </Typography>
             <Button
               variant="contained"
-              onClick={() => navigate("/projects")}
+              onClick={() => navigate(backPath)}
               sx={{ mr: 2 }}
             >
-              Back to Projects
+              {backText}
             </Button>
             <Button variant="outlined" onClick={() => setLogModalOpen(true)}>
               View Project Log

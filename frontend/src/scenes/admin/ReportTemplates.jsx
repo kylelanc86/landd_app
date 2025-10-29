@@ -83,8 +83,13 @@ const ReportTemplates = () => {
       color: "#FF6B6B",
     },
     {
-      id: "asbestosClearanceMixed",
-      name: "Friable Asbestos Clearance (Non-Friable Conditions)",
+      id: "asbestosClearanceFriableNonFriableConditions",
+      name: "Friable (Non-Friable Conditions)",
+      color: "#FF6B6B",
+    },
+    {
+      id: "asbestosClearanceVehicle",
+      name: "Vehicle/Equipment",
       color: "#FF6B6B",
     },
     // {
@@ -136,11 +141,12 @@ const ReportTemplates = () => {
 
   // Template sections organized by page for detailed editing
   const getTemplateSections = (templateType) => {
-    // Asbestos clearance templates (non-friable, friable, and mixed)
+    // Asbestos clearance templates (non-friable, friable, friable non-friable conditions, vehicle)
     if (
       templateType === "asbestosClearanceNonFriable" ||
       templateType === "asbestosClearanceFriable" ||
-      templateType === "asbestosClearanceMixed"
+      templateType === "asbestosClearanceFriableNonFriableConditions" ||
+      templateType === "asbestosClearanceVehicle"
     ) {
       const baseSections = {
         "Background Information": ["backgroundInformationContent"],
@@ -149,7 +155,6 @@ const ReportTemplates = () => {
         "Inspection Exclusions": ["inspectionExclusionsContent"],
         "Clearance Certification": ["clearanceCertificationContent"],
         "Sign-off": ["signOffContent"],
-        Footer: ["footerText"],
       };
 
       // Add template-specific limitations sections
@@ -161,9 +166,15 @@ const ReportTemplates = () => {
         baseSections["Friable Clearance Certificate Limitations"] = [
           "friableClearanceCertificateLimitationsContent",
         ];
-      } else if (templateType === "asbestosClearanceMixed") {
-        baseSections["Mixed Clearance Certificate Limitations"] = [
-          "mixedClearanceCertificateLimitationsContent",
+      } else if (
+        templateType === "asbestosClearanceFriableNonFriableConditions"
+      ) {
+        baseSections[
+          "Friable (Non-Friable Conditions) Clearance Certificate Limitations"
+        ] = ["friableNonFriableConditionsCertificateLimitationsContent"];
+      } else if (templateType === "asbestosClearanceVehicle") {
+        baseSections["Vehicle/Equipment Certificate Limitations"] = [
+          "vehicleCertificateLimitationsContent",
         ];
       }
 
@@ -180,7 +191,6 @@ const ReportTemplates = () => {
         "Risk Assessment": ["riskAssessmentContent"],
         Recommendations: ["recommendationsContent"],
         Conclusion: ["conclusionContent"],
-        Footer: ["footerText"],
       };
     }
 
@@ -199,7 +209,6 @@ const ReportTemplates = () => {
         "Assessment Limitations/Caveats": ["assessmentLimitationsContent"],
         "Sign-off": ["signOffContent"],
         Signature: ["signaturePlaceholder"],
-        Footer: ["footerText"],
       };
     }
 
@@ -1183,13 +1192,23 @@ const ReportTemplates = () => {
                   limitationsContent =
                     template.standardSections
                       .friableClearanceCertificateLimitationsContent;
-                } else if (selectedTemplate === "asbestosClearanceMixed") {
+                } else if (
+                  selectedTemplate ===
+                  "asbestosClearanceFriableNonFriableConditions"
+                ) {
                   limitationsTitle =
                     template.standardSections
-                      .mixedClearanceCertificateLimitationsTitle;
+                      .friableNonFriableConditionsCertificateLimitationsTitle;
                   limitationsContent =
                     template.standardSections
-                      .mixedClearanceCertificateLimitationsContent;
+                      .friableNonFriableConditionsCertificateLimitationsContent;
+                } else if (selectedTemplate === "asbestosClearanceVehicle") {
+                  limitationsTitle =
+                    template.standardSections
+                      .vehicleCertificateLimitationsTitle;
+                  limitationsContent =
+                    template.standardSections
+                      .vehicleCertificateLimitationsContent;
                 }
 
                 if (limitationsTitle && limitationsContent) {
@@ -1406,7 +1425,8 @@ const ReportTemplates = () => {
     if (
       selectedTemplate === "asbestosClearanceNonFriable" ||
       selectedTemplate === "asbestosClearanceFriable" ||
-      selectedTemplate === "asbestosClearanceMixed"
+      selectedTemplate === "asbestosClearanceFriableNonFriableConditions" ||
+      selectedTemplate === "asbestosClearanceVehicle"
     ) {
       availablePlaceholders = [...basePlaceholders, ...asbestosPlaceholders];
     } else if (selectedTemplate === "leadAssessment") {
@@ -1653,7 +1673,7 @@ const ReportTemplates = () => {
           </Typography>
         </Box>
         <Typography variant="h5" color="black">
-          Manage standardized content for different report types
+          Manage standardised content for different report types
         </Typography>
 
         {saveStatus.show && (

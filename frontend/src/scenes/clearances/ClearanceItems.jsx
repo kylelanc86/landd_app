@@ -305,31 +305,48 @@ const ClearanceItems = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate required fields
-    if (!form.roomArea.trim()) {
-      showSnackbar("Room/Area is required", "error");
-      return;
-    }
+    // Validate required fields based on clearance type
+    if (clearance?.clearanceType === "Vehicle/Equipment") {
+      if (!form.materialDescription.trim()) {
+        showSnackbar("Item Description is required", "error");
+        return;
+      }
+    } else {
+      if (!form.roomArea.trim()) {
+        showSnackbar("Room/Area is required", "error");
+        return;
+      }
 
-    if (!form.locationDescription.trim()) {
-      showSnackbar("Location Description is required", "error");
-      return;
-    }
+      if (!form.locationDescription.trim()) {
+        showSnackbar("Location Description is required", "error");
+        return;
+      }
 
-    if (!form.materialDescription.trim()) {
-      showSnackbar("Materials Description is required", "error");
-      return;
+      if (!form.materialDescription.trim()) {
+        showSnackbar("Materials Description is required", "error");
+        return;
+      }
     }
 
     try {
-      const itemData = {
-        locationDescription: form.locationDescription, // Location Description
-        levelFloor: showLevelFloor ? form.levelFloor : "",
-        roomArea: form.roomArea,
-        materialDescription: form.materialDescription, // Materials Description
-        asbestosType: form.asbestosType, // Material Type
-        notes: form.notes,
-      };
+      const itemData =
+        clearance?.clearanceType === "Vehicle/Equipment"
+          ? {
+              // For Vehicle/Equipment, use placeholder values for required fields
+              roomArea: "N/A", // Placeholder for required field
+              locationDescription: "N/A", // Placeholder for required field
+              materialDescription: form.materialDescription, // Item Description
+              asbestosType: form.asbestosType, // Material Type
+              notes: form.notes,
+            }
+          : {
+              locationDescription: form.locationDescription,
+              levelFloor: showLevelFloor ? form.levelFloor : "",
+              roomArea: form.roomArea,
+              materialDescription: form.materialDescription,
+              asbestosType: form.asbestosType,
+              notes: form.notes,
+            };
 
       console.log("Submitting item data:", itemData);
 
@@ -386,14 +403,17 @@ const ClearanceItems = () => {
   const handleEdit = (item) => {
     setEditingItem(item);
     setForm({
-      locationDescription: item.locationDescription,
+      locationDescription: item.locationDescription || "",
       levelFloor: item.levelFloor || "",
       roomArea: item.roomArea || "",
       materialDescription: item.materialDescription,
       asbestosType: item.asbestosType,
       notes: item.notes || "",
     });
-    setShowLevelFloor(!!item.levelFloor);
+    // Don't show level floor checkbox for Vehicle/Equipment items
+    setShowLevelFloor(
+      clearance?.clearanceType !== "Vehicle/Equipment" && !!item.levelFloor
+    );
     setDialogOpen(true);
   };
 
@@ -445,14 +465,25 @@ const ClearanceItems = () => {
       return;
     }
 
+    // Don't auto-update clearance type for Vehicle/Equipment or specialized clearance types
+    if (
+      clearance?.clearanceType === "Vehicle/Equipment" ||
+      clearance?.clearanceType === "Friable (Non-Friable Conditions)"
+    ) {
+      return;
+    }
+
     const hasFriable = items.some((item) => item.asbestosType === "friable");
     const hasNonFriable = items.some(
       (item) => item.asbestosType === "non-friable"
     );
 
     let newClearanceType;
+    // Determine clearance type based on asbestos items
+    // If has both friable and non-friable, use "Friable (Non-Friable Conditions)"
+    // Otherwise use the predominant type
     if (hasFriable && hasNonFriable) {
-      newClearanceType = "Mixed";
+      newClearanceType = "Friable (Non-Friable Conditions)";
     } else if (hasFriable) {
       newClearanceType = "Friable";
     } else {
@@ -1388,18 +1419,28 @@ const ClearanceItems = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    {items &&
-                      items.length > 0 &&
-                      items.some(
-                        (item) =>
-                          item.levelFloor && item.levelFloor.trim() !== ""
-                      ) && <TableCell>Level/Floor</TableCell>}
-                    <TableCell>Room/Area</TableCell>
-                    <TableCell>Location Description</TableCell>
-                    <TableCell>Materials Description</TableCell>
-                    <TableCell>Asbestos Type</TableCell>
-                    <TableCell>Photograph</TableCell>
-                    <TableCell>Actions</TableCell>
+                    {clearance?.clearanceType === "Vehicle/Equipment" ? (
+                      <>
+                        <TableCell>Item Description</TableCell>
+                        <TableCell>Photo No.</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </>
+                    ) : (
+                      <>
+                        {items &&
+                          items.length > 0 &&
+                          items.some(
+                            (item) =>
+                              item.levelFloor && item.levelFloor.trim() !== ""
+                          ) && <TableCell>Level/Floor</TableCell>}
+                        <TableCell>Room/Area</TableCell>
+                        <TableCell>Location Description</TableCell>
+                        <TableCell>Materials Description</TableCell>
+                        <TableCell>Asbestos Type</TableCell>
+                        <TableCell>Photograph</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </>
+                    )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1411,6 +1452,89 @@ const ClearanceItems = () => {
                         (item) =>
                           item.levelFloor && item.levelFloor.trim() !== ""
                       );
+
+                    // For Vehicle/Equipment, show simplified view
+                    if (clearance?.clearanceType === "Vehicle/Equipment") {
+                      const photoCount =
+                        (item.photographs?.length || 0) +
+                        (item.photograph ? 1 : 0);
+                      const selectedCount =
+                        item.photographs?.filter((p) => p.includeInReport)
+                          .length || 0;
+
+                      return (
+                        <TableRow key={item._id}>
+                          <TableCell>{item.materialDescription}</TableCell>
+                          <TableCell>
+                            {photoCount > 0 ? (
+                              <Box
+                                display="flex"
+                                flexDirection="column"
+                                alignItems="flex-start"
+                                gap={0.5}
+                              >
+                                <Chip
+                                  label={`${photoCount} photo${
+                                    photoCount !== 1 ? "s" : ""
+                                  }`}
+                                  color="success"
+                                  size="small"
+                                />
+                                {item.photographs?.length > 0 && (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {selectedCount} in report
+                                  </Typography>
+                                )}
+                              </Box>
+                            ) : (
+                              <Chip
+                                label="No photos"
+                                color="default"
+                                size="small"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Box display="flex" gap={1}>
+                              <IconButton
+                                onClick={() => handleOpenPhotoGallery(item)}
+                                color="secondary"
+                                size="small"
+                                title="Manage Photos"
+                              >
+                                <PhotoCameraIcon />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => handleEdit(item)}
+                                color="primary"
+                                size="small"
+                                title="Edit"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              <PermissionGate
+                                requiredPermissions={["admin.view"]}
+                                fallback={null}
+                              >
+                                <IconButton
+                                  onClick={() => handleDelete(item)}
+                                  color="error"
+                                  size="small"
+                                  title="Delete (Admin Only)"
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              </PermissionGate>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+
+                    // Standard view for non-Vehicle/Equipment clearances
                     return (
                       <TableRow key={item._id}>
                         {hasLevelFloor && (
@@ -1586,127 +1710,169 @@ const ClearanceItems = () => {
           <form onSubmit={handleSubmit}>
             <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
               <Grid container spacing={2}>
-                <Grid item xs={12} container spacing={2} alignItems="center">
-                  <Grid item>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={showLevelFloor}
-                          onChange={(e) => setShowLevelFloor(e.target.checked)}
-                        />
+                {clearance?.clearanceType === "Vehicle/Equipment" ? (
+                  // Simplified view for Vehicle/Equipment
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Item Description"
+                      value={form.materialDescription}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          materialDescription: e.target.value,
+                        })
                       }
-                      label="Include Level/Floor"
+                      required
+                      placeholder="e.g., Trailer, hydrovac tank"
                     />
                   </Grid>
-                  {showLevelFloor && (
-                    <Grid item xs={6}>
-                      <TextField
-                        fullWidth
-                        label="Level/Floor"
-                        value={form.levelFloor}
-                        onChange={(e) =>
-                          setForm({ ...form, levelFloor: e.target.value })
+                ) : (
+                  // Standard view for other clearance types
+                  <>
+                    <Grid
+                      item
+                      xs={12}
+                      container
+                      spacing={2}
+                      alignItems="center"
+                    >
+                      <Grid item>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={showLevelFloor}
+                              onChange={(e) =>
+                                setShowLevelFloor(e.target.checked)
+                              }
+                            />
+                          }
+                          label="Include Level/Floor"
+                        />
+                      </Grid>
+                      {showLevelFloor && (
+                        <Grid item xs={6}>
+                          <TextField
+                            fullWidth
+                            label="Level/Floor"
+                            value={form.levelFloor}
+                            onChange={(e) =>
+                              setForm({ ...form, levelFloor: e.target.value })
+                            }
+                            placeholder="e.g., Ground Floor, Level 1, Basement"
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        value={form.roomArea}
+                        onChange={(event, newValue) =>
+                          setForm({ ...form, roomArea: newValue || "" })
                         }
-                        placeholder="e.g., Ground Floor, Level 1, Basement"
+                        onInputChange={(event, newInputValue) =>
+                          setForm({ ...form, roomArea: newInputValue })
+                        }
+                        options={customDataFields.roomAreas.map(
+                          (item) => item.text
+                        )}
+                        onOpen={() =>
+                          console.log(
+                            "Room areas options:",
+                            customDataFields.roomAreas
+                          )
+                        }
+                        freeSolo
+                        renderInput={(params) => (
+                          <TextField {...params} label="Room/Area" required />
+                        )}
                       />
                     </Grid>
-                  )}
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    value={form.roomArea}
-                    onChange={(event, newValue) =>
-                      setForm({ ...form, roomArea: newValue || "" })
-                    }
-                    onInputChange={(event, newInputValue) =>
-                      setForm({ ...form, roomArea: newInputValue })
-                    }
-                    options={customDataFields.roomAreas.map(
-                      (item) => item.text
-                    )}
-                    onOpen={() =>
-                      console.log(
-                        "Room areas options:",
-                        customDataFields.roomAreas
-                      )
-                    }
-                    freeSolo
-                    renderInput={(params) => (
-                      <TextField {...params} label="Room/Area" required />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    value={form.locationDescription}
-                    onChange={(event, newValue) =>
-                      setForm({ ...form, locationDescription: newValue || "" })
-                    }
-                    onInputChange={(event, newInputValue) =>
-                      setForm({ ...form, locationDescription: newInputValue })
-                    }
-                    options={customDataFields.locationDescriptions.map(
-                      (item) => item.text
-                    )}
-                    freeSolo
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Location Description"
-                        required
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        value={form.locationDescription}
+                        onChange={(event, newValue) =>
+                          setForm({
+                            ...form,
+                            locationDescription: newValue || "",
+                          })
+                        }
+                        onInputChange={(event, newInputValue) =>
+                          setForm({
+                            ...form,
+                            locationDescription: newInputValue,
+                          })
+                        }
+                        options={customDataFields.locationDescriptions.map(
+                          (item) => item.text
+                        )}
+                        freeSolo
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Location Description"
+                            required
+                          />
+                        )}
                       />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    value={form.materialDescription}
-                    onChange={(event, newValue) =>
-                      setForm({ ...form, materialDescription: newValue || "" })
-                    }
-                    onInputChange={(event, newInputValue) =>
-                      setForm({ ...form, materialDescription: newInputValue })
-                    }
-                    options={customDataFields.materialsDescriptions.map(
-                      (item) => item.text
-                    )}
-                    freeSolo
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Materials Description"
-                        required
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        value={form.materialDescription}
+                        onChange={(event, newValue) =>
+                          setForm({
+                            ...form,
+                            materialDescription: newValue || "",
+                          })
+                        }
+                        onInputChange={(event, newInputValue) =>
+                          setForm({
+                            ...form,
+                            materialDescription: newInputValue,
+                          })
+                        }
+                        options={customDataFields.materialsDescriptions.map(
+                          (item) => item.text
+                        )}
+                        freeSolo
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Materials Description"
+                            required
+                          />
+                        )}
                       />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth required>
-                    <InputLabel>Asbestos Type</InputLabel>
-                    <Select
-                      value={form.asbestosType}
-                      onChange={(e) =>
-                        setForm({ ...form, asbestosType: e.target.value })
-                      }
-                      label="Asbestos Type"
-                    >
-                      <MenuItem value="non-friable">Non-friable</MenuItem>
-                      <MenuItem value="friable">Friable</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Notes"
-                    value={form.notes}
-                    onChange={(e) =>
-                      setForm({ ...form, notes: e.target.value })
-                    }
-                    multiline
-                    rows={3}
-                  />
-                </Grid>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <FormControl fullWidth required>
+                        <InputLabel>Asbestos Type</InputLabel>
+                        <Select
+                          value={form.asbestosType}
+                          onChange={(e) =>
+                            setForm({ ...form, asbestosType: e.target.value })
+                          }
+                          label="Asbestos Type"
+                        >
+                          <MenuItem value="non-friable">Non-friable</MenuItem>
+                          <MenuItem value="friable">Friable</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Notes"
+                        value={form.notes}
+                        onChange={(e) =>
+                          setForm({ ...form, notes: e.target.value })
+                        }
+                        multiline
+                        rows={3}
+                      />
+                    </Grid>
+                  </>
+                )}
               </Grid>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
@@ -1727,9 +1893,11 @@ const ClearanceItems = () => {
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
                 disabled={
-                  !form.roomArea.trim() ||
-                  !form.locationDescription.trim() ||
-                  !form.materialDescription.trim()
+                  clearance?.clearanceType === "Vehicle/Equipment"
+                    ? !form.materialDescription.trim()
+                    : !form.roomArea.trim() ||
+                      !form.locationDescription.trim() ||
+                      !form.materialDescription.trim()
                 }
                 sx={{
                   minWidth: 120,

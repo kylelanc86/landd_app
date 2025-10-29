@@ -50,6 +50,13 @@ const shiftSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Sample'
   }],
+  sampleNumbers: [{
+    type: String
+  }],
+  submittedBy: {
+    type: String,
+    required: false
+  },
   samplesReceivedDate: {
     type: Date,
     required: false

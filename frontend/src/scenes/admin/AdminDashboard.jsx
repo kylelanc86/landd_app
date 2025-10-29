@@ -42,7 +42,7 @@ const AdminDashboard = () => {
     {
       id: "report-templates",
       title: "Report Templates",
-      description: "Manage standardized content for different report types",
+      description: "Manage standardised content for different report types",
       icon: <AssessmentIcon />,
       path: "/admin/report-templates",
       requiredPermission: "admin.view",
