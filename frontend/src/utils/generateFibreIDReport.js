@@ -480,9 +480,15 @@ pdfMake.fonts = {
                   
                   // Ensure all values are safe strings to prevent NaN
                   const safeProjectID = (assessment?.projectId?.projectID && assessment.projectId.projectID !== 'undefined' && assessment.projectId.projectID !== 'null') ? assessment.projectId.projectID : 'Unknown';
-                  const safeSampleRef = (item.sampleReference && item.sampleReference !== 'undefined' && item.sampleReference !== 'null') ? item.sampleReference : `Sample ${index + 1}`;
+                  // Use labReference or clientReference for client supplied samples
+                  const safeSampleRef = (item.labReference || item.clientReference || item.sampleReference) && 
+                    (item.labReference || item.clientReference || item.sampleReference) !== 'undefined' && 
+                    (item.labReference || item.clientReference || item.sampleReference) !== 'null' 
+                      ? (item.labReference || item.clientReference || item.sampleReference)
+                      : `Sample ${index + 1}`;
                   const safeAnalysisDate = (analysisDate && analysisDate !== 'undefined' && analysisDate !== 'null') ? analysisDate : 'Unknown';
-                  const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription) ? (item.analysisData.sampleDescription || item.locationDescription) : 'No description';
+                  const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) ? 
+                    (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) : 'No description';
                   const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
                   const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None detected';
                   const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'None detected';
@@ -506,8 +512,13 @@ pdfMake.fonts = {
                   });
                   console.log(`=== END TABLE ROW ${index + 1} DEBUG ===`);
                   
+                  // Use labReference for L&D ID Reference, or fall back to projectID-index
+                  const safeLabRef = (item.labReference && item.labReference !== 'undefined' && item.labReference !== 'null') 
+                    ? item.labReference 
+                    : `${safeProjectID}-${index + 1}`;
+                  
                   return [
-                    { text: `${safeProjectID}-${index + 1}`, fontSize: 8 },
+                    { text: safeLabRef, fontSize: 8 },
                     { text: safeSampleRef, fontSize: 8 },
                     { text: safeAnalysisDate, fontSize: 8 },
                     { text: safeDescription, fontSize: 8 },

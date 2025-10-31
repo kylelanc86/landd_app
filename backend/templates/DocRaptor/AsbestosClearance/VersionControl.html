@@ -105,10 +105,10 @@
 
       .green-line {
         width: calc(100% - 96px);
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin: 8px auto 0 auto;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .watermark {
@@ -118,7 +118,7 @@
         transform: translate(-50%, -50%);
         width: 450px;
         height: auto;
-        opacity: 0.2;
+        opacity: 0.1;
         z-index: 1;
         pointer-events: none;
       }
@@ -272,10 +272,10 @@
 
       .footer-border-line {
         width: 100%;
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin-bottom: 6px;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .page-number {
@@ -320,7 +320,7 @@
         <div class="section-label">Document Details</div>
         <table class="document-details-table">
           <tr>
-            <td>File Name</td>
+            <td>Report Reference</td>
             <td>[FILENAME]</td>
           </tr>
           <tr>
@@ -356,9 +356,7 @@
       <div class="footer">
         <div class="footer-border-line"></div>
         <div class="footer-content">
-          <div class="footer-text">
-            Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
-          </div>
+          <div class="footer-text">[FOOTER_TEXT]</div>
         </div>
       </div>
     </div>

@@ -516,6 +516,14 @@ const Sidebar = () => {
             />
           )}
 
+          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
+            <Item
+              title="Client Supplied"
+              to="/client-supplied"
+              icon={<ContactsOutlinedIcon />}
+            />
+          )}
+
           {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
             <CollapsibleSection
               title="FIBRE ID"
@@ -531,9 +539,7 @@ const Sidebar = () => {
             backgroundColor: "#ffffff",
             marginTop: "auto",
           }}
-        >
-
-        </Box>
+        ></Box>
       </Menu>
     </ProSidebar>
   );

@@ -14,12 +14,13 @@ const docRaptorService = new DocRaptorService();
 const formatClearanceDate = (dateString) => {
   if (!dateString) return 'Unknown';
   const date = new Date(dateString);
-  const day = date.getDate().toString().padStart(2, '0');
+  const day = date.getDate();
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
   const month = monthNames[date.getMonth()];
   const year = date.getFullYear();
-  return `${day} ${month} ${year}`;
+  // Use non-breaking space between day and month to keep them on the same line
+  return `${day}\u00A0${month} ${year}`;
 };
 
 // Performance monitoring removed
@@ -57,7 +58,7 @@ const generateAttachmentText = (clearanceData) => {
 
   // Only air monitoring report (no site plan)
   if (!hasSitePlan && hasAirMonitoring) {
-    return 'Photographs of the Asbestos Removal Area are presented in Appendix A. The air monitoring report for these works is presented in Appendix C.';
+    return 'Photographs of the Asbestos Removal Area are presented in Appendix A. The air monitoring report for these works is presented in Appendix B.';
   }
 
   return ''; // Fallback
@@ -162,16 +163,24 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       siteAddress = clearanceData.vehicleEquipmentDescription;
     }
 
+    // Determine footer text based on clearance type
+    let footerText;
+    if (clearanceData.clearanceType === 'Vehicle/Equipment' && clearanceData.vehicleEquipmentDescription) {
+      footerText = `Inspection Certificate: ${clearanceData.vehicleEquipmentDescription}`;
+    } else {
+      footerText = `Asbestos Removal Clearance Certificate: ${siteAddress}`;
+    }
+
     // Determine the report title based on clearance type
     let reportTitle = 'ASBESTOS REMOVAL<br />CLEARANCE<br />CERTIFICATE';
     if (clearanceData.clearanceType === 'Vehicle/Equipment') {
       reportTitle = 'INSPECTION CERTIFICATE';
     } else if (clearanceData.clearanceType === 'Friable') {
-      reportTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+      reportTitle = 'FRIABLE ASBESTOS<br /> REMOVAL CLEARANCE<br /> CERTIFICATE';
     } else if (clearanceData.clearanceType === 'Non-friable') {
-      reportTitle = 'NON-FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+      reportTitle = 'NON-FRIABLE ASBESTOS<br /> REMOVAL CLEARANCE<br /> CERTIFICATE';
     } else if (clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
-      reportTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
+      reportTitle = 'FRIABLE ASBESTOS<br /> REMOVAL CLEARANCE<br /> CERTIFICATE';
     }
 
     // Populate cover template with data
@@ -283,9 +292,10 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)}).pdf`)
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+      .replace(/\[FOOTER_TEXT\]/g, footerText)
       .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateRevisionHistory());
 
     // Generate clearance items table headers
@@ -442,6 +452,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
               console.log(`Adding photo ${photoIndex} from item ${index} to report`);
               
               // For Vehicle/Equipment, use materialDescription as the item description
+              // For others, store both locationDescription and materialDescription for photo description formatting
               const itemDescription = clearanceData.clearanceType === 'Vehicle/Equipment' 
                 ? item.materialDescription 
                 : item.locationDescription;
@@ -450,7 +461,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
                 photoUrl: photo.data,
                 levelFloor: item.levelFloor,
                 roomArea: item.roomArea,
-                materialDescription: itemDescription
+                materialDescription: itemDescription,
+                locationDescription: item.locationDescription || item.materialDescription || 'Unknown Location'
               });
             }
           });
@@ -474,11 +486,14 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           const photoNumber = i + pageIndex + 1;
           
           // For Vehicle/Equipment, show only materialDescription, not "N/A - description"
+          // For other clearance types, use expressive format: "Photograph after removal of [material] to [room]"
           let photoLocation;
           if (clearanceData.clearanceType === 'Vehicle/Equipment') {
             photoLocation = photo.materialDescription || 'Unknown Item';
           } else {
-            photoLocation = `${photo.roomArea || 'Unknown Room/Area'} - ${photo.materialDescription || 'Unknown Location'}`;
+            const roomArea = (photo.roomArea || 'unknown room/area').toLowerCase();
+            const materialDesc = (photo.locationDescription || photo.materialDescription || 'unknown material').toLowerCase();
+            photoLocation = `Photograph after removal of ${materialDesc} to ${roomArea}`;
           }
           
           // IMPORTANT: Replace the combined placeholder FIRST before individual placeholders
@@ -505,7 +520,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           .replace(/\[PHOTO_ITEMS\]/g, photoItems)
           .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
           .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-          .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site');
+          .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+          .replace(/\[FOOTER_TEXT\]/g, footerText);
         
         pages.push(page);
         
@@ -554,7 +570,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLEARANCE_CERTIFICATION_TITLE\]/g, templateContent?.standardSections?.clearanceCertificationTitle || 'CLEARANCE CERTIFICATION')
       .replace(/\[CLEARANCE_CERTIFICATION_CONTENT\]/g, clearanceCertificationContent)
       .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent)
-      .replace(/\[ATTACHMENTS\]/g, generateAttachmentText(clearanceData));
+      .replace(/\[ATTACHMENTS\]/g, generateAttachmentText(clearanceData))
+      .replace(/\[FOOTER_TEXT\]/g, footerText);
 
     // Prepare background information template content placeholders (async operations)
     const backgroundInformationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, templateData) : 'Background information content not found';
@@ -589,7 +606,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[LEGISLATIVE_REQUIREMENTS_TITLE\]/g, templateContent?.standardSections?.legislativeRequirementsTitle || 'LEGISLATIVE REQUIREMENTS')
       .replace(/\[LEGISLATIVE_REQUIREMENTS_CONTENT\]/g, legislativeRequirementsContent)
       .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE\]/g, clearanceCertificateLimitationsTitle)
-      .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT\]/g, clearanceCertificateLimitationsContent);
+      .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT\]/g, clearanceCertificateLimitationsContent)
+      .replace(/\[FOOTER_TEXT\]/g, footerText);
 
     // Extract just the page content from each template
     const extractPageContent = (html) => {
@@ -618,7 +636,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
+        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+        .replace(/\[FOOTER_TEXT\]/g, footerText);
 
       // Generate photos section completely independently (no template mixing)
       console.log("=== ABOUT TO GENERATE PHOTOS SECTION ===");
@@ -637,12 +656,13 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     // Handle Appendix B and C based on content
     if (hasSitePlan) {
       // Site Plan exists - add as Appendix B
-      const populatedAppendixBCover = extractPageContent(
+        const populatedAppendixBCover = extractPageContent(
         appendixBCoverTemplate
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
         .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+        .replace(/\[FOOTER_TEXT\]/g, footerText)
       );
       
       appendixContent += `
@@ -659,7 +679,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       
       if (isSitePlanImage) {
         console.log(`[${pdfId}] Generating site plan content page for image data`);
-        const sitePlanContentPage = generateSitePlanContentPage(clearanceData, 'B', logoBase64);
+        const sitePlanContentPage = generateSitePlanContentPage(clearanceData, 'B', logoBase64, footerText);
         console.log(`[${pdfId}] Site plan content page length: ${sitePlanContentPage.length} characters`);
         console.log(`[${pdfId}] Site plan content contains page-break-after: ${sitePlanContentPage.includes('page-break-after')}`);
         appendixContent += `
@@ -676,6 +696,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
             .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
             .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+            .replace(/\[FOOTER_TEXT\]/g, footerText)
         );
         
         appendixContent += `
@@ -691,6 +712,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
         .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+        .replace(/\[FOOTER_TEXT\]/g, footerText)
           .replace(/APPENDIX B/g, 'APPENDIX B')
           .replace(/SITE PLAN/g, 'AIR MONITORING REPORT')
       );
@@ -749,10 +771,10 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
 
           .green-line {
             width: calc(100% - 96px);
-            height: 4px;
+            height: 1.5px;
             background: #16b12b;
             margin: 8px auto 0 auto;
-            border-radius: 2px;
+            border-radius: 0;
           }
 
           .content {
@@ -878,10 +900,10 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
 
           .footer-line {
             width: 100%;
-            height: 4px;
+            height: 1.5px;
             background: #16b12b;
             margin-bottom: 6px;
-            border-radius: 2px;
+            border-radius: 0;
           }
 
           /* Site Plan specific styles to prevent CSS conflicts */
@@ -943,16 +965,20 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           /* Site plan container styling */
           .site-plan-container {
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 10px !important;
-            width: calc(100vh - 80px) !important;
-            max-width: calc(100vh - 80px) !important;
+            padding: 10px 10px 10px 50px !important;
+            width: calc(100vh - 120px) !important;
+            max-width: calc(100vh - 120px) !important;
             box-sizing: border-box !important;
+            margin-left: 40px !important;
+            margin-right: auto !important;
           }
 
           .site-plan-container img {
             border-radius: 4px;
-            max-height: calc(100vw - 200px) !important;
+            max-height: calc((100vw - 200px) * 0.9) !important;
             object-fit: contain !important;
+            width: 90% !important;
+            margin: 0 auto !important;
           }
 
         </style>
@@ -991,9 +1017,10 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
  * @param {Object} data - Clearance data
  * @param {string} appendixLetter - Appendix letter (B, C, etc.)
  * @param {string} logoBase64 - Base64 encoded logo
+ * @param {string} footerText - Footer text to display
  * @returns {string} - HTML for site plan content page
  */
-const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fileField = 'sitePlanFile', title = 'SITE PLAN', figureTitle = 'Asbestos Removal Site Plan') => {
+const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, footerText = '', fileField = 'sitePlanFile', title = 'SITE PLAN', figureTitle = 'Asbestos Removal Site Plan') => {
   // Determine the file type and create appropriate HTML
   const fileData = data[fileField];
   
@@ -1018,11 +1045,12 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
   
   if (fileType.startsWith('image/') || isDataUrl) {
     // For images, embed directly with caption in a grey bordered box
+    // Container stays full width, image is 10% smaller and shifted 20px to the right
     content = `
-      <div class="site-plan-container" style="width: calc(100vh - 80px); margin: 0 auto; padding: 10px; border: 2px solid #ccc; background-color: #f9f9f9; border-radius: 8px; max-width: calc(100vh - 80px); box-sizing: border-box;">
+      <div class="site-plan-container" style="width: calc(100vh - 120px); margin-left: 40px; margin-right: auto; padding: 10px 10px 10px 50px; border: 2px solid #ccc; background-color: #f9f9f9; border-radius: 8px; max-width: calc(100vh - 120px); box-sizing: border-box;">
         <img src="${imageSrc}" 
              alt="${title}" 
-             style="width: 100%; height: auto; object-fit: contain; display: block;" />
+             style="width: 90% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
         <div style="font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 10px;">
           Figure 1: ${figureTitle}
         </div>
@@ -1058,7 +1086,7 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, fil
           </div>
           <div class="footer">
             <div class="footer-line"></div>
-            Asbestos Assessment Report: ${data.projectId?.name || data.siteName || 'Unknown Site'}
+            ${footerText || `Asbestos Assessment Report: ${data.projectId?.name || data.siteName || 'Unknown Site'}`}
           </div>
         </div>
       `;

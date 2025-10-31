@@ -35,17 +35,18 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   clientSuppliedJobsService,
   sampleItemsService,
   projectService,
 } from "../../services/api";
-import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
+import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [jobs, setJobs] = useState([]);
   const [sampleCounts, setSampleCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,9 @@ const ClientSuppliedJobs = () => {
   const [jobToDelete, setJobToDelete] = useState(null);
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedJobType, setSelectedJobType] = useState("");
+  const [sampleReceiptDate, setSampleReceiptDate] = useState("");
+  const [numberOfSamples, setNumberOfSamples] = useState("");
   const [creatingJob, setCreatingJob] = useState(false);
 
   useEffect(() => {
@@ -176,13 +180,26 @@ const ClientSuppliedJobs = () => {
   };
 
   const handleCreateJob = async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !selectedJobType) return;
 
     try {
       setCreatingJob(true);
-      await clientSuppliedJobsService.create({
+      const jobData = {
         projectId: selectedProject._id,
-      });
+        jobType: selectedJobType,
+      };
+
+      // Add sample receipt date if provided
+      if (sampleReceiptDate) {
+        jobData.sampleReceiptDate = sampleReceiptDate;
+      }
+
+      // Add number of samples if provided
+      if (numberOfSamples) {
+        jobData.sampleCount = parseInt(numberOfSamples, 10);
+      }
+
+      await clientSuppliedJobsService.create(jobData);
 
       // Refresh the jobs list
       await fetchClientSuppliedJobs();
@@ -190,8 +207,12 @@ const ClientSuppliedJobs = () => {
       // Close dialog and reset form
       setCreateDialogOpen(false);
       setSelectedProject(null);
+      setSelectedJobType("");
+      setSampleReceiptDate("");
+      setNumberOfSamples("");
     } catch (error) {
       console.error("Error creating client supplied job:", error);
+      alert("Failed to create job. Please ensure all fields are filled.");
     } finally {
       setCreatingJob(false);
     }
@@ -238,11 +259,20 @@ const ClientSuppliedJobs = () => {
   const handleViewJob = (jobId) => {
     // Ensure we're passing a string ID, not an object
     const actualJobId = typeof jobId === "object" ? jobId._id : jobId;
-    navigate(`/fibre-id/client-supplied/${actualJobId}/samples`);
+    // Use the appropriate route based on current location
+    const basePath = location.pathname.startsWith("/client-supplied")
+      ? "/client-supplied"
+      : "/fibre-id/client-supplied";
+    navigate(`${basePath}/${actualJobId}/samples`);
   };
 
   const handleBackToHome = () => {
-    navigate("/fibre-id");
+    // Navigate back based on current location
+    if (location.pathname.startsWith("/client-supplied")) {
+      navigate("/client-supplied");
+    } else {
+      navigate("/fibre-id");
+    }
   };
 
   const getStatusColor = (status) => {
@@ -260,17 +290,81 @@ const ClientSuppliedJobs = () => {
     try {
       setGeneratingPDF((prev) => ({ ...prev, [job._id]: true }));
 
-      // Fetch sample items for this job
+      // Fetch the job with full population to get client and project data
+      const jobResponse = await clientSuppliedJobsService.getById(job._id);
+      const fullJob = jobResponse.data;
+
+      // Fetch sample items for this job with analysis data
       const response = await sampleItemsService.getAll({
-        projectId: job.projectId._id || job.projectId,
+        projectId: fullJob.projectId._id || fullJob.projectId,
       });
       const sampleItems = response.data || [];
 
-      // Generate the PDF using pdfMake
-      await generateFibreIDReport({
-        job: job,
-        sampleItems: sampleItems,
+      // Get analyst from first analyzed sample or job analyst
+      let analyst = null;
+      const analyzedSample = sampleItems.find((s) => s.analyzedBy);
+      if (analyzedSample?.analyzedBy) {
+        if (
+          typeof analyzedSample.analyzedBy === "object" &&
+          analyzedSample.analyzedBy.firstName
+        ) {
+          analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
+        } else if (typeof analyzedSample.analyzedBy === "string") {
+          analyst = analyzedSample.analyzedBy;
+        }
+      } else if (fullJob.analyst) {
+        analyst = fullJob.analyst;
+      }
+
+      // Transform sample items to match air monitoring format
+      const transformedSamples = sampleItems.map((item) => {
+        return {
+          fullSampleID: item.labReference || `Sample-${item._id}`,
+          sampleID: item.labReference || `Sample-${item._id}`,
+          location: item.clientReference || item.locationDescription || "N/A",
+          // No time or flowrate for client supplied
+          startTime: null,
+          endTime: null,
+          averageFlowrate: null,
+          // Use analysisData from sample item
+          analysis: item.analysisData
+            ? {
+                fieldsCounted: item.analysisData.fieldsCounted,
+                fibresCounted: item.analysisData.fibresCounted,
+                edgesDistribution: item.analysisData.edgesDistribution,
+                backgroundDust: item.analysisData.backgroundDust,
+                // No reported concentration for client supplied
+                reportedConcentration: null,
+              }
+            : null,
+        };
+      });
+
+      // Create a mock shift-like object for PDF generation
+      const mockShift = {
+        descriptionOfWorks:
+          fullJob.projectId?.name || "Client Supplied Fibre Count",
+        date: fullJob.sampleReceiptDate || new Date(),
+        analysedBy: analyst || "N/A",
+        analysisDate: fullJob.analysisDate || new Date(),
+        reportApprovedBy: "Jordan Smith",
+        reportIssueDate: new Date(),
+      };
+
+      // Create a job-like object with projectId populated
+      const jobForPDF = {
+        projectId: fullJob.projectId,
+        asbestosRemovalist: null, // Not applicable for client supplied
+      };
+
+      // Generate the PDF using air monitoring format
+      await generateShiftReport({
+        shift: mockShift,
+        job: jobForPDF,
+        samples: transformedSamples,
+        project: fullJob.projectId,
         openInNewTab: false,
+        isClientSupplied: true, // Flag to indicate we want fibre count format
       });
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -360,14 +454,11 @@ const ClientSuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
                     Project Name
                   </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
+                    Job Type
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
-                    Sample Date
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "150px" }}>
-                    Client
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "70px" }}>
-                    Samples
+                    Sample Receipt Date
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
@@ -376,13 +467,13 @@ const ClientSuppliedJobs = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       Loading jobs...
                     </TableCell>
                   </TableRow>
                 ) : filteredJobs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       No client supplied jobs found
                     </TableCell>
                   </TableRow>
@@ -403,22 +494,26 @@ const ClientSuppliedJobs = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
+                        <Chip
+                          label={job.jobType || "Fibre ID"}
+                          color={
+                            job.jobType === "Fibre ID"
+                              ? "primary"
+                              : job.jobType === "Fibre Count"
+                              ? "secondary"
+                              : "default"
+                          }
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
                         <Typography variant="body2">
-                          {job.projectId?.d_Date
-                            ? new Date(job.projectId.d_Date).toLocaleDateString(
-                                "en-GB"
-                              )
+                          {job.sampleReceiptDate
+                            ? new Date(
+                                job.sampleReceiptDate
+                              ).toLocaleDateString("en-GB")
                             : "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {job.projectId?.client?.name || "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {sampleCounts[job._id] || 0}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -473,6 +568,9 @@ const ClientSuppliedJobs = () => {
           onClose={() => {
             setCreateDialogOpen(false);
             setSelectedProject(null);
+            setSelectedJobType("");
+            setSampleReceiptDate("");
+            setNumberOfSamples("");
           }}
           maxWidth="sm"
           fullWidth
@@ -513,73 +611,113 @@ const ClientSuppliedJobs = () => {
             </Typography>
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mt: 2 }}>
+            <Box
+              sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 3 }}
+            >
               {Array.isArray(projects) && projects.length > 0 ? (
-                <Autocomplete
-                  options={projects}
-                  getOptionLabel={(option) => {
-                    return `${option.projectID || "N/A"} - ${
-                      option.name || "Unnamed Project"
-                    }`;
-                  }}
-                  value={selectedProject}
-                  onChange={(event, newValue) => {
-                    setSelectedProject(newValue);
-                  }}
-                  isOptionEqualToValue={(option, value) => {
-                    return option._id === value._id;
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Select Project"
-                      placeholder="Search for a project..."
-                      required
-                      fullWidth
-                    />
-                  )}
-                  renderOption={(props, option) => {
-                    return (
-                      <li {...props}>
-                        <Box>
-                          <Typography variant="body1">
-                            {option.projectID || "N/A"} -{" "}
-                            {option.name || "Unnamed Project"}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Client: {option.client?.name || "Not specified"}
-                          </Typography>
-                        </Box>
-                      </li>
-                    );
-                  }}
-                  filterOptions={(options, { inputValue }) => {
-                    if (!Array.isArray(options)) {
-                      return [];
-                    }
+                <>
+                  <Autocomplete
+                    options={projects}
+                    getOptionLabel={(option) => {
+                      return `${option.projectID || "N/A"} - ${
+                        option.name || "Unnamed Project"
+                      }`;
+                    }}
+                    value={selectedProject}
+                    onChange={(event, newValue) => {
+                      setSelectedProject(newValue);
+                    }}
+                    isOptionEqualToValue={(option, value) => {
+                      return option._id === value._id;
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Select Project"
+                        placeholder="Search for a project..."
+                        required
+                        fullWidth
+                      />
+                    )}
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props}>
+                          <Box>
+                            <Typography variant="body1">
+                              {option.projectID || "N/A"} -{" "}
+                              {option.name || "Unnamed Project"}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Client: {option.client?.name || "Not specified"}
+                            </Typography>
+                          </Box>
+                        </li>
+                      );
+                    }}
+                    filterOptions={(options, { inputValue }) => {
+                      if (!Array.isArray(options)) {
+                        return [];
+                      }
 
-                    // If no input, show all options
-                    if (!inputValue || inputValue.length === 0) {
-                      return options;
-                    }
+                      // If no input, show all options
+                      if (!inputValue || inputValue.length === 0) {
+                        return options;
+                      }
 
-                    // If input is less than 2 characters, show all options
-                    if (inputValue.length < 2) {
-                      return options;
-                    }
+                      // If input is less than 2 characters, show all options
+                      if (inputValue.length < 2) {
+                        return options;
+                      }
 
-                    // Filter based on input
-                    const filterValue = inputValue.toLowerCase();
-                    const filtered = options.filter(
-                      (option) =>
-                        option.projectID?.toLowerCase().includes(filterValue) ||
-                        option.name?.toLowerCase().includes(filterValue) ||
-                        option.client?.name?.toLowerCase().includes(filterValue)
-                    );
+                      // Filter based on input
+                      const filterValue = inputValue.toLowerCase();
+                      const filtered = options.filter(
+                        (option) =>
+                          option.projectID
+                            ?.toLowerCase()
+                            .includes(filterValue) ||
+                          option.name?.toLowerCase().includes(filterValue) ||
+                          option.client?.name
+                            ?.toLowerCase()
+                            .includes(filterValue)
+                      );
 
-                    return filtered;
-                  }}
-                />
+                      return filtered;
+                    }}
+                  />
+                  <FormControl fullWidth required>
+                    <InputLabel>Job Type</InputLabel>
+                    <Select
+                      value={selectedJobType}
+                      onChange={(e) => setSelectedJobType(e.target.value)}
+                      label="Job Type"
+                    >
+                      <MenuItem value="Fibre ID">Fibre ID</MenuItem>
+                      <MenuItem value="Fibre Count">Fibre Count</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    fullWidth
+                    label="Sample Receipt Date"
+                    type="date"
+                    value={sampleReceiptDate}
+                    onChange={(e) => setSampleReceiptDate(e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="No of Samples"
+                    type="number"
+                    value={numberOfSamples}
+                    onChange={(e) => setNumberOfSamples(e.target.value)}
+                    inputProps={{
+                      min: 0,
+                      step: 1,
+                    }}
+                  />
+                </>
               ) : (
                 <Box sx={{ textAlign: "center", py: 2 }}>
                   <Typography variant="body2" color="text.secondary">
@@ -596,6 +734,9 @@ const ClientSuppliedJobs = () => {
               onClick={() => {
                 setCreateDialogOpen(false);
                 setSelectedProject(null);
+                setSelectedJobType("");
+                setSampleReceiptDate("");
+                setNumberOfSamples("");
               }}
               variant="outlined"
               sx={{
@@ -612,6 +753,7 @@ const ClientSuppliedJobs = () => {
               variant="contained"
               disabled={
                 !selectedProject ||
+                !selectedJobType ||
                 creatingJob ||
                 !Array.isArray(projects) ||
                 projects.length === 0

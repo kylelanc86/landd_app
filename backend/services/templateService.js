@@ -4,6 +4,19 @@ const mongoose = require('mongoose');
 // Simple in-memory cache for user lookups during PDF generation
 const userLookupCache = new Map();
 
+// Date formatting function for clearance dates (dd Month yyyy format)
+const formatClearanceDate = (dateString) => {
+  if (!dateString) return 'Unknown';
+  const date = new Date(dateString);
+  const day = date.getDate();
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const month = monthNames[date.getMonth()];
+  const year = date.getFullYear();
+  // Use non-breaking space between day and month to keep them on the same line
+  return `${day}\u00A0${month} ${year}`;
+};
+
 // Function to get default template content for a given template type
 const getDefaultTemplateContent = (templateType) => {
   const defaultTemplates = {
@@ -501,9 +514,7 @@ const replacePlaceholders = async (content, data) => {
       ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
     '{REPORT_TYPE}': data.clearanceType || 'Non-friable',
-    '{CLEARANCE_DATE}': data.clearanceDate 
-      ? new Date(data.clearanceDate).toLocaleDateString('en-GB')
-      : 'Unknown Date',
+    '{CLEARANCE_DATE}': formatClearanceDate(data.clearanceDate),
     '{CLEARANCE_TIME}': 'Clearance Time',
     '{PROJECT_NAME}': data.projectId?.name || data.project?.name || 'Unknown Project',
     '{PROJECT_NUMBER}': data.projectId?.projectID || data.project?.projectID || 'Unknown Project ID',

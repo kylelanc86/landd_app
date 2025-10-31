@@ -484,16 +484,17 @@ router.put("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), async (
       return res.status(404).json({ message: "Clearance item not found" });
     }
 
-    clearance.items[itemIndex] = {
-      ...clearance.items[itemIndex],
-      locationDescription,
-      levelFloor,
-      roomArea,
-      materialDescription,
-      asbestosType,
-      photograph,
-      notes,
-    };
+    // Preserve existing fields like photographs when updating
+    const existingItem = clearance.items[itemIndex];
+    // Only update fields that are explicitly provided in the request
+    if (locationDescription !== undefined) existingItem.locationDescription = locationDescription;
+    if (levelFloor !== undefined) existingItem.levelFloor = levelFloor;
+    if (roomArea !== undefined) existingItem.roomArea = roomArea;
+    if (materialDescription !== undefined) existingItem.materialDescription = materialDescription;
+    if (asbestosType !== undefined) existingItem.asbestosType = asbestosType;
+    if (photograph !== undefined) existingItem.photograph = photograph;
+    if (notes !== undefined) existingItem.notes = notes;
+    // Photographs array is preserved automatically since we're modifying the existing item in place
 
     clearance.updatedBy = req.user.id;
 

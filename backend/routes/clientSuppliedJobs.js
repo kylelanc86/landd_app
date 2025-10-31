@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
         select: 'name projectID d_Date createdAt',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email'
+          select: 'name contact1Name contact1Email address'
         }
       })
       .sort({ createdAt: -1 });
@@ -36,7 +36,7 @@ router.get('/by-project/:projectId', async (req, res) => {
         select: 'name projectID d_Date createdAt',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email'
+          select: 'name contact1Name contact1Email address'
         }
       })
       .sort({ createdAt: -1 });
@@ -66,7 +66,7 @@ router.get('/:id', async (req, res) => {
         select: 'name projectID d_Date createdAt',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email'
+          select: 'name contact1Name contact1Email address'
         }
       });
     
@@ -83,7 +83,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/client-supplied-jobs - create new job
 router.post('/', async (req, res) => {
   try {
-    const { projectId } = req.body;
+    const { projectId, jobType, sampleReceiptDate, sampleCount } = req.body;
     
     if (!projectId) {
       return res.status(400).json({ 
@@ -91,14 +91,34 @@ router.post('/', async (req, res) => {
       });
     }
     
+    // jobType is optional, defaults to 'Fibre ID' in the model
+    // But we'll use the provided jobType if available
+    
     // Generate job number
     const jobCount = await ClientSuppliedJob.countDocuments();
     const jobNumber = `CSJ-${String(jobCount + 1).padStart(4, '0')}`;
     
-    const job = new ClientSuppliedJob({
+    const jobData = {
       projectId,
       jobNumber
-    });
+    };
+    
+    // Only add jobType if provided (for backward compatibility)
+    if (jobType) {
+      jobData.jobType = jobType;
+    }
+    
+    // Add sample receipt date if provided
+    if (sampleReceiptDate) {
+      jobData.sampleReceiptDate = new Date(sampleReceiptDate);
+    }
+    
+    // Add sample count if provided
+    if (sampleCount !== undefined && sampleCount !== null) {
+      jobData.sampleCount = parseInt(sampleCount, 10);
+    }
+    
+    const job = new ClientSuppliedJob(jobData);
     
     await job.save();
     
@@ -108,7 +128,7 @@ router.post('/', async (req, res) => {
         select: 'name projectID d_Date createdAt',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email'
+          select: 'name contact1Name contact1Email address'
         }
       });
     

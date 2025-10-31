@@ -150,7 +150,7 @@ const formatReportedConcentration = (sample) => {
   return reportedConc;
 };
 
-export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false, sitePlanData = null }) {
+export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false, sitePlanData = null, isClientSupplied = false }) {
   console.log("generateShiftReport called with sitePlanData:", sitePlanData);
   // Debug logging
   console.log('generateShiftReport called with:', { shift, job, samples, project, openInNewTab, returnPdfData });
@@ -288,14 +288,14 @@ pdfMake.fonts = {
               {
                 type: 'line',
                 x1: 0, y1: 0, x2: 520, y2: 0,
-                lineWidth: 2,
+                lineWidth: 1.5,
                 lineColor: '#16b12b'
               }
             ],
             margin: [0, 0, 0, 20]
           },
           
-          { text: 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
+          { text: isClientSupplied ? 'ASBESTOS FIBRE COUNT REPORT' : 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
           
           // Client and Lab details in single table
           {
@@ -313,7 +313,7 @@ pdfMake.fonts = {
                       { text: [ { text: 'Client Name: ', bold: true }, { text: project?.client?.name || job?.projectId?.client?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Client Contact: ', bold: true }, { text: project?.projectContact?.name || job?.projectId?.projectContact?.name || job?.projectId?.client?.contact1Name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Email: ', bold: true }, { text: project?.projectContact?.email || job?.projectId?.projectContact?.email || job?.projectId?.client?.contact1Email || job?.projectId?.client?.invoiceEmail || job?.projectId?.client?.contact2Email || 'N/A' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Site Name: ', bold: true }, { text: project?.name || job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: isClientSupplied ? 'Client Reference: ' : 'Site Name: ', bold: true }, { text: project?.name || job?.projectId?.name || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
@@ -363,35 +363,35 @@ pdfMake.fonts = {
                         text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectId?.projectID || 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
-                        width: '50%'
+                        width: isClientSupplied ? '100%' : '50%'
                       },
-                      {
+                      ...(isClientSupplied ? [] : [{
                         text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
-                      }
+                      }])
                     ]
                   }
                 ],
-                [
+                ...(isClientSupplied ? [] : [
                   {
                     text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
                     style: 'tableContent',
                     margin: [0, 0, 0, 2]
                   }
-                ],
+                ]),
                 [
                   {
                     columns: [
                       {
-                        text: [ { text: 'Sampled by: ', bold: true }, { text: shift?.supervisor ? `${shift.supervisor.firstName} ${shift.supervisor.lastName}` : shift?.defaultSampler ? `${shift.defaultSampler.firstName} ${shift.defaultSampler.lastName}` : 'N/A' } ],
+                        text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (shift?.supervisor ? `${shift.supervisor.firstName} ${shift.supervisor.lastName}` : shift?.defaultSampler ? `${shift.defaultSampler.firstName} ${shift.defaultSampler.lastName}` : 'N/A') } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Sample Date: ', bold: true }, { text: shift?.date ? formatDate(shift.date) : 'N/A' } ],
+                        text: [ { text: isClientSupplied ? 'Samples Received: ' : 'Sample Date: ', bold: true }, { text: shift?.date ? formatDate(shift.date) : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -493,12 +493,9 @@ pdfMake.fonts = {
                       },
                       {
                         stack: [
-                          { text: '1. Samples taken from the direct flow of negative air units are reported as a fibre count only', style: 'notes' },
-                          { text: '2. The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL', style: 'notes' },
-                          { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
-                          { text: '4. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
-                          { text: '5. The results of the testing relate only to the samples as supplied to the laboratory.', style: 'notes' },
-                          { text: '6. (E) = Exposure Monitoring, (C) = Clearance Monitoring.', style: 'notes' },
+                          { text: '1. The analysed samples covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of the samples collected or the accompanying descriptions.', style: 'notes' },
+                          { text: '2. Report must not be reproduced except in full.', style: 'notes' },
+                          { text: '3. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
                         ],
                         margin: [0, 0, 0, 3],
                       }
@@ -533,32 +530,52 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['16%', '35%', '7%', '7%', '9%', '7%', '7%', '12%'],
+              widths: isClientSupplied 
+                ? ['25%', '40%', '17%', '18%'] 
+                : ['16%', '35%', '7%', '7%', '9%', '7%', '7%', '12%'],
               body: [
-                                  [
-                    { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Time On', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Time Off', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Ave flow (L/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                    { text: 'Reported Conc. (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
-                  ],
-                                  ...sortedSamples.map(sample => [
-                    { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
-                    { text: formatSampleLocation(sample), style: 'tableContent' },
-                    { text: sample.startTime ? formatTime(sample.startTime) : '-', style: 'tableContent' },
-                    { text: sample.endTime ? formatTime(sample.endTime) : '-', style: 'tableContent' },
-                    { text: sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-', style: 'tableContent' },
-                    { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
-                    { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' },
-                  { 
-                    text: formatReportedConcentration(sample),
-                    style: 'tableContent',
-                    ...(typeof formatReportedConcentration(sample) === 'object' && formatReportedConcentration(sample).color ? { color: formatReportedConcentration(sample).color } : {})
+                isClientSupplied 
+                  ? [
+                      { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
+                    ]
+                  : [
+                      { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Time On', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Time Off', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Ave flow (L/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Reported Conc. (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
+                    ],
+                ...sortedSamples.map(sample => {
+                  if (isClientSupplied) {
+                    return [
+                      { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
+                      { text: formatSampleLocation(sample), style: 'tableContent' },
+                      { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
+                      { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' }
+                    ];
+                  } else {
+                    return [
+                      { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
+                      { text: formatSampleLocation(sample), style: 'tableContent' },
+                      { text: sample.startTime ? formatTime(sample.startTime) : '-', style: 'tableContent' },
+                      { text: sample.endTime ? formatTime(sample.endTime) : '-', style: 'tableContent' },
+                      { text: sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-', style: 'tableContent' },
+                      { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
+                      { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' },
+                      { 
+                        text: formatReportedConcentration(sample),
+                        style: 'tableContent',
+                        ...(typeof formatReportedConcentration(sample) === 'object' && formatReportedConcentration(sample).color ? { color: formatReportedConcentration(sample).color } : {})
+                      }
+                    ];
                   }
-                ])
+                })
               ]
             },
             layout: {
@@ -576,8 +593,14 @@ pdfMake.fonts = {
               },
               paddingLeft: function(i, node) { return 4; },
               paddingRight: function(i, node) { return 4; },
-              paddingTop: function(i, node) { return 4; },
-              paddingBottom: function(i, node) { return 4; },
+              paddingTop: function(i, node) { 
+                // Increase row height by 75% for client supplied reports (4 * 1.75 = 7)
+                return isClientSupplied ? (i === 0 ? 4 : 7) : 4; 
+              },
+              paddingBottom: function(i, node) { 
+                // Increase row height by 75% for client supplied reports (4 * 1.75 = 7)
+                return isClientSupplied ? (i === 0 ? 4 : 7) : 4; 
+              },
             },
             margin: [0, 0, 0, 20]
           },
@@ -614,7 +637,7 @@ pdfMake.fonts = {
                 {
                   type: 'line',
                   x1: 0, y1: 0, x2: 520, y2: 0,
-                  lineWidth: 2,
+                  lineWidth: 1.5,
                   lineColor: '#16b12b'
                 }
               ],
@@ -774,7 +797,7 @@ pdfMake.fonts = {
         const footerBlocks = [];
         footerBlocks.push({
             canvas: [
-            { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#16b12b' }
+            { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: '#16b12b' }
           ],
           margin: [0, 0, 0, 8]
         });
@@ -811,12 +834,13 @@ pdfMake.fonts = {
     })(nataLogo, job || {}, sortedSamples, companyLogo)
   };
 
-  // Build filename (unchanged)
-  const projectID = job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
+  // Build filename
+  const projectID = job?.projectID || job?.projectId?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
   const projectNameRaw = project?.name || '';
   const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
   const samplingDate = shift?.date ? formatDateForFilename(shift.date) : '';
-  const filename = `${projectID}: Air Monitoring Report - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
+  const reportType = isClientSupplied ? 'Fibre Count Report' : 'Air Monitoring Report';
+  const filename = `${projectID}: ${reportType} - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
     // Security options to prevent text selection/copying

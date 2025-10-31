@@ -16,6 +16,11 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     enum: ['In Progress', 'Completed'],
     default: 'In Progress'
   },
+  jobType: {
+    type: String,
+    enum: ['Fibre ID', 'Fibre Count'],
+    default: 'Fibre ID'
+  },
   analyst: {
     type: String,
     trim: true
@@ -26,6 +31,9 @@ const clientSuppliedJobSchema = new mongoose.Schema({
   sampleCount: {
     type: Number,
     default: 0
+  },
+  sampleReceiptDate: {
+    type: Date
   },
   createdAt: {
     type: Date,

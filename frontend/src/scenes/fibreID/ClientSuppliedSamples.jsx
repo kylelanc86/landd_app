@@ -31,20 +31,17 @@ import {
   Close as CloseIcon,
   ArrowBack as ArrowBackIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon,
-  PictureAsPdf as PdfIcon,
 } from "@mui/icons-material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   clientSuppliedJobsService,
   sampleItemsService,
   userService,
 } from "../../services/api";
-import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const ClientSuppliedSamples = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { jobId } = useParams();
   const [job, setJob] = useState(null);
   const [samples, setSamples] = useState([]);
@@ -59,7 +56,6 @@ const ClientSuppliedSamples = () => {
     new Date().toISOString().split("T")[0]
   );
   const [users, setUsers] = useState([]);
-  const [generatingPDF, setGeneratingPDF] = useState(false);
   const [completingJob, setCompletingJob] = useState(false);
 
   useEffect(() => {
@@ -76,7 +72,10 @@ const ClientSuppliedSamples = () => {
     } else if (jobId === "[object Object]") {
       setLoading(false);
       // Redirect back to the jobs list if we have an invalid jobId
-      navigate("/fibre-id/client-supplied");
+      const basePath = location.pathname.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id/client-supplied";
+      navigate(basePath);
     }
   }, [jobId]);
 
@@ -161,11 +160,20 @@ const ClientSuppliedSamples = () => {
     });
 
   const handleBackToJobs = () => {
-    navigate("/fibre-id/client-supplied");
+    // Use the appropriate route based on current location
+    const basePath = location.pathname.startsWith("/client-supplied")
+      ? "/client-supplied"
+      : "/fibre-id/client-supplied";
+    navigate(basePath);
   };
 
   const handleBackToHome = () => {
-    navigate("/fibre-id");
+    // Navigate back based on current location
+    if (location.pathname.startsWith("/client-supplied")) {
+      navigate("/client-supplied");
+    } else {
+      navigate("/fibre-id");
+    }
   };
 
   const handleOpenModal = () => {
@@ -358,26 +366,6 @@ const ClientSuppliedSamples = () => {
     }
   };
 
-  const handleGeneratePDF = async () => {
-    try {
-      setGeneratingPDF(true);
-
-      // Generate the PDF using pdfMake
-      await generateFibreIDReport({
-        job: job,
-        sampleItems: samples,
-        openInNewTab: false,
-      });
-
-      console.log("Client supplied fibre ID PDF downloaded successfully");
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      // You might want to show a snackbar or alert here
-    } finally {
-      setGeneratingPDF(false);
-    }
-  };
-
   const handleCompleteJob = async () => {
     try {
       setCompletingJob(true);
@@ -426,11 +414,6 @@ const ClientSuppliedSamples = () => {
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
-        {/* PDF Loading Overlay */}
-        <PDFLoadingOverlay
-          open={generatingPDF}
-          message="Generating Fibre ID Report PDF..."
-        />
         {/* Breadcrumbs */}
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link
@@ -453,9 +436,12 @@ const ClientSuppliedSamples = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={() =>
-              navigate(`/fibre-id/client-supplied/${jobId}/samples`)
-            }
+            onClick={() => {
+              const basePath = location.pathname.startsWith("/client-supplied")
+                ? "/client-supplied"
+                : "/fibre-id/client-supplied";
+              navigate(`${basePath}/${jobId}/samples`);
+            }}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             Sample Items
@@ -478,34 +464,14 @@ const ClientSuppliedSamples = () => {
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
                 Project ID: {job.projectId?.projectID || "N/A"} | Client:{" "}
-                {job.projectId?.client?.name || "Unknown Client"} | Sample Date:{" "}
-                {job.projectId?.d_Date
-                  ? new Date(job.projectId.d_Date).toLocaleDateString("en-GB")
-                  : job.projectId?.createdAt
-                  ? new Date(job.projectId.createdAt).toLocaleDateString(
-                      "en-GB"
-                    )
+                {job.projectId?.client?.name || "Unknown Client"} | Sample
+                Receipt Date:{" "}
+                {job.sampleReceiptDate
+                  ? new Date(job.sampleReceiptDate).toLocaleDateString("en-GB")
                   : "N/A"}
               </Typography>
             </Box>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={fetchSampleItems}
-                sx={{ ml: 2 }}
-              >
-                Refresh
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<PdfIcon />}
-                onClick={handleGeneratePDF}
-                disabled={generatingPDF || samples.length === 0}
-                sx={{ ml: 2 }}
-              >
-                {generatingPDF ? "Generating PDF..." : "Generate PDF"}
-              </Button>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -524,28 +490,34 @@ const ClientSuppliedSamples = () => {
                   {completingJob ? "Completing..." : "Complete Job"}
                 </Button>
               )}
+              {/* Analysis Status Chip */}
+              {samples.length > 0 && (
+                <Chip
+                  label={
+                    samples.every(
+                      (sample) =>
+                        sample.analyzedAt ||
+                        (sample.analysisData && sample.analysisData.analyzedAt)
+                    )
+                      ? "Analysis Complete"
+                      : "Analysis In Progress"
+                  }
+                  color={
+                    samples.every(
+                      (sample) =>
+                        sample.analyzedAt ||
+                        (sample.analysisData && sample.analysisData.analyzedAt)
+                    )
+                      ? "success"
+                      : "warning"
+                  }
+                  size="medium"
+                  sx={{ ml: 2 }}
+                />
+              )}
             </Box>
           </Box>
         </Box>
-
-        {/* Search Bar */}
-        <Box sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search by lab reference, client reference, or sample description..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-
         {/* Sample Items Table */}
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
           <TableContainer>
@@ -558,19 +530,13 @@ const ClientSuppliedSamples = () => {
                   <TableCell sx={{ fontWeight: "bold" }}>
                     Client Reference
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
-                    Sample Description
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
-                    Analysis Result
-                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredSamples.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
+                    <TableCell colSpan={3} align="center">
                       {searchTerm
                         ? "No samples match your search criteria"
                         : "No samples found for this job. Click 'Add Samples' to get started."}
@@ -593,29 +559,6 @@ const ClientSuppliedSamples = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2">
-                          {sample.sampleDescription || "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={sample.analysisResult || "Pending"}
-                          color={sample.analysisResult ? "success" : "warning"}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          color="primary"
-                          onClick={() =>
-                            navigate(`/fibre-id/analysis/${sample._id}`)
-                          }
-                          sx={{ mr: 1 }}
-                        >
-                          Analysis
-                        </Button>
                         <IconButton
                           color="error"
                           size="small"
@@ -632,6 +575,34 @@ const ClientSuppliedSamples = () => {
             </Table>
           </TableContainer>
         </Paper>
+
+        {/* Analysis Button */}
+        {samples.length > 0 && (
+          <Box sx={{ mt: 3, display: "flex", justifyContent: "center" }}>
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              onClick={() => {
+                const basePath = location.pathname.startsWith(
+                  "/client-supplied"
+                )
+                  ? "/client-supplied"
+                  : "/fibre-id/client-supplied";
+                navigate(`${basePath}/${jobId}/analysis`);
+              }}
+              sx={{ minWidth: 200 }}
+            >
+              {samples.every(
+                (sample) =>
+                  sample.analyzedAt ||
+                  (sample.analysisData && sample.analysisData.analyzedAt)
+              )
+                ? "Edit Analysis"
+                : "Analysis"}
+            </Button>
+          </Box>
+        )}
 
         {/* Add Samples Modal */}
         <Dialog

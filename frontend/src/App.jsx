@@ -42,6 +42,7 @@ import FibreIdIndex from "./scenes/fibreID/index.jsx";
 import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
 import LDsuppliedJobs from "./scenes/fibreID/LDsuppliedJobs.jsx";
 import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
+import ClientSuppliedFibreCountAnalysis from "./scenes/fibreID/ClientSuppliedFibreCountAnalysis.jsx";
 import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
 import LDsuppliedItems from "./scenes/fibreID/LDsuppliedItems.jsx";
@@ -739,6 +740,36 @@ function App() {
                                   }
                                 />
                               )}
+                              {isFeatureEnabled(
+                                "ADVANCED.ASBESTOS_REMOVAL"
+                              ) && (
+                                <Route
+                                  path="/client-supplied/:jobId/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreCountAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                <Route
+                                  path="/fibre-id/client-supplied/:jobId/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["fibre.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreCountAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
                                   path="/assessments"
@@ -1148,6 +1179,36 @@ function App() {
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <AsbestosRemovalJobDetails />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+                              {isFeatureEnabled(
+                                "ADVANCED.ASBESTOS_REMOVAL"
+                              ) && (
+                                <Route
+                                  path="/client-supplied"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.view"]}
+                                    >
+                                      <ClientSuppliedJobs />
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+                              {isFeatureEnabled(
+                                "ADVANCED.ASBESTOS_REMOVAL"
+                              ) && (
+                                <Route
+                                  path="/client-supplied/:jobId/samples"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedSamples />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
