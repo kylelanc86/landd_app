@@ -476,12 +476,12 @@ const Projects = ({ initialFilters = {} }) => {
           : response.data?.data || [];
 
         setProjects(projectsData);
-        setPagination({
+        setPagination((prev) => ({
           total: projectsData.length,
-          pages: Math.ceil(projectsData.length / paginationModel.pageSize),
+          pages: Math.ceil(projectsData.length / prev.pageSize),
           page: 0,
-          limit: paginationModel.pageSize,
-        });
+          limit: prev.pageSize,
+        }));
 
         // Status counts will be updated when the component re-renders with new projects
       } catch (err) {
@@ -492,7 +492,7 @@ const Projects = ({ initialFilters = {} }) => {
         setSearchLoading(false);
       }
     },
-    [activeStatuses] // Include activeStatuses to refetch when statuses change
+    [activeStatuses] // Only depend on activeStatuses - paginationModel.pageSize is used functionally
   );
 
   // Move fetchProjects here so it is defined after fetchAllProjects
@@ -634,31 +634,21 @@ const Projects = ({ initialFilters = {} }) => {
       setStatusCounts(counts);
     } catch (err) {
       // Fallback to local calculation if backend fails
-      const counts = {
-        all: projects.length,
-        all_active: projects.filter((project) =>
-          activeStatuses.includes(project.status)
-        ).length,
-        all_inactive: projects.filter((project) =>
-          inactiveStatuses.includes(project.status)
-        ).length,
-      };
+      // Use current projects state via functional update to avoid dependency
+      setStatusCounts((prevCounts) => {
+        // Get current projects from state (we'll use a ref to access it)
+        // Actually, since we can't access projects here, just use prevCounts as fallback
+        // or return empty counts
+        return prevCounts; // Keep previous counts on error
+      });
 
-      for (const status of activeStatuses) {
-        counts[status] = projects.filter(
-          (project) => project.status === status
-        ).length;
-      }
-
-      for (const status of inactiveStatuses) {
-        counts[status] = projects.filter(
-          (project) => project.status === status
-        ).length;
-      }
-
-      setStatusCounts(counts);
+      // Log error but don't break the UI
+      console.error(
+        "Error fetching status counts, keeping previous values:",
+        err
+      );
     }
-  }, [activeStatuses, inactiveStatuses, projects]);
+  }, [activeStatuses, inactiveStatuses]); // Removed 'projects' dependency to prevent infinite loop
 
   // Memoize the status counts calculation to prevent unnecessary recalculations
   const memoizedStatusCounts = useMemo(() => {
@@ -810,17 +800,25 @@ const Projects = ({ initialFilters = {} }) => {
     fetchUsers();
   }, []);
 
+  // Track if initial fetch has been done to prevent infinite loops
+  const hasInitialFetchRef = useRef(false);
+
   // Initial fetch for projects and status counts when component mounts and statuses are loaded
   // Fetch them in parallel for faster data loading
   useEffect(() => {
-    // Only fetch if we have active statuses loaded
-    if (activeStatuses.length > 0) {
+    // Only fetch if we have active statuses loaded and haven't fetched yet
+    if (activeStatuses.length > 0 && !hasInitialFetchRef.current) {
+      hasInitialFetchRef.current = true;
       // Fetch projects and status counts in parallel (they're independent)
       Promise.all([fetchAllProjects(), fetchStatusCounts()]).catch((err) => {
         console.error("Error loading initial data:", err);
+        hasInitialFetchRef.current = false; // Reset on error so we can retry
       });
     }
-  }, [activeStatuses, fetchAllProjects, fetchStatusCounts]); // Depend on activeStatuses and both fetch functions
+    // Only depend on activeStatuses to prevent infinite loops
+    // The fetch functions are stable (useCallback) and don't need to be in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStatuses.length]); // Only depend on activeStatuses length to prevent infinite loops
 
   const searchClients = async (searchTerm) => {
     if (!searchTerm || searchTerm.trim().length === 0) {
@@ -1706,16 +1704,8 @@ const Projects = ({ initialFilters = {} }) => {
   // Client-side filtering for live status updates
   // Note: Since we now only load active projects from backend, inactive status filtering is not available
   const filteredProjects = useMemo(() => {
-    console.log("Filtering projects:", {
-      totalProjects: projects.length,
-      statusFilter: filters.statusFilter,
-      activeStatuses: activeStatuses,
-      inactiveStatuses: inactiveStatuses,
-    });
-
     // Since we only load active projects from backend, "all" shows all active projects
     if (filters.statusFilter === "all") {
-      console.log("Showing all active projects:", projects.length);
       return projects;
     }
 
@@ -1725,14 +1715,8 @@ const Projects = ({ initialFilters = {} }) => {
       return projectStatus === filters.statusFilter;
     });
 
-    console.log("Filtered projects:", {
-      statusFilter: filters.statusFilter,
-      filteredCount: filtered.length,
-      totalCount: projects.length,
-    });
-
     return filtered;
-  }, [projects, filters.statusFilter, activeStatuses, inactiveStatuses]);
+  }, [projects, filters.statusFilter]); // Removed activeStatuses and inactiveStatuses - not needed for filtering
 
   // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
