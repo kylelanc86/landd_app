@@ -36,11 +36,7 @@ import {
   Delete as DeleteIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  clientSuppliedJobsService,
-  sampleItemsService,
-  projectService,
-} from "../../services/api";
+import { clientSuppliedJobsService, projectService } from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
@@ -59,7 +55,6 @@ const ClientSuppliedJobs = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedJobType, setSelectedJobType] = useState("");
   const [sampleReceiptDate, setSampleReceiptDate] = useState("");
-  const [numberOfSamples, setNumberOfSamples] = useState("");
   const [creatingJob, setCreatingJob] = useState(false);
 
   useEffect(() => {
@@ -165,17 +160,10 @@ const ClientSuppliedJobs = () => {
 
   const fetchSampleCounts = async (jobsArray) => {
     const counts = {};
-    for (const job of jobsArray) {
-      try {
-        const response = await sampleItemsService.getAll({
-          projectId: job.projectId._id || job.projectId,
-        });
-        counts[job._id] = response.data?.length || 0;
-      } catch (error) {
-        console.error(`Error fetching sample count for job ${job._id}:`, error);
-        counts[job._id] = 0;
-      }
-    }
+    // Samples are now embedded in the job, so count them directly
+    jobsArray.forEach((job) => {
+      counts[job._id] = job.samples?.length || 0;
+    });
     setSampleCounts(counts);
   };
 
@@ -194,11 +182,6 @@ const ClientSuppliedJobs = () => {
         jobData.sampleReceiptDate = sampleReceiptDate;
       }
 
-      // Add number of samples if provided
-      if (numberOfSamples) {
-        jobData.sampleCount = parseInt(numberOfSamples, 10);
-      }
-
       await clientSuppliedJobsService.create(jobData);
 
       // Refresh the jobs list
@@ -209,7 +192,6 @@ const ClientSuppliedJobs = () => {
       setSelectedProject(null);
       setSelectedJobType("");
       setSampleReceiptDate("");
-      setNumberOfSamples("");
     } catch (error) {
       console.error("Error creating client supplied job:", error);
       alert("Failed to create job. Please ensure all fields are filled.");
@@ -294,11 +276,8 @@ const ClientSuppliedJobs = () => {
       const jobResponse = await clientSuppliedJobsService.getById(job._id);
       const fullJob = jobResponse.data;
 
-      // Fetch sample items for this job with analysis data
-      const response = await sampleItemsService.getAll({
-        projectId: fullJob.projectId._id || fullJob.projectId,
-      });
-      const sampleItems = response.data || [];
+      // Samples are now embedded in the job
+      const sampleItems = fullJob.samples || [];
 
       // Get analyst from first analyzed sample or job analyst
       let analyst = null;
@@ -317,10 +296,10 @@ const ClientSuppliedJobs = () => {
       }
 
       // Transform sample items to match air monitoring format
-      const transformedSamples = sampleItems.map((item) => {
+      const transformedSamples = sampleItems.map((item, index) => {
         return {
-          fullSampleID: item.labReference || `Sample-${item._id}`,
-          sampleID: item.labReference || `Sample-${item._id}`,
+          fullSampleID: item.labReference || `Sample-${index + 1}`,
+          sampleID: item.labReference || `Sample-${index + 1}`,
           location: item.clientReference || item.locationDescription || "N/A",
           // No time or flowrate for client supplied
           startTime: null,
@@ -570,7 +549,6 @@ const ClientSuppliedJobs = () => {
             setSelectedProject(null);
             setSelectedJobType("");
             setSampleReceiptDate("");
-            setNumberOfSamples("");
           }}
           maxWidth="sm"
           fullWidth
@@ -705,16 +683,22 @@ const ClientSuppliedJobs = () => {
                     InputLabelProps={{
                       shrink: true,
                     }}
-                  />
-                  <TextField
-                    fullWidth
-                    label="No of Samples"
-                    type="number"
-                    value={numberOfSamples}
-                    onChange={(e) => setNumberOfSamples(e.target.value)}
-                    inputProps={{
-                      min: 0,
-                      step: 1,
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              setSampleReceiptDate(
+                                new Date().toISOString().split("T")[0]
+                              )
+                            }
+                            sx={{ textTransform: "none", minWidth: "auto" }}
+                          >
+                            Today
+                          </Button>
+                        </InputAdornment>
+                      ),
                     }}
                   />
                 </>
@@ -736,7 +720,6 @@ const ClientSuppliedJobs = () => {
                 setSelectedProject(null);
                 setSelectedJobType("");
                 setSampleReceiptDate("");
-                setNumberOfSamples("");
               }}
               variant="outlined"
               sx={{

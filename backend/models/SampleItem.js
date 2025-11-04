@@ -6,6 +6,11 @@ const sampleItemSchema = new mongoose.Schema({
     ref: 'Project',
     required: true
   },
+  clientSuppliedJobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ClientSuppliedJob',
+    required: false
+  },
   labReference: {
     type: String,
     required: true,
@@ -60,6 +65,7 @@ sampleItemSchema.pre('save', function(next) {
 // Create compound index for efficient queries
 sampleItemSchema.index({ projectId: 1, labReference: 1 });
 sampleItemSchema.index({ projectId: 1, createdAt: -1 });
+sampleItemSchema.index({ clientSuppliedJobId: 1 });
 sampleItemSchema.index({ labReference: 1 }, { unique: true });
 
 module.exports = mongoose.model('SampleItem', sampleItemSchema); 

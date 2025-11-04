@@ -9,9 +9,37 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
 
-// Helper function to get active and inactive statuses from custom data field groups
-const getProjectStatuses = async () => {
+// Cache for project statuses
+const statusCache = {
+  data: null,
+  timestamp: null,
+  TTL: 10 * 60 * 1000, // 10 minutes in milliseconds
+};
+
+// Helper function to invalidate the status cache
+const invalidateStatusCache = () => {
+  statusCache.data = null;
+  statusCache.timestamp = null;
+};
+
+// Helper function to get active and inactive statuses from custom data field groups (with caching)
+const getProjectStatuses = async (forceRefresh = false) => {
   try {
+    // Check cache first
+    const now = Date.now();
+    if (!forceRefresh && statusCache.data && statusCache.timestamp) {
+      const cacheAge = now - statusCache.timestamp;
+      if (cacheAge < statusCache.TTL) {
+        console.log(`[PROJECTS] Using cached statuses (age: ${Math.round(cacheAge / 1000)}s)`);
+        return statusCache.data;
+      } else {
+        console.log(`[PROJECTS] Cache expired (age: ${Math.round(cacheAge / 1000)}s), refreshing...`);
+      }
+    }
+
+    // Fetch from database
+    console.log(`[PROJECTS] Fetching statuses from database...`);
+    const fetchStartTime = Date.now();
     const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
     const group = await CustomDataFieldGroup.findOne({ 
       type: 'project_status', 
@@ -19,7 +47,11 @@ const getProjectStatuses = async () => {
     });
     
     if (!group) {
-      return { activeStatuses: [], inactiveStatuses: [] };
+      const result = { activeStatuses: [], inactiveStatuses: [] };
+      // Cache even empty result
+      statusCache.data = result;
+      statusCache.timestamp = Date.now();
+      return result;
     }
     
     const activeStatuses = group.fields
@@ -32,13 +64,28 @@ const getProjectStatuses = async () => {
       .sort((a, b) => a.order - b.order)
       .map(field => field.text);
     
-    return { activeStatuses, inactiveStatuses };
+    const result = { activeStatuses, inactiveStatuses };
+    const fetchTime = Date.now() - fetchStartTime;
+    console.log(`[PROJECTS] Statuses fetched from database in ${fetchTime}ms`);
+    
+    // Update cache
+    statusCache.data = result;
+    statusCache.timestamp = Date.now();
+    
+    return result;
   } catch (error) {
     console.error('Error fetching project statuses from custom data field groups:', error);
-    // Return empty arrays if database query fails
+    // Return cached data if available, even if expired, as fallback
+    if (statusCache.data) {
+      console.log('[PROJECTS] Database error, returning stale cache as fallback');
+      return statusCache.data;
+    }
+    // Return empty arrays if database query fails and no cache
     return { activeStatuses: [], inactiveStatuses: [] };
   }
 };
+
+// Cache invalidation function will be exported at the end of the file
 
 // Get status counts for all projects
 router.get('/status-counts', auth, checkPermission(['projects.view']), async (req, res) => {
@@ -108,17 +155,29 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     }
 
     // Handle status filtering
+    // DEFAULT: Only show active projects unless explicitly requested otherwise
+    // This prevents inactive projects from being loaded when no status filter is provided
     if (status && status !== 'all') {
       try {
         console.log(`[PROJECTS] Processing status filter: ${status}`);
         if (status === 'all_active') {
           // Filter for all active statuses from custom data fields
-          query.status = { $in: activeStatuses };
-          console.log(`[PROJECTS] Applied active status filter:`, query.status);
+          if (activeStatuses.length > 0) {
+            query.status = { $in: activeStatuses };
+            console.log(`[PROJECTS] Applied active status filter:`, query.status);
+          } else {
+            console.log(`[PROJECTS] No active statuses available, returning empty result`);
+            query.status = { $in: [] }; // Return no results if no active statuses defined
+          }
         } else if (status === 'all_inactive') {
           // Filter for all inactive statuses from custom data fields
-          query.status = { $in: inactiveStatuses };
-          console.log(`[PROJECTS] Applied inactive status filter:`, query.status);
+          if (inactiveStatuses.length > 0) {
+            query.status = { $in: inactiveStatuses };
+            console.log(`[PROJECTS] Applied inactive status filter:`, query.status);
+          } else {
+            console.log(`[PROJECTS] No inactive statuses available, returning empty result`);
+            query.status = { $in: [] }; // Return no results if no inactive statuses defined
+          }
         } else {
           // Handle specific status or comma-separated list
           const statusArray = status.includes(',') ? status.split(',') : [status];
@@ -135,7 +194,15 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         throw new Error(`Invalid status filter: ${error.message}`);
       }
     } else {
-      console.log(`[PROJECTS] No status filter applied`);
+      // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
+      // This prevents inactive projects from appearing when statuses aren't loaded yet
+      if (activeStatuses.length > 0) {
+        query.status = { $in: activeStatuses };
+        console.log(`[PROJECTS] No status filter provided, defaulting to active projects only`);
+      } else {
+        console.log(`[PROJECTS] No active statuses available and no filter provided, returning empty result`);
+        query.status = { $in: [] }; // Return no results if no active statuses defined
+      }
     }
 
     // Calculate pagination
@@ -1035,4 +1102,8 @@ router.get('/stats/dashboard', auth, checkPermission(['projects.view']), async (
   }
 });
 
-module.exports = router; 
+// Export router as default
+module.exports = router;
+
+// Export cache invalidation function for use in other routes
+module.exports.invalidateStatusCache = invalidateStatusCache; 

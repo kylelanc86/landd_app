@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const ClientSuppliedJob = require('../models/ClientSuppliedJob');
-const SampleItem = require('../models/SampleItem');
 
 // GET /api/client-supplied-jobs - get all client supplied jobs
 router.get('/', async (req, res) => {
@@ -174,8 +173,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Client supplied job not found' });
     }
     
-    // Also delete associated sample items
-    await SampleItem.deleteMany({ projectId: job.projectId });
+    // Samples are now embedded in the job, so they'll be deleted automatically
     
     res.json({ message: 'Client supplied job deleted successfully' });
   } catch (err) {
@@ -183,22 +181,5 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET /api/client-supplied-jobs/:id/samples - get samples for a job
-router.get('/:id/samples', async (req, res) => {
-  try {
-    const job = await ClientSuppliedJob.findById(req.params.id);
-    
-    if (!job) {
-      return res.status(404).json({ message: 'Client supplied job not found' });
-    }
-    
-    const samples = await SampleItem.find({ projectId: job.projectId })
-      .sort({ labReference: 1 });
-    
-    res.json(samples);
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch samples', error: err.message });
-  }
-});
 
 module.exports = router; 

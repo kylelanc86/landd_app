@@ -29,10 +29,7 @@ import {
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
-import {
-  sampleItemsService,
-  clientSuppliedJobsService,
-} from "../../services/api";
+import { clientSuppliedJobsService } from "../../services/api";
 import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { FixedSizeList as List } from "react-window";
@@ -284,13 +281,13 @@ const ClientSuppliedFibreCountAnalysis = () => {
       try {
         setLoading(true);
 
-        // Fetch job first to get projectId
+        // Fetch job first to get projectId and embedded samples
         const jobResponse = await clientSuppliedJobsService.getById(jobId);
         const job = jobResponse.data;
         const projectId = job.projectId._id || job.projectId;
 
-        // Fetch all samples for this project
-        const samplesResponse = await sampleItemsService.getAll({ projectId });
+        // Samples are now embedded in the job
+        const samplesResponse = { data: job.samples || [] };
         const pcmCalibrationsResponse = await pcmMicroscopeService.getAll();
 
         if (!isMounted) return;
@@ -298,22 +295,25 @@ const ClientSuppliedFibreCountAnalysis = () => {
         setJobStatus(job.status || "In Progress");
         setPcmCalibrations(pcmCalibrationsResponse);
 
-        // Sort samples by labReference
-        const sortedSamples = (samplesResponse.data || []).sort((a, b) => {
-          const labRefA = a.labReference || "";
-          const labRefB = b.labReference || "";
-          return labRefA.localeCompare(labRefB);
-        });
+        // Sort samples by labReference and add unique IDs
+        const sortedSamples = (samplesResponse.data || [])
+          .sort((a, b) => {
+            const labRefA = a.labReference || "";
+            const labRefB = b.labReference || "";
+            return labRefA.localeCompare(labRefB);
+          })
+          .map((sample, index) => ({ ...sample, _id: index })); // Add unique ID based on index
 
         // Initialize analyses for each sample
         const initialAnalyses = {};
         sortedSamples.forEach((sample) => {
+          const sampleKey = sample._id;
           if (
             sample.analysisData &&
             Object.keys(sample.analysisData).length > 0
           ) {
             const ad = sample.analysisData;
-            initialAnalyses[sample._id] = {
+            initialAnalyses[sampleKey] = {
               edgesDistribution: ad.edgesDistribution || "",
               backgroundDust: ad.backgroundDust || "",
               fibreCounts:
@@ -330,7 +330,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
               fieldsCounted: ad.fieldsCounted || 0,
             };
           } else {
-            initialAnalyses[sample._id] = {
+            initialAnalyses[sampleKey] = {
               edgesDistribution: "",
               backgroundDust: "",
               fibreCounts: Array(5)
@@ -741,33 +741,39 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Update each sample with its analysis data
-      const updatePromises = samples.map(async (sample) => {
+      // Update samples array with analysis data and update job
+      const updatedSamples = samples.map((sample) => {
         const analysis = sampleAnalyses[sample._id];
         if (analysis) {
-          const analysisData = {
-            microscope: analysisDetails.microscope,
-            testSlide: analysisDetails.testSlide,
-            testSlideLines: analysisDetails.testSlideLines,
-            edgesDistribution: analysis.edgesDistribution,
-            backgroundDust: analysis.backgroundDust,
-            fibreCounts: analysis.fibreCounts,
-            fibresCounted: analysis.fibresCounted,
-            fieldsCounted: analysis.fieldsCounted,
-            analyzedBy: analysedBy,
-            analyzedAt: new Date().toISOString(),
-          };
-
-          await sampleItemsService.update(sample._id, {
-            analysisData,
+          // Remove _id we added before saving
+          const { _id, ...sampleWithoutId } = sample;
+          return {
+            ...sampleWithoutId,
+            analysisData: {
+              microscope: analysisDetails.microscope,
+              testSlide: analysisDetails.testSlide,
+              testSlideLines: analysisDetails.testSlideLines,
+              edgesDistribution: analysis.edgesDistribution,
+              backgroundDust: analysis.backgroundDust,
+              fibreCounts: analysis.fibreCounts,
+              fibresCounted: analysis.fibresCounted,
+              fieldsCounted: analysis.fieldsCounted,
+            },
             analyzedBy: analysedBy,
             analyzedAt: new Date(),
-          });
+          };
         }
+        const { _id, ...sampleWithoutId } = sample;
+        return sampleWithoutId;
       });
 
-      // Wait for all sample updates to complete
-      await Promise.all(updatePromises);
+      // Update the job with the updated samples array
+      await clientSuppliedJobsService.update(jobId, {
+        samples: updatedSamples,
+        analyst: analysedBy,
+        analysisDate: new Date(),
+        status: "Completed",
+      });
 
       // Clear localStorage
       localStorage.removeItem(ANALYSIS_PROGRESS_KEY);

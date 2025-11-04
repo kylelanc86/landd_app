@@ -463,11 +463,10 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = filtersToUse.departmentFilter;
         }
 
-        // Only load active projects for better performance
+        // ALWAYS load only active projects for better performance
         // Inactive projects can be accessed via the reports page if needed
-        if (activeStatuses.length > 0) {
-          params.status = "all_active";
-        }
+        // Always send status filter to prevent loading all projects (including inactive)
+        params.status = "all_active";
 
         const response = await projectService.getAll(params);
 
@@ -560,10 +559,9 @@ const Projects = ({ initialFilters = {} }) => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // Only load active projects for better performance
-          if (activeStatuses.length > 0) {
-            params.status = "all_active";
-          }
+          // ALWAYS load only active projects for better performance
+          // Always send status filter to prevent loading all projects (including inactive)
+          params.status = "all_active";
 
           const response = await projectService.getAll(params);
 
@@ -1177,10 +1175,9 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = departmentValue;
         }
 
-        // Only load active projects for better performance
-        if (activeStatuses.length > 0) {
-          params.status = "all_active";
-        }
+        // ALWAYS load only active projects for better performance
+        // Always send status filter to prevent loading all projects (including inactive)
+        params.status = "all_active";
 
         const response = await projectService.getAll(params);
 

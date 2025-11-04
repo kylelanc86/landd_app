@@ -35,6 +35,51 @@ const clientSuppliedJobSchema = new mongoose.Schema({
   sampleReceiptDate: {
     type: Date
   },
+  samples: [{
+    labReference: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    clientReference: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    sampleDescription: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    ashingReference: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    analysisResult: {
+      type: String,
+      default: 'Pending'
+    },
+    analysisData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
+    analyzedBy: {
+      type: mongoose.Schema.Types.Mixed,
+      ref: 'User'
+    },
+    analyzedAt: {
+      type: Date
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   createdAt: {
     type: Date,
     default: Date.now

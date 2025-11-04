@@ -33,11 +33,7 @@ import {
   Delete as DeleteIcon,
 } from "@mui/icons-material";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import {
-  clientSuppliedJobsService,
-  sampleItemsService,
-  userService,
-} from "../../services/api";
+import { clientSuppliedJobsService, userService } from "../../services/api";
 
 const ClientSuppliedSamples = () => {
   const navigate = useNavigate();
@@ -118,13 +114,10 @@ const ClientSuppliedSamples = () => {
     }
 
     try {
-      // Get the job first to get the projectId
+      // Get the job which now has embedded samples
       const jobResponse = await clientSuppliedJobsService.getById(jobId);
-      const projectId =
-        jobResponse.data.projectId._id || jobResponse.data.projectId;
-
-      const response = await sampleItemsService.getAll({ projectId });
-      setSamples(response.data || []);
+      // Samples are now embedded in the job
+      setSamples(jobResponse.data.samples || []);
     } catch (error) {
       console.error("Error fetching sample items:", error);
       setSamples([]);
@@ -275,9 +268,6 @@ const ClientSuppliedSamples = () => {
 
   const handleConfirmSamples = async () => {
     try {
-      // Get the projectId from the job
-      const projectId = job.projectId._id || job.projectId;
-
       // Create a map of existing samples by labReference for quick lookup
       const existingSamplesMap = new Map();
       samples.forEach((sample) => {
@@ -313,27 +303,12 @@ const ClientSuppliedSamples = () => {
         }
       });
 
-      // Update existing samples and create new ones
-      const updatePromises = sampleData.map(async (sampleData) => {
-        const existingSample = existingSamplesMap.get(sampleData.labReference);
-
-        if (existingSample) {
-          // Update existing sample
-          return await sampleItemsService.update(
-            existingSample._id,
-            sampleData
-          );
-        } else {
-          // Create new sample
-          return await sampleItemsService.create({
-            projectId,
-            ...sampleData,
-          });
-        }
+      // Update the job with the new samples array
+      await clientSuppliedJobsService.update(jobId, {
+        samples: sampleData,
       });
 
-      const results = await Promise.all(updatePromises);
-      console.log("Samples updated/created:", results);
+      console.log("Samples saved to job");
 
       // Refresh the samples list
       await fetchSampleItems();
@@ -343,11 +318,15 @@ const ClientSuppliedSamples = () => {
     }
   };
 
-  const handleDeleteSample = async (sampleId) => {
+  const handleDeleteSample = async (index) => {
     try {
-      await sampleItemsService.delete(sampleId);
-      // Remove the deleted sample from the local state
-      setSamples(samples.filter((sample) => sample._id !== sampleId));
+      // Remove the sample at the given index from the job's samples array
+      const updatedSamples = samples.filter((_, i) => i !== index);
+      await clientSuppliedJobsService.update(jobId, {
+        samples: updatedSamples,
+      });
+      // Refresh the samples list
+      await fetchSampleItems();
     } catch (error) {
       console.error("Error deleting sample:", error);
     }
@@ -543,8 +522,8 @@ const ClientSuppliedSamples = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSamples.map((sample) => (
-                    <TableRow key={sample.id} hover>
+                  filteredSamples.map((sample, index) => (
+                    <TableRow key={index} hover>
                       <TableCell>
                         <Typography
                           variant="body2"
@@ -563,7 +542,7 @@ const ClientSuppliedSamples = () => {
                           color="error"
                           size="small"
                           title="Delete Sample"
-                          onClick={() => handleDeleteSample(sample._id)}
+                          onClick={() => handleDeleteSample(index)}
                         >
                           <DeleteIcon />
                         </IconButton>

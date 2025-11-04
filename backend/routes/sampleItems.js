@@ -2,13 +2,18 @@ const express = require('express');
 const router = express.Router();
 const SampleItem = require('../models/SampleItem');
 
-// GET /api/sample-items - get all sample items (with optional project filter)
+// GET /api/sample-items - get all sample items (with optional project and job filter)
 router.get('/', async (req, res) => {
   try {
-    const { projectId } = req.query;
+    const { projectId, clientSuppliedJobId } = req.query;
     const filter = {};
     if (projectId) {
       filter.projectId = projectId;
+    }
+    // Filter by clientSuppliedJobId if provided (for client supplied jobs)
+    // Only show samples with this specific jobId (exclude null/undefined)
+    if (clientSuppliedJobId) {
+      filter.clientSuppliedJobId = { $exists: true, $eq: clientSuppliedJobId };
     }
     
     const sampleItems = await SampleItem.find(filter)
@@ -60,7 +65,8 @@ router.post('/', async (req, res) => {
     const sampleItem = new SampleItem({
       projectId,
       labReference,
-      clientReference
+      clientReference,
+      clientSuppliedJobId: req.body.clientSuppliedJobId || undefined
     });
     
     await sampleItem.save();
@@ -102,7 +108,8 @@ router.post('/bulk', async (req, res) => {
       labReference: sample.labReference.trim(),
       clientReference: sample.clientReference.trim(),
       analyzedBy: sample.analyzedBy || undefined,
-      analyzedAt: sample.analyzedAt || undefined
+      analyzedAt: sample.analyzedAt || undefined,
+      clientSuppliedJobId: req.body.clientSuppliedJobId || undefined
     }));
     
     const createdSampleItems = await SampleItem.insertMany(sampleItems);

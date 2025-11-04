@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
+const projectsRouter = require('./projects');
 
 // Get all custom data field groups
 router.get('/', auth, checkPermission(['admin.view']), async (req, res) => {
@@ -102,8 +103,19 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
     });
     
     const savedGroup = await newGroup.save();
-    await savedGroup.populate('createdBy', 'firstName lastName');
     
+    // Invalidate project statuses cache if this is a project_status group
+    if (savedGroup.type === 'project_status') {
+      try {
+        projectsRouter.invalidateStatusCache();
+        console.log('[CUSTOM_DATA_FIELDS] Invalidated project statuses cache after create');
+      } catch (error) {
+        console.error('[CUSTOM_DATA_FIELDS] Error invalidating cache:', error);
+        // Don't fail the request if cache invalidation fails
+      }
+    }
+    
+    await savedGroup.populate('createdBy', 'firstName lastName');
     res.status(201).json(savedGroup);
   } catch (error) {
     console.error('Error creating custom data field group:', error);
@@ -146,6 +158,17 @@ router.put('/:id', auth, checkPermission(['admin.edit']), async (req, res) => {
     group.updatedAt = new Date();
     await group.save();
     
+    // Invalidate project statuses cache if this is a project_status group
+    if (group.type === 'project_status') {
+      try {
+        projectsRouter.invalidateStatusCache();
+        console.log('[CUSTOM_DATA_FIELDS] Invalidated project statuses cache after update');
+      } catch (error) {
+        console.error('[CUSTOM_DATA_FIELDS] Error invalidating cache:', error);
+        // Don't fail the request if cache invalidation fails
+      }
+    }
+    
     await group.populate('createdBy', 'firstName lastName');
     res.json(group);
   } catch (error) {
@@ -167,6 +190,17 @@ router.delete('/:id', auth, checkPermission(['admin.edit']), async (req, res) =>
     group.isActive = false;
     group.updatedAt = new Date();
     await group.save();
+    
+    // Invalidate project statuses cache if this is a project_status group
+    if (group.type === 'project_status') {
+      try {
+        projectsRouter.invalidateStatusCache();
+        console.log('[CUSTOM_DATA_FIELDS] Invalidated project statuses cache after delete');
+      } catch (error) {
+        console.error('[CUSTOM_DATA_FIELDS] Error invalidating cache:', error);
+        // Don't fail the request if cache invalidation fails
+      }
+    }
     
     res.json({ message: 'Group deleted successfully' });
   } catch (error) {
