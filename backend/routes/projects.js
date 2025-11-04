@@ -1120,19 +1120,53 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
     const userId = req.user.id;
 
+    // Get active/inactive statuses for filtering (with caching)
+    const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
     const query = {
       users: userId
     };
 
-    // Add status filter if specified
-    if (status) {
+    // Handle status filtering
+    // DEFAULT: Only show active projects unless explicitly requested otherwise
+    if (status && status !== 'all') {
       try {
-        const statusArray = status.includes(',') ? status.split(',') : [status];
-        query.status = { $in: statusArray };
+        if (status === 'all_active') {
+          // Filter for all active statuses
+          if (activeStatuses.length > 0) {
+            query.status = { $in: activeStatuses };
+            console.log(`[${userId}] Applied active status filter to assigned projects`);
+          } else {
+            query.status = { $in: [] }; // Return no results if no active statuses defined
+          }
+        } else if (status === 'all_inactive') {
+          // Filter for all inactive statuses
+          if (inactiveStatuses.length > 0) {
+            query.status = { $in: inactiveStatuses };
+            console.log(`[${userId}] Applied inactive status filter to assigned projects`);
+          } else {
+            query.status = { $in: [] }; // Return no results if no inactive statuses defined
+          }
+        } else {
+          // Handle specific status or comma-separated list
+          const statusArray = status.includes(',') ? status.split(',') : [status];
+          query.status = { $in: statusArray };
+          console.log(`[${userId}] Applied specific status filter to assigned projects:`, query.status);
+        }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
+      }
+    } else {
+      // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
+      // This matches the projects page behavior
+      if (activeStatuses.length > 0) {
+        query.status = { $in: activeStatuses };
+        console.log(`[${userId}] No status filter provided, defaulting to active projects only for assigned projects`);
+      } else {
+        console.log(`[${userId}] No active statuses available and no filter provided, returning empty result`);
+        query.status = { $in: [] }; // Return no results if no active statuses defined
       }
     }
 

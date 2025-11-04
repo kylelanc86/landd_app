@@ -44,6 +44,7 @@ async function loadLogoAsBase64() {
 // Get all users
 router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
   try {
+    const startTime = Date.now();
     const query = {};
     
     // If isActive parameter is provided, filter by active status
@@ -51,9 +52,14 @@ router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
       query.isActive = req.query.isActive === 'true';
     }
     
+    // Only select fields needed for the table view
+    // Exclude large fields like signature (base64 images), userPreferences, workingHours, etc.
     const users = await User.find(query)
-      .select('-password')
-      .sort({ createdAt: -1 });
+      .select('firstName lastName email role licences isActive _id createdAt phone')
+      .sort({ lastName: 1, firstName: 1 }); // Sort by name for better UX
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${users.length} users in ${queryTime}ms`);
     
     res.json(users);
   } catch (err) {

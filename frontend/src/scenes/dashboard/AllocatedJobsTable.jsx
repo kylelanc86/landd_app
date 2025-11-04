@@ -52,36 +52,27 @@ const AllocatedJobsTable = () => {
 
       try {
         const apiStartTime = performance.now();
-        // Load all projects since we need to filter client-side
+        // Let backend filter by active status - much faster!
+        // Only need a reasonable limit since we're filtering to active projects (~200 max)
         const response = await projectService.getAssignedToMe({
-          page: 1,
-          limit: 10000, // Load all projects
-          // Note: Status filtering is handled client-side, not on the backend
+          page: page + 1, // Backend uses 1-based pagination
+          limit: pageSize,
+          status: "all_active", // Filter to active projects on backend
           sortBy: "projectID",
           sortOrder: "desc",
         });
         const apiEndTime = performance.now();
 
-        const allProjectsData = response.data.data || [];
-
-        // Filter to show only active projects on the client side
-        const filteredProjects = allProjectsData.filter((project) =>
-          activeStatuses.includes(project.status)
-        );
-
-        // Apply client-side pagination
-        const startIndex = page * pageSize;
-        const endIndex = startIndex + pageSize;
-        const projectsData = filteredProjects.slice(startIndex, endIndex);
+        const projectsData = response.data.data || [];
+        const totalCount = response.data.pagination?.total || 0;
 
         const processingEndTime = performance.now();
 
         console.log("✅ ALLOCATED JOBS FETCH COMPLETE", {
           page,
           pageSize,
-          allProjectsCount: allProjectsData.length,
-          filteredProjectsCount: filteredProjects.length,
-          paginatedProjectsCount: projectsData.length,
+          projectsCount: projectsData.length,
+          totalCount: totalCount,
           activeStatuses: activeStatuses,
           apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
           processingTime: `${(processingEndTime - apiEndTime).toFixed(2)}ms`,
@@ -89,9 +80,9 @@ const AllocatedJobsTable = () => {
           responseSize: JSON.stringify(response).length,
         });
 
-        // Store paginated filtered data
+        // Store paginated data (already filtered by backend)
         setJobs(projectsData);
-        setRowCount(filteredProjects.length);
+        setRowCount(totalCount);
       } catch (err) {
         console.error("❌ ALLOCATED JOBS FETCH ERROR", {
           page,

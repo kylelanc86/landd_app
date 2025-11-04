@@ -277,8 +277,10 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
-// Create indexes
+// Create indexes for performance
 userSchema.index({ email: 1 });
+userSchema.index({ isActive: 1 }); // Index for filtering active/inactive users
+userSchema.index({ lastName: 1, firstName: 1 }); // Index for sorting
 
 const User = mongoose.model('User', userSchema);
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -40,49 +40,24 @@ const Users = () => {
   const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
 
+  const [loading, setLoading] = useState(true);
+
   // Fetch users from the API on mount
   useEffect(() => {
     const fetchUsers = async () => {
       try {
+        setLoading(true);
         const response = await userService.getAll(showInactive);
-        console.log("Users data from API:", response.data);
-        // Transform the data to ensure role is properly set
-        const transformedUsers = response.data.map((user) => ({
-          ...user,
-          role: user.role || "employee",
-        }));
-        setUsers(transformedUsers);
+        // Backend already returns role, no need to transform
+        setUsers(response.data || []);
       } catch (error) {
         console.error("Error fetching users:", error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchUsers();
   }, [showInactive]);
-
-  const handleEditUser = (user) => {
-    navigate(`/users/edit/${user._id}`);
-  };
-
-  const handleStatusChange = (userId, newStatus) => {
-    // Check if trying to deactivate the last admin
-    if (!newStatus) {
-      const userToDeactivate = users.find((u) => u._id === userId);
-      if (userToDeactivate.role === "admin") {
-        const activeAdmins = users.filter(
-          (u) => u.isActive && u.role === "admin"
-        );
-        if (activeAdmins.length <= 1) {
-          setStatusDialogOpen(true);
-          setStatusChangeId(userId);
-          setStatusChangeType(newStatus);
-          return;
-        }
-      }
-    }
-    setStatusChangeId(userId);
-    setStatusChangeType(newStatus);
-    setStatusDialogOpen(true);
-  };
 
   const confirmStatusChange = async () => {
     const userToDeactivate = users.find((u) => u._id === statusChangeId);
@@ -113,129 +88,164 @@ const Users = () => {
     }
   };
 
-  const columns = [
-    {
-      field: "firstName",
-      headerName: "Name",
-      flex: 1.5,
-      maxWidth: 180,
-      renderCell: (params) => {
-        const fullName = `${params.row.firstName || ""} ${
-          params.row.lastName || ""
-        }`.trim();
-        return <TruncatedCell value={fullName} />;
-      },
+  const handleEditUser = useCallback(
+    (user) => {
+      navigate(`/users/edit/${user._id}`);
     },
-    {
-      field: "email",
-      headerName: "Email",
-      flex: 1,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
-    },
-    {
-      field: "role",
-      headerName: "User Level",
-      flex: 1,
-      minWidth: 120,
-      renderCell: (params) => {
-        const role = params.row.role || "employee";
-        const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+    [navigate]
+  );
 
-        // Define colors for different user levels
-        let roleColor;
-        switch (role.toLowerCase()) {
-          case "admin":
-            roleColor = "#d32f2f"; // Red
-            break;
-          case "manager":
-            roleColor = "#ed6c02"; // Orange
-            break;
-          case "employee":
-          default:
-            roleColor = "#1976d2"; // Blue
-            break;
+  const handleStatusChange = useCallback(
+    (userId, newStatus) => {
+      // Check if trying to deactivate the last admin
+      if (!newStatus) {
+        const userToDeactivate = users.find((u) => u._id === userId);
+        if (userToDeactivate?.role === "admin") {
+          const activeAdmins = users.filter(
+            (u) => u.isActive && u.role === "admin"
+          );
+          if (activeAdmins.length <= 1) {
+            setStatusDialogOpen(true);
+            setStatusChangeId(userId);
+            setStatusChangeType(newStatus);
+            return;
+          }
         }
+      }
+      setStatusChangeId(userId);
+      setStatusChangeType(newStatus);
+      setStatusDialogOpen(true);
+    },
+    [users]
+  );
 
-        return (
+  // Memoize columns to prevent unnecessary re-renders
+  const columns = useMemo(
+    () => [
+      {
+        field: "firstName",
+        headerName: "Name",
+        flex: 1.5,
+        maxWidth: 180,
+        renderCell: (params) => {
+          const fullName = `${params.row.firstName || ""} ${
+            params.row.lastName || ""
+          }`.trim();
+          return <TruncatedCell value={fullName} />;
+        },
+      },
+      {
+        field: "email",
+        headerName: "Email",
+        flex: 1,
+        renderCell: (params) => <TruncatedCell value={params.value} />,
+      },
+      {
+        field: "role",
+        headerName: "User Level",
+        flex: 1,
+        minWidth: 120,
+        renderCell: (params) => {
+          const role = params.row.role || "employee";
+          const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+
+          // Define colors for different user levels
+          let roleColor;
+          switch (role.toLowerCase()) {
+            case "admin":
+              roleColor = "#d32f2f"; // Red
+              break;
+            case "manager":
+              roleColor = "#ed6c02"; // Orange
+              break;
+            case "employee":
+            default:
+              roleColor = "#1976d2"; // Blue
+              break;
+          }
+
+          return (
+            <Chip
+              label={formattedRole}
+              sx={{
+                backgroundColor: roleColor,
+                color: "white",
+              }}
+            />
+          );
+        },
+      },
+      {
+        field: "licences",
+        headerName: "Licences",
+        flex: 1.5,
+        minWidth: 150,
+        renderCell: (params) => {
+          const licences = params.row.licences || [];
+          if (licences.length === 0) {
+            return (
+              <Typography variant="body2" color="textSecondary">
+                No licences
+              </Typography>
+            );
+          }
+          return (
+            <Box>
+              {licences.map((licence, index) => (
+                <Typography key={index} variant="body2">
+                  {licence.licenceType}
+                </Typography>
+              ))}
+            </Box>
+          );
+        },
+      },
+
+      {
+        field: "isActive",
+        headerName: "Status",
+        flex: 1,
+        maxWidth: 100,
+        renderCell: (params) => (
           <Chip
-            label={formattedRole}
+            label={params.value ? "Active" : "Inactive"}
+            color={params.value ? "success" : "error"}
             sx={{
-              backgroundColor: roleColor,
+              backgroundColor: params.value ? "green" : "red",
               color: "white",
             }}
           />
-        );
+        ),
       },
-    },
-    {
-      field: "licences",
-      headerName: "Licences",
-      flex: 1.5,
-      minWidth: 150,
-      renderCell: (params) => {
-        const licences = params.row.licences || [];
-        if (licences.length === 0) {
-          return (
-            <Typography variant="body2" color="textSecondary">
-              No licences
-            </Typography>
-          );
-        }
-        return (
+      {
+        field: "actions",
+        headerName: "Actions",
+        flex: 1,
+        minWidth: 150,
+        renderCell: (params) => (
           <Box>
-            {licences.map((licence, index) => (
-              <Typography key={index} variant="body2">
-                {licence.licenceType}
-              </Typography>
-            ))}
-          </Box>
-        );
-      },
-    },
-
-    {
-      field: "isActive",
-      headerName: "Status",
-      flex: 1,
-      maxWidth: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value ? "Active" : "Inactive"}
-          color={params.value ? "success" : "error"}
-          sx={{
-            backgroundColor: params.value ? "green" : "red",
-            color: "white",
-          }}
-        />
-      ),
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      flex: 1,
-      minWidth: 150,
-      renderCell: (params) => (
-        <Box>
-          {/* Only show edit button for admin users */}
-          {currentUser.role === "admin" && (
-            <IconButton onClick={() => handleEditUser(params.row)}>
-              <EditIcon />
+            {/* Only show edit button for admin users */}
+            {currentUser.role === "admin" && (
+              <IconButton onClick={() => handleEditUser(params.row)}>
+                <EditIcon />
+              </IconButton>
+            )}
+            <IconButton
+              onClick={() =>
+                handleStatusChange(params.row._id, !params.row.isActive)
+              }
+              title={params.row.isActive ? "Deactivate User" : "Activate User"}
+            >
+              {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
             </IconButton>
-          )}
-          <IconButton
-            onClick={() =>
-              handleStatusChange(params.row._id, !params.row.isActive)
-            }
-            title={params.row.isActive ? "Deactivate User" : "Activate User"}
-          >
-            {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
-          </IconButton>
-        </Box>
-      ),
-      sortable: false,
-      filterable: false,
-    },
-  ];
+          </Box>
+        ),
+        sortable: false,
+        filterable: false,
+      },
+    ],
+    [currentUser, handleEditUser, handleStatusChange]
+  );
 
   // Users are filtered by the backend API based on showInactive state
   const filteredUsers = users;
@@ -340,9 +350,13 @@ const Users = () => {
             getRowId={(row) => row._id}
             pageSize={10}
             rowsPerPageOptions={[10]}
+            loading={loading}
             autoHeight
             disableSelectionOnClick
             sortingOrder={["desc", "asc"]}
+            disableColumnMenu
+            disableDensitySelector
+            disableColumnFilter
           />
         </Box>
       </Box>
