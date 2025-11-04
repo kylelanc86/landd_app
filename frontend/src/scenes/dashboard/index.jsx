@@ -189,20 +189,46 @@ const Dashboard = () => {
             prefs.dailyTimesheet = true;
             console.log("Setting visible widgets from preferences:", prefs);
 
-            // Merge with default to ensure all widgets have a value
-            const merged = {
-              dailyTimesheet: true,
-              inProgress: false,
-              samplesSubmitted: false,
-              labComplete: false,
-              reportReview: false,
-              readyForInvoicing: false,
-              invoiceSent: false,
-              awaitingPayment: false,
-              allActive: false,
-              ...prefs,
-            };
+            // Get current state (may have localStorage values or initial state)
+            const currentWidgets = visibleWidgets;
 
+            // Check if preferences have all widgets defined
+            // If not, we should preserve current state for missing widgets
+            const allWidgetKeys = [
+              "dailyTimesheet",
+              "inProgress",
+              "samplesSubmitted",
+              "labComplete",
+              "reportReview",
+              "readyForInvoicing",
+              "invoiceSent",
+              "awaitingPayment",
+              "allActive",
+            ];
+
+            const prefsHasAllKeys = allWidgetKeys.every((key) => key in prefs);
+
+            // Merge strategy:
+            // 1. Start with current state (preserves what user sees initially)
+            // 2. If preferences have all keys, use them (complete preferences)
+            // 3. If preferences are incomplete, merge: current state + prefs (only override what exists)
+            const merged = prefsHasAllKeys
+              ? {
+                  ...currentWidgets, // Start with current
+                  ...prefs, // Apply all preferences (complete)
+                }
+              : {
+                  ...currentWidgets, // Start with current (preserves visible widgets)
+                  ...prefs, // Only override widgets that exist in prefs
+                  dailyTimesheet: true, // Always ensure dailyTimesheet is true
+                };
+
+            console.log("Merged visible widgets (current + prefs):", {
+              prefsHasAllKeys,
+              currentWidgets,
+              prefs,
+              merged,
+            });
             setVisibleWidgets(merged);
           } else {
             // No preferences found - use default state (only dailyTimesheet enabled)

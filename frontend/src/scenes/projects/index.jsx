@@ -41,6 +41,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import InfoIcon from "@mui/icons-material/Info";
+import ClearIcon from "@mui/icons-material/Clear";
 
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
@@ -687,6 +688,17 @@ const Projects = ({ initialFilters = {} }) => {
     [debouncedSearch, updateFilter]
   );
 
+  // Handle search clear
+  const handleSearchClear = useCallback(() => {
+    updateFilter("searchTerm", "");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    // Trigger search with empty value immediately (no debounce needed)
+    fetchAllProjects("", false, {
+      ...filtersRef.current,
+      searchTerm: "",
+    });
+  }, [updateFilter, fetchAllProjects]);
+
   // Memoize pagination model to prevent unnecessary re-renders
   const memoizedPaginationModel = useMemo(
     () => paginationModel,
@@ -798,20 +810,17 @@ const Projects = ({ initialFilters = {} }) => {
     fetchUsers();
   }, []);
 
-  // Initial fetch for projects when component mounts and statuses are loaded
+  // Initial fetch for projects and status counts when component mounts and statuses are loaded
+  // Fetch them in parallel for faster data loading
   useEffect(() => {
-    // Only fetch projects if we have active statuses loaded
+    // Only fetch if we have active statuses loaded
     if (activeStatuses.length > 0) {
-      fetchAllProjects();
+      // Fetch projects and status counts in parallel (they're independent)
+      Promise.all([fetchAllProjects(), fetchStatusCounts()]).catch((err) => {
+        console.error("Error loading initial data:", err);
+      });
     }
-  }, [activeStatuses, fetchAllProjects]); // Depend on activeStatuses and fetchAllProjects
-
-  // Fetch status counts when component mounts and when statuses change
-  useEffect(() => {
-    if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
-      fetchStatusCounts();
-    }
-  }, [fetchStatusCounts]);
+  }, [activeStatuses, fetchAllProjects, fetchStatusCounts]); // Depend on activeStatuses and both fetch functions
 
   const searchClients = async (searchTerm) => {
     if (!searchTerm || searchTerm.trim().length === 0) {
@@ -1269,9 +1278,16 @@ const Projects = ({ initialFilters = {} }) => {
         users: currentProject?.users || [],
       };
 
+      // Get old status before making the API call
+      const oldProject = projects.find((p) => p._id === projectId);
+      const oldStatus = oldProject?.status;
+
       const apiStartTime = performance.now();
       const response = await projectService.update(projectId, updatePayload);
       const apiEndTime = performance.now();
+
+      // Get new status from response (use updatePayload.status as fallback)
+      const updatedStatus = response.data?.status || updatePayload.status;
 
       // Update the local state with the full updated project data from the API response
       const stateUpdateStartTime = performance.now();
@@ -1284,10 +1300,47 @@ const Projects = ({ initialFilters = {} }) => {
       );
       const stateUpdateTime = performance.now() - stateUpdateStartTime;
 
-      // Refresh status counts after updating project status
-      const statusCountsStartTime = performance.now();
-      fetchStatusCounts();
-      const statusCountsTime = performance.now() - statusCountsStartTime;
+      // Update status counts locally instead of refetching (much faster)
+      if (oldStatus && updatedStatus && oldStatus !== updatedStatus) {
+        setStatusCounts((prevCounts) => {
+          const newCounts = { ...prevCounts };
+
+          // Decrement old status
+          if (newCounts[oldStatus] > 0) {
+            newCounts[oldStatus] = (newCounts[oldStatus] || 0) - 1;
+          }
+
+          // Increment new status
+          newCounts[updatedStatus] = (newCounts[updatedStatus] || 0) + 1;
+
+          // Update active/inactive totals if needed
+          if (
+            activeStatuses.includes(oldStatus) &&
+            !activeStatuses.includes(updatedStatus)
+          ) {
+            // Moved from active to inactive
+            newCounts.all_active = Math.max(0, (newCounts.all_active || 0) - 1);
+            newCounts.all_inactive = (newCounts.all_inactive || 0) + 1;
+          } else if (
+            !activeStatuses.includes(oldStatus) &&
+            activeStatuses.includes(updatedStatus)
+          ) {
+            // Moved from inactive to active
+            newCounts.all_active = (newCounts.all_active || 0) + 1;
+            newCounts.all_inactive = Math.max(
+              0,
+              (newCounts.all_inactive || 0) - 1
+            );
+          } else if (
+            activeStatuses.includes(oldStatus) &&
+            activeStatuses.includes(updatedStatus)
+          ) {
+            // Both active - totals stay the same, just status counts change
+          }
+
+          return newCounts;
+        });
+      }
 
       // Close the dropdown
       setStatusDropdownAnchor(null);
@@ -1771,6 +1824,23 @@ const Projects = ({ initialFilters = {} }) => {
                 startAdornment: (
                   <InputAdornment position="start">
                     <SearchIcon />
+                  </InputAdornment>
+                ),
+                endAdornment: filters.searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={handleSearchClear}
+                      sx={{
+                        padding: "4px",
+                        "&:hover": {
+                          backgroundColor: "rgba(0, 0, 0, 0.04)",
+                        },
+                      }}
+                      aria-label="Clear search"
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
                   </InputAdornment>
                 ),
               }}

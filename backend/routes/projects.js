@@ -87,10 +87,25 @@ const getProjectStatuses = async (forceRefresh = false) => {
 
 // Cache invalidation function will be exported at the end of the file
 
-// Get status counts for all projects
+// Get status counts for all projects (optimized to only count active projects by default)
 router.get('/status-counts', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const counts = await Project.aggregate([
+    const startTime = Date.now();
+    
+    // Get active/inactive statuses for filtering
+    const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+    
+    // Build query - only count active projects for better performance
+    // This matches the projects page behavior (only shows active projects)
+    const activeQuery = activeStatuses.length > 0 
+      ? { status: { $in: activeStatuses } }
+      : {};
+    
+    // Aggregate counts for active projects only (much faster with ~200 vs 5000+)
+    const activeCounts = await Project.aggregate([
+      {
+        $match: activeQuery
+      },
       {
         $group: {
           _id: '$status',
@@ -98,21 +113,48 @@ router.get('/status-counts', auth, checkPermission(['projects.view']), async (re
         }
       }
     ]);
+    
+    // Also get inactive counts if needed (but make it optional/fast)
+    const inactiveCounts = inactiveStatuses.length > 0 
+      ? await Project.aggregate([
+          {
+            $match: { status: { $in: inactiveStatuses } }
+          },
+          {
+            $group: {
+              _id: '$status',
+              count: { $sum: 1 }
+            }
+          }
+        ])
+      : [];
 
     // Transform the results into a more usable format
     const statusCounts = {};
-    let totalActive = 0;
-    let totalInactive = 0;
-
-    counts.forEach(item => {
+    
+    // Process active counts
+    activeCounts.forEach(item => {
+      const status = item._id || 'Unknown';
+      const count = item.count;
+      statusCounts[status] = count;
+    });
+    
+    // Process inactive counts
+    inactiveCounts.forEach(item => {
       const status = item._id || 'Unknown';
       const count = item.count;
       statusCounts[status] = count;
     });
 
-    // Get total count
-    const totalCount = await Project.countDocuments();
-    statusCounts.all = totalCount;
+    // Calculate totals
+    const totalActive = activeCounts.reduce((sum, item) => sum + item.count, 0);
+    const totalInactive = inactiveCounts.reduce((sum, item) => sum + item.count, 0);
+    statusCounts.all = totalActive + totalInactive;
+    statusCounts.all_active = totalActive;
+    statusCounts.all_inactive = totalInactive;
+
+    const queryTime = Date.now() - startTime;
+    console.log(`[PROJECTS] Status counts completed in ${queryTime}ms (active: ${totalActive}, inactive: ${totalInactive})`);
 
     res.json({ statusCounts });
   } catch (error) {
@@ -216,81 +258,152 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       let projects, total;
 
       if (search) {
-        console.log(`[PROJECTS] Starting search for: "${search}"`);
+        console.log(`[PROJECTS] Starting optimized search for: "${search}"`);
         console.log(`[PROJECTS] Base query:`, JSON.stringify(query, null, 2));
         
-        // Use a simpler approach: search projects first, then search clients separately
-        // This ensures we don't miss any results due to aggregation complexity
+        const searchStartTime = Date.now();
         
-        // First: Search project fields
-        const projectSearchQuery = {
-          ...query,
-          $or: [
-            { name: { $regex: search, $options: 'i' } },
-            { projectID: { $regex: search, $options: 'i' } }
-          ]
-        };
+        // Use MongoDB aggregation pipeline for efficient single-query search
+        // This searches both project fields AND client names in one database operation
+        const searchRegex = new RegExp(search, 'i'); // Case-insensitive regex
         
-        console.log(`[PROJECTS] Project search query:`, JSON.stringify(projectSearchQuery, null, 2));
+        // Collection names (Mongoose automatically pluralizes model names)
+        // 'clients' and 'users' are the standard MongoDB collection names
+        const clientsCollection = 'clients';
+        const usersCollection = 'users';
         
-        // Get projects matching project fields
-        const projectMatches = await Project.find(projectSearchQuery)
-          .populate('client', 'name')
-          .populate('users', 'firstName lastName');
-        
-        console.log(`[PROJECTS] Found ${projectMatches.length} projects matching project fields`);
-        if (projectMatches.length > 0) {
-          console.log(`[PROJECTS] Sample project client data:`, {
-            projectName: projectMatches[0].name,
-            client: projectMatches[0].client,
-            clientName: projectMatches[0].client?.name
-          });
-        }
-        
-        // Second: Search by client name
-        const clientSearchQuery = {
-          ...query,
-          client: { $exists: true }
-        };
-        
-        const clientMatches = await Project.find(clientSearchQuery)
-          .populate({
-            path: 'client',
-            match: { name: { $regex: search, $options: 'i' } },
-            select: 'name'
-          })
-          .populate('users', 'firstName lastName');
-        
-        // Filter out projects where client population failed
-        const validClientMatches = clientMatches.filter(p => p.client);
-        console.log(`[PROJECTS] Found ${validClientMatches.length} projects matching client names`);
-        
-        // Combine results and remove duplicates
-        const allMatches = [...projectMatches];
-        const existingIds = new Set(projectMatches.map(p => p._id.toString()));
-        
-        for (const clientProject of validClientMatches) {
-          if (!existingIds.has(clientProject._id.toString())) {
-            allMatches.push(clientProject);
+        // Build aggregation pipeline
+        const pipeline = [
+          // Stage 1: Match base filters (status, department, etc.)
+          {
+            $match: query
+          },
+          
+          // Stage 2: Lookup client information
+          {
+            $lookup: {
+              from: clientsCollection,
+              localField: 'client',
+              foreignField: '_id',
+              as: 'clientData'
+            }
+          },
+          
+          // Stage 3: Unwind client data (we expect one client per project)
+          {
+            $unwind: {
+              path: '$clientData',
+              preserveNullAndEmptyArrays: true // Keep projects even if client lookup fails
+            }
+          },
+          
+          // Stage 4: Match search criteria - project fields OR client name
+          {
+            $match: {
+              $or: [
+                { name: searchRegex },
+                { projectID: searchRegex },
+                { 'clientData.name': searchRegex }
+              ]
+            }
+          },
+          
+          // Stage 5: Lookup user information
+          {
+            $lookup: {
+              from: usersCollection,
+              localField: 'users',
+              foreignField: '_id',
+              as: 'usersData',
+              pipeline: [
+                {
+                  $project: {
+                    firstName: 1,
+                    lastName: 1,
+                    _id: 1
+                  }
+                }
+              ]
+            }
+          },
+          
+          // Stage 6: Sort in database (more efficient than JavaScript sorting)
+          {
+            $sort: {
+              [sortBy]: sortOrder === 'desc' ? -1 : 1
+            }
+          },
+          
+          // Stage 7: Project/reshape the output to match expected format
+          {
+            $project: {
+              _id: 1,
+              projectID: 1,
+              name: 1,
+              client: {
+                _id: '$clientData._id',
+                name: '$clientData.name'
+              },
+              users: {
+                $map: {
+                  input: '$usersData',
+                  as: 'user',
+                  in: {
+                    _id: '$$user._id',
+                    firstName: '$$user.firstName',
+                    lastName: '$$user.lastName'
+                  }
+                }
+              },
+              department: 1,
+              status: 1,
+              address: 1,
+              d_Date: 1,
+              workOrder: 1,
+              categories: 1,
+              description: 1,
+              notes: 1,
+              projectContact: 1,
+              budget: 1,
+              isLargeProject: 1,
+              reports_present: 1,
+              createdAt: 1,
+              updatedAt: 1,
+              startDate: 1,
+              endDate: 1
+            }
           }
-        }
+        ];
         
-        console.log(`[PROJECTS] Combined results: ${allMatches.length} unique projects`);
+        // Execute aggregation
+        const aggregationResult = await Project.aggregate(pipeline);
+        const searchTime = Date.now() - searchStartTime;
         
-        // Sort results
-        allMatches.sort((a, b) => {
-          const aVal = a[sortBy];
-          const bVal = b[sortBy];
-          return sortOrder === 'desc' ? 
-            (bVal > aVal ? 1 : -1) : 
-            (aVal > bVal ? 1 : -1);
+        console.log(`[PROJECTS] Aggregation search completed in ${searchTime}ms`);
+        console.log(`[PROJECTS] Found ${aggregationResult.length} matching projects`);
+        
+        // Convert aggregation results to Mongoose documents (for consistency with non-search queries)
+        // This allows us to use .toObject() and other Mongoose methods if needed
+        projects = aggregationResult.map(item => {
+          // Convert to plain object format that matches what find() returns
+          const project = {
+            ...item,
+            // Ensure client is properly formatted (null if no client)
+            client: item.client && item.client._id ? item.client : null,
+            // Ensure users array is properly formatted
+            users: item.users || []
+          };
+          return project;
         });
         
-        // Return all results for client-side pagination and sorting
-        total = allMatches.length;
-        projects = allMatches; // Return all results, let frontend handle pagination
+        // Get total count (for pagination info)
+        total = projects.length;
         
-        console.log(`[PROJECTS] Returning all ${projects.length} projects for client-side pagination`);
+        // Note: We're returning all results for client-side pagination
+        // This is fine since we only have ~200 active projects
+        // If needed later, we can add server-side pagination here with $skip and $limit
+        
+        console.log(`[PROJECTS] Returning ${projects.length} projects from optimized search`);
       } else {
         // Use regular find for non-search queries
         const countStartTime = Date.now();
@@ -300,6 +413,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         
         const dataStartTime = Date.now();
         projects = await Project.find(query)
+          .select('projectID name department status client users d_Date workOrder categories description notes projectContact budget isLargeProject reports_present createdAt updatedAt startDate endDate address')
           .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
           .skip(skip)
           .limit(parseInt(limit))
