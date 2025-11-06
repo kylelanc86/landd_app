@@ -8,7 +8,7 @@ const checkPermission = require("../middleware/checkPermission");
 // Get all asbestos removal jobs with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
-    const { page = 1, limit = 1000, status, excludeStatus, projectId, sortBy = "createdAt", sortOrder = "desc" } = req.query;
+    const { page = 1, limit = 1000, status, excludeStatus, projectId, sortBy = "createdAt", sortOrder = "desc", minimal } = req.query;
 
     const filter = {};
     
@@ -35,6 +35,31 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
 
+    // If minimal=true, only fetch fields needed for table display
+    if (minimal === "true" || minimal === true) {
+      const jobs = await AsbestosRemovalJob.find(filter)
+        .select("_id projectId asbestosRemovalist status")
+        .populate({
+          path: "projectId",
+          select: "projectID name",
+        })
+        .sort(sortOptions)
+        .limit(limit * 1)
+        .skip((page - 1) * limit)
+        .lean()
+        .exec();
+
+      const count = await AsbestosRemovalJob.countDocuments(filter);
+
+      return res.json({
+        jobs,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+        totalCount: count,
+      });
+    }
+
+    // Full data for detailed views
     const jobs = await AsbestosRemovalJob.find(filter)
       .populate({
         path: "projectId",

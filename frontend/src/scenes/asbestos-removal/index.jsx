@@ -71,9 +71,11 @@ const AsbestosRemoval = () => {
 
     try {
       // Fetch only incomplete asbestos removal jobs (exclude completed and cancelled)
+      // Use minimal=true to only fetch fields needed for table display
       const jobsResponse = await asbestosRemovalJobService.getAll({
         excludeStatus: "completed,cancelled",
         limit: 1000,
+        minimal: true,
       });
 
       // Handle different response structures for jobs
@@ -104,16 +106,18 @@ const AsbestosRemoval = () => {
       }
 
       // Fetch only active air monitoring jobs (exclude completed/cancelled)
-      // This matches what we show in the asbestos removal jobs table
+      // Use minimal=true to only fetch projectId for matching (much smaller payload)
       let allAirMonitoringJobs = [];
       try {
         const airMonitoringResponse = await jobService.getAll({
           excludeStatus: "completed,cancelled",
+          minimal: true,
         });
-        allAirMonitoringJobs = Array.isArray(airMonitoringResponse.data)
-          ? airMonitoringResponse.data
-          : Array.isArray(airMonitoringResponse)
+        // With minimal=true, backend returns array directly
+        allAirMonitoringJobs = Array.isArray(airMonitoringResponse)
           ? airMonitoringResponse
+          : Array.isArray(airMonitoringResponse?.data)
+          ? airMonitoringResponse.data
           : [];
       } catch (error) {
         console.error("Error fetching air monitoring jobs:", error);

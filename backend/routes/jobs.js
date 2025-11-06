@@ -10,7 +10,7 @@ const dashboardStatsService = require('../services/dashboardStatsService');
 // Get all air monitoring jobs
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const { status, excludeStatus } = req.query;
+    const { status, excludeStatus, minimal } = req.query;
     
     const filter = {};
     
@@ -30,7 +30,21 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
       }
     }
 
-    // Fetch jobs with filter and populate
+    // If minimal=true, only fetch projectId for matching
+    if (minimal === "true" || minimal === true) {
+      const jobs = await AirMonitoringJob.find(filter)
+        .select("_id projectId")
+        .populate({
+          path: 'projectId',
+          select: '_id projectID name'
+        })
+        .lean()
+        .exec();
+      
+      return res.json(jobs);
+    }
+
+    // Full data for detailed views
     const populatedJobs = await AirMonitoringJob.find(filter)
       .populate({
         path: 'projectId',
