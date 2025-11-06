@@ -75,7 +75,7 @@ const SampleSummary = React.memo(
                 {sample.labReference || "N/A"}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Client Ref: {sample.clientReference || "N/A"}
+                Cowl Number: {sample.cowlNumber || "N/A"}
               </Typography>
               {analysisDetails.microscope && (
                 <Chip
@@ -269,6 +269,9 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const [error, setError] = useState(null);
   const [users, setUsers] = useState([]);
   const [analysedBy, setAnalysedBy] = useState("");
+  const [analysisDate, setAnalysisDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
   const [activeSampleId, setActiveSampleId] = useState(null);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
@@ -355,8 +358,10 @@ const ClientSuppliedFibreCountAnalysis = () => {
           });
         }
 
-        // Set analyst from first sample if available
-        if (sortedSamples.length > 0 && sortedSamples[0].analyzedBy) {
+        // Set analyst from job first (database), then from first sample if available
+        if (job.analyst) {
+          setAnalysedBy(job.analyst);
+        } else if (sortedSamples.length > 0 && sortedSamples[0].analyzedBy) {
           const firstSample = sortedSamples[0];
           setAnalysedBy(
             typeof firstSample.analyzedBy === "string"
@@ -368,6 +373,13 @@ const ClientSuppliedFibreCountAnalysis = () => {
           );
         }
 
+        // Set analysis date from job (database) - this is the source of truth
+        if (job.analysisDate) {
+          setAnalysisDate(
+            new Date(job.analysisDate).toISOString().split("T")[0]
+          );
+        }
+
         // Load in-progress analysis data if present
         const progressData = localStorage.getItem(ANALYSIS_PROGRESS_KEY);
         if (progressData) {
@@ -376,6 +388,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
             // Only merge if we don't have existing data
             if (!firstSampleWithAnalysis?.analysisData) {
               setAnalysisDetails(parsed.analysisDetails);
+            }
+            // Restore analyst and analysis date from saved progress only if not already set from database
+            // Database values take precedence over localStorage
+            if (parsed.analysedBy && !job.analyst) {
+              setAnalysedBy(parsed.analysedBy);
+            }
+            if (parsed.analysisDate && !job.analysisDate) {
+              setAnalysisDate(parsed.analysisDate);
             }
             // Merge saved analyses with all samples (preserve backend, add new)
             const mergedAnalyses = { ...initialAnalyses };
@@ -718,15 +738,52 @@ const ClientSuppliedFibreCountAnalysis = () => {
     return incompleteSamples.length === 0;
   };
 
-  const handleSaveAndClose = () => {
-    const progressData = {
-      jobId,
-      analysisDetails,
-      sampleAnalyses,
-      timestamp: new Date().toISOString(),
-    };
+  const handleSaveAndClose = async () => {
     try {
+      // Update samples array with analysis data
+      const updatedSamples = samples.map((sample) => {
+        const analysis = sampleAnalyses[sample._id];
+        if (analysis) {
+          // Remove _id we added before saving
+          const { _id, ...sampleWithoutId } = sample;
+          return {
+            ...sampleWithoutId,
+            analysisData: {
+              microscope: analysisDetails.microscope,
+              testSlide: analysisDetails.testSlide,
+              testSlideLines: analysisDetails.testSlideLines,
+              edgesDistribution: analysis.edgesDistribution,
+              backgroundDust: analysis.backgroundDust,
+              fibreCounts: analysis.fibreCounts,
+              fibresCounted: analysis.fibresCounted,
+              fieldsCounted: analysis.fieldsCounted,
+            },
+            analyzedBy: analysedBy || sample.analyzedBy,
+            analyzedAt: sample.analyzedAt || new Date(),
+          };
+        }
+        const { _id, ...sampleWithoutId } = sample;
+        return sampleWithoutId;
+      });
+
+      // Save analyst, analysis date, and sample analysis data to database
+      await clientSuppliedJobsService.update(jobId, {
+        analyst: analysedBy || undefined,
+        analysisDate: analysisDate ? new Date(analysisDate) : undefined,
+        samples: updatedSamples,
+      });
+
+      // Also save to localStorage for progress recovery
+      const progressData = {
+        jobId,
+        analysisDetails,
+        sampleAnalyses,
+        analysedBy,
+        analysisDate,
+        timestamp: new Date().toISOString(),
+      };
       localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(progressData));
+
       showSnackbar("Analysis saved successfully", "success");
       // Navigate back to samples page
       const basePath = location.pathname.startsWith("/client-supplied")
@@ -735,6 +792,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
       navigate(`${basePath}/${jobId}/samples`);
     } catch (error) {
       console.error("Error saving progress data:", error);
+      showSnackbar("Failed to save analysis", "error");
     }
   };
 
@@ -771,8 +829,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
       await clientSuppliedJobsService.update(jobId, {
         samples: updatedSamples,
         analyst: analysedBy,
-        analysisDate: new Date(),
-        status: "Completed",
+        analysisDate: analysisDate ? new Date(analysisDate) : new Date(),
+        status: "Analysis Complete",
       });
 
       // Clear localStorage
@@ -818,6 +876,22 @@ const ClientSuppliedFibreCountAnalysis = () => {
     if (!analysis.edgesDistribution || !analysis.backgroundDust) {
       setValidationDialogOpen(true);
       return;
+    }
+
+    // Ensure fibreCounts array exists before opening modal
+    if (!analysis.fibreCounts || !Array.isArray(analysis.fibreCounts)) {
+      // Initialize if missing
+      setSampleAnalyses((prev) => ({
+        ...prev,
+        [sampleId]: {
+          ...prev[sampleId],
+          fibreCounts: Array(5)
+            .fill()
+            .map(() => Array(20).fill("")),
+          fibresCounted: 0,
+          fieldsCounted: 0,
+        },
+      }));
     }
 
     setActiveSampleId(sampleId);
@@ -881,7 +955,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
         Fibre Count Analysis
       </Typography>
 
-      {/* Analyst Dropdown */}
+      {/* Analyst and Analysis Date */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -894,7 +968,6 @@ const ClientSuppliedFibreCountAnalysis = () => {
             value={analysedBy}
             label="Analyst"
             onChange={(e) => setAnalysedBy(e.target.value)}
-            disabled={jobStatus === "Completed"}
           >
             {users.map((user) => (
               <MenuItem
@@ -906,6 +979,17 @@ const ClientSuppliedFibreCountAnalysis = () => {
             ))}
           </Select>
         </FormControl>
+        <TextField
+          label="Analysis Date"
+          type="date"
+          value={analysisDate}
+          onChange={(e) => setAnalysisDate(e.target.value)}
+          InputLabelProps={{
+            shrink: true,
+          }}
+          sx={{ maxWidth: 300 }}
+          fullWidth
+        />
       </Stack>
 
       <Box component="form" onSubmit={handleSubmit}>
@@ -929,13 +1013,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
                       value="LD-PCM1"
                       control={<Radio />}
                       label="LD-PCM1"
-                      disabled={jobStatus === "Completed"}
                     />
                     <FormControlLabel
                       value="LD-PCM2"
                       control={<Radio />}
                       label="LD-PCM2"
-                      disabled={jobStatus === "Completed"}
                     />
                   </RadioGroup>
                 </FormControl>
@@ -954,13 +1036,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
                       value="LD-TS1"
                       control={<Radio />}
                       label="LD-TS1"
-                      disabled={jobStatus === "Completed"}
                     />
                     <FormControlLabel
                       value="LD-TS2"
                       control={<Radio />}
                       label="LD-TS2"
-                      disabled={jobStatus === "Completed"}
                     />
                   </RadioGroup>
                 </FormControl>
@@ -979,14 +1059,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
                       value="partial 5"
                       control={<Radio />}
                       label="Partial 5"
-                      disabled={jobStatus === "Completed"}
                     />
-                    <FormControlLabel
-                      value="6"
-                      control={<Radio />}
-                      label="6"
-                      disabled={jobStatus === "Completed"}
-                    />
+                    <FormControlLabel value="6" control={<Radio />} label="6" />
                   </RadioGroup>
                 </FormControl>
               </Stack>
@@ -1013,7 +1087,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                     calculateConcentration={() => null}
                     getReportedConcentration={getReportedConcentration}
                     inputRefs={inputRefs}
-                    isReadOnly={jobStatus === "Completed"}
+                    isReadOnly={false}
                     onOpenFibreCountModal={handleOpenFibreCountModal}
                   />
                 ))
@@ -1048,7 +1122,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                                 getReportedConcentration
                               }
                               inputRefs={inputRefs}
-                              isReadOnly={jobStatus === "Completed"}
+                              isReadOnly={false}
                               onOpenFibreCountModal={handleOpenFibreCountModal}
                             />
                           </div>
@@ -1077,19 +1151,17 @@ const ClientSuppliedFibreCountAnalysis = () => {
             <Button variant="outlined" onClick={handleCancel}>
               Cancel
             </Button>
+            <Button variant="contained" onClick={handleSaveAndClose}>
+              Save & Close
+            </Button>
             {jobStatus !== "Completed" && (
-              <>
-                <Button variant="contained" onClick={handleSaveAndClose}>
-                  Save & Close
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleSubmit}
-                  disabled={!isAllAnalysisComplete()}
-                >
-                  Finalise Analysis
-                </Button>
-              </>
+              <Button
+                variant="contained"
+                onClick={handleSubmit}
+                disabled={!isAllAnalysisComplete()}
+              >
+                Finalise Analysis
+              </Button>
             )}
           </Box>
         </Stack>
@@ -1104,11 +1176,15 @@ const ClientSuppliedFibreCountAnalysis = () => {
       >
         <DialogTitle>
           Fibre Counts -{" "}
-          {activeSampleId &&
+          {activeSampleId !== null &&
+            activeSampleId !== undefined &&
             samples.find((s) => s._id === activeSampleId)?.labReference}
         </DialogTitle>
         <DialogContent>
-          {activeSampleId && sampleAnalyses[activeSampleId] && (
+          {activeSampleId !== null &&
+          activeSampleId !== undefined &&
+          sampleAnalyses[activeSampleId] &&
+          sampleAnalyses[activeSampleId].fibreCounts ? (
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle2" sx={{ mb: 2 }}>
                 "Spacebar" = 10 zeros, "/" = half fibre
@@ -1130,122 +1206,141 @@ const ClientSuppliedFibreCountAnalysis = () => {
                 </Button>
               )}
 
-              {isFilterUncountable(activeSampleId) && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%, -50%)",
-                    zIndex: 1,
-                    pointerEvents: "none",
-                  }}
-                >
-                  <Typography
-                    variant="h4"
+              <Box sx={{ position: "relative" }}>
+                {isFilterUncountable(activeSampleId) && (
+                  <Box
                     sx={{
-                      color: "error.main",
-                      fontWeight: "bold",
-                      textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      zIndex: 1,
+                      pointerEvents: "none",
                     }}
                   >
-                    Filter Uncountable
-                  </Typography>
-                </Box>
-              )}
-
-              <TableContainer>
-                <Table size="small" sx={{ tableLayout: "fixed" }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ width: "80px" }}>Range</TableCell>
-                      {Array.from({ length: 20 }, (_, i) => (
-                        <TableCell
-                          key={i}
-                          align="center"
-                          sx={{ width: "40px", p: 0.5 }}
-                        >
-                          {i + 1}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sampleAnalyses[activeSampleId].fibreCounts.map(
-                      (row, rowIndex) => (
-                        <TableRow key={rowIndex}>
-                          <TableCell sx={{ p: 0.5 }}>
-                            {`${rowIndex * 20 + 1}-${(rowIndex + 1) * 20}`}
+                    <Typography
+                      variant="h4"
+                      sx={{
+                        color: "error.main",
+                        fontWeight: "bold",
+                        textShadow: "2px 2px 4px rgba(0,0,0,0.2)",
+                      }}
+                    >
+                      Filter Uncountable
+                    </Typography>
+                  </Box>
+                )}
+                <TableContainer
+                  component={Paper}
+                  sx={{ maxHeight: 600, overflow: "auto" }}
+                >
+                  <Table size="small" sx={{ tableLayout: "fixed" }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ width: "80px" }}>Range</TableCell>
+                        {Array.from({ length: 20 }, (_, i) => (
+                          <TableCell
+                            key={i}
+                            align="center"
+                            sx={{ width: "40px", p: 0.5 }}
+                          >
+                            {i + 1}
                           </TableCell>
-                          {row.map((cell, colIndex) => (
-                            <TableCell
-                              key={colIndex}
-                              align="center"
-                              sx={{ p: 0.5 }}
-                            >
-                              <TextField
-                                type="text"
-                                value={cell}
-                                onChange={(e) =>
-                                  handleFibreCountChange(
-                                    activeSampleId,
-                                    rowIndex,
-                                    colIndex,
-                                    e.target.value
-                                  )
-                                }
-                                onKeyDown={(e) =>
-                                  handleKeyDown(
-                                    e,
-                                    activeSampleId,
-                                    rowIndex,
-                                    colIndex
-                                  )
-                                }
-                                size="small"
-                                disabled={
-                                  isFilterUncountable(activeSampleId) ||
-                                  jobStatus === "Completed"
-                                }
-                                inputRef={(el) => {
-                                  inputRefs.current[
-                                    `${activeSampleId}-${rowIndex}-${colIndex}`
-                                  ] = el;
-                                }}
-                                sx={{
-                                  width: "40px",
-                                  "& .MuiInputBase-input": {
-                                    p: 0.5,
-                                    textAlign: "center",
-                                  },
-                                }}
-                              />
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      )
-                    )}
-                    <TableRow>
-                      <TableCell colSpan={21}>
-                        <Stack
-                          direction="row"
-                          spacing={4}
-                          justifyContent="center"
-                        >
-                          <Typography>
-                            Fibres Counted:{" "}
-                            {sampleAnalyses[activeSampleId].fibresCounted || 0}
-                          </Typography>
-                          <Typography>
-                            Fields Counted:{" "}
-                            {sampleAnalyses[activeSampleId].fieldsCounted || 0}
-                          </Typography>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Array.isArray(
+                        sampleAnalyses[activeSampleId].fibreCounts
+                      ) &&
+                        sampleAnalyses[activeSampleId].fibreCounts.map(
+                          (row, rowIndex) => (
+                            <TableRow key={rowIndex}>
+                              <TableCell sx={{ p: 0.5 }}>
+                                {`${rowIndex * 20 + 1}-${(rowIndex + 1) * 20}`}
+                              </TableCell>
+                              {row.map((cell, colIndex) => (
+                                <TableCell
+                                  key={colIndex}
+                                  align="center"
+                                  sx={{ p: 0.5 }}
+                                >
+                                  <TextField
+                                    type="text"
+                                    value={cell}
+                                    onChange={(e) =>
+                                      handleFibreCountChange(
+                                        activeSampleId,
+                                        rowIndex,
+                                        colIndex,
+                                        e.target.value
+                                      )
+                                    }
+                                    onKeyDown={(e) =>
+                                      handleKeyDown(
+                                        e,
+                                        activeSampleId,
+                                        rowIndex,
+                                        colIndex
+                                      )
+                                    }
+                                    size="small"
+                                    disabled={
+                                      isFilterUncountable(activeSampleId) ||
+                                      jobStatus === "Completed"
+                                    }
+                                    inputRef={(el) => {
+                                      inputRefs.current[
+                                        `${activeSampleId}-${rowIndex}-${colIndex}`
+                                      ] = el;
+                                    }}
+                                    sx={{
+                                      width: "40px",
+                                      "& .MuiInputBase-input": {
+                                        p: 0.5,
+                                        textAlign: "center",
+                                      },
+                                      "& .MuiInputBase-input.Mui-disabled": {
+                                        WebkitTextFillColor:
+                                          "rgba(0, 0, 0, 0.6)",
+                                      },
+                                    }}
+                                  />
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          )
+                        )}
+                      <TableRow>
+                        <TableCell colSpan={21}>
+                          <Stack
+                            direction="row"
+                            spacing={4}
+                            justifyContent="center"
+                          >
+                            <Typography>
+                              Fibres Counted:{" "}
+                              {sampleAnalyses[activeSampleId].fibresCounted ||
+                                0}
+                            </Typography>
+                            <Typography>
+                              Fields Counted:{" "}
+                              {sampleAnalyses[activeSampleId].fieldsCounted ||
+                                0}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            </Box>
+          ) : (
+            <Box sx={{ mt: 2, textAlign: "center", py: 4 }}>
+              <Typography variant="body1" color="text.secondary">
+                Loading fibre counts...
+              </Typography>
             </Box>
           )}
         </DialogContent>

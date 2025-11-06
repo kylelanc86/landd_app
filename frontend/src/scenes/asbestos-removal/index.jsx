@@ -70,32 +70,11 @@ const AsbestosRemoval = () => {
     setError(null);
 
     try {
-      // Fetch all required data in parallel
-      const [
-        jobsResponse,
-        clearancesResponse,
-        airMonitoringJobsResponse,
-        shiftsResponse,
-      ] = await Promise.all([
-        asbestosRemovalJobService.getAll(),
-        asbestosClearanceService.getAll(),
-        jobService.getAll(),
-        shiftService.getAll(),
-      ]);
-
-      console.log(
-        "Raw response from asbestosRemovalJobService.getAll():",
-        jobsResponse
-      );
-      console.log(
-        "Raw response from asbestosClearanceService.getAll():",
-        clearancesResponse
-      );
-      console.log(
-        "Raw response from jobService.getAll():",
-        airMonitoringJobsResponse
-      );
-      console.log("Raw response from shiftService.getAll():", shiftsResponse);
+      // Fetch only incomplete asbestos removal jobs (exclude completed and cancelled)
+      const jobsResponse = await asbestosRemovalJobService.getAll({
+        excludeStatus: "completed,cancelled",
+        limit: 1000,
+      });
 
       // Handle different response structures for jobs
       let jobs = [];
@@ -114,9 +93,37 @@ const AsbestosRemoval = () => {
       } else if (Array.isArray(jobsResponse)) {
         jobs = jobsResponse;
       } else {
-        console.log("Unexpected jobs response structure:", jobsResponse);
         jobs = [];
       }
+
+      // Ensure jobs is an array before processing
+      if (!Array.isArray(jobs)) {
+        console.error("Jobs is not an array:", jobs);
+        setAsbestosRemovalJobs([]);
+        return;
+      }
+
+      // Extract unique project IDs from jobs to fetch only relevant related data
+      const projectIds = jobs
+        .map((job) => job.projectId?._id || job.projectId)
+        .filter((id) => id);
+      const jobIds = jobs.map((job) => job._id).filter((id) => id);
+
+      // Fetch only relevant related data in parallel with limits
+      // Only fetch clearances and air monitoring jobs for projects that have asbestos removal jobs
+      const [clearancesResponse, airMonitoringJobsResponse, shiftsResponse] =
+        await Promise.all([
+          // Fetch clearances with limit and only for relevant projects
+          projectIds.length > 0
+            ? asbestosClearanceService.getAll({
+                limit: 5000, // Set reasonable limit
+              })
+            : Promise.resolve({ clearances: [] }),
+          // Fetch air monitoring jobs with limit
+          jobService.getAll(),
+          // Fetch shifts only for these asbestos removal jobs
+          jobIds.length > 0 ? shiftService.getAll() : Promise.resolve([]),
+        ]);
 
       // Handle different response structures for clearances
       let clearances = [];
@@ -134,12 +141,6 @@ const AsbestosRemoval = () => {
         clearances = clearancesResponse.data;
       } else if (Array.isArray(clearancesResponse)) {
         clearances = clearancesResponse;
-      } else {
-        console.log(
-          "Unexpected clearances response structure:",
-          clearancesResponse
-        );
-        clearances = [];
       }
 
       // Handle different response structures for air monitoring jobs
@@ -152,18 +153,11 @@ const AsbestosRemoval = () => {
         airMonitoringJobs = airMonitoringJobsResponse.data;
       } else if (Array.isArray(airMonitoringJobsResponse)) {
         airMonitoringJobs = airMonitoringJobsResponse;
-      } else {
-        console.log(
-          "Unexpected air monitoring jobs response structure:",
-          airMonitoringJobsResponse
-        );
-        airMonitoringJobs = [];
       }
 
       // Handle different response structures for shifts
       let shifts = [];
       if (Array.isArray(shiftsResponse)) {
-        // Backend returns shifts directly as an array
         shifts = shiftsResponse;
       } else if (
         shiftsResponse &&
@@ -171,87 +165,55 @@ const AsbestosRemoval = () => {
         Array.isArray(shiftsResponse.data)
       ) {
         shifts = shiftsResponse.data;
-      } else {
-        console.log("Unexpected shifts response structure:", shiftsResponse);
-        shifts = [];
       }
 
-      console.log("Extracted jobs array:", jobs);
-      console.log("Extracted clearances array:", clearances);
-      console.log("Extracted air monitoring jobs array:", airMonitoringJobs);
-      console.log("Extracted shifts array:", shifts);
+      // Create lookup maps for O(1) access instead of O(n) filtering
+      const clearancesByProjectId = new Map();
+      clearances.forEach((clearance) => {
+        const projectId = clearance.projectId?._id || clearance.projectId;
+        if (projectId) {
+          if (!clearancesByProjectId.has(projectId)) {
+            clearancesByProjectId.set(projectId, []);
+          }
+          clearancesByProjectId.get(projectId).push(clearance);
+        }
+      });
 
-      // Ensure jobs is an array before processing
-      if (!Array.isArray(jobs)) {
-        console.error("Jobs is not an array:", jobs);
-        setAsbestosRemovalJobs([]);
-        return;
-      }
+      const airMonitoringJobsByProjectId = new Map();
+      airMonitoringJobs.forEach((airJob) => {
+        const projectId = airJob.projectId?._id || airJob.projectId;
+        if (projectId) {
+          if (!airMonitoringJobsByProjectId.has(projectId)) {
+            airMonitoringJobsByProjectId.set(projectId, []);
+          }
+          airMonitoringJobsByProjectId.get(projectId).push(airJob);
+        }
+      });
 
-      // Process jobs to include project details
+      const shiftsByJobId = new Map();
+      shifts.forEach((shift) => {
+        const shiftJobId = shift.job?._id || shift.job;
+        if (shiftJobId && shift.jobModel === "AsbestosRemovalJob") {
+          if (!shiftsByJobId.has(shiftJobId)) {
+            shiftsByJobId.set(shiftJobId, []);
+          }
+          shiftsByJobId.get(shiftJobId).push(shift);
+        }
+      });
+
+      // Process jobs using lookup maps for better performance
       const processedJobs = jobs.map((job) => {
-        console.log("Processing job:", job);
-        console.log("Job airMonitoring field:", job.airMonitoring);
-        console.log("Job clearance field:", job.clearance);
-        console.log("Job hasAirMonitoring field:", job.hasAirMonitoring);
-        console.log("Job hasClearance field:", job.hasClearance);
-
         const projectId = job.projectId?._id || job.projectId;
-        console.log("Job projectId:", projectId);
+        const jobId = job._id;
 
-        // Check if there are any clearances for this project
-        const projectClearances = clearances.filter((clearance) => {
-          const clearanceProjectId =
-            clearance.projectId?._id || clearance.projectId;
-          return clearanceProjectId === projectId;
-        });
-        console.log("Project clearances for job:", projectClearances);
-
-        // Check if there are any air monitoring jobs for this project
-        const projectAirMonitoringJobs = airMonitoringJobs.filter((airJob) => {
-          const airJobProjectId = airJob.projectId?._id || airJob.projectId;
-          return airJobProjectId === projectId;
-        });
-        console.log(
-          "Project air monitoring jobs for job:",
-          projectAirMonitoringJobs
-        );
-
-        // Check if there are any shifts for this asbestos removal job
-        console.log("All shifts:", shifts);
-        console.log("Looking for shifts with job._id:", job._id);
-
-        const jobShifts = shifts.filter((shift) => {
-          // Handle both populated and unpopulated job references
-          const shiftJobId = shift.job?._id || shift.job;
-          const matches =
-            shiftJobId === job._id && shift.jobModel === "AsbestosRemovalJob";
-
-          console.log("Checking shift:", {
-            shiftId: shift._id,
-            shiftJob: shift.job,
-            shiftJobId: shiftJobId,
-            shiftJobModel: shift.jobModel,
-            jobId: job._id,
-            matches: matches,
-          });
-
-          return matches;
-        });
-        console.log("Shifts for this asbestos removal job:", jobShifts);
-
-        // Determine job type based on actual data
-        const hasClearance = projectClearances.length > 0;
+        // Use Maps for O(1) lookup instead of O(n) filter
+        const hasClearance =
+          clearancesByProjectId.has(projectId) &&
+          clearancesByProjectId.get(projectId).length > 0;
         const hasAirMonitoring =
-          projectAirMonitoringJobs.length > 0 || jobShifts.length > 0;
-
-        console.log("Job type calculation:", {
-          projectClearances: projectClearances.length,
-          projectAirMonitoringJobs: projectAirMonitoringJobs.length,
-          jobShifts: jobShifts.length,
-          hasClearance,
-          hasAirMonitoring,
-        });
+          (airMonitoringJobsByProjectId.has(projectId) &&
+            airMonitoringJobsByProjectId.get(projectId).length > 0) ||
+          (shiftsByJobId.has(jobId) && shiftsByJobId.get(jobId).length > 0);
 
         let jobType = "None";
         if (hasAirMonitoring && hasClearance) {
@@ -261,16 +223,6 @@ const AsbestosRemoval = () => {
         } else if (hasClearance) {
           jobType = "Clearance";
         }
-
-        console.log(
-          "Computed jobType:",
-          jobType,
-          "(hasClearance:",
-          hasClearance,
-          ", hasAirMonitoring:",
-          hasAirMonitoring,
-          ")"
-        );
 
         return {
           id: job._id,
@@ -286,26 +238,13 @@ const AsbestosRemoval = () => {
         };
       });
 
-      console.log("Processed jobs:", processedJobs);
-
-      // Filter out completed jobs to show only active jobs
-      const activeJobs = processedJobs.filter((job) => {
-        const normalizedStatus = job.status?.toLowerCase().replace(/\s+/g, "_");
-        return (
-          normalizedStatus !== "completed" && normalizedStatus !== "complete"
-        );
-      });
-
-      console.log("Active jobs (filtered):", activeJobs);
-
-      // Sort by project ID
-      const sortedJobs = activeJobs.sort((a, b) => {
+      // Sort by project ID (backend already filtered out completed jobs)
+      const sortedJobs = processedJobs.sort((a, b) => {
         const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
         const bNum = parseInt(b.projectID?.replace(/\D/g, "")) || 0;
         return bNum - aNum; // Descending order (highest first)
       });
 
-      console.log("Final sorted active jobs:", sortedJobs);
       setAsbestosRemovalJobs(sortedJobs);
     } catch (err) {
       console.error("Error fetching asbestos removal jobs:", err);
@@ -315,6 +254,7 @@ const AsbestosRemoval = () => {
     }
   }, []);
 
+  // Lazy load projects and removalists only when modal opens
   const fetchProjects = useCallback(async () => {
     try {
       const response = await projectService.getAll({
@@ -360,47 +300,54 @@ const AsbestosRemoval = () => {
     }
   }, []);
 
+  // Only fetch jobs on mount, lazy load modal data when needed
   useEffect(() => {
     fetchAsbestosRemovalJobs();
-    fetchProjects();
-    fetchAsbestosRemovalists();
-  }, [fetchAsbestosRemovalJobs, fetchProjects, fetchAsbestosRemovalists]);
+  }, [fetchAsbestosRemovalJobs]);
 
-  const getStatusColor = (status) => {
-    // Handle both original and formatted status values
-    const normalizedStatus = status?.toLowerCase().replace(/\s+/g, "_");
+  // Memoize color functions
+  const getStatusColor = useCallback(
+    (status) => {
+      // Handle both original and formatted status values
+      const normalizedStatus = status?.toLowerCase().replace(/\s+/g, "_");
 
-    switch (normalizedStatus) {
-      case "completed":
-      case "complete":
-        return theme.palette.success.main;
-      case "in_progress":
-        return theme.palette.warning.main;
-      case "active":
-        return theme.palette.primary.main;
-      case "cancelled":
-        return theme.palette.error.main;
-      default:
-        return theme.palette.grey[500];
-    }
-  };
+      switch (normalizedStatus) {
+        case "completed":
+        case "complete":
+          return theme.palette.success.main;
+        case "in_progress":
+          return theme.palette.warning.main;
+        case "active":
+          return theme.palette.primary.main;
+        case "cancelled":
+          return theme.palette.error.main;
+        default:
+          return theme.palette.grey[500];
+      }
+    },
+    [theme]
+  );
 
-  const getJobTypeColor = (jobType) => {
-    switch (jobType) {
-      case "Air Monitoring":
-        return theme.palette.primary.main;
-      case "Clearance":
-        return theme.palette.secondary.main;
-      case "Air Monitoring & Clearance":
-        return theme.palette.info.main;
-      case "None":
-        return theme.palette.grey[500];
-      default:
-        return theme.palette.grey[500];
-    }
-  };
+  const getJobTypeColor = useCallback(
+    (jobType) => {
+      switch (jobType) {
+        case "Air Monitoring":
+          return theme.palette.primary.main;
+        case "Clearance":
+          return theme.palette.secondary.main;
+        case "Air Monitoring & Clearance":
+          return theme.palette.info.main;
+        case "None":
+          return theme.palette.grey[500];
+        default:
+          return theme.palette.grey[500];
+      }
+    },
+    [theme]
+  );
 
-  const formatStatusLabel = (status) => {
+  // Memoize status formatting function
+  const formatStatusLabel = useCallback((status) => {
     if (!status) return "Unknown";
 
     // Handle specific status mappings
@@ -422,13 +369,20 @@ const AsbestosRemoval = () => {
         )
         .join(" ")
     );
-  };
+  }, []);
 
   const handleCreateAsbestosRemovalJob = () => {
     setModalOpen(true);
     setSelectedProject(null);
     setSelectedRemovalist("");
     setModalError(null);
+    // Lazy load modal data only when modal opens
+    if (projects.length === 0) {
+      fetchProjects();
+    }
+    if (asbestosRemovalists.length === 0) {
+      fetchAsbestosRemovalists();
+    }
   };
 
   const handleCloseModal = () => {

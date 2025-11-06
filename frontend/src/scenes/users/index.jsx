@@ -44,19 +44,39 @@ const Users = () => {
 
   // Fetch users from the API on mount
   useEffect(() => {
+    let cancelled = false;
     const fetchUsers = async () => {
       try {
         setLoading(true);
+        const startTime = performance.now();
         const response = await userService.getAll(showInactive);
-        // Backend already returns role, no need to transform
-        setUsers(response.data || []);
+        const fetchTime = performance.now() - startTime;
+
+        if (!cancelled) {
+          // Backend already returns role, no need to transform
+          setUsers(response.data || []);
+          console.log(
+            `[USERS] Loaded ${
+              response.data?.length || 0
+            } users in ${fetchTime.toFixed(0)}ms`
+          );
+        }
       } catch (error) {
-        console.error("Error fetching users:", error);
+        if (!cancelled) {
+          console.error("Error fetching users:", error);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     fetchUsers();
+
+    // Cleanup function to prevent state updates if component unmounts
+    return () => {
+      cancelled = true;
+    };
   }, [showInactive]);
 
   const confirmStatusChange = async () => {
@@ -357,6 +377,10 @@ const Users = () => {
             disableColumnMenu
             disableDensitySelector
             disableColumnFilter
+            disableRowSelectionOnClick
+            hideFooterSelectedRowCount
+            disableVirtualization={filteredUsers.length < 100} // Disable virtualization for small datasets
+            experimentalFeatures={{ ariaV7: false }} // Disable experimental features that add overhead
           />
         </Box>
       </Box>

@@ -24,16 +24,16 @@ const categories = [
   },
   {
     id: "asbestos-removal-jobs",
-    title: "Asbestos Removal Jobs",
+    title: "Air Monitoring and Clearances",
     icon: AsbestosRemovalIcon,
-    description: "Access air monitoring shifts and clearance reports",
+    description: "Access air monitoring shifts and clearance reports for asbestos removal",
     color: "#ff9800", // orange-500
   },
   {
     id: "fibre-id",
-    title: "Fibre ID Reports",
+    title: "Fibre ID & FIbre Count Reports",
     icon: FibreIcon,
-    description: "Access fibre identification reports",
+    description: "Access fibre identification and fibre count reports",
     color: "#ba68c8", // purple-300
   },
 ];

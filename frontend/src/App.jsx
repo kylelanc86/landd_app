@@ -43,6 +43,7 @@ import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
 import LDsuppliedJobs from "./scenes/fibreID/LDsuppliedJobs.jsx";
 import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
 import ClientSuppliedFibreCountAnalysis from "./scenes/fibreID/ClientSuppliedFibreCountAnalysis.jsx";
+import ClientSuppliedFibreIDAnalysis from "./scenes/fibreID/ClientSuppliedFibreIDAnalysis.jsx";
 import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
 import LDsuppliedItems from "./scenes/fibreID/LDsuppliedItems.jsx";
@@ -740,6 +741,27 @@ function App() {
                                   }
                                 />
                               )}
+                              {(isFeatureEnabled("ADVANCED.FIBRE_ID") ||
+                                isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL"
+                                )) && (
+                                <Route
+                                  path="/client-supplied/:jobId/sample/:sampleIndex/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={
+                                        isFeatureEnabled("ADVANCED.FIBRE_ID")
+                                          ? ["fibre.view"]
+                                          : ["projects.view"]
+                                      }
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreIDAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
                               {isFeatureEnabled(
                                 "ADVANCED.ASBESTOS_REMOVAL"
                               ) && (
@@ -751,6 +773,20 @@ function App() {
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <ClientSuppliedFibreCountAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                <Route
+                                  path="/fibre-id/client-supplied/:jobId/sample/:sampleIndex/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["fibre.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreIDAnalysis />
                                       </Suspense>
                                     </PermissionRoute>
                                   }

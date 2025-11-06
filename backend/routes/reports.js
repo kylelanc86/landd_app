@@ -111,7 +111,7 @@ router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), asy
       id: job._id,
       date: job.analysisDate || job.updatedAt,
       type: 'fibre_id',
-      reference: job.jobNumber,
+      reference: job.projectId?.projectID || job._id.toString(),
       description: 'Fibre ID Analysis Report',
       status: job.status,
       analyst: job.analyst || 'Unknown',

@@ -29,20 +29,27 @@ import {
 } from "@mui/material";
 import {
   Search as SearchIcon,
-  Visibility as ViewIcon,
   ArrowBack as ArrowBackIcon,
   PictureAsPdf as PdfIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  Archive as ArchiveIcon,
+  Mail as MailIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, projectService } from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
+import { useSnackbar } from "../../context/SnackbarContext";
+import { useAuth } from "../../context/AuthContext";
+import { hasPermission } from "../../config/permissions";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showSnackbar } = useSnackbar();
+  const { currentUser } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [sampleCounts, setSampleCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -56,10 +63,16 @@ const ClientSuppliedJobs = () => {
   const [selectedJobType, setSelectedJobType] = useState("");
   const [sampleReceiptDate, setSampleReceiptDate] = useState("");
   const [creatingJob, setCreatingJob] = useState(false);
+  const [completingJobs, setCompletingJobs] = useState({});
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [jobToArchive, setJobToArchive] = useState(null);
+  const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
+  const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
 
   useEffect(() => {
     fetchClientSuppliedJobs();
     fetchProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refresh data when component comes into focus (e.g., when returning from samples page)
@@ -172,17 +185,36 @@ const ClientSuppliedJobs = () => {
 
     try {
       setCreatingJob(true);
+
+      // Validate project ID
+      if (!selectedProject._id) {
+        throw new Error("Invalid project selected. Please select a project.");
+      }
+
+      // Validate job type
+      if (selectedJobType !== "Fibre ID" && selectedJobType !== "Fibre Count") {
+        throw new Error(
+          "Invalid job type. Please select either 'Fibre ID' or 'Fibre Count'."
+        );
+      }
+
       const jobData = {
         projectId: selectedProject._id,
         jobType: selectedJobType,
       };
 
-      // Add sample receipt date if provided
-      if (sampleReceiptDate) {
+      // Add sample receipt date if provided (and not empty)
+      if (sampleReceiptDate && sampleReceiptDate.trim() !== "") {
         jobData.sampleReceiptDate = sampleReceiptDate;
       }
 
-      await clientSuppliedJobsService.create(jobData);
+      // Explicitly do NOT include sampleCount - it's calculated from samples array
+
+      const response = await clientSuppliedJobsService.create(jobData);
+
+      if (!response || !response.data) {
+        throw new Error("Invalid response from server");
+      }
 
       // Refresh the jobs list
       await fetchClientSuppliedJobs();
@@ -194,7 +226,12 @@ const ClientSuppliedJobs = () => {
       setSampleReceiptDate("");
     } catch (error) {
       console.error("Error creating client supplied job:", error);
-      alert("Failed to create job. Please ensure all fields are filled.");
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to create job. Please ensure all fields are filled correctly.";
+      alert(`Failed to create job: ${errorMessage}`);
     } finally {
       setCreatingJob(false);
     }
@@ -227,15 +264,12 @@ const ClientSuppliedJobs = () => {
 
   const filteredJobs = (Array.isArray(jobs) ? jobs : []).filter(
     (job) =>
-      // Exclude completed jobs from the table
-      job.status !== "Completed" &&
-      (job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.projectId?.client?.name
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        job.projectId?.projectID
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase()))
+      // Filter by search term only (show all jobs including completed)
+      job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.projectId?.client?.name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      job.projectId?.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleViewJob = (jobId) => {
@@ -261,11 +295,101 @@ const ClientSuppliedJobs = () => {
     switch (status) {
       case "In Progress":
         return "info";
+      case "Analysis Complete":
+        return "warning";
       case "Completed":
         return "success";
       default:
         return "info";
     }
+  };
+
+  const handleCompleteJob = async (jobId) => {
+    try {
+      setCompletingJobs((prev) => ({ ...prev, [jobId]: true }));
+
+      await clientSuppliedJobsService.update(jobId, {
+        status: "Completed",
+      });
+
+      // Update the local jobs state
+      setJobs((prevJobs) =>
+        prevJobs.map((job) =>
+          job._id === jobId ? { ...job, status: "Completed" } : job
+        )
+      );
+
+      showSnackbar("Job completed successfully!", "success");
+      console.log("Job completed successfully");
+    } catch (error) {
+      console.error("Error completing job:", error);
+      showSnackbar(`Error completing job: ${error.message}`, "error");
+    } finally {
+      setCompletingJobs((prev) => ({ ...prev, [jobId]: false }));
+    }
+  };
+
+  const handleArchiveJob = (job) => {
+    setJobToArchive(job);
+    setArchiveDialogOpen(true);
+  };
+
+  const confirmArchiveJob = async () => {
+    if (!jobToArchive) return;
+
+    try {
+      // Archive the job via API
+      await clientSuppliedJobsService.archive(jobToArchive._id);
+
+      // Remove the job from the local state
+      setJobs((prevJobs) =>
+        prevJobs.filter((job) => job._id !== jobToArchive._id)
+      );
+
+      showSnackbar("Job archived successfully!", "success");
+      setArchiveDialogOpen(false);
+      setJobToArchive(null);
+    } catch (error) {
+      console.error("Error archiving job:", error);
+      showSnackbar(
+        `Error archiving job: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
+      );
+    }
+  };
+
+  const cancelArchiveJob = () => {
+    setArchiveDialogOpen(false);
+    setJobToArchive(null);
+  };
+
+  // Check if all samples in a job have been analyzed (have analysisData)
+  const areAllSamplesAnalyzed = (job) => {
+    if (!job || !job.samples || job.samples.length === 0) {
+      return false;
+    }
+
+    // For Fibre ID jobs, check if all samples have isAnalyzed === true
+    if (job.jobType === "Fibre ID") {
+      return job.samples.every((sample) => {
+        return (
+          sample.analysisData &&
+          sample.analysisData.isAnalyzed === true &&
+          sample.analyzedAt
+        );
+      });
+    }
+
+    // For Fibre Count jobs, check if all samples have fieldsCounted
+    return job.samples.every((sample) => {
+      return (
+        sample.analysisData &&
+        sample.analysisData.fieldsCounted !== undefined &&
+        sample.analyzedAt
+      );
+    });
   };
 
   const handleGeneratePDF = async (job) => {
@@ -295,61 +419,169 @@ const ClientSuppliedJobs = () => {
         analyst = fullJob.analyst;
       }
 
-      // Transform sample items to match air monitoring format
-      const transformedSamples = sampleItems.map((item, index) => {
-        return {
-          fullSampleID: item.labReference || `Sample-${index + 1}`,
-          sampleID: item.labReference || `Sample-${index + 1}`,
-          location: item.clientReference || item.locationDescription || "N/A",
-          // No time or flowrate for client supplied
-          startTime: null,
-          endTime: null,
-          averageFlowrate: null,
-          // Use analysisData from sample item
-          analysis: item.analysisData
-            ? {
-                fieldsCounted: item.analysisData.fieldsCounted,
-                fibresCounted: item.analysisData.fibresCounted,
-                edgesDistribution: item.analysisData.edgesDistribution,
-                backgroundDust: item.analysisData.backgroundDust,
-                // No reported concentration for client supplied
-                reportedConcentration: null,
-              }
-            : null,
+      // If no analyst found, default to "Unknown Analyst"
+      if (!analyst) {
+        analyst = "Unknown Analyst";
+      }
+
+      // Handle Fibre ID jobs differently from Fibre Count jobs
+      if (fullJob.jobType === "Fibre ID") {
+        // Transform samples to match the format expected by generateFibreIDReport
+        const sampleItemsForReport = sampleItems
+          .filter(
+            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+          )
+          .map((item, index) => ({
+            itemNumber: index + 1,
+            sampleReference: item.labReference || `Sample ${index + 1}`,
+            labReference: item.labReference || `Sample ${index + 1}`,
+            locationDescription:
+              item.clientReference || item.sampleDescription || "N/A",
+            clientReference: item.clientReference,
+            analysisData: item.analysisData,
+          }));
+
+        // Create an assessment-like object for the report generator
+        const assessmentForReport = {
+          _id: fullJob._id,
+          projectId: fullJob.projectId,
+          jobType: fullJob.jobType,
+          status: fullJob.status,
+          analysisDate: fullJob.analysisDate,
+          sampleReceiptDate: fullJob.sampleReceiptDate,
         };
-      });
 
-      // Create a mock shift-like object for PDF generation
-      const mockShift = {
-        descriptionOfWorks:
-          fullJob.projectId?.name || "Client Supplied Fibre Count",
-        date: fullJob.sampleReceiptDate || new Date(),
-        analysedBy: analyst || "N/A",
-        analysisDate: fullJob.analysisDate || new Date(),
-        reportApprovedBy: "Jordan Smith",
-        reportIssueDate: new Date(),
-      };
+        // Generate the Fibre ID report
+        await generateFibreIDReport({
+          assessment: assessmentForReport,
+          sampleItems: sampleItemsForReport,
+          analyst: analyst || "Unknown Analyst",
+          openInNewTab: !fullJob.reportApprovedBy, // open if not approved, download if approved
+          returnPdfData: false,
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        });
+        setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+      } else {
+        // Fibre Count jobs - use existing logic
+        // Transform sample items to match air monitoring format
+        const transformedSamples = sampleItems.map((item, index) => {
+          return {
+            fullSampleID: item.labReference || `Sample-${index + 1}`,
+            sampleID: item.labReference || `Sample-${index + 1}`,
+            location: item.clientReference || item.locationDescription || "N/A",
+            // No time or flowrate for client supplied
+            startTime: null,
+            endTime: null,
+            averageFlowrate: null,
+            // Use analysisData from sample item
+            analysis: item.analysisData
+              ? {
+                  fieldsCounted: item.analysisData.fieldsCounted,
+                  fibresCounted: item.analysisData.fibresCounted,
+                  edgesDistribution: item.analysisData.edgesDistribution,
+                  backgroundDust: item.analysisData.backgroundDust,
+                  // No reported concentration for client supplied
+                  reportedConcentration: null,
+                }
+              : null,
+          };
+        });
 
-      // Create a job-like object with projectId populated
-      const jobForPDF = {
-        projectId: fullJob.projectId,
-        asbestosRemovalist: null, // Not applicable for client supplied
-      };
+        // Create a mock shift-like object for PDF generation
+        const mockShift = {
+          descriptionOfWorks:
+            fullJob.projectId?.name || "Client Supplied Fibre Count",
+          date: fullJob.sampleReceiptDate || new Date(),
+          analysedBy: analyst || "N/A",
+          analysisDate: fullJob.analysisDate || new Date(),
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        };
 
-      // Generate the PDF using air monitoring format
-      await generateShiftReport({
-        shift: mockShift,
-        job: jobForPDF,
-        samples: transformedSamples,
-        project: fullJob.projectId,
-        openInNewTab: false,
-        isClientSupplied: true, // Flag to indicate we want fibre count format
-      });
+        // Create a job-like object with projectId populated
+        const jobForPDF = {
+          projectId: fullJob.projectId,
+          asbestosRemovalist: null, // Not applicable for client supplied
+        };
+
+        // Generate the PDF using air monitoring format
+        await generateShiftReport({
+          shift: mockShift,
+          job: jobForPDF,
+          samples: transformedSamples,
+          project: fullJob.projectId,
+          openInNewTab: !fullJob.reportApprovedBy, // open if not approved, download if approved
+          isClientSupplied: true, // Flag to indicate we want fibre count format
+        });
+        setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+      }
     } catch (error) {
       console.error("Error generating PDF:", error);
-      // You might want to show a snackbar or alert here
+      showSnackbar("Failed to generate report.", "error");
     } finally {
       setGeneratingPDF((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
+  const handleApproveReport = async (job) => {
+    try {
+      const now = new Date().toISOString();
+      const approver =
+        currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser?.name || currentUser?.email || "Unknown";
+
+      // Update the job with report approval
+      const response = await clientSuppliedJobsService.update(job._id, {
+        reportApprovedBy: approver,
+        reportIssueDate: now,
+      });
+
+      console.log("Report approved successfully:", response);
+
+      // Refresh the jobs list
+      await fetchClientSuppliedJobs();
+
+      // Generate and download the approved report
+      try {
+        await handleGeneratePDF(job);
+        showSnackbar("Report approved and downloaded successfully.", "success");
+      } catch (reportError) {
+        console.error("Error generating approved report:", reportError);
+        showSnackbar(
+          "Report approved but failed to generate download.",
+          "warning"
+        );
+      }
+    } catch (error) {
+      console.error("Error approving report:", error);
+      showSnackbar("Failed to approve report. Please try again.", "error");
+    }
+  };
+
+  const handleSendForApproval = async (job) => {
+    try {
+      setSendingApprovalEmails((prev) => ({ ...prev, [job._id]: true }));
+
+      const response = await clientSuppliedJobsService.sendForApproval(job._id);
+
+      showSnackbar(
+        response.data?.message ||
+          `Approval request emails sent successfully to ${
+            response.data?.recipients?.length || 0
+          } signatory user(s)`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error sending approval request emails:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to send approval request emails. Please try again.",
+        "error"
+      );
+    } finally {
+      setSendingApprovalEmails((prev) => ({ ...prev, [job._id]: false }));
     }
   };
 
@@ -361,19 +593,6 @@ const ClientSuppliedJobs = () => {
           open={Object.values(generatingPDF).some(Boolean)}
           message="Generating Fibre ID Report PDF..."
         />
-        {/* Breadcrumbs */}
-        <Breadcrumbs sx={{ mb: 3 }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Fibre ID Home
-          </Link>
-          <Typography color="text.primary">Client Supplied Jobs</Typography>
-        </Breadcrumbs>
 
         <Box
           sx={{
@@ -458,7 +677,12 @@ const ClientSuppliedJobs = () => {
                   </TableRow>
                 ) : (
                   filteredJobs.map((job) => (
-                    <TableRow key={job._id} hover>
+                    <TableRow
+                      key={job._id}
+                      hover
+                      onClick={() => handleViewJob(job._id)}
+                      sx={{ cursor: "pointer" }}
+                    >
                       <TableCell>
                         <Typography
                           variant="body2"
@@ -502,29 +726,136 @@ const ClientSuppliedJobs = () => {
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: "flex", gap: 1 }}>
-                          <Button
-                            onClick={() => handleViewJob(job._id)}
-                            color="primary"
-                            size="small"
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "flex-start",
+                            }}
                           >
-                            Items
-                          </Button>
-                          <Button
-                            onClick={() => handleGeneratePDF(job)}
-                            color="secondary"
-                            size="small"
-                            startIcon={<PdfIcon />}
-                            disabled={
-                              generatingPDF[job._id] ||
-                              (sampleCounts[job._id] || 0) === 0
-                            }
-                          >
-                            {generatingPDF[job._id] ? "..." : "PDF"}
-                          </Button>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGeneratePDF(job);
+                              }}
+                              color="secondary"
+                              size="small"
+                              startIcon={<PdfIcon />}
+                              disabled={
+                                generatingPDF[job._id] ||
+                                (sampleCounts[job._id] || 0) === 0 ||
+                                !areAllSamplesAnalyzed(job)
+                              }
+                            >
+                              {generatingPDF[job._id] ? "..." : "PDF"}
+                            </Button>
+                            {!job.reportApprovedBy &&
+                              job.status === "Analysis Complete" && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "error.main",
+                                    fontSize: "0.7rem",
+                                    mt: 0.5,
+                                    ml: 0.5,
+                                  }}
+                                >
+                                  Not approved
+                                </Typography>
+                              )}
+                          </Box>
+                          {(() => {
+                            const conditions = {
+                              notApproved: !job.reportApprovedBy,
+                              reportViewed: reportViewedJobIds.has(job._id),
+                              hasAdminPermission: hasPermission(
+                                currentUser,
+                                "admin.view"
+                              ),
+                              isLabSignatory: currentUser?.labSignatory,
+                            };
+                            const showButton =
+                              conditions.notApproved &&
+                              conditions.reportViewed &&
+                              conditions.hasAdminPermission &&
+                              conditions.isLabSignatory;
+                            return showButton;
+                          })() && (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              color="success"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApproveReport(job);
+                              }}
+                              sx={{
+                                backgroundColor: "#4caf50",
+                                color: "white",
+                                "&:hover": {
+                                  backgroundColor: "#45a049",
+                                },
+                              }}
+                            >
+                              Approve
+                            </Button>
+                          )}
+                          {job.status === "Analysis Complete" &&
+                            !job.reportApprovedBy &&
+                            !currentUser?.labSignatory && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="primary"
+                                startIcon={<MailIcon />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendForApproval(job);
+                                }}
+                                disabled={sendingApprovalEmails[job._id]}
+                              >
+                                {sendingApprovalEmails[job._id]
+                                  ? "Sending..."
+                                  : "Send for Approval"}
+                              </Button>
+                            )}
+                          {job.status === "Analysis Complete" &&
+                            job.reportApprovedBy && (
+                              <Button
+                                variant="contained"
+                                color="success"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCompleteJob(job._id);
+                                }}
+                                disabled={completingJobs[job._id]}
+                              >
+                                {completingJobs[job._id]
+                                  ? "Completing..."
+                                  : "Complete"}
+                              </Button>
+                            )}
+                          {job.status === "Completed" && (
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleArchiveJob(job);
+                              }}
+                              color="default"
+                              size="small"
+                              title="Archive Job"
+                            >
+                              <ArchiveIcon />
+                            </IconButton>
+                          )}
                           <IconButton
-                            onClick={() => handleDeleteJob(job._id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteJob(job._id);
+                            }}
                             color="error"
                             size="small"
                             title="Delete Job"
@@ -832,6 +1163,88 @@ const ClientSuppliedJobs = () => {
               }}
             >
               Delete Job
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Archive Confirmation Dialog */}
+        <Dialog
+          open={archiveDialogOpen}
+          onClose={cancelArchiveJob}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <ArchiveIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Archive Job
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
+              Are you sure you want to archive this client supplied job?
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              This job will be removed from the client supplied jobs table. You
+              can access archived jobs in the Project Reports section.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={cancelArchiveJob}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmArchiveJob}
+              variant="contained"
+              color="primary"
+              startIcon={<ArchiveIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                boxShadow: "0 4px 12px rgba(25, 118, 210, 0.3)",
+              }}
+            >
+              Archive
             </Button>
           </DialogActions>
         </Dialog>

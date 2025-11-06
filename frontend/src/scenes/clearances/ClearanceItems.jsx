@@ -50,7 +50,7 @@ import PermissionGate from "../../components/PermissionGate";
 import SitePlanDrawing from "../../components/SitePlanDrawing";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
-import { compressImage, needsCompression } from "../../utils/imageCompression";
+import { compressImage, needsCompression, saveFileToDevice } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
@@ -596,7 +596,7 @@ const ClearanceItems = () => {
     }
   };
 
-  const handleCapturePhoto = () => {
+  const handleCapturePhoto = async () => {
     if (videoRef) {
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
@@ -608,19 +608,37 @@ const ClearanceItems = () => {
       // Draw the current video frame to canvas
       context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
 
-      // Convert canvas to blob
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `clearance-photo-${timestamp}.jpg`;
+
+      // Capture full-quality version first
       canvas.toBlob(
-        (blob) => {
+        async (blob) => {
           if (blob) {
-            // Create a file from the blob
-            const file = new File([blob], "camera-photo.jpg", {
+            // Create a file from the blob (full quality)
+            const fullQualityFile = new File([blob], filename, {
               type: "image/jpeg",
             });
-            handlePhotoUploadForGallery({ target: { files: [file] } });
+
+            // Save full-size original to device
+            try {
+              await saveFileToDevice(fullQualityFile, filename);
+            } catch (error) {
+              console.error("Error saving photo to device:", error);
+              // Continue with upload even if device save fails
+            }
+
+            // Now process the full-quality file for upload (will be compressed if needed)
+            // Pass it with a special name to prevent double-saving in handlePhotoUploadForGallery
+            const uploadFile = new File([blob], "camera-photo.jpg", {
+              type: "image/jpeg",
+            });
+            handlePhotoUploadForGallery({ target: { files: [uploadFile] } });
           }
         },
         "image/jpeg",
-        0.8
+        1.0 // Full quality for device storage
       );
     }
 
@@ -843,6 +861,19 @@ const ClearanceItems = () => {
       });
 
       try {
+        // Save full-size original to device (if not already saved in handleCapturePhoto)
+        // Only save if this is an uploaded file (not from camera capture)
+        if (file.name !== "camera-photo.jpg") {
+          try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const originalFilename = file.name || `clearance-photo-${timestamp}.jpg`;
+            await saveFileToDevice(file, originalFilename);
+          } catch (error) {
+            console.error("Error saving photo to device:", error);
+            // Continue with upload even if device save fails
+          }
+        }
+
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
 

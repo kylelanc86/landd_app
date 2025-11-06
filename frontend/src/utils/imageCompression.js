@@ -92,4 +92,62 @@ export const getBase64SizeKB = (base64DataUrl) => {
  */
 export const needsCompression = (file, maxSizeKB = 500) => {
   return file.size / 1024 > maxSizeKB;
+};
+
+/**
+ * Save a file to the device storage (full-size original)
+ * Uses File System Access API if available, otherwise falls back to download
+ * @param {File|Blob} file - The file to save
+ * @param {string} filename - The filename to use
+ * @returns {Promise<void>}
+ */
+export const saveFileToDevice = async (file, filename) => {
+  try {
+    // Try to use File System Access API (modern browsers)
+    if ('showSaveFilePicker' in window) {
+      try {
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [
+            {
+              description: 'Image files',
+              accept: {
+                'image/jpeg': ['.jpg', '.jpeg'],
+                'image/png': ['.png'],
+                'image/webp': ['.webp'],
+              },
+            },
+          ],
+        });
+        
+        const writable = await fileHandle.createWritable();
+        await writable.write(file);
+        await writable.close();
+        return;
+      } catch (error) {
+        // User cancelled the save dialog, silently fail
+        if (error.name === 'AbortError') {
+          return;
+        }
+        // Otherwise fall through to download method
+      }
+    }
+
+    // Fallback: Create download link
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up the URL after a delay
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
+  } catch (error) {
+    console.error('Error saving file to device:', error);
+    throw error;
+  }
 }; 

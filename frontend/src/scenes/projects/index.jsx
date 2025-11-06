@@ -701,48 +701,8 @@ const Projects = ({ initialFilters = {} }) => {
     // All fetches are now triggered manually in search and filter handlers
   }, [memoizedPaginationModel]);
 
-  // Clear search term when component unmounts or when navigating away
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Clear search term from localStorage when leaving the page
-      const currentFilters = localStorage.getItem("projects-filters");
-      if (currentFilters) {
-        try {
-          const parsedFilters = JSON.parse(currentFilters);
-          if (parsedFilters.searchTerm) {
-            parsedFilters.searchTerm = "";
-            localStorage.setItem(
-              "projects-filters",
-              JSON.stringify(parsedFilters)
-            );
-          }
-        } catch (error) {}
-      }
-    };
-
-    // Listen for page unload/refresh
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    // Cleanup function to clear search term when component unmounts
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-
-      // Clear search term from state and localStorage
-      const currentFilters = localStorage.getItem("projects-filters");
-      if (currentFilters) {
-        try {
-          const parsedFilters = JSON.parse(currentFilters);
-          if (parsedFilters.searchTerm) {
-            parsedFilters.searchTerm = "";
-            localStorage.setItem(
-              "projects-filters",
-              JSON.stringify(parsedFilters)
-            );
-          }
-        } catch (error) {}
-      }
-    };
-  }, []);
+  // Note: Search term is now persisted in localStorage and will be restored
+  // when the component mounts again. No need to clear it on unmount.
 
   // Restore focus to search input when search loading completes
   useEffect(() => {

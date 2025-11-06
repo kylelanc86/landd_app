@@ -158,15 +158,21 @@ const ProjectReports = () => {
           "../../services/asbestosRemovalJobService"
         );
 
+        // Check if there are ANY asbestos removal jobs for this project (not just completed)
+        const allJobsResponse = await asbestosRemovalJobService.getAll();
+        const allJobs = allJobsResponse.jobs || allJobsResponse.data || [];
+        const hasAnyJobs = allJobs.some(
+          (job) =>
+            job.projectId === projectId || job.projectId?._id === projectId
+        );
+
         // Check if there are completed asbestos removal jobs
-        const completedJobsResponse = await asbestosRemovalJobService.getAll();
-        const completedJobs =
-          completedJobsResponse.jobs || completedJobsResponse.data || [];
-        const hasCompletedJobs = completedJobs.some(
+        const completedJobs = allJobs.filter(
           (job) =>
             (job.projectId === projectId || job.projectId?._id === projectId) &&
             job.status === "completed"
         );
+        const hasCompletedJobs = completedJobs.length > 0;
 
         let hasClearances = false;
         if (hasCompletedJobs) {
@@ -193,21 +199,46 @@ const ProjectReports = () => {
           hasClearances = projectClearances.length > 0;
         }
 
-        if (hasAirMonitoring || hasClearances) {
+        // If there are any asbestos removal jobs for this project OR air monitoring reports OR clearances, show the category
+        if (hasAnyJobs || hasAirMonitoring || hasClearances) {
           available.push("asbestos-removal-jobs");
         }
       } catch (error) {
         console.log("No asbestos removal job reports found");
       }
 
-      // Check fibre ID reports
+      // Check fibre ID reports (client supplied jobs)
       try {
+        // Check for completed fibre ID reports
         const fibreIdReports = await reportService.getFibreIdReports(projectId);
-        if (
+        const hasCompletedReports =
           fibreIdReports &&
           Array.isArray(fibreIdReports) &&
-          fibreIdReports.length > 0
-        ) {
+          fibreIdReports.length > 0;
+
+        // Also check if there are ANY client supplied jobs for this project (not just completed)
+        const clientSuppliedJobsResponse = await fetch(
+          `${
+            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+          }/client-supplied-jobs/by-project/${projectId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        let hasAnyClientSuppliedJobs = false;
+        if (clientSuppliedJobsResponse.ok) {
+          const clientSuppliedJobsData =
+            await clientSuppliedJobsResponse.json();
+          const jobs =
+            clientSuppliedJobsData.data || clientSuppliedJobsData || [];
+          hasAnyClientSuppliedJobs = Array.isArray(jobs) && jobs.length > 0;
+        }
+
+        // Show the category if there are completed reports OR any client supplied jobs
+        if (hasCompletedReports || hasAnyClientSuppliedJobs) {
           available.push("fibre-id");
         }
       } catch (error) {

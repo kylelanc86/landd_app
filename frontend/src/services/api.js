@@ -465,7 +465,9 @@ export const clientSuppliedJobsService = {
   create: (data) => api.post('/client-supplied-jobs', data),
   update: (id, data) => api.put(`/client-supplied-jobs/${id}`, data),
   delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
-  getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`)
+  archive: (id) => api.put(`/client-supplied-jobs/${id}/archive`),
+  getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`),
+  sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`)
 };
 
 export default api; 

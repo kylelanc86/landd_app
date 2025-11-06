@@ -29,6 +29,7 @@ import {
   Clear as ClearIcon,
   Assessment as AssessmentIcon,
   Close as CloseIcon,
+  Description as DescriptionIcon,
 } from "@mui/icons-material";
 
 import { projectService } from "../../services/api";
@@ -247,6 +248,7 @@ const Reports = () => {
           sortBy: "createdAt",
           sortOrder: "desc",
           search: searchValue.trim(),
+          status: "all", // Search ALL projects regardless of status
         };
 
         const response = await projectService.getAll(params);
@@ -408,33 +410,38 @@ const Reports = () => {
       maxWidth: 350,
       flex: 1.5,
       sortable: false,
-      renderCell: (params) => (
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              const project = params.row;
-              navigate(`/projects/${project._id}`);
-            }}
-          >
-            Job Details
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<AssessmentIcon />}
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedProject(params.row);
-              setDetailsModalOpen(true);
-            }}
-          >
-            Logs
-          </Button>
-        </Stack>
-      ),
+      renderCell: (params) => {
+        const project = params.row;
+        const hasReports = project.reports_present === true;
+
+        return (
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/projects/${project._id}`);
+              }}
+            >
+              Job Details
+            </Button>
+            {hasReports && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<DescriptionIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/reports/project/${project._id}`);
+                }}
+              >
+                Reports
+              </Button>
+            )}
+          </Stack>
+        );
+      },
     },
   ];
 
@@ -524,40 +531,7 @@ const Reports = () => {
                     <TableRow
                       key={project._id}
                       hover
-                      onClick={async () => {
-                        console.log("Recent project row clicked:", project);
-
-                        // Check if project has reports before navigating
-                        const hasReports = await checkProjectHasReports(
-                          project
-                        );
-
-                        if (hasReports) {
-                          // Add to recent searches when clicked
-                          const updatedSearches = [
-                            project,
-                            ...recentSearches.filter(
-                              (p) => p._id !== project._id
-                            ),
-                          ].slice(0, 20);
-                          setRecentSearches(updatedSearches);
-                          localStorage.setItem(
-                            "recentProjectSearches",
-                            JSON.stringify(updatedSearches)
-                          );
-                          navigate(`/reports/project/${project._id}`, {
-                            state: { from: "reports" },
-                          });
-                        } else {
-                          // Show dialog for projects with no reports
-                          setNoReportsDialog({
-                            open: true,
-                            project: project,
-                          });
-                        }
-                      }}
                       sx={{
-                        cursor: "pointer",
                         "&:hover": {
                           backgroundColor: "rgba(0, 0, 0, 0.04)",
                         },
@@ -599,17 +573,21 @@ const Reports = () => {
                           >
                             Job Details
                           </Button>
-                          <Button
-                            size="small"
-                            startIcon={<AssessmentIcon />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedProject(project);
-                              setDetailsModalOpen(true);
-                            }}
-                          >
-                            Work Logs
-                          </Button>
+                          {project.reports_present === true && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<DescriptionIcon />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/reports/project/${project._id}`, {
+                                  state: { from: "reports" },
+                                });
+                              }}
+                            >
+                              Reports
+                            </Button>
+                          )}
                           <IconButton
                             size="small"
                             color="default"
@@ -658,67 +636,9 @@ const Reports = () => {
                     sortModel: [{ field: "projectID", sort: "desc" }],
                   },
                 }}
-                onCellClick={async (params, event) => {
-                  console.log("Cell clicked:", params.row, params.field);
-
-                  // Only handle clicks on non-action columns
-                  if (params.field === "actions") {
-                    console.log("Click was on actions column, ignoring");
-                    return;
-                  }
-
-                  // Check if the click was on a button or interactive element
-                  if (event.target.closest("button")) {
-                    console.log("Click was on a button, ignoring row click");
-                    return;
-                  }
-
-                  const project = params.row;
-
-                  // Check if project has reports before navigating
-                  const hasReports = await checkProjectHasReports(project);
-
-                  if (hasReports) {
-                    // Add to recent searches when clicked
-                    const updatedSearches = [
-                      project,
-                      ...recentSearches.filter((p) => p._id !== project._id),
-                    ].slice(0, 20);
-                    setRecentSearches(updatedSearches);
-                    localStorage.setItem(
-                      "recentProjectSearches",
-                      JSON.stringify(updatedSearches)
-                    );
-                    navigate(`/reports/project/${project._id}`);
-                  } else {
-                    // Show dialog for projects with no reports
-                    setNoReportsDialog({
-                      open: true,
-                      project: project,
-                    });
-                  }
-                }}
                 sx={{
-                  "& .MuiDataGrid-root": {
-                    cursor: "pointer",
-                  },
-                  "& .MuiDataGrid-main": {
-                    cursor: "pointer",
-                  },
-                  "& .MuiDataGrid-row": {
-                    cursor: "pointer !important",
-                    "&:hover": {
-                      backgroundColor: "rgba(0, 0, 0, 0.04) !important",
-                    },
-                  },
-                  "& .MuiDataGrid-cell": {
-                    cursor: "pointer !important",
-                    "&:hover": {
-                      backgroundColor: "rgba(0, 0, 0, 0.02) !important",
-                    },
-                  },
-                  "& .MuiDataGrid-cellContent": {
-                    cursor: "pointer !important",
+                  "& .MuiDataGrid-row:hover": {
+                    backgroundColor: "rgba(0, 0, 0, 0.04)",
                   },
                 }}
               />

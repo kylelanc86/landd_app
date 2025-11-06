@@ -20,7 +20,6 @@ import {
   useTheme,
   Breadcrumbs,
   Link,
-  Alert,
   MenuItem,
 } from "@mui/material";
 import {
@@ -54,6 +53,7 @@ const CustomDataFields = () => {
   const navigate = useNavigate();
   const { refreshStatuses } = useProjectStatuses();
   const [tabValue, setTabValue] = useState(0);
+  const [itemDescriptionsTabValue, setItemDescriptionsTabValue] = useState(0); // For nested tabs within Item Descriptions
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [locationDescriptions, setLocationDescriptions] = useState([]);
   const [materialsDescriptions, setMaterialsDescriptions] = useState([]);
@@ -138,6 +138,14 @@ const CustomDataFields = () => {
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
+    // Reset nested tab when switching away from Item Descriptions
+    if (newValue !== 1) {
+      setItemDescriptionsTabValue(0);
+    }
+  };
+
+  const handleItemDescriptionsTabChange = (event, newValue) => {
+    setItemDescriptionsTabValue(newValue);
   };
 
   const getCurrentData = () => {
@@ -150,30 +158,36 @@ const CustomDataFields = () => {
             title: "Asbestos Removalists",
           };
         case 1:
-          return {
-            data: roomAreas,
-            setter: setRoomAreas,
-            title: "Room/Area",
-          };
+          // Item Descriptions tab - use nested tab value
+          switch (itemDescriptionsTabValue) {
+            case 0:
+              return {
+                data: roomAreas,
+                setter: setRoomAreas,
+                title: "Room/Area",
+              };
+            case 1:
+              return {
+                data: locationDescriptions,
+                setter: setLocationDescriptions,
+                title: "Location Descriptions",
+              };
+            case 2:
+              return {
+                data: materialsDescriptions,
+                setter: setMaterialsDescriptions,
+                title: "Materials Descriptions",
+              };
+            default:
+              return { data: [], setter: () => {}, title: "" };
+          }
         case 2:
-          return {
-            data: locationDescriptions,
-            setter: setLocationDescriptions,
-            title: "Location Descriptions",
-          };
-        case 3:
-          return {
-            data: materialsDescriptions,
-            setter: setMaterialsDescriptions,
-            title: "Materials Descriptions",
-          };
-        case 4:
           return {
             data: legislation,
             setter: setLegislation,
             title: "Legislation",
           };
-        case 5:
+        case 3:
           return {
             data: Array.isArray(projectStatuses)
               ? projectStatuses
@@ -1035,9 +1049,7 @@ const CustomDataFields = () => {
             sx={{ borderBottom: 1, borderColor: "divider" }}
           >
             <Tab label="Asbestos Removalists" />
-            <Tab label="Room/Area" />
-            <Tab label="Location Descriptions" />
-            <Tab label="Materials Descriptions" />
+            <Tab label="Item Descriptions" />
             <Tab label="Legislation" />
             <Tab label="Projects Status" />
           </Tabs>
@@ -1047,22 +1059,43 @@ const CustomDataFields = () => {
           </TabPanel>
 
           <TabPanel value={tabValue} index={1}>
-            {renderTabContent(roomAreas, "Room/Area")}
+            <Box>
+              <Tabs
+                value={itemDescriptionsTabValue}
+                onChange={handleItemDescriptionsTabChange}
+                aria-label="item descriptions tabs"
+                sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}
+              >
+                <Tab label="Room/Area" />
+                <Tab label="Location Descriptions" />
+                <Tab label="Materials Descriptions" />
+              </Tabs>
+
+              <TabPanel value={itemDescriptionsTabValue} index={0}>
+                {renderTabContent(roomAreas, "Room/Area")}
+              </TabPanel>
+
+              <TabPanel value={itemDescriptionsTabValue} index={1}>
+                {renderTabContent(
+                  locationDescriptions,
+                  "Location Descriptions"
+                )}
+              </TabPanel>
+
+              <TabPanel value={itemDescriptionsTabValue} index={2}>
+                {renderTabContent(
+                  materialsDescriptions,
+                  "Materials Descriptions"
+                )}
+              </TabPanel>
+            </Box>
           </TabPanel>
 
           <TabPanel value={tabValue} index={2}>
-            {renderTabContent(locationDescriptions, "Location Descriptions")}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={3}>
-            {renderTabContent(materialsDescriptions, "Materials Descriptions")}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={4}>
             {renderTabContent(legislation, "Legislation")}
           </TabPanel>
 
-          <TabPanel value={tabValue} index={5}>
+          <TabPanel value={tabValue} index={3}>
             {renderProjectStatusContent()}
           </TabPanel>
         </Paper>

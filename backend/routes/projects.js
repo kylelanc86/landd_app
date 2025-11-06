@@ -551,17 +551,20 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
     // If this is a client supplied project, automatically create a job
     if (newProject.department === 'Client Supplied') {
       try {
-        const jobCount = await ClientSuppliedJob.countDocuments();
-        const jobNumber = `CSJ-${String(jobCount + 1).padStart(4, '0')}`;
-        
         const job = new ClientSuppliedJob({
           projectId: newProject._id,
-          jobNumber,
           status: 'Pending'
         });
         
         await job.save();
-        console.log(`Automatically created client supplied job ${jobNumber} for project ${newProject.projectID}`);
+        console.log(`Automatically created client supplied job for project ${newProject.projectID}`);
+        
+        // Update the project's reports_present field to true
+        await Project.findByIdAndUpdate(
+          newProject._id,
+          { reports_present: true }
+        );
+        console.log(`Updated project ${newProject._id} reports_present to true due to automatic client supplied job creation`);
       } catch (jobError) {
         console.error('Error creating automatic client supplied job:', jobError);
         // Don't fail the project creation if job creation fails

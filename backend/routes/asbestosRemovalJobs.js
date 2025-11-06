@@ -1,18 +1,31 @@
 const express = require("express");
 const router = express.Router();
 const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+const Project = require("../models/Project");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 
 // Get all asbestos removal jobs with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, projectId, sortBy = "createdAt", sortOrder = "desc" } = req.query;
+    const { page = 1, limit = 1000, status, excludeStatus, projectId, sortBy = "createdAt", sortOrder = "desc" } = req.query;
 
     const filter = {};
     
-    if (status) {
-      filter.status = status;
+    // Support excluding statuses (e.g., excludeStatus=completed,cancelled)
+    // This takes precedence if both status and excludeStatus are provided
+    if (excludeStatus) {
+      const excludedStatuses = excludeStatus.includes(',') 
+        ? excludeStatus.split(',').map(s => s.trim())
+        : [excludeStatus];
+      filter.status = { $nin: excludedStatuses };
+    } else if (status) {
+      // Support single status or comma-separated statuses
+      if (status.includes(',')) {
+        filter.status = { $in: status.split(',').map(s => s.trim()) };
+      } else {
+        filter.status = status;
+      }
     }
     
     if (projectId) {
@@ -94,6 +107,21 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
     });
 
     const savedJob = await job.save();
+    
+    // Update the project's reports_present field to true
+    if (savedJob.projectId) {
+      try {
+        const projectId = savedJob.projectId._id || savedJob.projectId;
+        await Project.findByIdAndUpdate(
+          projectId,
+          { reports_present: true }
+        );
+        console.log(`Updated project ${projectId} reports_present to true due to asbestos removal job creation`);
+      } catch (error) {
+        console.error("Error updating project reports_present field:", error);
+        // Don't fail the main request if project update fails
+      }
+    }
     
     const populatedJob = await AsbestosRemovalJob.findById(savedJob._id)
       .populate("projectId", "projectID name client")

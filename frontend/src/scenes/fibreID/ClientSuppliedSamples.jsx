@@ -23,17 +23,18 @@ import {
   DialogContent,
   DialogActions,
   IconButton as MuiIconButton,
-  MenuItem,
 } from "@mui/material";
 import {
   Search as SearchIcon,
   Add as AddIcon,
+  Edit as EditIcon,
   Close as CloseIcon,
   ArrowBack as ArrowBackIcon,
   Delete as DeleteIcon,
+  Science as ScienceIcon,
 } from "@mui/icons-material";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { clientSuppliedJobsService, userService } from "../../services/api";
+import { clientSuppliedJobsService } from "../../services/api";
 
 const ClientSuppliedSamples = () => {
   const navigate = useNavigate();
@@ -45,14 +46,8 @@ const ClientSuppliedSamples = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [openModal, setOpenModal] = useState(false);
   const [sampleRows, setSampleRows] = useState([
-    { labReference: "", clientReference: "" },
+    { labReference: "", clientReference: "", cowlNumber: "" },
   ]);
-  const [analyst, setAnalyst] = useState("");
-  const [analysisDate, setAnalysisDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [users, setUsers] = useState([]);
-  const [completingJob, setCompletingJob] = useState(false);
 
   useEffect(() => {
     // Reset data when jobId changes
@@ -64,7 +59,6 @@ const ClientSuppliedSamples = () => {
       // Load data for the new jobId
       fetchJobDetails();
       fetchSampleItems();
-      fetchUsers();
     } else if (jobId === "[object Object]") {
       setLoading(false);
       // Redirect back to the jobs list if we have an invalid jobId
@@ -124,15 +118,7 @@ const ClientSuppliedSamples = () => {
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await userService.getAll();
-      setUsers(response.data || []);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      setUsers([]);
-    }
-  };
+  // Removed fetchUsers - analyst selection is now only on the analysis page
 
   const filteredSamples = samples
     .filter(
@@ -177,41 +163,18 @@ const ClientSuppliedSamples = () => {
       const existingRows = samples.map((sample) => ({
         labReference: sample.labReference,
         clientReference: sample.clientReference,
+        cowlNumber: sample.cowlNumber || "",
       }));
       setSampleRows(existingRows);
-      // Set analyst and analysis date from first sample if available
-      if (samples[0].analyzedBy) {
-        // Handle both string and object formats for analyzedBy
-        if (typeof samples[0].analyzedBy === "string") {
-          setAnalyst(samples[0].analyzedBy);
-        } else if (
-          samples[0].analyzedBy.firstName &&
-          samples[0].analyzedBy.lastName
-        ) {
-          setAnalyst(
-            samples[0].analyzedBy.firstName +
-              " " +
-              samples[0].analyzedBy.lastName
-          );
-        } else {
-          setAnalyst("");
-        }
-      }
-      if (samples[0].analyzedAt) {
-        setAnalysisDate(
-          new Date(samples[0].analyzedAt).toISOString().split("T")[0]
-        );
-      }
     } else {
       // Start with one empty row with auto-generated lab reference
       setSampleRows([
         {
           labReference: `${job?.projectId?.projectID || "PROJ"}-1`,
           clientReference: "",
+          cowlNumber: "",
         },
       ]);
-      setAnalyst("");
-      setAnalysisDate(new Date().toISOString().split("T")[0]);
     }
   };
 
@@ -244,6 +207,7 @@ const ClientSuppliedSamples = () => {
       {
         labReference: newLabReference,
         clientReference: "",
+        cowlNumber: "",
       },
     ]);
   };
@@ -274,7 +238,7 @@ const ClientSuppliedSamples = () => {
         existingSamplesMap.set(sample.labReference, sample);
       });
 
-      // Prepare sample data with analyst and analysis date
+      // Prepare sample data (analyst and analysis date are set on the analysis page)
       const sampleData = sampleRows.map((row) => {
         const existingSample = existingSamplesMap.get(row.labReference);
 
@@ -284,21 +248,26 @@ const ClientSuppliedSamples = () => {
             ...existingSample,
             labReference: row.labReference,
             clientReference: row.clientReference,
+            cowlNumber: row.cowlNumber || "",
             // Preserve existing analysis data
             analysisData: existingSample.analysisData,
             analysisResult: existingSample.analysisResult,
-            // Update analyst info only if not already set
-            analyzedBy: existingSample.analyzedBy || analyst || undefined,
-            analyzedAt:
-              existingSample.analyzedAt ||
-              (analysisDate ? new Date(analysisDate) : undefined),
+            // Only preserve analyzedBy/analyzedAt if analysis was actually completed
+            // (i.e., if analysisData exists, meaning analysis was finalized)
+            analyzedBy: existingSample.analysisData
+              ? existingSample.analyzedBy
+              : undefined,
+            analyzedAt: existingSample.analysisData
+              ? existingSample.analyzedAt
+              : undefined,
           };
         } else {
-          // New sample - create with basic info
+          // New sample - create with basic info only (no analysis data yet)
           return {
             ...row,
-            analyzedBy: analyst || undefined,
-            analyzedAt: analysisDate ? new Date(analysisDate) : undefined,
+            // Don't set analyzedBy/analyzedAt for new samples - they haven't been analyzed yet
+            analyzedBy: undefined,
+            analyzedAt: undefined,
           };
         }
       });
@@ -345,27 +314,6 @@ const ClientSuppliedSamples = () => {
     }
   };
 
-  const handleCompleteJob = async () => {
-    try {
-      setCompletingJob(true);
-
-      const response = await clientSuppliedJobsService.update(jobId, {
-        status: "Completed",
-      });
-
-      // Update the local job state
-      setJob((prevJob) => ({ ...prevJob, status: "Completed" }));
-
-      console.log("Job completed successfully");
-      // You might want to show a success message here
-    } catch (error) {
-      console.error("Error completing job:", error);
-      // You might want to show an error message here
-    } finally {
-      setCompletingJob(false);
-    }
-  };
-
   if (loading) {
     return (
       <Container maxWidth="xl">
@@ -398,33 +346,18 @@ const ClientSuppliedSamples = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Fibre ID Home
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
             onClick={handleBackToJobs}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
+            <ArrowBackIcon sx={{ mr: 1 }} />
             Client Supplied Jobs
           </Link>
-          <Link
-            component="button"
+          <Typography
             variant="body1"
-            onClick={() => {
-              const basePath = location.pathname.startsWith("/client-supplied")
-                ? "/client-supplied"
-                : "/fibre-id/client-supplied";
-              navigate(`${basePath}/${jobId}/samples`);
-            }}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+            sx={{ display: "flex", alignItems: "center" }}
           >
             Sample Items
-          </Link>
+          </Typography>
         </Breadcrumbs>
 
         {/* Header */}
@@ -453,30 +386,20 @@ const ClientSuppliedSamples = () => {
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button
                 variant="contained"
-                startIcon={<AddIcon />}
+                startIcon={samples.length > 0 ? <EditIcon /> : <AddIcon />}
                 onClick={handleOpenModal}
               >
-                Add Samples
+                {samples.length > 0 ? "Edit Samples" : "Add Samples"}
               </Button>
-              {job?.status !== "Completed" && (
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={handleCompleteJob}
-                  disabled={completingJob || samples.length === 0}
-                  sx={{ ml: 2 }}
-                >
-                  {completingJob ? "Completing..." : "Complete Job"}
-                </Button>
-              )}
               {/* Analysis Status Chip */}
               {samples.length > 0 && (
                 <Chip
                   label={
                     samples.every(
                       (sample) =>
-                        sample.analyzedAt ||
-                        (sample.analysisData && sample.analysisData.analyzedAt)
+                        sample.analysisData &&
+                        sample.analysisData.fieldsCounted !== undefined &&
+                        sample.analyzedAt
                     )
                       ? "Analysis Complete"
                       : "Analysis In Progress"
@@ -484,8 +407,9 @@ const ClientSuppliedSamples = () => {
                   color={
                     samples.every(
                       (sample) =>
-                        sample.analyzedAt ||
-                        (sample.analysisData && sample.analysisData.analyzedAt)
+                        sample.analysisData &&
+                        sample.analysisData.fieldsCounted !== undefined &&
+                        sample.analyzedAt
                     )
                       ? "success"
                       : "warning"
@@ -509,46 +433,56 @@ const ClientSuppliedSamples = () => {
                   <TableCell sx={{ fontWeight: "bold" }}>
                     Client Reference
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                  {job.jobType !== "Fibre ID" && (
+                    <TableCell sx={{ fontWeight: "bold" }}>
+                      Cowl Number
+                    </TableCell>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredSamples.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} align="center">
+                    <TableCell
+                      colSpan={job.jobType !== "Fibre ID" ? 3 : 2}
+                      align="center"
+                    >
                       {searchTerm
                         ? "No samples match your search criteria"
                         : "No samples found for this job. Click 'Add Samples' to get started."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSamples.map((sample, index) => (
-                    <TableRow key={index} hover>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: "medium" }}
-                        >
-                          {sample.labReference}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {sample.clientReference || "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <IconButton
-                          color="error"
-                          size="small"
-                          title="Delete Sample"
-                          onClick={() => handleDeleteSample(index)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredSamples.map((sample, filteredIndex) => {
+                    // Find the actual index in the original samples array
+                    const actualIndex = samples.findIndex(
+                      (s) => s.labReference === sample.labReference
+                    );
+                    return (
+                      <TableRow key={actualIndex} hover>
+                        <TableCell>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: "medium" }}
+                          >
+                            {sample.labReference}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {sample.clientReference || "N/A"}
+                          </Typography>
+                        </TableCell>
+                        {job.jobType !== "Fibre ID" && (
+                          <TableCell>
+                            <Typography variant="body2">
+                              {sample.cowlNumber || "N/A"}
+                            </Typography>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -560,7 +494,6 @@ const ClientSuppliedSamples = () => {
           <Box sx={{ mt: 3, display: "flex", justifyContent: "center" }}>
             <Button
               variant="contained"
-              color="primary"
               size="large"
               onClick={() => {
                 const basePath = location.pathname.startsWith(
@@ -568,9 +501,39 @@ const ClientSuppliedSamples = () => {
                 )
                   ? "/client-supplied"
                   : "/fibre-id/client-supplied";
-                navigate(`${basePath}/${jobId}/analysis`);
+
+                // For Fibre ID jobs, navigate to first sample's analysis page
+                // For Fibre Count jobs, navigate to bulk analysis page
+                if (job.jobType === "Fibre ID") {
+                  // Ensure we have at least one sample before navigating
+                  if (samples.length > 0) {
+                    const targetPath = `${basePath}/${jobId}/sample/0/analysis`;
+                    console.log(
+                      "Navigating to Fibre ID analysis:",
+                      targetPath,
+                      { jobId, basePath, samplesCount: samples.length }
+                    );
+                    navigate(targetPath);
+                  } else {
+                    console.warn("Cannot navigate: No samples available");
+                  }
+                } else {
+                  const targetPath = `${basePath}/${jobId}/analysis`;
+                  console.log(
+                    "Navigating to Fibre Count analysis:",
+                    targetPath
+                  );
+                  navigate(targetPath);
+                }
               }}
-              sx={{ minWidth: 200 }}
+              disabled={job.jobType === "Fibre ID" && samples.length === 0}
+              sx={{
+                minWidth: 200,
+                backgroundColor: "#1976d2", // Blue color
+                "&:hover": {
+                  backgroundColor: "#1565c0", // Darker blue on hover
+                },
+              }}
             >
               {samples.every(
                 (sample) =>
@@ -598,7 +561,9 @@ const ClientSuppliedSamples = () => {
                 alignItems: "center",
               }}
             >
-              <Typography variant="h6">Add Samples</Typography>
+              <Typography variant="h6">
+                {samples.length > 0 ? "Edit Samples" : "Add Samples"}
+              </Typography>
               <MuiIconButton onClick={handleCloseModal}>
                 <CloseIcon />
               </MuiIconButton>
@@ -606,50 +571,10 @@ const ClientSuppliedSamples = () => {
           </DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Add sample references for project {job.projectId?.projectID}
+              {samples.length > 0
+                ? `Edit sample references for project ${job.projectId?.projectID}`
+                : `Add sample references for project ${job.projectId?.projectID}`}
             </Typography>
-
-            {/* Analyst and Analysis Date Fields */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Analysis Details
-              </Typography>
-              <Box sx={{ display: "flex", gap: 2 }}>
-                <TextField
-                  select
-                  label="Analyst"
-                  variant="outlined"
-                  size="small"
-                  value={analyst}
-                  onChange={(e) => setAnalyst(e.target.value)}
-                  sx={{ flex: 1 }}
-                >
-                  <MenuItem value="">
-                    <em>Select an analyst</em>
-                  </MenuItem>
-                  {users.map((user) => (
-                    <MenuItem
-                      key={user._id}
-                      value={`${user.firstName} ${user.lastName}`}
-                    >
-                      {user.firstName} {user.lastName}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Analysis Date"
-                  type="date"
-                  variant="outlined"
-                  size="small"
-                  value={analysisDate}
-                  onChange={(e) => setAnalysisDate(e.target.value)}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  sx={{ flex: 1 }}
-                />
-              </Box>
-            </Box>
 
             <TableContainer component={Paper}>
               <Table>
@@ -661,6 +586,12 @@ const ClientSuppliedSamples = () => {
                     <TableCell sx={{ fontWeight: "bold" }}>
                       Client Reference
                     </TableCell>
+                    {job.jobType !== "Fibre ID" && (
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Cowl Number
+                      </TableCell>
+                    )}
+                    <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -699,6 +630,35 @@ const ClientSuppliedSamples = () => {
                           }
                           placeholder="Enter client reference"
                         />
+                      </TableCell>
+                      {job.jobType !== "Fibre ID" && (
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            variant="outlined"
+                            size="small"
+                            value={row.cowlNumber}
+                            onChange={(e) =>
+                              handleRowChange(
+                                index,
+                                "cowlNumber",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Enter cowl number"
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <IconButton
+                          color="error"
+                          size="small"
+                          onClick={() => handleRemoveRow(index)}
+                          disabled={sampleRows.length === 1}
+                          title="Delete Sample"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -36,7 +36,7 @@ const ReportsList = ({
       case "asbestos-assessment":
         return "Asbestos Assessment Reports";
       case "asbestos-removal-jobs":
-        return "Asbestos Removal Jobs";
+        return "Air Monitoring and Clearances";
       case "fibre-id":
         return "Fibre ID Reports";
       default:

@@ -6,14 +6,9 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     ref: 'Project',
     required: true
   },
-  jobNumber: {
-    type: String,
-    required: true,
-    unique: true
-  },
   status: {
     type: String,
-    enum: ['In Progress', 'Completed'],
+    enum: ['In Progress', 'Analysis Complete', 'Completed'],
     default: 'In Progress'
   },
   jobType: {
@@ -35,6 +30,21 @@ const clientSuppliedJobSchema = new mongoose.Schema({
   sampleReceiptDate: {
     type: Date
   },
+  archived: {
+    type: Boolean,
+    default: false
+  },
+  archivedAt: {
+    type: Date
+  },
+  reportApprovedBy: {
+    type: String,
+    required: false
+  },
+  reportIssueDate: {
+    type: Date,
+    required: false
+  },
   samples: [{
     labReference: {
       type: String,
@@ -45,6 +55,11 @@ const clientSuppliedJobSchema = new mongoose.Schema({
       type: String,
       required: true,
       trim: true
+    },
+    cowlNumber: {
+      type: String,
+      trim: true,
+      default: ""
     },
     sampleDescription: {
       type: String,
@@ -98,7 +113,6 @@ clientSuppliedJobSchema.pre('save', function(next) {
 
 // Create indexes
 clientSuppliedJobSchema.index({ projectId: 1 });
-clientSuppliedJobSchema.index({ jobNumber: 1 });
 clientSuppliedJobSchema.index({ status: 1 });
 
 module.exports = mongoose.model('ClientSuppliedJob', clientSuppliedJobSchema); 

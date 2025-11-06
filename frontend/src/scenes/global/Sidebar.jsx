@@ -484,7 +484,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.REPORTS") && (
             <CollapsibleSection
-              title="All Projects"
+              title="Project Reports"
               to="/reports"
               icon={<DescriptionIcon />}
             />
