@@ -255,7 +255,13 @@ export const projectService = {
 
 // Job service
 export const jobService = {
-  getAll: () => api.get('/air-monitoring-jobs'),
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.excludeStatus) queryParams.append('excludeStatus', params.excludeStatus);
+    const queryString = queryParams.toString();
+    return api.get(`/air-monitoring-jobs${queryString ? `?${queryString}` : ''}`);
+  },
   getById: (id) => api.get(`/air-monitoring-jobs/${id}`),
   create: (data) => api.post('/air-monitoring-jobs', data),
   update: (id, data) => api.patch(`/air-monitoring-jobs/${id}`, data),

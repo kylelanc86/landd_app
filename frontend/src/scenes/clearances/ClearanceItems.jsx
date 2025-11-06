@@ -50,7 +50,11 @@ import PermissionGate from "../../components/PermissionGate";
 import SitePlanDrawing from "../../components/SitePlanDrawing";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
-import { compressImage, needsCompression, saveFileToDevice } from "../../utils/imageCompression";
+import {
+  compressImage,
+  needsCompression,
+  saveFileToDevice,
+} from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
@@ -609,7 +613,10 @@ const ClearanceItems = () => {
       context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
 
       // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, -5);
       const filename = `clearance-photo-${timestamp}.jpg`;
 
       // Capture full-quality version first
@@ -865,8 +872,12 @@ const ClearanceItems = () => {
         // Only save if this is an uploaded file (not from camera capture)
         if (file.name !== "camera-photo.jpg") {
           try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-            const originalFilename = file.name || `clearance-photo-${timestamp}.jpg`;
+            const timestamp = new Date()
+              .toISOString()
+              .replace(/[:.]/g, "-")
+              .slice(0, -5);
+            const originalFilename =
+              file.name || `clearance-photo-${timestamp}.jpg`;
             await saveFileToDevice(file, originalFilename);
           } catch (error) {
             console.error("Error saving photo to device:", error);

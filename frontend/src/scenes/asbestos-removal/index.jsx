@@ -103,140 +103,103 @@ const AsbestosRemoval = () => {
         return;
       }
 
-      // Extract unique project IDs from jobs to fetch only relevant related data
-      const projectIds = jobs
-        .map((job) => job.projectId?._id || job.projectId)
-        .filter((id) => id);
-      const jobIds = jobs.map((job) => job._id).filter((id) => id);
-
-      // Fetch only relevant related data in parallel with limits
-      // Only fetch clearances and air monitoring jobs for projects that have asbestos removal jobs
-      const [clearancesResponse, airMonitoringJobsResponse, shiftsResponse] =
-        await Promise.all([
-          // Fetch clearances with limit and only for relevant projects
-          projectIds.length > 0
-            ? asbestosClearanceService.getAll({
-                limit: 5000, // Set reasonable limit
-              })
-            : Promise.resolve({ clearances: [] }),
-          // Fetch air monitoring jobs with limit
-          jobService.getAll(),
-          // Fetch shifts only for these asbestos removal jobs
-          jobIds.length > 0 ? shiftService.getAll() : Promise.resolve([]),
-        ]);
-
-      // Handle different response structures for clearances
-      let clearances = [];
-      if (
-        clearancesResponse &&
-        clearancesResponse.clearances &&
-        Array.isArray(clearancesResponse.clearances)
-      ) {
-        clearances = clearancesResponse.clearances;
-      } else if (
-        clearancesResponse &&
-        clearancesResponse.data &&
-        Array.isArray(clearancesResponse.data)
-      ) {
-        clearances = clearancesResponse.data;
-      } else if (Array.isArray(clearancesResponse)) {
-        clearances = clearancesResponse;
+      // Fetch only active air monitoring jobs (exclude completed/cancelled)
+      // This matches what we show in the asbestos removal jobs table
+      let allAirMonitoringJobs = [];
+      try {
+        const airMonitoringResponse = await jobService.getAll({
+          excludeStatus: "completed,cancelled",
+        });
+        allAirMonitoringJobs = Array.isArray(airMonitoringResponse.data)
+          ? airMonitoringResponse.data
+          : Array.isArray(airMonitoringResponse)
+          ? airMonitoringResponse
+          : [];
+      } catch (error) {
+        console.error("Error fetching air monitoring jobs:", error);
       }
 
-      // Handle different response structures for air monitoring jobs
-      let airMonitoringJobs = [];
-      if (
-        airMonitoringJobsResponse &&
-        airMonitoringJobsResponse.data &&
-        Array.isArray(airMonitoringJobsResponse.data)
-      ) {
-        airMonitoringJobs = airMonitoringJobsResponse.data;
-      } else if (Array.isArray(airMonitoringJobsResponse)) {
-        airMonitoringJobs = airMonitoringJobsResponse;
-      }
+      // For each job, make targeted queries to check if related data exists
+      // This is MUCH faster than fetching ALL data - we only query what we need
+      const processedJobs = await Promise.all(
+        jobs.map(async (job) => {
+          const projectId = job.projectId?._id || job.projectId;
+          const jobId = job._id;
 
-      // Handle different response structures for shifts
-      let shifts = [];
-      if (Array.isArray(shiftsResponse)) {
-        shifts = shiftsResponse;
-      } else if (
-        shiftsResponse &&
-        shiftsResponse.data &&
-        Array.isArray(shiftsResponse.data)
-      ) {
-        shifts = shiftsResponse.data;
-      }
+          // Make targeted queries in parallel for this specific job/project
+          // Each query only fetches data for THIS specific project/job
+          const [clearancesResponse, shiftsResponse] = await Promise.all([
+            // Query clearances for this specific project only (limit 1 - we only need to know if any exist)
+            projectId
+              ? asbestosClearanceService
+                  .getAll({
+                    projectId: projectId,
+                    limit: 1, // We only need to know if any exist
+                  })
+                  .catch(() => ({ clearances: [] }))
+              : Promise.resolve({ clearances: [] }),
+            // Query shifts for this specific job only
+            jobId
+              ? shiftService.getByJob(jobId).catch(() => [])
+              : Promise.resolve([]),
+          ]);
 
-      // Create lookup maps for O(1) access instead of O(n) filtering
-      const clearancesByProjectId = new Map();
-      clearances.forEach((clearance) => {
-        const projectId = clearance.projectId?._id || clearance.projectId;
-        if (projectId) {
-          if (!clearancesByProjectId.has(projectId)) {
-            clearancesByProjectId.set(projectId, []);
+          // Check if clearances exist for this project
+          let hasClearance = false;
+          if (clearancesResponse) {
+            const clearances =
+              clearancesResponse.clearances ||
+              clearancesResponse.data ||
+              (Array.isArray(clearancesResponse) ? clearancesResponse : []);
+            hasClearance = clearances.length > 0;
           }
-          clearancesByProjectId.get(projectId).push(clearance);
-        }
-      });
 
-      const airMonitoringJobsByProjectId = new Map();
-      airMonitoringJobs.forEach((airJob) => {
-        const projectId = airJob.projectId?._id || airJob.projectId;
-        if (projectId) {
-          if (!airMonitoringJobsByProjectId.has(projectId)) {
-            airMonitoringJobsByProjectId.set(projectId, []);
+          // Check if air monitoring jobs exist for this project (using cached data)
+          const hasAirMonitoring = allAirMonitoringJobs.some(
+            (airJob) =>
+              (airJob.projectId?._id || airJob.projectId) === projectId
+          );
+
+          // Check if shifts exist for this job
+          let hasShifts = false;
+          if (shiftsResponse) {
+            const shifts = Array.isArray(shiftsResponse)
+              ? shiftsResponse
+              : shiftsResponse.data || [];
+            hasShifts =
+              shifts.length > 0 &&
+              shifts.some(
+                (shift) =>
+                  (shift.job?._id || shift.job) === jobId &&
+                  shift.jobModel === "AsbestosRemovalJob"
+              );
           }
-          airMonitoringJobsByProjectId.get(projectId).push(airJob);
-        }
-      });
 
-      const shiftsByJobId = new Map();
-      shifts.forEach((shift) => {
-        const shiftJobId = shift.job?._id || shift.job;
-        if (shiftJobId && shift.jobModel === "AsbestosRemovalJob") {
-          if (!shiftsByJobId.has(shiftJobId)) {
-            shiftsByJobId.set(shiftJobId, []);
+          const hasAirMonitoringOverall = hasAirMonitoring || hasShifts;
+
+          let jobType = "None";
+          if (hasAirMonitoringOverall && hasClearance) {
+            jobType = "Air Monitoring & Clearance";
+          } else if (hasAirMonitoringOverall) {
+            jobType = "Air Monitoring";
+          } else if (hasClearance) {
+            jobType = "Clearance";
           }
-          shiftsByJobId.get(shiftJobId).push(shift);
-        }
-      });
 
-      // Process jobs using lookup maps for better performance
-      const processedJobs = jobs.map((job) => {
-        const projectId = job.projectId?._id || job.projectId;
-        const jobId = job._id;
-
-        // Use Maps for O(1) lookup instead of O(n) filter
-        const hasClearance =
-          clearancesByProjectId.has(projectId) &&
-          clearancesByProjectId.get(projectId).length > 0;
-        const hasAirMonitoring =
-          (airMonitoringJobsByProjectId.has(projectId) &&
-            airMonitoringJobsByProjectId.get(projectId).length > 0) ||
-          (shiftsByJobId.has(jobId) && shiftsByJobId.get(jobId).length > 0);
-
-        let jobType = "None";
-        if (hasAirMonitoring && hasClearance) {
-          jobType = "Air Monitoring & Clearance";
-        } else if (hasAirMonitoring) {
-          jobType = "Air Monitoring";
-        } else if (hasClearance) {
-          jobType = "Clearance";
-        }
-
-        return {
-          id: job._id,
-          projectID: job.projectId?.projectID || job.projectID || "Unknown",
-          projectName:
-            job.projectId?.name || job.projectName || "Unknown Project",
-          asbestosRemovalist: job.asbestosRemovalist || "Not assigned",
-          status: job.status || "Active",
-          jobType: jobType,
-          hasAirMonitoring: hasAirMonitoring,
-          hasClearance: hasClearance,
-          originalData: job,
-        };
-      });
+          return {
+            id: job._id,
+            projectID: job.projectId?.projectID || job.projectID || "Unknown",
+            projectName:
+              job.projectId?.name || job.projectName || "Unknown Project",
+            asbestosRemovalist: job.asbestosRemovalist || "Not assigned",
+            status: job.status || "Active",
+            jobType: jobType,
+            hasAirMonitoring: hasAirMonitoringOverall,
+            hasClearance: hasClearance,
+            originalData: job,
+          };
+        })
+      );
 
       // Sort by project ID (backend already filtered out completed jobs)
       const sortedJobs = processedJobs.sort((a, b) => {
