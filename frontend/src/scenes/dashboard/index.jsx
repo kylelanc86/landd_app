@@ -65,10 +65,7 @@ const Dashboard = () => {
   const [dataLoading, setDataLoading] = useState(false);
 
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
-  const [dailyTimesheetData, setDailyTimesheetData] = useState({
-    totalTime: 0,
-    status: "incomplete",
-  });
+  const [dailyTimesheetStatus, setDailyTimesheetStatus] = useState("incomplete");
 
   // Add responsive breakpoints - allow single row when possible
   const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // Back to "sm" for mobile
@@ -341,49 +338,32 @@ const Dashboard = () => {
     loadUserPreferences();
   }, []);
 
-  // Fetch daily timesheet data
+  // Fetch daily timesheet status only (optimized - removed unnecessary entries fetch)
   useEffect(() => {
-    const fetchDailyTimesheet = async () => {
+    const fetchDailyTimesheetStatus = async () => {
       try {
+        const startTime = performance.now();
         const today = new Date();
         const formattedDate = format(today, "yyyy-MM-dd");
 
-        // Get timesheet entries for time calculation
-        const entriesResponse = await api.get(
-          `/timesheets/range/${formattedDate}/${formattedDate}`
-        );
-
-        // Get daily status
+        // OPTIMIZATION: Only fetch status, not timesheet entries
+        // Removed: /timesheets/range API call (was unused - calculated totalTime but never displayed it)
         const statusResponse = await api.get(
           `/timesheets/status/range/${formattedDate}/${formattedDate}`
         );
 
-        // Calculate total time from entries
-        const totalMinutes = entriesResponse.data.reduce((total, entry) => {
-          const [startHours, startMinutes] = entry.startTime
-            .split(":")
-            .map(Number);
-          const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
-          const startTotalMinutes = startHours * 60 + startMinutes;
-          const endTotalMinutes = endHours * 60 + endMinutes;
-          let duration = endTotalMinutes - startTotalMinutes;
-          if (duration < 0) duration += 24 * 60;
-          return total + duration;
-        }, 0);
+        const fetchTime = performance.now() - startTime;
+        console.log(`⚡ Dashboard timesheet status loaded in ${fetchTime.toFixed(2)}ms (was 2 API calls)`);
 
-        // Get status from daily status summary (not individual entries)
         const dailyStatus = statusResponse.data[0]?.status || "incomplete";
-
-        setDailyTimesheetData({
-          totalTime: totalMinutes,
-          status: dailyStatus,
-        });
+        setDailyTimesheetStatus(dailyStatus);
       } catch (error) {
-        console.error("Error fetching daily timesheet:", error);
+        console.error("Error fetching daily timesheet status:", error);
+        setDailyTimesheetStatus("incomplete"); // Fallback to incomplete on error
       }
     };
 
-    fetchDailyTimesheet();
+    fetchDailyTimesheetStatus();
   }, []);
 
   const handleDragEnd = async (result) => {
@@ -424,8 +404,8 @@ const Dashboard = () => {
         bgcolor: "#EA1517",
         onClick: () => navigate("/timesheets"),
         subtitle:
-          dailyTimesheetData.status.charAt(0).toUpperCase() +
-          dailyTimesheetData.status.slice(1),
+          dailyTimesheetStatus.charAt(0).toUpperCase() +
+          dailyTimesheetStatus.slice(1),
       },
       {
         id: "inProgress",
@@ -491,7 +471,7 @@ const Dashboard = () => {
         onClick: () => navigate("/projects?status=active"),
       },
     ],
-    [dailyTimesheetData, currentUser, navigate]
+    [dailyTimesheetStatus, currentUser, navigate]
   );
 
   // Clean up invalid widget IDs after gridItems is defined
