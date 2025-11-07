@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Typography, useTheme, CircularProgress } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { DataGrid, GridToolbar } from "@mui/x-data-grid";
+import { DataGrid } from "@mui/x-data-grid";
 import { projectService } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { StatusChip } from "../../components/JobStatus";
@@ -39,21 +39,22 @@ const AllocatedJobsTable = () => {
       }
 
       const fetchStartTime = performance.now();
-      console.log("📋 ALLOCATED JOBS FETCH START", {
-        page,
+      console.log("\n" + "=".repeat(80));
+      console.log("📋 ALLOCATED JOBS TABLE - FETCH START");
+      console.log("⏱️  Frontend fetch initiated at:", new Date().toISOString());
+      console.log("📄 Request params:", {
+        page: page + 1,
         pageSize,
         userId: currentUser._id || currentUser.id,
-        activeStatuses: activeStatuses,
-        statusesLoaded: !statusesLoading,
-        timestamp: new Date().toISOString(),
+        statusFilter: "all_active",
+        activeStatusCount: activeStatuses.length,
       });
 
       setLoading(true);
 
       try {
+        // Timing: API request
         const apiStartTime = performance.now();
-        // Let backend filter by active status - much faster!
-        // Only need a reasonable limit since we're filtering to active projects (~200 max)
         const response = await projectService.getAssignedToMe({
           page: page + 1, // Backend uses 1-based pagination
           limit: pageSize,
@@ -62,34 +63,55 @@ const AllocatedJobsTable = () => {
           sortOrder: "desc",
         });
         const apiEndTime = performance.now();
+        const apiTime = apiEndTime - apiStartTime;
 
+        // Timing: Data extraction
+        const extractStart = performance.now();
         const projectsData = response.data.data || [];
         const totalCount = response.data.pagination?.total || 0;
+        const extractTime = performance.now() - extractStart;
 
-        const processingEndTime = performance.now();
-
-        console.log("✅ ALLOCATED JOBS FETCH COMPLETE", {
-          page,
-          pageSize,
-          projectsCount: projectsData.length,
-          totalCount: totalCount,
-          activeStatuses: activeStatuses,
-          apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
-          processingTime: `${(processingEndTime - apiEndTime).toFixed(2)}ms`,
-          totalTime: `${(processingEndTime - fetchStartTime).toFixed(2)}ms`,
-          responseSize: JSON.stringify(response).length,
-        });
-
-        // Store paginated data (already filtered by backend)
+        // Timing: State update
+        const stateUpdateStart = performance.now();
         setJobs(projectsData);
         setRowCount(totalCount);
+        const stateUpdateTime = performance.now() - stateUpdateStart;
+
+        const totalTime = performance.now() - fetchStartTime;
+
+        // Calculate payload sizes
+        const responseSize = JSON.stringify(response).length;
+        const dataSize = JSON.stringify(projectsData).length;
+
+        console.log("✅ ALLOCATED JOBS TABLE - FETCH COMPLETE");
+        console.log("📊 Results:", {
+          projectsReceived: projectsData.length,
+          totalCount: totalCount,
+          pageSize: pageSize,
+        });
+        console.log("⏱️  Performance breakdown:");
+        console.log(`   • API request/response: ${apiTime.toFixed(2)}ms`);
+        console.log(`   • Data extraction: ${extractTime.toFixed(2)}ms`);
+        console.log(`   • State update: ${stateUpdateTime.toFixed(2)}ms`);
+        console.log(`   • TOTAL FRONTEND TIME: ${totalTime.toFixed(2)}ms`);
+        console.log("📦 Payload sizes:");
+        console.log(`   • Full response: ${(responseSize / 1024).toFixed(2)} KB`);
+        console.log(`   • Data only: ${(dataSize / 1024).toFixed(2)} KB`);
+        console.log(`   • Avg per project: ${(dataSize / projectsData.length / 1024).toFixed(2)} KB`);
+        console.log("=".repeat(80) + "\n");
+
+        // Store paginated data (already filtered by backend)
       } catch (err) {
-        console.error("❌ ALLOCATED JOBS FETCH ERROR", {
-          page,
+        const errorTime = performance.now() - fetchStartTime;
+        console.error("❌ ALLOCATED JOBS TABLE - FETCH ERROR");
+        console.error("⏱️  Failed after:", `${errorTime.toFixed(2)}ms`);
+        console.error("📄 Error details:", {
+          page: page + 1,
           pageSize,
           error: err.message,
-          totalTime: `${(performance.now() - fetchStartTime).toFixed(2)}ms`,
+          stack: err.stack,
         });
+        console.error("=".repeat(80) + "\n");
         setError(err.message);
       } finally {
         setLoading(false);
@@ -301,7 +323,6 @@ const AllocatedJobsTable = () => {
         disableColumnSelector
         disableDensitySelector
         getRowId={(row) => row.id}
-        components={{ Toolbar: GridToolbar }}
         sortingOrder={["desc", "asc"]}
         sx={{
           cursor: "pointer",

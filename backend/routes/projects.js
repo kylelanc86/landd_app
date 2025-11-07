@@ -1116,7 +1116,9 @@ router.get('/:id/timelogs', auth, checkPermission(['projects.view']), async (req
 router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const startTime = Date.now();
-    console.log(`[${req.user.id}] Starting getAssignedToMe request`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[ASSIGNED-TO-ME] Starting request for user: ${req.user.id}`);
+    console.log(`[ASSIGNED-TO-ME] Params:`, req.query);
     
     const {
       page = 1,
@@ -1129,7 +1131,10 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     const userId = req.user.id;
 
     // Get active/inactive statuses for filtering (with caching)
+    const statusFetchStart = Date.now();
     const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+    const statusFetchTime = Date.now() - statusFetchStart;
+    console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
 
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
@@ -1145,7 +1150,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           // Filter for all active statuses
           if (activeStatuses.length > 0) {
             query.status = { $in: activeStatuses };
-            console.log(`[${userId}] Applied active status filter to assigned projects`);
+            console.log(`[ASSIGNED-TO-ME] Applied active status filter (${activeStatuses.length} statuses)`);
           } else {
             query.status = { $in: [] }; // Return no results if no active statuses defined
           }
@@ -1153,7 +1158,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           // Filter for all inactive statuses
           if (inactiveStatuses.length > 0) {
             query.status = { $in: inactiveStatuses };
-            console.log(`[${userId}] Applied inactive status filter to assigned projects`);
+            console.log(`[ASSIGNED-TO-ME] Applied inactive status filter (${inactiveStatuses.length} statuses)`);
           } else {
             query.status = { $in: [] }; // Return no results if no inactive statuses defined
           }
@@ -1161,7 +1166,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           // Handle specific status or comma-separated list
           const statusArray = status.includes(',') ? status.split(',') : [status];
           query.status = { $in: statusArray };
-          console.log(`[${userId}] Applied specific status filter to assigned projects:`, query.status);
+          console.log(`[ASSIGNED-TO-ME] Applied specific status filter:`, query.status);
         }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
@@ -1171,9 +1176,9 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       // This matches the projects page behavior
       if (activeStatuses.length > 0) {
         query.status = { $in: activeStatuses };
-        console.log(`[${userId}] No status filter provided, defaulting to active projects only for assigned projects`);
+        console.log(`[ASSIGNED-TO-ME] No status filter provided, defaulting to active projects (${activeStatuses.length} statuses)`);
       } else {
-        console.log(`[${userId}] No active statuses available and no filter provided, returning empty result`);
+        console.log(`[ASSIGNED-TO-ME] No active statuses available and no filter provided, returning empty result`);
         query.status = { $in: [] }; // Return no results if no active statuses defined
       }
     }
@@ -1181,46 +1186,74 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const queryBuildTime = Date.now() - queryStartTime;
-    console.log(`[${userId}] Query building completed in ${queryBuildTime}ms`);
+    console.log(`[ASSIGNED-TO-ME] ⏱️  Query building: ${queryBuildTime}ms`);
     
     try {
       const dbStartTime = Date.now();
       
-      // Count query timing
-      const countStartTime = Date.now();
-      const total = await Project.countDocuments(query);
-      const countTime = Date.now() - countStartTime;
-      console.log(`[${userId}] Count query completed in ${countTime}ms`);
+      // OPTIMIZATION 1: Use aggregation to combine count and data queries into one
+      // This reduces database roundtrips from 2 to 1
+      const aggregateStartTime = Date.now();
       
+      const sortField = sortBy;
+      const sortDirection = sortOrder === 'desc' ? -1 : 1;
+      
+      const results = await Project.aggregate([
+        // Match stage - filter documents
+        { $match: query },
+        
+        // Facet stage - run count and data queries in parallel
+        {
+          $facet: {
+            // Count total matching documents
+            metadata: [
+              { $count: 'total' }
+            ],
+            // Get paginated data
+            data: [
+              { $sort: { [sortField]: sortDirection } },
+              { $skip: skip },
+              { $limit: parseInt(limit) },
+              // OPTIMIZATION 4: Only select fields needed for the table display
+              {
+                $project: {
+                  _id: 1,
+                  projectID: 1,
+                  name: 1,
+                  status: 1,
+                  d_Date: 1
+                  // Removed: department, client, users, createdAt (not displayed in dashboard table)
+                }
+              }
+            ]
+          }
+        }
+      ]);
+      
+      const aggregateTime = Date.now() - aggregateStartTime;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Combined aggregate query (count + data): ${aggregateTime}ms`);
+      
+      // Extract results
+      const total = results[0].metadata[0]?.total || 0;
+      const projects = results[0].data || [];
       const pages = Math.ceil(total / parseInt(limit));
-
-      // Data query timing
-      const dataStartTime = Date.now();
-      const projects = await Project.find(query)
-        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('client', 'name')
-        .select('projectID name department status client users createdAt d_Date');
-      const dataTime = Date.now() - dataStartTime;
-      console.log(`[${userId}] Data query completed in ${dataTime}ms`);
+      
+      console.log(`[ASSIGNED-TO-ME] 📊 Results: ${projects.length} projects (${total} total)`);
       
       const dbTime = Date.now() - dbStartTime;
-      console.log(`[${userId}] Total database operations completed in ${dbTime}ms (Count: ${countTime}ms, Data: ${dataTime}ms)`);
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Total database time: ${dbTime}ms`);
 
-      // Invoice processing removed for performance
-
-      // Transform the response
+      // OPTIMIZATION 2 & 3: No .populate() needed, no client lookup
+      // Data is already lean from aggregation (plain JS objects, not Mongoose documents)
+      
+      // Transform the response (minimal transformation needed)
+      const transformStart = Date.now();
       const response = {
         data: projects.map(project => ({
           _id: project._id,
           projectID: project.projectID,
           name: project.name,
-          department: project.department || '',
           status: project.status,
-          client: project.client?.name || '',
-          users: project.users,
-          createdAt: project.createdAt,
           d_Date: project.d_Date
         })),
         pagination: {
@@ -1230,15 +1263,31 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           limit: parseInt(limit),
         }
       };
+      const transformTime = Date.now() - transformStart;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Response transformation: ${transformTime}ms`);
 
       const totalTime = Date.now() - startTime;
-      console.log(`[${userId}] getAssignedToMe completed in ${totalTime}ms (DB: ${dbTime}ms)`);
+      const breakdown = {
+        statusFetch: statusFetchTime,
+        queryBuild: queryBuildTime,
+        database: dbTime,
+        transform: transformTime,
+        total: totalTime
+      };
+      
+      console.log(`[ASSIGNED-TO-ME] ⏱️  TOTAL REQUEST TIME: ${totalTime}ms`);
+      console.log(`[ASSIGNED-TO-ME] 📈 Performance breakdown:`, breakdown);
+      console.log(`[ASSIGNED-TO-ME] ✅ Request completed successfully`);
+      console.log(`${'='.repeat(80)}\n`);
 
       res.json(response);
     } catch (error) {
+      const errorTime = Date.now() - startTime;
+      console.error(`[ASSIGNED-TO-ME] ❌ Database error after ${errorTime}ms:`, error.message);
       throw new Error(`Database error: ${error.message}`);
     }
   } catch (error) {
+    console.error(`[ASSIGNED-TO-ME] ❌ Request failed:`, error.message);
     res.status(500).json({ message: error.message });
   }
 });
