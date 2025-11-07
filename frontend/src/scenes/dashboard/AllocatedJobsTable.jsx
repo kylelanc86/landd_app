@@ -58,16 +58,19 @@ const AllocatedJobsTable = () => {
 
   const fetchAllocatedJobs = useCallback(
     async (page = 0, pageSize = 25) => {
+      // OPTIMIZATION: Don't wait for statusesLoading, just need activeStatuses to have data
+      // This allows parallel loading of statuses and projects
       if (
         authLoading ||
-        statusesLoading ||
         !currentUser ||
-        !(currentUser._id || currentUser.id)
+        !(currentUser._id || currentUser.id) ||
+        activeStatuses.length === 0  // Only need activeStatuses data, not full loading complete
       ) {
         console.log("⏱️  [LIFECYCLE] Fetch blocked - waiting for:", {
           authLoading,
           statusesLoading,
           hasCurrentUser: !!currentUser,
+          hasActiveStatuses: activeStatuses.length > 0,
           timeSinceMount: `${(performance.now() - mountTime).toFixed(2)}ms`
         });
         return;
@@ -165,14 +168,14 @@ const AllocatedJobsTable = () => {
         setLoading(false);
       }
     },
-    [authLoading, statusesLoading, currentUser, activeStatuses]
+    [authLoading, currentUser, activeStatuses, mountTime]
   );
 
   useEffect(() => {
     fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
   }, [
     authLoading,
-    statusesLoading,
+    activeStatuses,  // Changed from statusesLoading to activeStatuses
     currentUser,
     paginationModel,
     fetchAllocatedJobs,
@@ -391,7 +394,7 @@ const AllocatedJobsTable = () => {
       <DataGrid
         rows={formattedJobs}
         columns={columns}
-        loading={loading || statusesLoading}
+        loading={loading}  // Removed statusesLoading - we fetch in parallel now
         paginationMode="server"
         rowCount={rowCount}
         paginationModel={paginationModel}
