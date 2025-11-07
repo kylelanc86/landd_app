@@ -1138,8 +1138,9 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
+    const mongoose = require('mongoose');
     const query = {
-      users: userId
+      users: new mongoose.Types.ObjectId(userId)  // Convert string to ObjectId for aggregation
     };
 
     // Handle status filtering
@@ -1187,6 +1188,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const queryBuildTime = Date.now() - queryStartTime;
     console.log(`[ASSIGNED-TO-ME] ⏱️  Query building: ${queryBuildTime}ms`);
+    console.log(`[ASSIGNED-TO-ME] 🔍 Query:`, JSON.stringify(query, null, 2));
     
     try {
       const dbStartTime = Date.now();
