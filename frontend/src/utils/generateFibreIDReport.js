@@ -321,7 +321,7 @@ pdfMake.fonts = {
               { text: '3. The practical detection limit for asbestos fibre identification is 0.01-0.1% (0.1-1g/kg).', style: 'notes' },
               { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
               { text: '5. Unknown Mineral Fibres (UMF) are reported as detected. Further analysis is required to confirm the identity of these fibres.', style: 'notes' },
-              { text: '6. The samples analysed covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details.', style: 'notes' },
+              { text: '6. The analysed samples detailed within this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details nor the quality of the supplied samples.', style: 'notes' },
               { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
             ],
             margin: [0, 0, 0, 10],
@@ -368,7 +368,7 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['11%', '11%', '11%', '23%', '12%', '15%', '17%'],
+              widths: ['11%', '14%', '11%', '20%', '12%', '15%', '17%'],
               body: [
                 [
                   { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
@@ -447,7 +447,7 @@ pdfMake.fonts = {
                     
                     if (!item.analysisData || !item.analysisData.fibres || !Array.isArray(item.analysisData.fibres)) {
                       console.log('No fibres data, returning defaults');
-                      return { nonAsbestos: 'None detected', asbestos: 'None detected' };
+                      return { nonAsbestos: 'None', asbestos: 'No Asbestos Detected' };
                     }
                     
                     const fibres = item.analysisData.fibres;
@@ -607,7 +607,7 @@ pdfMake.fonts = {
                 {
                   stack: [
                     { text: `Report Reference: ${assessment?.projectId?.projectID}`, fontSize: 8 },
-                    { text: 'Revision: 0', fontSize: 8 }
+                    { text: `Revision: ${assessment?.revision || 0}`, fontSize: 8 }
                   ],
                   alignment: 'left',
                   width: '30%'

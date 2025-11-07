@@ -294,13 +294,54 @@ const Reports = () => {
     [searchCache]
   );
 
-  // Load recent searches on mount
-  useEffect(() => {
-    const savedSearches = localStorage.getItem("recentProjectSearches");
-    if (savedSearches) {
-      setRecentSearches(JSON.parse(savedSearches));
+  // Function to load recent searches from localStorage
+  const loadRecentSearches = useCallback(() => {
+    try {
+      const savedSearches = localStorage.getItem("recentProjectSearches");
+      if (savedSearches) {
+        const parsed = JSON.parse(savedSearches);
+        // Ensure it's an array and limit to 20
+        const recentProjects = Array.isArray(parsed) ? parsed.slice(0, 20) : [];
+        setRecentSearches(recentProjects);
+      } else {
+        setRecentSearches([]);
+      }
+    } catch (error) {
+      console.error("Error loading recent searches:", error);
+      setRecentSearches([]);
     }
   }, []);
+
+  // Load recent searches on mount and listen for updates
+  useEffect(() => {
+    loadRecentSearches();
+
+    // Listen for custom event when recent projects are updated
+    const handleRecentProjectsUpdate = () => {
+      loadRecentSearches();
+    };
+
+    // Listen for storage changes from other tabs
+    const handleStorageChange = (e) => {
+      if (e.key === "recentProjectSearches") {
+        loadRecentSearches();
+      }
+    };
+
+    window.addEventListener(
+      "recentProjectsUpdated",
+      handleRecentProjectsUpdate
+    );
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener(
+        "recentProjectsUpdated",
+        handleRecentProjectsUpdate
+      );
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [loadRecentSearches]);
 
   // Handle URL search parameter
   useEffect(() => {

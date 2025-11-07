@@ -66,17 +66,30 @@ const AsbestosRemoval = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchAsbestosRemovalJobs = useCallback(async () => {
+    const startTime = performance.now();
+    console.log("[Asbestos Removal] Starting fetchAsbestosRemovalJobs");
+
     setLoading(true);
     setError(null);
 
     try {
       // Fetch only incomplete asbestos removal jobs (exclude completed and cancelled)
       // Use minimal=true to only fetch fields needed for table display
+      const jobsFetchStart = performance.now();
+      console.log("[Asbestos Removal] Fetching asbestos removal jobs...");
+
       const jobsResponse = await asbestosRemovalJobService.getAll({
         excludeStatus: "completed,cancelled",
         limit: 1000,
         minimal: true,
       });
+
+      const jobsFetchTime = performance.now() - jobsFetchStart;
+      console.log(
+        `[Asbestos Removal] Asbestos removal jobs fetched in ${jobsFetchTime.toFixed(
+          2
+        )}ms`
+      );
 
       // Handle different response structures for jobs
       let jobs = [];
@@ -98,6 +111,10 @@ const AsbestosRemoval = () => {
         jobs = [];
       }
 
+      console.log(
+        `[Asbestos Removal] Found ${jobs.length} active asbestos removal jobs`
+      );
+
       // Ensure jobs is an array before processing
       if (!Array.isArray(jobs)) {
         console.error("Jobs is not an array:", jobs);
@@ -107,7 +124,11 @@ const AsbestosRemoval = () => {
 
       // Fetch only active air monitoring jobs (exclude completed/cancelled)
       // Use minimal=true to only fetch projectId for matching (much smaller payload)
+      const airMonitoringFetchStart = performance.now();
+      console.log("[Asbestos Removal] Fetching air monitoring jobs...");
+
       let allAirMonitoringJobs = [];
+      let airMonitoringFetchTime = 0;
       try {
         const airMonitoringResponse = await jobService.getAll({
           excludeStatus: "completed,cancelled",
@@ -119,19 +140,39 @@ const AsbestosRemoval = () => {
           : Array.isArray(airMonitoringResponse?.data)
           ? airMonitoringResponse.data
           : [];
+
+        airMonitoringFetchTime = performance.now() - airMonitoringFetchStart;
+        console.log(
+          `[Asbestos Removal] Air monitoring jobs fetched in ${airMonitoringFetchTime.toFixed(
+            2
+          )}ms (${allAirMonitoringJobs.length} jobs)`
+        );
       } catch (error) {
-        console.error("Error fetching air monitoring jobs:", error);
+        airMonitoringFetchTime = performance.now() - airMonitoringFetchStart;
+        console.error(
+          `[Asbestos Removal] Error fetching air monitoring jobs after ${airMonitoringFetchTime.toFixed(
+            2
+          )}ms:`,
+          error
+        );
       }
 
       // For each job, make targeted queries to check if related data exists
       // This is MUCH faster than fetching ALL data - we only query what we need
+      const perJobProcessingStart = performance.now();
+      console.log(
+        `[Asbestos Removal] Processing ${jobs.length} jobs (clearances & shifts)...`
+      );
+
       const processedJobs = await Promise.all(
-        jobs.map(async (job) => {
+        jobs.map(async (job, index) => {
+          const jobStartTime = performance.now();
           const projectId = job.projectId?._id || job.projectId;
           const jobId = job._id;
 
           // Make targeted queries in parallel for this specific job/project
           // Each query only fetches data for THIS specific project/job
+          const queriesStartTime = performance.now();
           const [clearancesResponse, shiftsResponse] = await Promise.all([
             // Query clearances for this specific project only (limit 1 - we only need to know if any exist)
             projectId
@@ -140,13 +181,26 @@ const AsbestosRemoval = () => {
                     projectId: projectId,
                     limit: 1, // We only need to know if any exist
                   })
-                  .catch(() => ({ clearances: [] }))
+                  .catch((err) => {
+                    console.warn(
+                      `[Asbestos Removal] Clearance query failed for project ${projectId}:`,
+                      err
+                    );
+                    return { clearances: [] };
+                  })
               : Promise.resolve({ clearances: [] }),
             // Query shifts for this specific job only
             jobId
-              ? shiftService.getByJob(jobId).catch(() => [])
+              ? shiftService.getByJob(jobId).catch((err) => {
+                  console.warn(
+                    `[Asbestos Removal] Shift query failed for job ${jobId}:`,
+                    err
+                  );
+                  return [];
+                })
               : Promise.resolve([]),
           ]);
+          const queriesTime = performance.now() - queriesStartTime;
 
           // Check if clearances exist for this project
           let hasClearance = false;
@@ -190,6 +244,17 @@ const AsbestosRemoval = () => {
             jobType = "Clearance";
           }
 
+          const jobProcessingTime = performance.now() - jobStartTime;
+          if (queriesTime > 100) {
+            console.log(
+              `[Asbestos Removal] Job ${index + 1}/${jobs.length} (${
+                job.projectId?.projectID || "Unknown"
+              }) processed in ${jobProcessingTime.toFixed(
+                2
+              )}ms (queries: ${queriesTime.toFixed(2)}ms)`
+            );
+          }
+
           return {
             id: job._id,
             projectID: job.projectId?.projectID || job.projectID || "Unknown",
@@ -205,19 +270,53 @@ const AsbestosRemoval = () => {
         })
       );
 
+      const perJobProcessingTime = performance.now() - perJobProcessingStart;
+      console.log(
+        `[Asbestos Removal] All jobs processed in ${perJobProcessingTime.toFixed(
+          2
+        )}ms`
+      );
+
       // Sort by project ID (backend already filtered out completed jobs)
+      const sortStart = performance.now();
       const sortedJobs = processedJobs.sort((a, b) => {
         const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
-        const bNum = parseInt(b.projectID?.replace(/\D/g, "")) || 0;
+        const bNum = parseInt(b.projectID?.replace(/\D/g, "") || 0);
         return bNum - aNum; // Descending order (highest first)
+      });
+      const sortTime = performance.now() - sortStart;
+      console.log(
+        `[Asbestos Removal] Sorting completed in ${sortTime.toFixed(2)}ms`
+      );
+
+      const totalTime = performance.now() - startTime;
+      console.log(
+        `[Asbestos Removal] Total fetch time: ${totalTime.toFixed(2)}ms`
+      );
+      console.log("[Asbestos Removal] Breakdown:", {
+        jobsFetch: `${jobsFetchTime.toFixed(2)}ms`,
+        airMonitoringFetch: `${airMonitoringFetchTime.toFixed(2)}ms`,
+        perJobProcessing: `${perJobProcessingTime.toFixed(2)}ms`,
+        sorting: `${sortTime.toFixed(2)}ms`,
+        total: `${totalTime.toFixed(2)}ms`,
       });
 
       setAsbestosRemovalJobs(sortedJobs);
     } catch (err) {
-      console.error("Error fetching asbestos removal jobs:", err);
+      const errorTime = performance.now() - startTime;
+      console.error(
+        `[Asbestos Removal] Error after ${errorTime.toFixed(2)}ms:`,
+        err
+      );
       setError(err.message || "Failed to fetch jobs");
     } finally {
       setLoading(false);
+      const finalTime = performance.now() - startTime;
+      console.log(
+        `[Asbestos Removal] fetchAsbestosRemovalJobs completed in ${finalTime.toFixed(
+          2
+        )}ms`
+      );
     }
   }, []);
 

@@ -449,6 +449,7 @@ const ClientSuppliedJobs = () => {
           status: fullJob.status,
           analysisDate: fullJob.analysisDate,
           sampleReceiptDate: fullJob.sampleReceiptDate,
+          revision: fullJob.revision || 0,
         };
 
         // Generate the Fibre ID report
@@ -532,10 +533,11 @@ const ClientSuppliedJobs = () => {
           ? `${currentUser.firstName} ${currentUser.lastName}`
           : currentUser?.name || currentUser?.email || "Unknown";
 
-      // Update the job with report approval
+      // Update the job with report approval and set status to Completed
       const response = await clientSuppliedJobsService.update(job._id, {
         reportApprovedBy: approver,
         reportIssueDate: now,
+        status: "Completed",
       });
 
       console.log("Report approved successfully:", response);

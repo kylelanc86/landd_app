@@ -91,20 +91,74 @@ const ProjectReports = () => {
   console.log("ProjectReports - currentUser:", currentUser);
   console.log("ProjectReports - isAdmin:", isAdmin);
 
+  // Function to add project to recent searches
+  const addToRecentSearches = useCallback((project) => {
+    try {
+      if (!project || !project._id) return;
+
+      // Get existing recent searches
+      const savedSearches = localStorage.getItem("recentProjectSearches");
+      let recentSearches = savedSearches ? JSON.parse(savedSearches) : [];
+
+      // Remove project if it already exists (to move to top)
+      recentSearches = recentSearches.filter((p) => p._id !== project._id);
+
+      // Prepare project data for storage
+      // Ensure client is properly stored (can be object or populated)
+      let clientData = project.client;
+      if (clientData && typeof clientData === "object" && clientData._id) {
+        // If client is populated, keep the object structure
+        clientData = {
+          _id: clientData._id,
+          name: clientData.name || "",
+        };
+      }
+
+      const projectToSave = {
+        _id: project._id,
+        projectID: project.projectID,
+        name: project.name,
+        client: clientData,
+        reports_present: project.reports_present || false,
+      };
+
+      // Add to beginning of array
+      recentSearches.unshift(projectToSave);
+
+      // Keep only the most recent 20 projects
+      const limitedSearches = recentSearches.slice(0, 20);
+
+      // Save back to localStorage
+      localStorage.setItem(
+        "recentProjectSearches",
+        JSON.stringify(limitedSearches)
+      );
+
+      // Dispatch a custom event to notify other components
+      window.dispatchEvent(new Event("recentProjectsUpdated"));
+    } catch (error) {
+      console.error("Error adding project to recent searches:", error);
+    }
+  }, []);
+
   // Load project details
   useEffect(() => {
     const loadProject = async () => {
       try {
         const response = await projectService.getById(projectId);
-        setProject(response.data);
-        setNewStatus(response.data.status || "");
+        const projectData = response.data;
+        setProject(projectData);
+        setNewStatus(projectData.status || "");
+
+        // Add project to recent searches when accessed
+        addToRecentSearches(projectData);
       } catch (err) {
         console.error("Error loading project:", err);
         setError("Failed to load project details");
       }
     };
     loadProject();
-  }, [projectId]);
+  }, [projectId, addToRecentSearches]);
 
   // Check which report categories have data for this project
   const checkAvailableCategories = useCallback(async () => {
@@ -493,6 +547,7 @@ const ProjectReports = () => {
             date: report.date,
             description: report.description,
             status: report.status,
+            revision: report.revision || 0,
             type: "fibre_id",
             data: report,
           }));
@@ -1046,6 +1101,36 @@ const ProjectReports = () => {
 
         // Reload reports to reflect the change
         loadReports();
+      } else if (report.type === "fibre_id") {
+        // For fibre ID reports (client supplied jobs), reset the status to Analysis Complete
+        const { clientSuppliedJobsService } = await import(
+          "../../services/api"
+        );
+
+        // Get the job ID (could be in data.id or data._id)
+        const jobId = report.data._id || report.data.id || report.id;
+
+        // Get current job data to increment revision count
+        const currentJob = await clientSuppliedJobsService.getById(jobId);
+        const currentRevision = currentJob.data?.revision || 0;
+        const newRevision = currentRevision + 1;
+
+        // Update the client supplied job status back to "Analysis Complete" and clear approval
+        await clientSuppliedJobsService.update(jobId, {
+          status: "Analysis Complete",
+          reportApprovedBy: null,
+          reportIssueDate: null,
+          revision: newRevision,
+        });
+
+        // Show success message
+        showSnackbar(
+          "Client supplied job status reset to Analysis Complete. You can now revise the report.",
+          "success"
+        );
+
+        // Reload reports to reflect the change
+        loadReports();
       }
     } catch (error) {
       console.error("Error revising report:", error);
@@ -1356,9 +1441,20 @@ const ProjectReports = () => {
         <DialogTitle>Revise Report</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to revise this report? This will enable
-            editing of the report in the asbestos removal jobs table and will
-            increase the report's revision count.
+            {(() => {
+              const reportType = reviseDialog.report?.type;
+              let tableText = "the asbestos removal jobs table";
+
+              if (reportType === "fibre_id") {
+                tableText = "the client supplied jobs table";
+              } else if (reportType === "clearance") {
+                tableText = "the clearances table";
+              } else if (reportType === "shift") {
+                tableText = "the asbestos removal jobs table";
+              }
+
+              return `Proceeding will enable editing of the report in ${tableText} and will increase the report's revision count.`;
+            })()}
           </DialogContentText>
           {reviseDialog.report?.type === "clearance" && (
             <TextField

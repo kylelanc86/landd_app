@@ -199,10 +199,14 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     // Handle status filtering
     // DEFAULT: Only show active projects unless explicitly requested otherwise
     // This prevents inactive projects from being loaded when no status filter is provided
-    if (status && status !== 'all') {
+    if (status) {
       try {
         console.log(`[PROJECTS] Processing status filter: ${status}`);
-        if (status === 'all_active') {
+        if (status === 'all') {
+          // Show ALL projects (both active and inactive) - no status filter applied
+          console.log(`[PROJECTS] Showing all projects (active and inactive)`);
+          // Don't add any status filter to the query
+        } else if (status === 'all_active') {
           // Filter for all active statuses from custom data fields
           if (activeStatuses.length > 0) {
             query.status = { $in: activeStatuses };
@@ -297,12 +301,13 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
             }
           },
           
-          // Stage 4: Match search criteria - project fields OR client name
+          // Stage 4: Match search criteria - project fields, client name, or address
           {
             $match: {
               $or: [
                 { name: searchRegex },
                 { projectID: searchRegex },
+                { address: searchRegex },
                 { 'clientData.name': searchRegex }
               ]
             }

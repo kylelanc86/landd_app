@@ -25,6 +25,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  LinearProgress,
+  CircularProgress,
 } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../services/api";
@@ -719,8 +721,33 @@ const TimesheetReview = () => {
           backgroundColor: theme.palette.background.paper,
           borderRadius: 2,
           overflow: "hidden",
+          position: "relative",
         }}
       >
+        {/* Loading Indicator */}
+        {isLoading && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+            }}
+          >
+            <LinearProgress
+              sx={{
+                height: 4,
+                borderRadius: "2px 2px 0 0",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                "& .MuiLinearProgress-bar": {
+                  backgroundColor: "#1976d2",
+                },
+              }}
+            />
+          </Box>
+        )}
+
         <TableContainer sx={{ maxHeight: "calc(100vh - 300px)" }}>
           <Table stickyHeader>
             <TableHead>
@@ -793,87 +820,136 @@ const TimesheetReview = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {users.map((user, index) => {
-                const weekTotal = getWeekTotal(user._id);
-                return (
-                  <TableRow
-                    key={user._id}
+              {isLoading &&
+              users.length > 0 &&
+              Object.keys(timesheetData).length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={daysInWeek.length + 2}
+                    align="center"
                     sx={{
-                      "&:nth-of-type(odd)": {
-                        backgroundColor: theme.palette.action.hover,
-                      },
-                      "&:hover": {
-                        backgroundColor: theme.palette.action.selected,
-                      },
+                      py: 8,
+                      border: "none",
                     }}
                   >
-                    <TableCell
-                      component="th"
-                      scope="row"
+                    <Box
                       sx={{
-                        fontWeight: 600,
-                        position: "sticky",
-                        left: 0,
-                        backgroundColor: "inherit",
-                        zIndex: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 2,
                       }}
                     >
-                      {user.firstName} {user.lastName}
-                    </TableCell>
-                    {daysInWeek.map((day) => {
-                      const dateStr = format(day, "yyyy-MM-dd");
-                      const minutes = timesheetData[user._id]?.[dateStr] || 0;
-                      const isApproved =
-                        timesheetData[`${user._id}_${dateStr}_approved`] ||
-                        false;
-                      const isWeekend =
-                        day.getDay() === 0 || day.getDay() === 6;
-                      return (
-                        <TableCell
-                          key={day.toISOString()}
-                          align="center"
-                          onClick={() => handleCellClick(user._id, day)}
-                          sx={{
-                            backgroundColor:
-                              isApproved && minutes > 0
-                                ? theme.palette.info.light
-                                : isWeekend
-                                ? theme.palette.grey[200]
-                                : getCellColor(minutes, isApproved),
-                            fontWeight: 500,
-                            fontSize: "0.9rem",
-                            border: `1px solid ${theme.palette.divider}`,
-                            cursor: "pointer",
-                            transition: "all 0.2s ease",
-                            "&:hover": {
-                              transform: "scale(1.05)",
-                              boxShadow: `0 4px 8px rgba(0,0,0,0.2)`,
-                              zIndex: 1,
-                              fontWeight: 700,
-                            },
-                          }}
-                        >
-                          {formatHours(minutes)}
-                        </TableCell>
-                      );
-                    })}
-                    <TableCell
-                      align="center"
+                      <CircularProgress size={40} />
+                      <Typography variant="body1" color="text.secondary">
+                        Loading timesheet data...
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={daysInWeek.length + 2}
+                    align="center"
+                    sx={{
+                      py: 8,
+                      border: "none",
+                    }}
+                  >
+                    <Typography variant="body1" color="text.secondary">
+                      No employees found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user, index) => {
+                  const weekTotal = getWeekTotal(user._id);
+                  return (
+                    <TableRow
+                      key={user._id}
                       sx={{
-                        fontWeight: 700,
-                        fontSize: "0.95rem",
-                        backgroundColor: theme.palette.success.light,
-                        position: "sticky",
-                        right: 0,
-                        zIndex: 1,
-                        border: `2px solid ${theme.palette.divider}`,
+                        "&:nth-of-type(odd)": {
+                          backgroundColor: theme.palette.action.hover,
+                        },
+                        "&:hover": {
+                          backgroundColor: theme.palette.action.selected,
+                        },
                       }}
                     >
-                      {formatHours(weekTotal)}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                      <TableCell
+                        component="th"
+                        scope="row"
+                        sx={{
+                          fontWeight: 600,
+                          position: "sticky",
+                          left: 0,
+                          backgroundColor: "inherit",
+                          zIndex: 1,
+                        }}
+                      >
+                        {user.firstName} {user.lastName}
+                      </TableCell>
+                      {daysInWeek.map((day) => {
+                        const dateStr = format(day, "yyyy-MM-dd");
+                        const minutes = timesheetData[user._id]?.[dateStr] || 0;
+                        const isApproved =
+                          timesheetData[`${user._id}_${dateStr}_approved`] ||
+                          false;
+                        const isWeekend =
+                          day.getDay() === 0 || day.getDay() === 6;
+                        return (
+                          <TableCell
+                            key={day.toISOString()}
+                            align="center"
+                            onClick={() => handleCellClick(user._id, day)}
+                            sx={{
+                              backgroundColor:
+                                isApproved && minutes > 0
+                                  ? theme.palette.info.light
+                                  : isWeekend
+                                  ? theme.palette.grey[200]
+                                  : getCellColor(minutes, isApproved),
+                              fontWeight: 500,
+                              fontSize: "0.9rem",
+                              border: `1px solid ${theme.palette.divider}`,
+                              cursor: isLoading ? "default" : "pointer",
+                              transition: "all 0.2s ease",
+                              opacity: isLoading ? 0.6 : 1,
+                              pointerEvents: isLoading ? "none" : "auto",
+                              "&:hover": {
+                                transform: isLoading ? "none" : "scale(1.05)",
+                                boxShadow: isLoading
+                                  ? "none"
+                                  : `0 4px 8px rgba(0,0,0,0.2)`,
+                                zIndex: 1,
+                                fontWeight: isLoading ? 500 : 700,
+                              },
+                            }}
+                          >
+                            {formatHours(minutes)}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell
+                        align="center"
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: "0.95rem",
+                          backgroundColor: theme.palette.success.light,
+                          position: "sticky",
+                          right: 0,
+                          zIndex: 1,
+                          border: `2px solid ${theme.palette.divider}`,
+                          opacity: isLoading ? 0.6 : 1,
+                        }}
+                      >
+                        {formatHours(weekTotal)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </TableContainer>

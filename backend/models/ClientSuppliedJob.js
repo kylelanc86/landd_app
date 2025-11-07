@@ -45,6 +45,26 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  revision: {
+    type: Number,
+    default: 0
+  },
+  chainOfCustody: {
+    fileName: {
+      type: String,
+      trim: true
+    },
+    fileType: {
+      type: String,
+      trim: true
+    },
+    uploadedAt: {
+      type: Date
+    },
+    data: {
+      type: String
+    }
+  },
   samples: [{
     labReference: {
       type: String,

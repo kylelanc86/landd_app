@@ -25,6 +25,8 @@ import {
   FormControlLabel,
   Checkbox,
   Stack,
+  Menu,
+  IconButton,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
@@ -68,6 +70,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const [analysts, setAnalysts] = useState([]);
   const [analyst, setAnalyst] = useState("");
   const { showSnackbar } = useSnackbar();
+  const [asbestosMenuAnchor, setAsbestosMenuAnchor] = useState(null);
+  const [selectedFibreId, setSelectedFibreId] = useState(null);
 
   useEffect(() => {
     if (jobId && sampleIndex !== undefined && sampleIndex !== null) {
@@ -179,15 +183,17 @@ const ClientSuppliedFibreIDAnalysis = () => {
           }
         }
       } else {
-        // Pre-populate sample description if available
-        if (sampleData.labReference) {
-          setSampleDescription(
-            `Sample ${sampleData.labReference} - ${
-              sampleData.clientReference || sampleData.sampleDescription || ""
-            }`
-          );
-        }
-        // Set analysis date to today for new analysis
+        // Reset all form fields for new analysis
+        setNoFibreDetected(false);
+        setMicroscope("LD-PLM-1");
+        setSampleDescription("");
+        setSampleType("mass");
+        setSampleMass("");
+        setSampleDimensions({ x: "", y: "", z: "" });
+        setAshing("no");
+        setCrucibleNo("");
+        setFibres([]);
+        setFinalResult("");
         setAnalysisDate(new Date());
 
         // Set default analyst if available
@@ -315,6 +321,82 @@ const ClientSuppliedFibreIDAnalysis = () => {
     setFibres(fibres.filter((fibre) => fibre.id !== fibreId));
   };
 
+  const handleAsbestosMenuOpen = (event, fibreId) => {
+    setAsbestosMenuAnchor(event.currentTarget);
+    setSelectedFibreId(fibreId);
+  };
+
+  const handleAsbestosMenuClose = () => {
+    setAsbestosMenuAnchor(null);
+    setSelectedFibreId(null);
+  };
+
+  const applyAsbestosPreset = (asbestosType) => {
+    if (!selectedFibreId) return;
+
+    // Define preset values for each asbestos type
+    const presets = {
+      Chrysotile: {
+        morphology: "curly",
+        disintegrates: "no",
+        riLiquid: "1.55",
+        colour: "White",
+        pleochrism: "None",
+        birefringence: "low",
+        extinction: "complete",
+        signOfElongation: "Length-slow",
+        fibreParallel: "Blue",
+        fibrePerpendicular: "Magenta",
+        result: "Chrysotile Asbestos",
+      },
+      Amosite: {
+        morphology: "straight",
+        disintegrates: "no",
+        riLiquid: "1.67",
+        colour: "Brown",
+        pleochrism: "Low",
+        birefringence: "moderate",
+        extinction: "complete",
+        signOfElongation: "Length-slow",
+        fibreParallel: "Magenta",
+        fibrePerpendicular: "Yellow",
+        result: "Amosite Asbestos",
+      },
+      Crocidolite: {
+        morphology: "straight",
+        disintegrates: "no",
+        riLiquid: "1.70",
+        colour: "Blue",
+        pleochrism: "Low",
+        birefringence: "low",
+        extinction: "complete",
+        signOfElongation: "Length-fast",
+        fibreParallel: "Blue",
+        fibrePerpendicular: "Blue",
+        result: "Crocidolite Asbestos",
+      },
+    };
+
+    const preset = presets[asbestosType];
+    if (!preset) return;
+
+    // Update the fibre with the preset values
+    setFibres(
+      fibres.map((fibre) => {
+        if (fibre.id === selectedFibreId) {
+          return {
+            ...fibre,
+            ...preset,
+          };
+        }
+        return fibre;
+      })
+    );
+
+    handleAsbestosMenuClose();
+    showSnackbar(`${asbestosType} preset applied successfully!`, "success");
+  };
+
   const calculateFinalResult = () => {
     if (fibres.length === 0) {
       return "No fibres Detected";
@@ -334,7 +416,26 @@ const ClientSuppliedFibreIDAnalysis = () => {
     return uniqueResults.join(", ");
   };
 
+  const isMassDimensionsValid = () => {
+    if (sampleType === "mass") {
+      return sampleMass && sampleMass.trim() !== "";
+    } else if (sampleType === "dimensions") {
+      // At least one dimension must be filled
+      return (
+        (sampleDimensions.x && sampleDimensions.x.trim() !== "") ||
+        (sampleDimensions.y && sampleDimensions.y.trim() !== "") ||
+        (sampleDimensions.z && sampleDimensions.z.trim() !== "")
+      );
+    }
+    return false;
+  };
+
   const isAnalysisComplete = () => {
+    // Check mass/dimensions validation
+    if (!isMassDimensionsValid()) {
+      return false;
+    }
+
     if (noFibreDetected) {
       return true; // No fibres detected means analysis is complete
     }
@@ -361,6 +462,17 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const handleFinaliseAnalysis = async () => {
     try {
       console.log("Finalising analysis for job:", jobId);
+
+      // Validate mass/dimensions first
+      if (!isMassDimensionsValid()) {
+        const fieldName =
+          sampleType === "mass" ? "Sample Mass" : "Sample Dimensions";
+        showSnackbar(
+          `${fieldName} is required. Please enter a value before finalising.`,
+          "warning"
+        );
+        return;
+      }
 
       // Ensure current sample analysis is saved first
       const analysisComplete = isAnalysisComplete();
@@ -444,6 +556,17 @@ const ClientSuppliedFibreIDAnalysis = () => {
     try {
       console.log("Starting to save analysis...");
 
+      // Validate mass/dimensions
+      if (!isMassDimensionsValid()) {
+        const fieldName =
+          sampleType === "mass" ? "Sample Mass" : "Sample Dimensions";
+        showSnackbar(
+          `${fieldName} is required. Please enter a value before saving.`,
+          "warning"
+        );
+        return;
+      }
+
       // Check if analysis is complete (all fibres have results or no fibres detected)
       const analysisComplete = isAnalysisComplete();
 
@@ -522,6 +645,17 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const handleMarkAsAnalyzed = async () => {
     try {
       console.log("Marking sample as analysed...");
+
+      // Validate mass/dimensions first
+      if (!isMassDimensionsValid()) {
+        const fieldName =
+          sampleType === "mass" ? "Sample Mass" : "Sample Dimensions";
+        showSnackbar(
+          `${fieldName} is required. Please enter a value before marking as analysed.`,
+          "warning"
+        );
+        return;
+      }
 
       // Check if analysis is complete (all fibres have results or no fibres detected)
       const analysisComplete = isAnalysisComplete();
@@ -974,10 +1108,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
             {sampleType === "mass" ? (
               <TextField
                 fullWidth
+                required
                 label="Sample Mass"
                 value={sampleMass}
                 onChange={(e) => setSampleMass(e.target.value)}
                 disabled={isSampleAnalyzed()}
+                error={!isSampleAnalyzed() && !sampleMass}
+                helperText={
+                  !isSampleAnalyzed() && !sampleMass ? "Required" : ""
+                }
                 sx={{
                   "& .MuiInputBase-input.Mui-disabled": {
                     backgroundColor: "#f5f5f5",
@@ -999,6 +1138,20 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       })
                     }
                     disabled={isSampleAnalyzed()}
+                    error={
+                      !isSampleAnalyzed() &&
+                      !sampleDimensions.x &&
+                      !sampleDimensions.y &&
+                      !sampleDimensions.z
+                    }
+                    helperText={
+                      !isSampleAnalyzed() &&
+                      !sampleDimensions.x &&
+                      !sampleDimensions.y &&
+                      !sampleDimensions.z
+                        ? "Required"
+                        : ""
+                    }
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
                         backgroundColor: "#f5f5f5",
@@ -1179,23 +1332,42 @@ const ClientSuppliedFibreIDAnalysis = () => {
                   <TableRow>
                     <TableCell sx={{ width: "170px" }}>Field</TableCell>
                     {fibres.map((fibre, index) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <Box
                           display="flex"
                           alignItems="center"
                           justifyContent="space-between"
                         >
-                          <Typography
-                            variant="subtitle2"
-                            color="black"
-                            fontWeight="bold"
-                          >
-                            {fibre.name}
-                          </Typography>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <Typography
+                              variant="subtitle2"
+                              color="black"
+                              fontWeight="bold"
+                            >
+                              {fibre.name}
+                            </Typography>
+                            <IconButton
+                              size="small"
+                              onClick={(e) =>
+                                handleAsbestosMenuOpen(e, fibre.id)
+                              }
+                              disabled={isSampleAnalyzed()}
+                              sx={{
+                                backgroundColor: "#4caf50",
+                                color: "white",
+                                width: 20,
+                                height: 20,
+                                "&:hover": {
+                                  backgroundColor: "#45a049",
+                                },
+                                "&.Mui-disabled": {
+                                  backgroundColor: "#ccc",
+                                },
+                              }}
+                            >
+                              <AddIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          </Box>
                           <Button
                             variant="outlined"
                             color="error"
@@ -1223,11 +1395,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.morphology}
@@ -1260,11 +1428,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.disintegrates}
@@ -1297,11 +1461,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.riLiquid}
@@ -1341,11 +1501,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <TextField
                           fullWidth
                           size="small"
@@ -1378,11 +1534,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <TextField
                           fullWidth
                           size="small"
@@ -1416,11 +1568,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.birefringence}
@@ -1464,11 +1612,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.extinction}
@@ -1511,11 +1655,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.signOfElongation}
@@ -1560,11 +1700,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <TextField
                           fullWidth
                           size="small"
@@ -1601,11 +1737,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <TextField
                           fullWidth
                           size="small"
@@ -1642,11 +1774,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       </Typography>
                     </TableCell>
                     {fibres.map((fibre) => (
-                      <TableCell
-                        key={fibre.id}
-                        align="center"
-                        sx={{ width: "230px" }}
-                      >
+                      <TableCell key={fibre.id} sx={{ width: "230px" }}>
                         <FormControl fullWidth size="small">
                           <Select
                             value={fibre.result}
@@ -1762,6 +1890,23 @@ const ClientSuppliedFibreIDAnalysis = () => {
           </Button>
         </Box>
       </Box>
+
+      {/* Asbestos Preset Menu */}
+      <Menu
+        anchorEl={asbestosMenuAnchor}
+        open={Boolean(asbestosMenuAnchor)}
+        onClose={handleAsbestosMenuClose}
+      >
+        <MenuItem onClick={() => applyAsbestosPreset("Chrysotile")}>
+          Chrysotile Asbestos
+        </MenuItem>
+        <MenuItem onClick={() => applyAsbestosPreset("Amosite")}>
+          Amosite Asbestos
+        </MenuItem>
+        <MenuItem onClick={() => applyAsbestosPreset("Crocidolite")}>
+          Crocidolite Asbestos
+        </MenuItem>
+      </Menu>
     </Container>
   );
 };

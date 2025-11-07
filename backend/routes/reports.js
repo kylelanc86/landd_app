@@ -115,7 +115,8 @@ router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), asy
       description: 'Fibre ID Analysis Report',
       status: job.status,
       analyst: job.analyst || 'Unknown',
-      sampleCount: job.sampleCount
+      sampleCount: job.sampleCount,
+      revision: job.revision || 0
     }));
 
     res.json(reports);

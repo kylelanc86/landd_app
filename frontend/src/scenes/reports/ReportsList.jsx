@@ -1,3 +1,4 @@
+//table on project reports page
 import React from "react";
 import {
   Box,
@@ -13,6 +14,7 @@ import {
   Tooltip,
   Chip,
   CircularProgress,
+  Button,
 } from "@mui/material";
 import {
   Visibility as VisibilityIcon,
@@ -181,11 +183,15 @@ const ReportsList = ({
                       {report.additionalInfo}
                     </Typography>
                   )}
-                  {report.revision > 0 && (
+                  {report.revision !== undefined && (
                     <Typography
                       variant="caption"
                       display="block"
-                      sx={{ mt: 0.5, fontWeight: "medium", color: "#ed6c02" }}
+                      sx={{
+                        mt: 0.5,
+                        fontWeight: "medium",
+                        color: report.revision > 0 ? "#ed6c02" : "#666",
+                      }}
                     >
                       Revision {report.revision}
                     </Typography>
@@ -222,17 +228,18 @@ const ReportsList = ({
                     </Tooltip>
                     {/* Only show revise button for completed reports */}
                     {(report.status === "complete" ||
-                      report.status === "completed") &&
+                      report.status === "completed" ||
+                      report.status === "Completed") &&
                       onRevise && (
-                        <Tooltip title="Revise Report">
-                          <IconButton
-                            size="small"
-                            onClick={() => onRevise(report)}
-                            color="warning"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="warning"
+                          onClick={() => onRevise(report)}
+                          startIcon={<EditIcon />}
+                        >
+                          Revise
+                        </Button>
                       )}
                   </Box>
                 </TableCell>

@@ -15,10 +15,10 @@ router.get('/', async (req, res) => {
     const jobs = await ClientSuppliedJob.find(filter)
       .populate({
         path: 'projectId',
-        select: 'name projectID d_Date createdAt',
+        select: 'name projectID d_Date createdAt projectContact',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email address'
+          select: 'name contact1Name contact1Email address invoiceEmail'
         }
       })
       .sort({ createdAt: -1 });
@@ -39,10 +39,10 @@ router.get('/by-project/:projectId', async (req, res) => {
     const jobs = await ClientSuppliedJob.find({ projectId })
       .populate({
         path: 'projectId',
-        select: 'name projectID d_Date createdAt',
+        select: 'name projectID d_Date createdAt projectContact',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email address'
+          select: 'name contact1Name contact1Email address invoiceEmail'
         }
       })
       .sort({ createdAt: -1 });
@@ -69,10 +69,10 @@ router.get('/:id', async (req, res) => {
     const job = await ClientSuppliedJob.findById(req.params.id)
       .populate({
         path: 'projectId',
-        select: 'name projectID d_Date createdAt',
+        select: 'name projectID d_Date createdAt projectContact',
         populate: {
           path: 'client',
-          select: 'name contact1Name contact1Email address'
+          select: 'name contact1Name contact1Email address invoiceEmail'
         }
       });
     
