@@ -46,6 +46,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:3000',
+      'http://127.0.0.1:3000',  // Added for Windows DNS optimization
       'https://app.landd.com.au',
       'https://landd-app-dev-front.onrender.com',
     ];
@@ -188,10 +189,19 @@ app.use('/api/project-audits', requireAuth, checkTokenBlacklist, require('./rout
       });
     });
 
-    // Start server
+    // Start server with HTTP keep-alive enabled for performance
     const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
+    const http = require('http');
+    
+    const server = http.createServer(app);
+    
+    // Configure keep-alive timeouts for better connection reuse
+    server.keepAliveTimeout = 65000; // 65 seconds (longer than most load balancers)
+    server.headersTimeout = 66000;   // Must be greater than keepAliveTimeout
+    
+    server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
+      console.log(`Keep-alive timeout: ${server.keepAliveTimeout}ms`);
     });
   })
   .catch(err => {

@@ -40,22 +40,43 @@ export const ProjectStatusesProvider = ({ children }) => {
 
     try {
       fetchingRef.current = true;
+      const startTime = performance.now();
       console.log("Fetching project statuses...");
       setLoading(true);
       setError(null);
 
-      const [active, inactive, all] = await Promise.all([
-        projectStatusService.getActiveStatuses(),
-        projectStatusService.getInactiveStatuses(),
-        projectStatusService.getAllStatusesWithData(),
-      ]);
-
+      // OPTIMIZATION: Fetch once instead of 3 separate API calls
+      const allStatusesData = await projectStatusService.getAllStatuses();
+      const fetchTime = performance.now() - startTime;
+      
       // Only update state if component is still mounted
       if (!mountedRef.current) {
         return;
       }
 
+      // Process data locally instead of making additional API calls
+      let active, inactive, all;
+      
+      if (allStatusesData && typeof allStatusesData === 'object' && !Array.isArray(allStatusesData)) {
+        // New structure: {activeStatuses: [...], inactiveStatuses: [...]}
+        active = allStatusesData.activeStatuses?.map(status => status.text) || [];
+        inactive = allStatusesData.inactiveStatuses?.map(status => status.text) || [];
+        all = allStatusesData;
+      } else {
+        // Fallback to old structure (array)
+        active = allStatusesData
+          .filter(status => status.isActiveStatus === true)
+          .map(status => status.text)
+          .sort();
+        inactive = allStatusesData
+          .filter(status => status.isActiveStatus === false)
+          .map(status => status.text)
+          .sort();
+        all = allStatusesData.sort((a, b) => a.text.localeCompare(b.text));
+      }
+
       console.log("Raw status data from backend:", { active, inactive, all });
+      console.log(`⚡ Status fetch optimized: 1 API call in ${fetchTime.toFixed(2)}ms (was 3 calls)`);
 
       // Use hardcoded colors for fast loading (these are synced with database)
       // This prevents the need to fetch colors from database every time

@@ -136,10 +136,11 @@ const Dashboard = () => {
 
   // Load user preferences from database
   useEffect(() => {
+    const DEBUG_PREFS = false; // Set to true to enable preference loading logs
     const loadUserPreferences = async () => {
       try {
         const response = await userPreferencesService.getPreferences();
-        console.log("Loaded user preferences:", response.data);
+        if (DEBUG_PREFS) console.log("Loaded user preferences:", response.data);
 
         if (response.data?.dashboard) {
           const dashboardPrefs = response.data.dashboard;
@@ -150,10 +151,12 @@ const Dashboard = () => {
             Array.isArray(dashboardPrefs.widgetOrder) &&
             dashboardPrefs.widgetOrder.length > 0
           ) {
-            console.log(
-              "Loading widget order from preferences:",
-              dashboardPrefs.widgetOrder
-            );
+            if (DEBUG_PREFS) {
+              console.log(
+                "Loading widget order from preferences:",
+                dashboardPrefs.widgetOrder
+              );
+            }
 
             // Map old status-based IDs to new widget IDs
             const idMapping = {
@@ -173,13 +176,17 @@ const Dashboard = () => {
 
             // Remove duplicates while preserving order
             const uniqueOrder = [...new Set(mappedOrder)];
-            console.log("Mapped widget order:", mappedOrder);
-            console.log("Unique widget order:", uniqueOrder);
+            if (DEBUG_PREFS) {
+              console.log("Mapped widget order:", mappedOrder);
+              console.log("Unique widget order:", uniqueOrder);
+            }
             setWidgetOrder(uniqueOrder);
           } else {
-            console.log(
-              "No valid widget order in preferences, keeping default"
-            );
+            if (DEBUG_PREFS) {
+              console.log(
+                "No valid widget order in preferences, keeping default"
+              );
+            }
           }
 
           // Load visible widgets - only if they exist in preferences
@@ -187,7 +194,7 @@ const Dashboard = () => {
             const prefs = { ...dashboardPrefs.visibleWidgets };
             // Ensure daily timesheet is always enabled (required widget)
             prefs.dailyTimesheet = true;
-            console.log("Setting visible widgets from preferences:", prefs);
+            if (DEBUG_PREFS) console.log("Setting visible widgets from preferences:", prefs);
 
             // Get current state (may have localStorage values or initial state)
             const currentWidgets = visibleWidgets;
@@ -223,16 +230,18 @@ const Dashboard = () => {
                   dailyTimesheet: true, // Always ensure dailyTimesheet is true
                 };
 
-            console.log("Merged visible widgets (current + prefs):", {
-              prefsHasAllKeys,
-              currentWidgets,
-              prefs,
-              merged,
-            });
+            if (DEBUG_PREFS) {
+              console.log("Merged visible widgets (current + prefs):", {
+                prefsHasAllKeys,
+                currentWidgets,
+                prefs,
+                merged,
+              });
+            }
             setVisibleWidgets(merged);
           } else {
             // No preferences found - use default state (only dailyTimesheet enabled)
-            console.log("No widget preferences found, using defaults");
+            if (DEBUG_PREFS) console.log("No widget preferences found, using defaults");
             setVisibleWidgets({
               dailyTimesheet: true,
               inProgress: false,
@@ -247,7 +256,7 @@ const Dashboard = () => {
           }
         } else {
           // No dashboard preferences found - use default state
-          console.log("No dashboard preferences found, using defaults");
+          if (DEBUG_PREFS) console.log("No dashboard preferences found, using defaults");
           setVisibleWidgets({
             dailyTimesheet: true,
             inProgress: false,
@@ -292,7 +301,7 @@ const Dashboard = () => {
               dailyTimesheet: true, // Force daily timesheet to always be true
             };
 
-            console.log("Using localStorage fallback:", merged);
+            if (DEBUG_PREFS) console.log("Using localStorage fallback:", merged);
             setVisibleWidgets(merged);
           } catch (parseError) {
             console.error(
@@ -520,30 +529,33 @@ const Dashboard = () => {
     }
   }, [visibleWidgets.dailyTimesheet]);
 
-  // Debug: Log when visibleWidgets changes
-  useEffect(() => {
-    console.log("visibleWidgets changed:", visibleWidgets);
-    console.log(
-      "Visible count:",
-      Object.values(visibleWidgets).filter(Boolean).length
-    );
-    console.log(
-      "All widgets state:",
-      Object.entries(visibleWidgets)
-        .map(([key, val]) => `${key}: ${val}`)
-        .join(", ")
-    );
-  }, [visibleWidgets]);
+  // Debug: Log when visibleWidgets changes (disabled for performance)
+  // useEffect(() => {
+  //   console.log("visibleWidgets changed:", visibleWidgets);
+  //   console.log(
+  //     "Visible count:",
+  //     Object.values(visibleWidgets).filter(Boolean).length
+  //   );
+  //   console.log(
+  //     "All widgets state:",
+  //     Object.entries(visibleWidgets)
+  //       .map(([key, val]) => `${key}: ${val}`)
+  //       .join(", ")
+  //   );
+  // }, [visibleWidgets]);
 
   // Get ordered and visible widgets - limit to 3 additional widgets + daily timesheet = 4 total
   const displayWidgets = useMemo(() => {
-    console.log("displayWidgets useMemo running with:", {
-      widgetOrder,
-      visibleWidgets,
-      gridItemsLength: gridItems.length,
-    });
-    console.log("visibleWidgets keys:", Object.keys(visibleWidgets));
-    console.log("visibleWidgets values:", Object.values(visibleWidgets));
+    const DEBUG = false; // Set to true to enable verbose widget debugging
+    if (DEBUG) {
+      console.log("displayWidgets useMemo running with:", {
+        widgetOrder,
+        visibleWidgets,
+        gridItemsLength: gridItems.length,
+      });
+      console.log("visibleWidgets keys:", Object.keys(visibleWidgets));
+      console.log("visibleWidgets values:", Object.values(visibleWidgets));
+    }
 
     // First, ensure we have valid widget IDs
     const validWidgetIds = gridItems.map((item) => item.id);
@@ -562,60 +574,70 @@ const Dashboard = () => {
       (id) => !orderToUse.includes(id)
     );
     if (missingVisibleWidgets.length > 0) {
-      console.log(
-        "Adding missing visible widgets to order:",
-        missingVisibleWidgets
-      );
+      if (DEBUG) {
+        console.log(
+          "Adding missing visible widgets to order:",
+          missingVisibleWidgets
+        );
+      }
       orderToUse = [...orderToUse, ...missingVisibleWidgets];
     }
 
-    console.log("Display widgets calculation:", {
-      validWidgetIds,
-      filteredOrder,
-      orderToUse,
-      widgetOrder,
-      visibleWidgets,
-      gridItems: gridItems.map((item) => ({ id: item.id, title: item.title })),
-      allActiveInValidIds: validWidgetIds.includes("allActive"),
-      allActiveInOrder: widgetOrder.includes("allActive"),
-      allActiveVisible: visibleWidgets.allActive,
-      allActiveInFinalOrder: orderToUse.includes("allActive"),
-    });
+    if (DEBUG) {
+      console.log("Display widgets calculation:", {
+        validWidgetIds,
+        filteredOrder,
+        orderToUse,
+        widgetOrder,
+        visibleWidgets,
+        gridItems: gridItems.map((item) => ({ id: item.id, title: item.title })),
+        allActiveInValidIds: validWidgetIds.includes("allActive"),
+        allActiveInOrder: widgetOrder.includes("allActive"),
+        allActiveVisible: visibleWidgets.allActive,
+        allActiveInFinalOrder: orderToUse.includes("allActive"),
+      });
+    }
 
     // Map and filter widgets, then limit to first 4 (1 required + up to 3 additional)
     const result = orderToUse
       .map((id) => {
         const item = gridItems.find((item) => item.id === id);
-        console.log(`Mapping ${id}:`, { item, isVisible: visibleWidgets[id] });
+        if (DEBUG) {
+          console.log(`Mapping ${id}:`, { item, isVisible: visibleWidgets[id] });
+        }
         return item;
       })
       .filter(Boolean)
       .filter((item) => {
         const isVisible = visibleWidgets[item.id];
-        console.log(`Filtering ${item.id}:`, {
-          isVisible,
-          willShow: isVisible,
-        });
+        if (DEBUG) {
+          console.log(`Filtering ${item.id}:`, {
+            isVisible,
+            willShow: isVisible,
+          });
+        }
         return isVisible;
       })
       .slice(0, 4); // Only show first 4 widgets (1 required + up to 3 additional)
 
-    console.log(
-      "Final display widgets:",
-      result.map((item) => ({ id: item.id, title: item.title }))
-    );
-    console.log("displayWidgets length:", result.length);
+    if (DEBUG) {
+      console.log(
+        "Final display widgets:",
+        result.map((item) => ({ id: item.id, title: item.title }))
+      );
+      console.log("displayWidgets length:", result.length);
+    }
     return result;
   }, [widgetOrder, gridItems, visibleWidgets]);
 
-  // Debug: Test without useMemo
-  const debugDisplayWidgets = gridItems.filter(
-    (item) => visibleWidgets[item.id]
-  );
-  console.log(
-    "Debug display widgets (no useMemo):",
-    debugDisplayWidgets.map((item) => ({ id: item.id, title: item.title }))
-  );
+  // Debug: Test without useMemo (disabled for performance)
+  // const debugDisplayWidgets = gridItems.filter(
+  //   (item) => visibleWidgets[item.id]
+  // );
+  // console.log(
+  //   "Debug display widgets (no useMemo):",
+  //   debugDisplayWidgets.map((item) => ({ id: item.id, title: item.title }))
+  // );
 
   const handleCardClick = (item) => {
     if (typeof item.onClick === "function") {
@@ -624,18 +646,18 @@ const Dashboard = () => {
   };
 
   const handleWidgetToggle = async (widgetId) => {
-    console.log("Toggling widget:", widgetId);
+    // console.log("Toggling widget:", widgetId);
 
     const isCurrentlyVisible = visibleWidgets[widgetId];
     const currentVisibleCount =
       Object.values(visibleWidgets).filter(Boolean).length;
-    console.log("Current state:", visibleWidgets);
-    console.log("Is currently visible:", isCurrentlyVisible);
-    console.log("Current visible count:", currentVisibleCount);
+    // console.log("Current state:", visibleWidgets);
+    // console.log("Is currently visible:", isCurrentlyVisible);
+    // console.log("Current visible count:", currentVisibleCount);
 
     // Prevent disabling the daily timesheet widget (it's required)
     if (widgetId === "dailyTimesheet" && isCurrentlyVisible) {
-      console.log("Cannot disable required daily timesheet widget");
+      // console.log("Cannot disable required daily timesheet widget");
       return; // Exit early - cannot disable required widget
     }
 
@@ -1116,13 +1138,14 @@ const Dashboard = () => {
                 // Can toggle if: already checked (can uncheck) OR not at limit of 4 total widgets
                 const canToggle = isChecked || currentCount < 4;
 
-                console.log(`Widget ${item.id}:`, {
-                  isChecked,
-                  currentCount,
-                  canToggle,
-                  visibleWidgetsValue: visibleWidgets[item.id],
-                  widgetState: visibleWidgets,
-                });
+                // Disabled for performance
+                // console.log(`Widget ${item.id}:`, {
+                //   isChecked,
+                //   currentCount,
+                //   canToggle,
+                //   visibleWidgetsValue: visibleWidgets[item.id],
+                //   widgetState: visibleWidgets,
+                // });
 
                 return (
                   <FormControlLabel

@@ -4,8 +4,9 @@ import axios from 'axios';
 const config = {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
-  defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api",
-  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api")
+  // Use 127.0.0.1 instead of localhost to avoid DNS resolution delays on Windows
+  defaultUrl: process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-backend-docker.onrender.com/api",
+  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-backend-docker.onrender.com/api")
 };
 // Create axios instance
 const api = axios.create({
@@ -13,8 +14,12 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
     "X-App-Version": process.env.REACT_APP_VERSION || "1.0.0",
+    // Note: "Connection: keep-alive" is blocked by browsers for security
+    // HTTP keep-alive is handled automatically by the browser
   },
-  withCredentials: true
+  withCredentials: true,
+  // Increase timeout for slow networks, but don't wait forever
+  timeout: 30000  // 30 seconds
 });
 
 // Add request interceptor
