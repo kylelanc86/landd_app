@@ -3,29 +3,15 @@ const router = express.Router();
 const Invoice = require('../models/Invoice');
 const auth = require('../middleware/auth');
 
-// Get all invoices
+// Get all invoices - only draft and awaiting_approval
 router.get('/', auth, async (req, res) => {
   try {
-    console.log('Fetching all invoices from MongoDB...');
-    
-    // First, let's check the total count without any limits
-    const totalCount = await Invoice.countDocuments({ isDeleted: { $ne: true } });
-    console.log(`Total invoices in database (count): ${totalCount}`);
-    
-    // Let's also check the total count including deleted invoices
-    const totalCountIncludingDeleted = await Invoice.countDocuments({});
-    console.log(`Total invoices in database (including deleted): ${totalCountIncludingDeleted}`);
-    
-    // Let's check how many have xeroInvoiceId
-    const xeroInvoicesCount = await Invoice.countDocuments({ 
+    // Only fetch draft and awaiting_approval invoices for the main invoices page
+    const invoices = await Invoice.find({ 
       isDeleted: { $ne: true },
-      xeroInvoiceId: { $exists: true, $ne: null }
-    });
-    console.log(`Invoices with xeroInvoiceId: ${xeroInvoicesCount}`);
-    
-    const invoices = await Invoice.find({ isDeleted: { $ne: true } })
+      status: { $in: ['draft', 'awaiting_approval'] }
+    })
       .sort({ createdAt: -1 }) // Show newest invoices first
-      .limit(10000) // Explicitly set a high limit to ensure we get all invoices
       .populate({
         path: 'projectId',
         select: 'name projectID',
@@ -37,15 +23,8 @@ router.get('/', auth, async (req, res) => {
       .populate({
         path: 'client',
         select: 'name'
-      });
-
-    console.log(`Total invoices found in database (query result): ${invoices.length}`);
-    console.log(`First few invoice IDs:`, invoices.slice(0, 5).map(inv => inv.invoiceID));
-    console.log(`Last few invoice IDs:`, invoices.slice(-5).map(inv => inv.invoiceID));
-    
-    if (totalCount !== invoices.length) {
-      console.warn(`WARNING: Count mismatch! Total count: ${totalCount}, Query result: ${invoices.length}`);
-    }
+      })
+      .lean(); // Use lean() for better performance
 
     res.json(invoices);
   } catch (err) {
@@ -71,8 +50,6 @@ router.get('/:id', auth, async (req, res) => {
 
 // Create invoice
 router.post('/', auth, async (req, res) => {
-  console.log('Received invoice creation request with data:', JSON.stringify(req.body, null, 2));
-  
   try {
     const invoice = new Invoice({
       invoiceID: req.body.invoiceID,
@@ -87,11 +64,8 @@ router.post('/', auth, async (req, res) => {
       xeroClientName: req.body.xeroClientName,
       xeroReference: req.body.xeroReference
     });
-
-    console.log('Created invoice instance:', JSON.stringify(invoice.toObject(), null, 2));
     
     const newInvoice = await invoice.save();
-    console.log('Invoice saved successfully:', JSON.stringify(newInvoice.toObject(), null, 2));
     
     const populatedInvoice = await Invoice.findById(newInvoice._id)
       .populate('projectId', 'name')
@@ -99,10 +73,6 @@ router.post('/', auth, async (req, res) => {
     res.status(201).json(populatedInvoice);
   } catch (err) {
     console.error('Error saving invoice:', err);
-    // Log detailed validation errors
-    if (err.errors) {
-      console.error('Validation errors:', JSON.stringify(err.errors, null, 2));
-    }
     
     // Check for specific error types
     if (err.name === 'ValidationError') {
@@ -196,7 +166,6 @@ router.delete('/:id/hard', auth, async (req, res) => {
     
     // Note: Xero invoices can be hard deleted from the app
     // They will remain in Xero but be removed from the app database
-    console.log('Hard deleting invoice:', invoice.invoiceID, 'Xero ID:', invoice.xeroInvoiceId);
     
     // Use findByIdAndDelete instead of deprecated remove() method
     await Invoice.findByIdAndDelete(req.params.id);
