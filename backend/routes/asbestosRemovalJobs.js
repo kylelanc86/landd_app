@@ -8,6 +8,7 @@ const checkPermission = require("../middleware/checkPermission");
 // Get all asbestos removal jobs with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
+    const routeStart = performance.now();
     const { page = 1, limit = 1000, status, excludeStatus, projectId, sortBy = "createdAt", sortOrder = "desc", minimal } = req.query;
 
     const filter = {};
@@ -35,8 +36,16 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
 
+    const metrics = {
+      filter,
+      sortBy,
+      minimal: minimal === "true" || minimal === true,
+      timings: {},
+    };
+
     // If minimal=true, only fetch fields needed for table display
     if (minimal === "true" || minimal === true) {
+      const queryStart = performance.now();
       const jobs = await AsbestosRemovalJob.find(filter)
         .select(
           "_id projectId projectName client asbestosRemovalist status airMonitoring clearance jobType"
@@ -50,8 +59,21 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
         .skip((page - 1) * limit)
         .lean()
         .exec();
+      metrics.timings.find = `${(performance.now() - queryStart).toFixed(2)}ms`;
 
+      const countStart = performance.now();
       const count = await AsbestosRemovalJob.countDocuments(filter);
+      metrics.timings.count = `${(performance.now() - countStart).toFixed(2)}ms`;
+
+      metrics.timings.total = `${(performance.now() - routeStart).toFixed(
+        2
+      )}ms`;
+
+      console.log("[AsbestosRemovalJobs] Minimal fetch metrics:", {
+        ...metrics,
+        count,
+        resultSize: jobs.length,
+      });
 
       return res.json({
         jobs,
@@ -79,6 +101,13 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
       .exec();
 
     const count = await AsbestosRemovalJob.countDocuments(filter);
+
+    metrics.timings.total = `${(performance.now() - routeStart).toFixed(2)}ms`;
+    console.log("[AsbestosRemovalJobs] Full fetch metrics:", {
+      ...metrics,
+      resultSize: jobs.length,
+      count,
+    });
 
     res.json({
       jobs,
