@@ -201,35 +201,17 @@ const ProjectReports = () => {
         if (airMonitoringResponse.ok) {
           const airMonitoringReports = await airMonitoringResponse.json();
           hasAirMonitoring =
-            airMonitoringReports && airMonitoringReports.length > 0;
+            Array.isArray(airMonitoringReports) &&
+            airMonitoringReports.length > 0;
         }
 
         // Check clearances
         const { default: asbestosClearanceService } = await import(
           "../../services/asbestosClearanceService"
         );
-        const { default: asbestosRemovalJobService } = await import(
-          "../../services/asbestosRemovalJobService"
-        );
-
-        // Check if there are ANY asbestos removal jobs for this project (not just completed)
-        const allJobsResponse = await asbestosRemovalJobService.getAll();
-        const allJobs = allJobsResponse.jobs || allJobsResponse.data || [];
-        const hasAnyJobs = allJobs.some(
-          (job) =>
-            job.projectId === projectId || job.projectId?._id === projectId
-        );
-
-        // Check if there are completed asbestos removal jobs
-        const completedJobs = allJobs.filter(
-          (job) =>
-            (job.projectId === projectId || job.projectId?._id === projectId) &&
-            job.status === "completed"
-        );
-        const hasCompletedJobs = completedJobs.length > 0;
 
         let hasClearances = false;
-        if (hasCompletedJobs) {
+        try {
           const clearancesResponse = await asbestosClearanceService.getAll();
           let projectClearances = [];
 
@@ -251,10 +233,12 @@ const ProjectReports = () => {
           }
 
           hasClearances = projectClearances.length > 0;
+        } catch (clearanceError) {
+          console.log("No asbestos clearance reports found");
         }
 
-        // If there are any asbestos removal jobs for this project OR air monitoring reports OR clearances, show the category
-        if (hasAnyJobs || hasAirMonitoring || hasClearances) {
+        // Only show the category when there are actual reports to display
+        if (hasAirMonitoring || hasClearances) {
           available.push("asbestos-removal-jobs");
         }
       } catch (error) {
@@ -270,29 +254,8 @@ const ProjectReports = () => {
           Array.isArray(fibreIdReports) &&
           fibreIdReports.length > 0;
 
-        // Also check if there are ANY client supplied jobs for this project (not just completed)
-        const clientSuppliedJobsResponse = await fetch(
-          `${
-            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-          }/client-supplied-jobs/by-project/${projectId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          }
-        );
-
-        let hasAnyClientSuppliedJobs = false;
-        if (clientSuppliedJobsResponse.ok) {
-          const clientSuppliedJobsData =
-            await clientSuppliedJobsResponse.json();
-          const jobs =
-            clientSuppliedJobsData.data || clientSuppliedJobsData || [];
-          hasAnyClientSuppliedJobs = Array.isArray(jobs) && jobs.length > 0;
-        }
-
-        // Show the category if there are completed reports OR any client supplied jobs
-        if (hasCompletedReports || hasAnyClientSuppliedJobs) {
+        // Show the category only when there are completed reports to display
+        if (hasCompletedReports) {
           available.push("fibre-id");
         }
       } catch (error) {
@@ -612,6 +575,12 @@ const ProjectReports = () => {
     if (!selectedCategory || !projectId) return;
     loadReports();
   }, [selectedCategory, projectId, loadReports]);
+
+  useEffect(() => {
+    if (selectedCategory && !availableCategories.includes(selectedCategory)) {
+      setSelectedCategory(null);
+    }
+  }, [availableCategories, selectedCategory]);
 
   const handleViewReport = async (report) => {
     try {

@@ -608,10 +608,6 @@ const ClientSuppliedJobs = () => {
             <Typography variant="h4" component="h1" gutterBottom>
               Client Supplied Jobs
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              View and manage client supplied jobs for fibre identification
-              analysis
-            </Typography>
           </Box>
           <Button
             variant="contained"
@@ -622,24 +618,6 @@ const ClientSuppliedJobs = () => {
           >
             Add New Job
           </Button>
-        </Box>
-
-        {/* Search Bar */}
-        <Box sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search by project name, client, or project ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
         </Box>
 
         {/* Jobs Table */}

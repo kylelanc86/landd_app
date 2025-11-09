@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   Button,
   Chip,
@@ -27,6 +25,7 @@ import {
   Select,
   MenuItem,
   Autocomplete,
+  Container,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import CloseIcon from "@mui/icons-material/Close";
@@ -118,6 +117,18 @@ const AsbestosRemoval = () => {
       // Ensure jobs is an array before processing
       if (!Array.isArray(jobs)) {
         console.error("Jobs is not an array:", jobs);
+        setAsbestosRemovalJobs([]);
+        return;
+      }
+
+      // Early exit when no jobs are present to avoid unnecessary downstream fetches
+      if (jobs.length === 0) {
+        const elapsed = performance.now() - startTime;
+        console.log(
+          `[Asbestos Removal] No active asbestos removal jobs found; skipping additional data fetches (elapsed ${elapsed.toFixed(
+            2
+          )}ms)`
+        );
         setAsbestosRemovalJobs([]);
         return;
       }
@@ -535,83 +546,84 @@ const AsbestosRemoval = () => {
   };
 
   return (
-    <Box m="20px">
-      <Typography variant="h3" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Asbestos Removal Jobs
-      </Typography>
-
-      {/* Action Button */}
-      <Box display="flex" gap={2} mb={3}>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateAsbestosRemovalJob}
+    <Container maxWidth="xl">
+      <Box sx={{ mt: 4, mb: 4 }}>
+        <Box
           sx={{
-            backgroundColor: colors.primary[700],
-            color: colors.grey[100],
-            "&:hover": {
-              backgroundColor: colors.primary[800],
-            },
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: { xs: "stretch", sm: "center" },
+            flexDirection: { xs: "column", sm: "row" },
+            gap: 2,
+            mb: 3,
           }}
         >
-          New Asbestos Removal Job
-        </Button>
-      </Box>
-
-      {/* Asbestos Removal Jobs Table */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Active Asbestos Removal Jobs
+          <Typography variant="h4" component="h1" gutterBottom>
+            Asbestos Removal Jobs
           </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleCreateAsbestosRemovalJob}
+            sx={{
+              minWidth: "220px",
+              backgroundColor: colors.primary[700],
+              color: colors.grey[100],
+              "&:hover": {
+                backgroundColor: colors.primary[800],
+              },
+            }}
+          >
+            New Asbestos Removal Job
+          </Button>
+        </Box>
 
+        <Paper sx={{ width: "100%", overflow: "hidden" }}>
           {loading ? (
-            <Box display="flex" justifyContent="center" p={3}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                p: 4,
+              }}
+            >
               <CircularProgress />
             </Box>
           ) : error ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
+            <Box sx={{ p: 4 }}>
+              <Alert severity="error">{error}</Alert>
+            </Box>
           ) : asbestosRemovalJobs.length === 0 ? (
-            <Typography variant="body1" color="text.secondary" sx={{ p: 3 }}>
-              No active asbestos removal jobs
-            </Typography>
+            <Box sx={{ p: 4 }}>
+              <Typography variant="body1" color="text.secondary">
+                No active asbestos removal jobs
+              </Typography>
+            </Box>
           ) : (
-            <TableContainer component={Paper} variant="outlined">
-              <Table>
+            <TableContainer>
+              <Table stickyHeader>
                 <TableHead>
-                  <TableRow
-                    sx={{ backgroundColor: theme.palette.primary.dark }}
-                  >
-                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
                       Project ID
                     </TableCell>
-                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "240px" }}>
                       Site Name (Project)
                     </TableCell>
-                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "200px" }}>
                       Asbestos Removalist
                     </TableCell>
-                    <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "140px" }}>
                       Status
                     </TableCell>
-                    <TableCell
-                      sx={{
-                        color: "white",
-                        fontWeight: "bold",
-                        maxWidth: "330px",
-                      }}
-                    >
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "200px" }}>
                       Job Type
                     </TableCell>
                     {hasPermission(currentUser, "asbestos.delete") && (
                       <TableCell
-                        sx={{
-                          color: "white",
-                          fontWeight: "bold",
-                          width: "100px",
-                        }}
+                        sx={{ fontWeight: "bold", width: "120px" }}
+                        align="center"
                       >
                         Actions
                       </TableCell>
@@ -626,9 +638,24 @@ const AsbestosRemoval = () => {
                       onClick={() => handleRowClick(job)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>{job.projectID}</TableCell>
-                      <TableCell>{job.projectName}</TableCell>
-                      <TableCell>{job.asbestosRemovalist}</TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: "medium" }}
+                        >
+                          {job.projectID}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {job.projectName}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {job.asbestosRemovalist}
+                        </Typography>
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={formatStatusLabel(job.status)}
@@ -639,7 +666,7 @@ const AsbestosRemoval = () => {
                           }}
                         />
                       </TableCell>
-                      <TableCell sx={{ maxWidth: "330px" }}>
+                      <TableCell>
                         <Chip
                           label={job.jobType}
                           size="small"
@@ -650,7 +677,7 @@ const AsbestosRemoval = () => {
                         />
                       </TableCell>
                       {hasPermission(currentUser, "asbestos.delete") && (
-                        <TableCell>
+                        <TableCell align="center">
                           <Tooltip title="Delete Job">
                             <IconButton
                               onClick={(event) => handleDeleteClick(event, job)}
@@ -674,8 +701,8 @@ const AsbestosRemoval = () => {
               </Table>
             </TableContainer>
           )}
-        </CardContent>
-      </Card>
+        </Paper>
+      </Box>
 
       {/* Create Asbestos Removal Job Modal */}
       <Dialog
@@ -839,7 +866,7 @@ const AsbestosRemoval = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   );
 };
 

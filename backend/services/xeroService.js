@@ -29,6 +29,95 @@ const SYNC_CONFIG = {
 };
 
 class XeroService {
+  // Map Xero statuses to application statuses
+  static mapXeroStatus(xeroStatus) {
+    if (!xeroStatus || typeof xeroStatus !== 'string') {
+      return 'unpaid';
+    }
+
+    const status = xeroStatus.toUpperCase();
+    switch (status) {
+      case 'PAID':
+        return 'paid';
+      case 'AUTHORISED':
+        return 'unpaid';
+      case 'SUBMITTED':
+        return 'awaiting_approval';
+      case 'DRAFT':
+        return 'draft';
+      case 'VOIDED':
+      case 'DELETED':
+      default:
+        return 'unpaid';
+    }
+  }
+
+  // Normalize Xero date values to JavaScript Date objects
+  static parseXeroDate(dateValue, fallbackDate = new Date()) {
+    if (!dateValue) {
+      return fallbackDate;
+    }
+
+    if (dateValue instanceof Date) {
+      return dateValue;
+    }
+
+    if (typeof dateValue === 'number') {
+      const dateFromNumber = new Date(dateValue);
+      if (!Number.isNaN(dateFromNumber.getTime())) {
+        return dateFromNumber;
+      }
+    }
+
+    if (typeof dateValue === 'string') {
+      const xeroMatch = dateValue.match(/\/Date\((\d+)([+-]\d{4})?\)\//);
+      if (xeroMatch) {
+        const timestamp = parseInt(xeroMatch[1], 10);
+        const dateFromTimestamp = new Date(timestamp);
+        if (!Number.isNaN(dateFromTimestamp.getTime())) {
+          return dateFromTimestamp;
+        }
+      }
+
+      const isoMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (isoMatch) {
+        const year = parseInt(isoMatch[1], 10);
+        const month = parseInt(isoMatch[2], 10) - 1;
+        const day = parseInt(isoMatch[3], 10);
+        const isoDate = new Date(year, month, day);
+        if (!Number.isNaN(isoDate.getTime())) {
+          return isoDate;
+        }
+      }
+
+      const parsedDate = new Date(dateValue);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        return parsedDate;
+      }
+
+      const isoStringDate = new Date(`${dateValue}T00:00:00`);
+      if (!Number.isNaN(isoStringDate.getTime())) {
+        return isoStringDate;
+      }
+
+      const parts = dateValue.split('/');
+      if (parts.length === 3) {
+        const [first, second, third] = parts.map((value) => parseInt(value, 10));
+        const ddmmyyyy = new Date(third, second - 1, first);
+        if (!Number.isNaN(ddmmyyyy.getTime())) {
+          return ddmmyyyy;
+        }
+
+        const mmddyyyy = new Date(third, first - 1, second);
+        if (!Number.isNaN(mmddyyyy.getTime())) {
+          return mmddyyyy;
+        }
+      }
+    }
+
+    return fallbackDate;
+  }
+
   // Get authorization URL
   static async getAuthUrl() {
     try {
@@ -311,6 +400,32 @@ class XeroService {
           console.error(`Full error:`, error);
         }
       }
+
+      // After processing, refresh any local invoices that are no longer awaiting approval in Xero
+      const syncedXeroInvoiceIds = [...new Set(validInvoices.map((invoice) => invoice.InvoiceID).filter(Boolean))];
+      const invoicesNeedingRefresh = await Invoice.find({
+        status: 'awaiting_approval',
+        isDeleted: { $ne: true },
+        xeroInvoiceId: { $exists: true, $ne: null, $nin: syncedXeroInvoiceIds }
+      }).select('_id invoiceID xeroInvoiceId');
+
+      if (invoicesNeedingRefresh.length > 0) {
+        console.log(`Refreshing ${invoicesNeedingRefresh.length} invoices no longer awaiting approval in Xero...`);
+        let refreshedCount = 0;
+
+        for (const invoice of invoicesNeedingRefresh) {
+          try {
+            await this.syncInvoiceStatus(invoice._id);
+            refreshedCount++;
+          } catch (refreshError) {
+            console.error(`Error refreshing invoice ${invoice.invoiceID}:`, refreshError.message);
+          }
+        }
+
+        console.log(`Finished refreshing invoices. Updated ${refreshedCount}/${invoicesNeedingRefresh.length}.`);
+      } else {
+        console.log('No awaiting approval invoices required refresh after sync.');
+      }
       
       console.log(`Invoice sync completed. Processed: ${processedCount}, Errors: ${errorCount}`);
       console.log('Successfully processed invoice numbers:', processedInvoices.sort());
@@ -403,10 +518,64 @@ class XeroService {
         throw new Error(`Xero API call failed: ${response.status} ${response.statusText}`);
       }
       
-      const xeroInvoice = await response.json();
+      const responseData = await response.json();
+      const xeroInvoice = responseData?.Invoices?.[0] || responseData;
+      
+      if (!xeroInvoice || !xeroInvoice.Status) {
+        throw new Error('Invalid invoice data returned from Xero');
+      }
 
-      // Update local invoice status based on Xero status
-      invoice.status = xeroInvoice.Status === 'PAID' ? 'paid' : 'unpaid';
+      const newStatus = this.mapXeroStatus(xeroInvoice.Status);
+      let hasChanges = false;
+
+      if (invoice.status !== newStatus) {
+        invoice.status = newStatus;
+        hasChanges = true;
+      }
+
+      if (invoice.xeroStatus !== xeroInvoice.Status) {
+        invoice.xeroStatus = xeroInvoice.Status;
+        hasChanges = true;
+      }
+
+      if (typeof xeroInvoice.Total === 'number' && invoice.amount !== xeroInvoice.Total) {
+        invoice.amount = xeroInvoice.Total;
+        hasChanges = true;
+      }
+
+      if (xeroInvoice.Date) {
+        const parsedDate = this.parseXeroDate(xeroInvoice.Date, invoice.date);
+        if (parsedDate && (!invoice.date || invoice.date.getTime() !== parsedDate.getTime())) {
+          invoice.date = parsedDate;
+          hasChanges = true;
+        }
+      }
+
+      if (xeroInvoice.DueDate) {
+        const parsedDueDate = this.parseXeroDate(xeroInvoice.DueDate, invoice.dueDate);
+        if (parsedDueDate && (!invoice.dueDate || invoice.dueDate.getTime() !== parsedDueDate.getTime())) {
+          invoice.dueDate = parsedDueDate;
+          hasChanges = true;
+        }
+      }
+
+      const lineItemDescription = xeroInvoice.LineItems?.[0]?.Description;
+      if (lineItemDescription && invoice.description !== lineItemDescription) {
+        invoice.description = lineItemDescription;
+        hasChanges = true;
+      }
+
+      if (xeroInvoice.Reference && invoice.xeroReference !== xeroInvoice.Reference) {
+        invoice.xeroReference = xeroInvoice.Reference;
+        hasChanges = true;
+      }
+
+      if (xeroInvoice.Contact?.Name && invoice.xeroClientName !== xeroInvoice.Contact.Name) {
+        invoice.xeroClientName = xeroInvoice.Contact.Name;
+        hasChanges = true;
+      }
+
+      invoice.lastSynced = new Date();
       await invoice.save();
 
       return invoice;
@@ -550,106 +719,16 @@ class XeroService {
 
       // Helper function to parse Xero dates with fallback
       const parseXeroDate = (dateValue, fallbackDate = new Date()) => {
-        if (!dateValue) {
-          console.log('No date value provided, using fallback');
+        console.log('Parsing date value:', dateValue, 'Type:', typeof dateValue);
+        const parsedDate = this.parseXeroDate(dateValue, fallbackDate);
+        if (!parsedDate || isNaN(parsedDate.getTime())) {
+          console.warn('Could not parse date, using fallback:', dateValue);
           return fallbackDate;
         }
-        
-        console.log('Parsing date value:', dateValue, 'Type:', typeof dateValue);
-        
-        // If it's already a Date object, return it
-        if (dateValue instanceof Date) {
-          console.log('Date is already a Date object');
-          return dateValue;
+        if (parsedDate === fallbackDate && dateValue) {
+          console.warn('Parsed date matched fallback value for:', dateValue);
         }
-        
-        // If it's a string, try to parse it
-        if (typeof dateValue === 'string') {
-          // 1. Try parsing Xero's /Date(1234567890000+0000)/ format
-          const xeroDateMatch = dateValue.match(/\/Date\((\d+)([+-]\d{4})?\)\//);
-          if (xeroDateMatch) {
-            const timestamp = parseInt(xeroDateMatch[1]);
-            const dateObj = new Date(timestamp);
-            if (!isNaN(dateObj.getTime())) {
-              console.log('Successfully parsed Xero date format:', dateObj);
-              return dateObj;
-            }
-          }
-          
-          // 2. Try parsing ISO date format (2024-01-15T00:00:00)
-          const isoDateMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
-          if (isoDateMatch) {
-            const year = parseInt(isoDateMatch[1]);
-            const month = parseInt(isoDateMatch[2]) - 1; // Month is 0-indexed
-            const day = parseInt(isoDateMatch[3]);
-            const dateObj = new Date(year, month, day);
-            if (!isNaN(dateObj.getTime())) {
-              console.log('Successfully parsed ISO date format:', dateObj);
-              return dateObj;
-            }
-          }
-          
-          // 3. Try standard Date parsing
-          const parsed = new Date(dateValue);
-          if (!isNaN(parsed.getTime())) {
-            console.log('Successfully parsed date:', parsed);
-            return parsed;
-          }
-          
-          // 4. Try parsing as ISO string without timezone
-          const isoParsed = new Date(dateValue + 'T00:00:00');
-          if (!isNaN(isoParsed.getTime())) {
-            console.log('Successfully parsed ISO date:', isoParsed);
-            return isoParsed;
-          }
-          
-          // 5. Try parsing as DD/MM/YYYY format
-          const dateParts = dateValue.split('/');
-          if (dateParts.length === 3) {
-            const day = parseInt(dateParts[0]);
-            const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed
-            const year = parseInt(dateParts[2]);
-            const dateObj = new Date(year, month, day);
-            if (!isNaN(dateObj.getTime())) {
-              console.log('Successfully parsed DD/MM/YYYY date:', dateObj);
-              return dateObj;
-            }
-          }
-          
-          // 6. Try parsing as MM/DD/YYYY format
-          if (dateParts.length === 3) {
-            const month = parseInt(dateParts[0]) - 1; // Month is 0-indexed
-            const day = parseInt(dateParts[1]);
-            const year = parseInt(dateParts[2]);
-            const dateObj = new Date(year, month, day);
-            if (!isNaN(dateObj.getTime())) {
-              console.log('Successfully parsed MM/DD/YYYY date:', dateObj);
-              return dateObj;
-            }
-          }
-        }
-        
-        console.warn('Could not parse date, using fallback:', dateValue);
-        return fallbackDate;
-      };
-
-      // Helper function to map Xero status to our status
-      const mapXeroStatus = (xeroStatus) => {
-        console.log('Mapping Xero status:', xeroStatus);
-        switch (xeroStatus?.toUpperCase()) {
-          case 'PAID':
-            return 'paid';
-          case 'AUTHORISED':
-            return 'unpaid';
-          case 'SUBMITTED':
-            return 'awaiting_approval';
-          case 'DRAFT':
-            return 'draft';
-          case 'VOIDED':
-          case 'DELETED':
-          default:
-            return 'unpaid';
-        }
+        return parsedDate;
       };
 
       // Check if invoice already exists in our database
@@ -704,7 +783,7 @@ class XeroService {
         }
         
         // Check if status changed
-        const newStatus = mapXeroStatus(xeroInvoice.Status);
+        const newStatus = this.mapXeroStatus(xeroInvoice.Status);
         if (existingInvoice.status !== newStatus) {
           console.log('Status changed:', {
             old: existingInvoice.status,
@@ -769,7 +848,7 @@ class XeroService {
       const newInvoice = new Invoice({
         invoiceID: invoiceID,
         amount: xeroInvoice.Total || 0,
-        status: mapXeroStatus(xeroInvoice.Status),
+        status: this.mapXeroStatus(xeroInvoice.Status),
         date: parseXeroDate(xeroInvoice.Date),
         dueDate: parseXeroDate(xeroInvoice.DueDate),
         description: xeroInvoice.LineItems?.[0]?.Description || '',
