@@ -133,6 +133,15 @@ const AsbestosRemoval = () => {
         return;
       }
 
+      // Track timings for per-job queries so we can identify bottlenecks
+      let clearanceTotalTime = 0;
+      let clearanceMaxTime = 0;
+      let shiftTotalTime = 0;
+      let shiftMaxTime = 0;
+      let jobProcessingTotalTime = 0;
+      let jobProcessingMaxTime = 0;
+      const slowJobDetails = [];
+
       // Fetch only active air monitoring jobs (exclude completed/cancelled)
       // Use minimal=true to only fetch projectId for matching (much smaller payload)
       const airMonitoringFetchStart = performance.now();
@@ -178,6 +187,8 @@ const AsbestosRemoval = () => {
       const processedJobs = await Promise.all(
         jobs.map(async (job, index) => {
           const jobStartTime = performance.now();
+          let clearanceElapsed = 0;
+          let shiftElapsed = 0;
           const projectId = job.projectId?._id || job.projectId;
           const jobId = job._id;
 
@@ -187,28 +198,46 @@ const AsbestosRemoval = () => {
           const [clearancesResponse, shiftsResponse] = await Promise.all([
             // Query clearances for this specific project only (limit 1 - we only need to know if any exist)
             projectId
-              ? asbestosClearanceService
-                  .getAll({
-                    projectId: projectId,
-                    limit: 1, // We only need to know if any exist
-                  })
-                  .catch((err) => {
+              ? (async () => {
+                  const clearanceStart = performance.now();
+                  try {
+                    const response = await asbestosClearanceService.getAll({
+                      projectId: projectId,
+                      limit: 1, // We only need to know if any exist
+                    });
+                    clearanceElapsed = performance.now() - clearanceStart;
+                    return response;
+                  } catch (err) {
+                    clearanceElapsed = performance.now() - clearanceStart;
                     console.warn(
-                      `[Asbestos Removal] Clearance query failed for project ${projectId}:`,
+                      `[Asbestos Removal] Clearance query failed for project ${projectId} after ${clearanceElapsed.toFixed(
+                        2
+                      )}ms:`,
                       err
                     );
                     return { clearances: [] };
-                  })
+                  }
+                })()
               : Promise.resolve({ clearances: [] }),
             // Query shifts for this specific job only
             jobId
-              ? shiftService.getByJob(jobId).catch((err) => {
-                  console.warn(
-                    `[Asbestos Removal] Shift query failed for job ${jobId}:`,
-                    err
-                  );
-                  return [];
-                })
+              ? (async () => {
+                  const shiftStart = performance.now();
+                  try {
+                    const response = await shiftService.getByJob(jobId);
+                    shiftElapsed = performance.now() - shiftStart;
+                    return response;
+                  } catch (err) {
+                    shiftElapsed = performance.now() - shiftStart;
+                    console.warn(
+                      `[Asbestos Removal] Shift query failed for job ${jobId} after ${shiftElapsed.toFixed(
+                        2
+                      )}ms:`,
+                      err
+                    );
+                    return [];
+                  }
+                })()
               : Promise.resolve([]),
           ]);
           const queriesTime = performance.now() - queriesStartTime;
@@ -266,6 +295,26 @@ const AsbestosRemoval = () => {
             );
           }
 
+          clearanceTotalTime += clearanceElapsed;
+          clearanceMaxTime = Math.max(clearanceMaxTime, clearanceElapsed);
+          shiftTotalTime += shiftElapsed;
+          shiftMaxTime = Math.max(shiftMaxTime, shiftElapsed);
+          jobProcessingTotalTime += jobProcessingTime;
+          jobProcessingMaxTime = Math.max(
+            jobProcessingMaxTime,
+            jobProcessingTime
+          );
+
+          if (jobProcessingTime > 150) {
+            slowJobDetails.push({
+              jobIndex: index + 1,
+              project: job.projectId?.projectID || "Unknown",
+              jobProcessing: jobProcessingTime.toFixed(2),
+              clearance: clearanceElapsed.toFixed(2),
+              shifts: shiftElapsed.toFixed(2),
+            });
+          }
+
           return {
             id: job._id,
             projectID: job.projectId?.projectID || job.projectID || "Unknown",
@@ -287,6 +336,24 @@ const AsbestosRemoval = () => {
           2
         )}ms`
       );
+      if (jobs.length > 0) {
+        const clearanceAvg = clearanceTotalTime / jobs.length || 0;
+        const shiftAvg = shiftTotalTime / jobs.length || 0;
+        const jobProcessingAvg = jobProcessingTotalTime / jobs.length || 0;
+        console.log("[Asbestos Removal] Per-job timing stats:", {
+          clearanceAvg: `${clearanceAvg.toFixed(2)}ms`,
+          clearanceMax: `${clearanceMaxTime.toFixed(2)}ms`,
+          shiftsAvg: `${shiftAvg.toFixed(2)}ms`,
+          shiftsMax: `${shiftMaxTime.toFixed(2)}ms`,
+          jobProcessingAvg: `${jobProcessingAvg.toFixed(2)}ms`,
+          jobProcessingMax: `${jobProcessingMaxTime.toFixed(2)}ms`,
+          slowJobSamples: slowJobDetails.slice(0, 5),
+          additionalSlowJobs:
+            slowJobDetails.length > 5
+              ? slowJobDetails.length - slowJobDetails.slice(0, 5).length
+              : 0,
+        });
+      }
 
       // Sort by project ID (backend already filtered out completed jobs)
       const sortStart = performance.now();
