@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
@@ -164,165 +164,216 @@ const AsbestosRemovalJobDetails = () => {
     }
   }, []);
 
-  const fetchJobDetails = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const latestFetchIdRef = useRef(0);
 
-    try {
-      // Fetch the asbestos removal job
-      const jobResponse = await asbestosRemovalJobService.getById(jobId);
-      const jobData = jobResponse.data;
-      setJob(jobData);
+  const fetchJobDetails = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!jobId) return;
 
-      // Fetch air monitoring jobs for this project
-      const airMonitoringResponse = await jobService.getAll();
-      const allAirMonitoringJobs =
-        airMonitoringResponse.data || airMonitoringResponse.jobs || [];
-      const projectAirMonitoringJobs = allAirMonitoringJobs.filter(
-        (job) => job.projectId === jobData.projectId
-      );
+      const fetchId = Date.now();
+      latestFetchIdRef.current = fetchId;
 
-      // Fetch shifts for each air monitoring job
-      const shiftsWithJobs = await Promise.all(
-        projectAirMonitoringJobs.map(async (monitoringJob) => {
-          try {
-            const shiftsResponse = await shiftService.getByJob(
-              monitoringJob._id
-            );
-            const shifts = shiftsResponse.data || [];
-            return shifts.map((shift) => ({
-              ...shift,
-              jobName: monitoringJob.name,
-              jobId: monitoringJob._id,
-            }));
-          } catch (error) {
-            console.error(
-              `Error fetching shifts for job ${monitoringJob._id}:`,
-              error
-            );
-            return [];
-          }
-        })
-      );
-
-      // Fetch shifts for this asbestos removal job
-      let jobShifts = [];
-      try {
-        console.log("Fetching shifts for asbestos removal job:", jobId);
-        const allShiftsResponse = await shiftService.getAll();
-        console.log("All shifts response:", allShiftsResponse);
-
-        // Filter shifts that belong to this job (check job, jobId, and projectId fields)
-        const filteredShifts = (allShiftsResponse.data || []).filter(
-          (shift) => {
-            const shiftJobId = shift.job?._id || shift.job || shift.jobId;
-            const jobMatches = shiftJobId === jobId;
-
-            // Fallback: if job field is null, try matching by projectId
-            const projectMatches =
-              shift.projectId === jobData.projectId ||
-              shift.projectId === jobData.projectId._id ||
-              shift.projectId?._id === jobData.projectId ||
-              shift.projectId?._id === jobData.projectId._id;
-
-            const matches = jobMatches || projectMatches;
-            console.log(
-              `Shift ${shift._id} fields:`,
-              {
-                job: shift.job,
-                jobId: shift.jobId,
-                projectId: shift.projectId,
-                resolvedJobId: shiftJobId,
-              },
-              "jobMatches:",
-              jobMatches,
-              "projectMatches:",
-              projectMatches,
-              "final matches:",
-              matches
-            );
-            return matches;
-          }
-        );
-
-        // Fetch sample numbers for each shift
-        jobShifts = await Promise.all(
-          filteredShifts.map(async (shift) => {
-            try {
-              const samplesResponse = await sampleService.getByShift(shift._id);
-              const sampleNumbers = (samplesResponse.data || [])
-                .map((sample) => {
-                  // Extract just the number part from AM prefix (e.g., "AM1" -> "1")
-                  const match = sample.fullSampleID?.match(/AM(\d+)$/);
-                  return match ? match[1] : null;
-                })
-                .filter(Boolean)
-                .sort((a, b) => parseInt(a) - parseInt(b));
-
-              return {
-                ...shift,
-                jobName: jobData.name || "Asbestos Removal Job",
-                jobId: jobId,
-                sampleNumbers,
-              };
-            } catch (error) {
-              console.error(
-                `Error fetching samples for shift ${shift._id}:`,
-                error
-              );
-              return {
-                ...shift,
-                jobName: jobData.name || "Asbestos Removal Job",
-                jobId: jobId,
-                sampleNumbers: [],
-              };
-            }
-          })
-        );
-
-        console.log("Job shifts:", jobShifts);
-      } catch (error) {
-        console.error("Error fetching job shifts:", error);
+      if (!silent) {
+        setLoading(true);
       }
+      setError(null);
 
-      const allShifts = [...shiftsWithJobs.flat(), ...jobShifts];
-      console.log("All shifts (air monitoring + job):", allShifts);
-      setAirMonitoringShifts(allShifts);
+      const isActive = () => latestFetchIdRef.current === fetchId;
 
-      // Fetch clearances for this project
-      const clearancesResponse = await asbestosClearanceService.getAll();
-      console.log("Raw clearances response:", clearancesResponse);
-      const allClearances =
-        clearancesResponse.data ||
-        clearancesResponse.jobs ||
-        clearancesResponse.clearances ||
-        [];
-      console.log("All clearances:", allClearances);
-      console.log("Job data projectId:", jobData.projectId);
+      try {
+        const jobResponse = await asbestosRemovalJobService.getById(jobId);
+        const jobData = jobResponse.data;
 
-      const projectClearances = allClearances.filter((clearance) => {
-        const matches =
-          clearance.projectId === jobData.projectId ||
-          clearance.projectId === jobData.projectId._id ||
-          clearance.projectId?._id === jobData.projectId ||
-          clearance.projectId?._id === jobData.projectId._id;
-        console.log(
-          `Clearance ${clearance._id} projectId:`,
-          clearance.projectId,
-          "matches:",
-          matches
-        );
-        return matches;
-      });
-      console.log("Filtered project clearances:", projectClearances);
-      setClearances(projectClearances);
-    } catch (err) {
-      console.error("Error fetching job details:", err);
-      setError(err.message || "Failed to fetch job details");
-    } finally {
-      setLoading(false);
-    }
-  }, [jobId]);
+        if (!isActive()) {
+          return;
+        }
+
+        setJob(jobData);
+
+        const resolvedProjectId =
+          jobData?.projectId?._id || jobData?.projectId || null;
+
+        const [airMonitoringJobsResponse, clearancesResponse] =
+          await Promise.all([
+            resolvedProjectId
+              ? jobService
+                  .getAll({ projectId: resolvedProjectId, minimal: true })
+                  .catch((error) => {
+                    console.error("Error fetching air monitoring jobs:", error);
+                    return null;
+                  })
+              : Promise.resolve(null),
+            resolvedProjectId
+              ? asbestosClearanceService
+                  .getAll({ projectId: resolvedProjectId })
+                  .catch((error) => {
+                    console.error("Error fetching project clearances:", error);
+                    return null;
+                  })
+              : Promise.resolve(null),
+          ]);
+
+        if (!isActive()) {
+          return;
+        }
+
+        const airMonitoringJobs =
+          airMonitoringJobsResponse?.data ||
+          airMonitoringJobsResponse?.jobs ||
+          [];
+
+        const jobNameMap = new Map();
+        if (jobData?._id || jobId) {
+          jobNameMap.set(jobId, jobData?.name || "Asbestos Removal Job");
+        }
+
+        airMonitoringJobs.forEach((monitoringJob) => {
+          if (monitoringJob?._id) {
+            jobNameMap.set(
+              monitoringJob._id,
+              monitoringJob.name || "Air Monitoring Job"
+            );
+          }
+        });
+
+        const shiftJobIds = Array.from(jobNameMap.keys());
+
+        let combinedShifts = [];
+
+        if (shiftJobIds.length) {
+          try {
+            const shiftsResponse = await shiftService.getByJobs(shiftJobIds);
+            const shiftData = shiftsResponse.data || [];
+
+            combinedShifts = shiftData.map((shift) => {
+              const associatedJobId =
+                shift.job?._id || shift.jobId || shift.job || jobId;
+
+              return {
+                ...shift,
+                jobId: associatedJobId,
+                jobName:
+                  jobNameMap.get(associatedJobId) ||
+                  jobData?.name ||
+                  "Asbestos Removal Job",
+                sampleNumbers: Array.isArray(shift.sampleNumbers)
+                  ? shift.sampleNumbers
+                  : [],
+              };
+            });
+          } catch (error) {
+            console.error("Error fetching shifts:", error);
+          }
+        }
+
+        if (!isActive()) {
+          return;
+        }
+
+        setAirMonitoringShifts(combinedShifts);
+
+        if (combinedShifts.some((shift) => !shift.sampleNumbers?.length)) {
+          Promise.all(
+            combinedShifts.map(async (shift) => {
+              if (!shift?._id) {
+                return { shiftId: null, sampleNumbers: [] };
+              }
+
+              try {
+                const samplesResponse = await sampleService.getByShift(
+                  shift._id
+                );
+                const samples = samplesResponse.data || [];
+
+                const sampleNumbers = samples
+                  .map((sample) => {
+                    const match = sample.fullSampleID?.match(/AM(\d+)$/);
+                    return match ? match[1] : null;
+                  })
+                  .filter(Boolean)
+                  .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+
+                return {
+                  shiftId: shift._id,
+                  sampleNumbers,
+                };
+              } catch (error) {
+                console.error(
+                  `Error fetching samples for shift ${shift._id}:`,
+                  error
+                );
+                return {
+                  shiftId: shift._id,
+                  sampleNumbers: [],
+                };
+              }
+            })
+          ).then((results) => {
+            if (!isActive()) {
+              return;
+            }
+
+            const sampleMap = new Map(
+              results
+                .filter((result) => result.shiftId)
+                .map((result) => [result.shiftId, result.sampleNumbers])
+            );
+
+            setAirMonitoringShifts((prevShifts) =>
+              prevShifts.map((shift) =>
+                sampleMap.has(shift._id)
+                  ? {
+                      ...shift,
+                      sampleNumbers: sampleMap.get(shift._id),
+                    }
+                  : shift
+              )
+            );
+          });
+        }
+
+        if (!isActive()) {
+          return;
+        }
+
+        const projectClearancesRaw =
+          Array.isArray(clearancesResponse) && clearancesResponse.length > 0
+            ? clearancesResponse
+            : clearancesResponse?.data ||
+              clearancesResponse?.jobs ||
+              clearancesResponse?.clearances ||
+              [];
+
+        const projectClearances = projectClearancesRaw.filter((clearance) => {
+          const clearanceProjectId =
+            clearance?.projectId?._id ||
+            clearance?.projectId ||
+            clearance?.project?._id ||
+            clearance?.project;
+
+          return (
+            clearanceProjectId &&
+            resolvedProjectId &&
+            clearanceProjectId.toString() === resolvedProjectId.toString()
+          );
+        });
+
+        setClearances(projectClearances);
+      } catch (err) {
+        if (!isActive()) {
+          return;
+        }
+
+        console.error("Error fetching job details:", err);
+        setError(err.message || "Failed to fetch job details");
+      } finally {
+        if (!silent && isActive()) {
+          setLoading(false);
+        }
+      }
+    },
+    [jobId]
+  );
 
   const fetchAsbestosRemovalists = useCallback(async () => {
     try {

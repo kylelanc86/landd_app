@@ -265,6 +265,7 @@ export const jobService = {
     if (params.status) queryParams.append('status', params.status);
     if (params.excludeStatus) queryParams.append('excludeStatus', params.excludeStatus);
     if (params.minimal) queryParams.append('minimal', params.minimal);
+    if (params.projectId) queryParams.append('projectId', params.projectId);
     const queryString = queryParams.toString();
     return api.get(`/air-monitoring-jobs${queryString ? `?${queryString}` : ''}`);
   },
