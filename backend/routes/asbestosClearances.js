@@ -3,6 +3,9 @@ const router = express.Router();
 const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
+const {
+  syncClearanceForProject,
+} = require("../services/asbestosRemovalJobSyncService");
 
 // Get all asbestos clearances with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
@@ -122,6 +125,17 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       })
       .populate("createdBy", "firstName lastName");
 
+    const projectIdForSync =
+      populatedClearance.projectId?._id || populatedClearance.projectId;
+    try {
+      await syncClearanceForProject(projectIdForSync);
+    } catch (syncError) {
+      console.error(
+        "Error syncing asbestos removal job clearance flags after creation:",
+        syncError
+      );
+    }
+
     res.status(201).json(populatedClearance);
   } catch (error) {
     console.error("Error creating asbestos clearance:", error);
@@ -138,6 +152,10 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
+
+    const previousProjectId = clearance.projectId
+      ? clearance.projectId.toString()
+      : null;
 
     clearance.projectId = projectId || clearance.projectId;
     clearance.clearanceDate = clearanceDate || clearance.clearanceDate;
@@ -184,6 +202,29 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       .populate("createdBy", "firstName lastName")
       .populate("updatedBy", "firstName lastName")
       .populate("revisionReasons.revisedBy", "firstName lastName");
+
+    const newProjectId = populatedClearance.projectId?._id
+      ? populatedClearance.projectId._id.toString()
+      : populatedClearance.projectId?.toString();
+
+    const projectsToSync = new Set();
+    if (previousProjectId) {
+      projectsToSync.add(previousProjectId);
+    }
+    if (newProjectId) {
+      projectsToSync.add(newProjectId);
+    }
+
+    for (const id of projectsToSync) {
+      try {
+        await syncClearanceForProject(id);
+      } catch (syncError) {
+        console.error(
+          "Error syncing asbestos removal job clearance flags after update:",
+          { projectId: id, error: syncError }
+        );
+      }
+    }
 
     res.json(populatedClearance);
   } catch (error) {
@@ -401,6 +442,21 @@ router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res)
     const clearance = await AsbestosClearance.findByIdAndDelete(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const projectIdForSync = clearance.projectId
+      ? clearance.projectId.toString()
+      : null;
+
+    if (projectIdForSync) {
+      try {
+        await syncClearanceForProject(projectIdForSync);
+      } catch (syncError) {
+        console.error(
+          "Error syncing asbestos removal job clearance flags after deletion:",
+          { projectId: projectIdForSync, error: syncError }
+        );
+      }
     }
 
     res.json({ message: "Asbestos clearance deleted successfully" });

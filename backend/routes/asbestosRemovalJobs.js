@@ -38,7 +38,9 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     // If minimal=true, only fetch fields needed for table display
     if (minimal === "true" || minimal === true) {
       const jobs = await AsbestosRemovalJob.find(filter)
-        .select("_id projectId asbestosRemovalist status")
+        .select(
+          "_id projectId projectName client asbestosRemovalist status airMonitoring clearance jobType"
+        )
         .populate({
           path: "projectId",
           select: "projectID name",

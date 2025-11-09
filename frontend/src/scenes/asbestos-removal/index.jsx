@@ -33,8 +33,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { tokens } from "../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
-import { jobService, shiftService, projectService } from "../../services/api";
-import asbestosClearanceService from "../../services/asbestosClearanceService";
+import { projectService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import { useAuth } from "../../context/AuthContext";
@@ -64,6 +63,37 @@ const AsbestosRemoval = () => {
   const [jobToDelete, setJobToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  const resolveJobTypeLabel = useCallback(
+    (jobTypeRaw, airMonitoringFlag, clearanceFlag) => {
+      switch (jobTypeRaw) {
+        case "air_monitoring_and_clearance":
+          return "Air Monitoring & Clearance";
+        case "air_monitoring":
+          return "Air Monitoring";
+        case "clearance":
+          return "Clearance";
+        case "none":
+        case undefined:
+        case null:
+        default: {
+          const hasAirMonitoring = !!airMonitoringFlag;
+          const hasClearance = !!clearanceFlag;
+          if (hasAirMonitoring && hasClearance) {
+            return "Air Monitoring & Clearance";
+          }
+          if (hasAirMonitoring) {
+            return "Air Monitoring";
+          }
+          if (hasClearance) {
+            return "Clearance";
+          }
+          return "None";
+        }
+      }
+    },
+    []
+  );
+
   const fetchAsbestosRemovalJobs = useCallback(async () => {
     const startTime = performance.now();
     console.log("[Asbestos Removal] Starting fetchAsbestosRemovalJobs");
@@ -72,8 +102,6 @@ const AsbestosRemoval = () => {
     setError(null);
 
     try {
-      // Fetch only incomplete asbestos removal jobs (exclude completed and cancelled)
-      // Use minimal=true to only fetch fields needed for table display
       const jobsFetchStart = performance.now();
       console.log("[Asbestos Removal] Fetching asbestos removal jobs...");
 
@@ -90,7 +118,6 @@ const AsbestosRemoval = () => {
         )}ms`
       );
 
-      // Handle different response structures for jobs
       let jobs = [];
       if (
         jobsResponse &&
@@ -106,26 +133,22 @@ const AsbestosRemoval = () => {
         jobs = jobsResponse.data;
       } else if (Array.isArray(jobsResponse)) {
         jobs = jobsResponse;
-      } else {
-        jobs = [];
       }
 
-      console.log(
-        `[Asbestos Removal] Found ${jobs.length} active asbestos removal jobs`
-      );
-
-      // Ensure jobs is an array before processing
       if (!Array.isArray(jobs)) {
         console.error("Jobs is not an array:", jobs);
         setAsbestosRemovalJobs([]);
         return;
       }
 
-      // Early exit when no jobs are present to avoid unnecessary downstream fetches
+      console.log(
+        `[Asbestos Removal] Found ${jobs.length} active asbestos removal jobs`
+      );
+
       if (jobs.length === 0) {
         const elapsed = performance.now() - startTime;
         console.log(
-          `[Asbestos Removal] No active asbestos removal jobs found; skipping additional data fetches (elapsed ${elapsed.toFixed(
+          `[Asbestos Removal] No active asbestos removal jobs found (elapsed ${elapsed.toFixed(
             2
           )}ms)`
         );
@@ -133,248 +156,50 @@ const AsbestosRemoval = () => {
         return;
       }
 
-      // Track timings for per-job queries so we can identify bottlenecks
-      let clearanceTotalTime = 0;
-      let clearanceMaxTime = 0;
-      let shiftTotalTime = 0;
-      let shiftMaxTime = 0;
-      let jobProcessingTotalTime = 0;
-      let jobProcessingMaxTime = 0;
-      const slowJobDetails = [];
+      const processingStart = performance.now();
+      const processedJobs = jobs.map((job) => {
+        const projectRef = job.projectId || {};
+        const projectIdentifier =
+          projectRef?.projectID || job.projectID || "Unknown";
+        const projectName =
+          projectRef?.name || job.projectName || "Unknown Project";
 
-      // Fetch only active air monitoring jobs (exclude completed/cancelled)
-      // Use minimal=true to only fetch projectId for matching (much smaller payload)
-      const airMonitoringFetchStart = performance.now();
-      console.log("[Asbestos Removal] Fetching air monitoring jobs...");
-
-      let allAirMonitoringJobs = [];
-      let airMonitoringFetchTime = 0;
-      try {
-        const airMonitoringResponse = await jobService.getAll({
-          excludeStatus: "completed,cancelled",
-          minimal: true,
-        });
-        // With minimal=true, backend returns array directly
-        allAirMonitoringJobs = Array.isArray(airMonitoringResponse)
-          ? airMonitoringResponse
-          : Array.isArray(airMonitoringResponse?.data)
-          ? airMonitoringResponse.data
-          : [];
-
-        airMonitoringFetchTime = performance.now() - airMonitoringFetchStart;
-        console.log(
-          `[Asbestos Removal] Air monitoring jobs fetched in ${airMonitoringFetchTime.toFixed(
-            2
-          )}ms (${allAirMonitoringJobs.length} jobs)`
+        const airMonitoringFlag = !!job.airMonitoring;
+        const clearanceFlag = !!job.clearance;
+        const jobTypeRaw = job.jobType || "none";
+        const jobTypeLabel = resolveJobTypeLabel(
+          jobTypeRaw,
+          airMonitoringFlag,
+          clearanceFlag
         );
-      } catch (error) {
-        airMonitoringFetchTime = performance.now() - airMonitoringFetchStart;
-        console.error(
-          `[Asbestos Removal] Error fetching air monitoring jobs after ${airMonitoringFetchTime.toFixed(
-            2
-          )}ms:`,
-          error
-        );
-      }
 
-      // For each job, make targeted queries to check if related data exists
-      // This is MUCH faster than fetching ALL data - we only query what we need
-      const perJobProcessingStart = performance.now();
-      console.log(
-        `[Asbestos Removal] Processing ${jobs.length} jobs (clearances & shifts)...`
-      );
+        return {
+          id: job._id,
+          projectID: projectIdentifier,
+          projectName: projectName,
+          asbestosRemovalist: job.asbestosRemovalist || "Not assigned",
+          status: job.status || "Active",
+          jobTypeLabel,
+          jobTypeRaw,
+          airMonitoring: airMonitoringFlag,
+          clearance: clearanceFlag,
+          originalData: job,
+        };
+      });
+      const processingTime = performance.now() - processingStart;
 
-      const processedJobs = await Promise.all(
-        jobs.map(async (job, index) => {
-          const jobStartTime = performance.now();
-          let clearanceElapsed = 0;
-          let shiftElapsed = 0;
-          const projectId = job.projectId?._id || job.projectId;
-          const jobId = job._id;
-
-          // Make targeted queries in parallel for this specific job/project
-          // Each query only fetches data for THIS specific project/job
-          const queriesStartTime = performance.now();
-          const [clearancesResponse, shiftsResponse] = await Promise.all([
-            // Query clearances for this specific project only (limit 1 - we only need to know if any exist)
-            projectId
-              ? (async () => {
-                  const clearanceStart = performance.now();
-                  try {
-                    const response = await asbestosClearanceService.getAll({
-                      projectId: projectId,
-                      limit: 1, // We only need to know if any exist
-                    });
-                    clearanceElapsed = performance.now() - clearanceStart;
-                    return response;
-                  } catch (err) {
-                    clearanceElapsed = performance.now() - clearanceStart;
-                    console.warn(
-                      `[Asbestos Removal] Clearance query failed for project ${projectId} after ${clearanceElapsed.toFixed(
-                        2
-                      )}ms:`,
-                      err
-                    );
-                    return { clearances: [] };
-                  }
-                })()
-              : Promise.resolve({ clearances: [] }),
-            // Query shifts for this specific job only
-            jobId
-              ? (async () => {
-                  const shiftStart = performance.now();
-                  try {
-                    const response = await shiftService.getByJob(jobId);
-                    shiftElapsed = performance.now() - shiftStart;
-                    return response;
-                  } catch (err) {
-                    shiftElapsed = performance.now() - shiftStart;
-                    console.warn(
-                      `[Asbestos Removal] Shift query failed for job ${jobId} after ${shiftElapsed.toFixed(
-                        2
-                      )}ms:`,
-                      err
-                    );
-                    return [];
-                  }
-                })()
-              : Promise.resolve([]),
-          ]);
-          const queriesTime = performance.now() - queriesStartTime;
-
-          // Check if clearances exist for this project
-          let hasClearance = false;
-          if (clearancesResponse) {
-            const clearances =
-              clearancesResponse.clearances ||
-              clearancesResponse.data ||
-              (Array.isArray(clearancesResponse) ? clearancesResponse : []);
-            hasClearance = clearances.length > 0;
-          }
-
-          // Check if air monitoring jobs exist for this project (using cached data)
-          const hasAirMonitoring = allAirMonitoringJobs.some(
-            (airJob) =>
-              (airJob.projectId?._id || airJob.projectId) === projectId
-          );
-
-          // Check if shifts exist for this job
-          let hasShifts = false;
-          if (shiftsResponse) {
-            const shifts = Array.isArray(shiftsResponse)
-              ? shiftsResponse
-              : shiftsResponse.data || [];
-            hasShifts =
-              shifts.length > 0 &&
-              shifts.some(
-                (shift) =>
-                  (shift.job?._id || shift.job) === jobId &&
-                  shift.jobModel === "AsbestosRemovalJob"
-              );
-          }
-
-          const hasAirMonitoringOverall = hasAirMonitoring || hasShifts;
-
-          let jobType = "None";
-          if (hasAirMonitoringOverall && hasClearance) {
-            jobType = "Air Monitoring & Clearance";
-          } else if (hasAirMonitoringOverall) {
-            jobType = "Air Monitoring";
-          } else if (hasClearance) {
-            jobType = "Clearance";
-          }
-
-          const jobProcessingTime = performance.now() - jobStartTime;
-          if (queriesTime > 100) {
-            console.log(
-              `[Asbestos Removal] Job ${index + 1}/${jobs.length} (${
-                job.projectId?.projectID || "Unknown"
-              }) processed in ${jobProcessingTime.toFixed(
-                2
-              )}ms (queries: ${queriesTime.toFixed(2)}ms)`
-            );
-          }
-
-          clearanceTotalTime += clearanceElapsed;
-          clearanceMaxTime = Math.max(clearanceMaxTime, clearanceElapsed);
-          shiftTotalTime += shiftElapsed;
-          shiftMaxTime = Math.max(shiftMaxTime, shiftElapsed);
-          jobProcessingTotalTime += jobProcessingTime;
-          jobProcessingMaxTime = Math.max(
-            jobProcessingMaxTime,
-            jobProcessingTime
-          );
-
-          if (jobProcessingTime > 150) {
-            slowJobDetails.push({
-              jobIndex: index + 1,
-              project: job.projectId?.projectID || "Unknown",
-              jobProcessing: jobProcessingTime.toFixed(2),
-              clearance: clearanceElapsed.toFixed(2),
-              shifts: shiftElapsed.toFixed(2),
-            });
-          }
-
-          return {
-            id: job._id,
-            projectID: job.projectId?.projectID || job.projectID || "Unknown",
-            projectName:
-              job.projectId?.name || job.projectName || "Unknown Project",
-            asbestosRemovalist: job.asbestosRemovalist || "Not assigned",
-            status: job.status || "Active",
-            jobType: jobType,
-            hasAirMonitoring: hasAirMonitoringOverall,
-            hasClearance: hasClearance,
-            originalData: job,
-          };
-        })
-      );
-
-      const perJobProcessingTime = performance.now() - perJobProcessingStart;
-      console.log(
-        `[Asbestos Removal] All jobs processed in ${perJobProcessingTime.toFixed(
-          2
-        )}ms`
-      );
-      if (jobs.length > 0) {
-        const clearanceAvg = clearanceTotalTime / jobs.length || 0;
-        const shiftAvg = shiftTotalTime / jobs.length || 0;
-        const jobProcessingAvg = jobProcessingTotalTime / jobs.length || 0;
-        console.log("[Asbestos Removal] Per-job timing stats:", {
-          clearanceAvg: `${clearanceAvg.toFixed(2)}ms`,
-          clearanceMax: `${clearanceMaxTime.toFixed(2)}ms`,
-          shiftsAvg: `${shiftAvg.toFixed(2)}ms`,
-          shiftsMax: `${shiftMaxTime.toFixed(2)}ms`,
-          jobProcessingAvg: `${jobProcessingAvg.toFixed(2)}ms`,
-          jobProcessingMax: `${jobProcessingMaxTime.toFixed(2)}ms`,
-          slowJobSamples: slowJobDetails.slice(0, 5),
-          additionalSlowJobs:
-            slowJobDetails.length > 5
-              ? slowJobDetails.length - slowJobDetails.slice(0, 5).length
-              : 0,
-        });
-      }
-
-      // Sort by project ID (backend already filtered out completed jobs)
       const sortStart = performance.now();
       const sortedJobs = processedJobs.sort((a, b) => {
         const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
         const bNum = parseInt(b.projectID?.replace(/\D/g, "") || 0);
-        return bNum - aNum; // Descending order (highest first)
+        return bNum - aNum;
       });
       const sortTime = performance.now() - sortStart;
-      console.log(
-        `[Asbestos Removal] Sorting completed in ${sortTime.toFixed(2)}ms`
-      );
 
       const totalTime = performance.now() - startTime;
-      console.log(
-        `[Asbestos Removal] Total fetch time: ${totalTime.toFixed(2)}ms`
-      );
-      console.log("[Asbestos Removal] Breakdown:", {
+      console.log("[Asbestos Removal] Timing breakdown:", {
         jobsFetch: `${jobsFetchTime.toFixed(2)}ms`,
-        airMonitoringFetch: `${airMonitoringFetchTime.toFixed(2)}ms`,
-        perJobProcessing: `${perJobProcessingTime.toFixed(2)}ms`,
+        processing: `${processingTime.toFixed(2)}ms`,
         sorting: `${sortTime.toFixed(2)}ms`,
         total: `${totalTime.toFixed(2)}ms`,
       });
@@ -396,7 +221,7 @@ const AsbestosRemoval = () => {
         )}ms`
       );
     }
-  }, []);
+  }, [resolveJobTypeLabel]);
 
   // Lazy load projects and removalists only when modal opens
   const fetchProjects = useCallback(async () => {
@@ -473,16 +298,15 @@ const AsbestosRemoval = () => {
   );
 
   const getJobTypeColor = useCallback(
-    (jobType) => {
-      switch (jobType) {
-        case "Air Monitoring":
-          return theme.palette.primary.main;
-        case "Clearance":
-          return theme.palette.secondary.main;
-        case "Air Monitoring & Clearance":
+    (jobTypeRaw) => {
+      switch (jobTypeRaw) {
+        case "air_monitoring_and_clearance":
           return theme.palette.info.main;
-        case "None":
-          return theme.palette.grey[500];
+        case "air_monitoring":
+          return theme.palette.primary.main;
+        case "clearance":
+          return theme.palette.secondary.main;
+        case "none":
         default:
           return theme.palette.grey[500];
       }
@@ -735,10 +559,10 @@ const AsbestosRemoval = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={job.jobType}
+                          label={job.jobTypeLabel}
                           size="small"
                           sx={{
-                            backgroundColor: getJobTypeColor(job.jobType),
+                            backgroundColor: getJobTypeColor(job.jobTypeRaw),
                             color: "white",
                           }}
                         />

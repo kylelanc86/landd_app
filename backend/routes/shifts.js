@@ -7,6 +7,9 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const mongoose = require('mongoose');
 const axios = require('axios');
+const {
+  syncAirMonitoringForJob,
+} = require("../services/asbestosRemovalJobSyncService");
 
 // Debug middleware to log all requests to shifts routes
 router.use((req, res, next) => {
@@ -206,6 +209,13 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     
     const newShift = await shift.save();
     console.log('Shift saved successfully:', newShift._id);
+
+    if (
+      (req.body.jobModel && req.body.jobModel === 'AsbestosRemovalJob') ||
+      (!req.body.jobModel && newShift.jobModel === 'AsbestosRemovalJob')
+    ) {
+      await syncAirMonitoringForJob(newShift.job);
+    }
     
     res.status(201).json(newShift);
   } catch (error) {
@@ -296,6 +306,10 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       }
 
       const updatedShift = await shift.save();
+      if (shift.job && shift.jobModel === 'AsbestosRemovalJob') {
+        await syncAirMonitoringForJob(shift.job);
+      }
+
       // Update project's reports_present field if shift is completed
       if (updatedShift.status === 'analysis_complete' || updatedShift.status === 'shift_complete' || updatedShift.reportApprovedBy) {
         try {
@@ -342,6 +356,8 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
       return res.status(404).json({ message: 'Shift not found' });
     }
 
+    const previousJobId = shift.job ? shift.job.toString() : null;
+
 
     // Update all fields from the request body
     Object.assign(shift, req.body);
@@ -358,6 +374,20 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
       }
 
       const updatedShift = await shift.save();
+
+      const updatedJobId = updatedShift.job ? updatedShift.job.toString() : null;
+
+      if (updatedJobId && updatedShift.jobModel === 'AsbestosRemovalJob') {
+        await syncAirMonitoringForJob(updatedJobId);
+      }
+
+      if (
+        previousJobId &&
+        updatedJobId &&
+        previousJobId !== updatedJobId
+      ) {
+        await syncAirMonitoringForJob(previousJobId);
+      }
       
       
       res.json(updatedShift);
@@ -408,6 +438,9 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
     }
 
     const updatedShift = await shift.save();
+    if (shift.job && (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)) {
+      await syncAirMonitoringForJob(shift.job);
+    }
     res.json({
       message: 'Shift reopened successfully',
       shift: updatedShift
@@ -424,6 +457,12 @@ router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) =
     const shift = await Shift.findByIdAndDelete(req.params.id);
     if (!shift) {
       return res.status(404).json({ message: 'Shift not found' });
+    }
+    if (
+      shift.job &&
+      (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)
+    ) {
+      await syncAirMonitoringForJob(shift.job);
     }
     res.json({ message: 'Shift deleted' });
   } catch (error) {
