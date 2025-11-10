@@ -133,6 +133,7 @@ const EditUserPage = () => {
               isActive: user.isActive,
               licences: user.licences || [],
               signature: user.signature || "",
+              chargeOutRate: user.chargeOutRate || 0,
               workingHours: user.workingHours || {
                 monday: { enabled: false, hours: 0 },
                 tuesday: { enabled: false, hours: 0 },

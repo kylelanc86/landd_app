@@ -25,6 +25,9 @@ import { equipmentService } from "../../services/equipmentService";
 import { useAuth } from "../../context/AuthContext";
 import { formatDateForInput } from "../../utils/dateUtils";
 
+const FIELD_BLANK_LOCATION = "Field blank";
+const NEG_AIR_EXHAUST_LOCATION = "Neg air exhaust";
+
 const SAMPLES_KEY = "ldc_samples";
 const SHIFTS_KEY = "ldc_shifts";
 const JOBS_KEY = "ldc_jobs";
@@ -64,6 +67,8 @@ const NewSample = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState(null);
+
+  const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
 
   // Fetch asbestos assessors when component mounts
   useEffect(() => {
@@ -425,11 +430,19 @@ const NewSample = () => {
     }
 
     if (name === "isFieldBlank") {
-      setForm((prev) => ({
-        ...prev,
-        [name]: checked,
-        location: checked ? "Field blank" : prev.location,
-      }));
+      setForm((prev) => {
+        const next = {
+          ...prev,
+          [name]: checked,
+          location: checked ? FIELD_BLANK_LOCATION : prev.location,
+        };
+
+        if (checked) {
+          next.isNegAirExhaust = false;
+        }
+
+        return next;
+      });
       return;
     }
 
@@ -437,6 +450,8 @@ const NewSample = () => {
       setForm((prev) => ({
         ...prev,
         [name]: checked,
+        isFieldBlank: checked ? false : prev.isFieldBlank,
+        location: checked ? NEG_AIR_EXHAUST_LOCATION : prev.location,
         // Clear flowrate fields when checked
         initialFlowrate: checked ? "" : prev.initialFlowrate,
         finalFlowrate: checked ? "" : prev.finalFlowrate,
@@ -527,7 +542,7 @@ const NewSample = () => {
       }
     }
 
-    if (!form.isFieldBlank && !form.isNegAirExhaust && !form.flowmeter) {
+    if (!isSimplifiedSample && !form.flowmeter) {
       // Only require flowmeter if user has explicitly set isFieldBlank to false
       // During initial load, isFieldBlank defaults to false but shouldn't block sample number calculation
       if (form.isFieldBlank === false) {
@@ -540,7 +555,7 @@ const NewSample = () => {
       errors.cowlNo = "Cowl No. is required";
     }
 
-    if (!form.isFieldBlank) {
+    if (!isSimplifiedSample) {
       if (!form.location) {
         errors.location = "Location is required";
       }
@@ -755,7 +770,7 @@ const NewSample = () => {
               label="Neg Air Exhaust"
             />
           </Box>
-          {!form.isFieldBlank && (
+          {!isSimplifiedSample && (
             <>
               <FormControl fullWidth required error={!!fieldErrors.type}>
                 <InputLabel>Type</InputLabel>
@@ -787,17 +802,21 @@ const NewSample = () => {
               />
             </>
           )}
-          {form.isFieldBlank && (
+          {isSimplifiedSample && (
             <TextField
               name="location"
               label="Location"
-              value="Field blank"
+              value={
+                form.isFieldBlank
+                  ? FIELD_BLANK_LOCATION
+                  : form.location || NEG_AIR_EXHAUST_LOCATION
+              }
               disabled
               required
               fullWidth
             />
           )}
-          {!form.isFieldBlank && (
+          {!isSimplifiedSample && (
             <>
               <FormControl fullWidth>
                 <InputLabel>Pump No.</InputLabel>
@@ -841,10 +860,10 @@ const NewSample = () => {
             error={!!fieldErrors.cowlNo}
             helperText={fieldErrors.cowlNo}
           />
-          {!form.isFieldBlank && (
+          {!isSimplifiedSample && (
             <FormControl
               fullWidth
-              required={!form.isFieldBlank}
+              required={!isSimplifiedSample}
               error={!!fieldErrors.flowmeter}
             >
               <InputLabel>Flowmeter</InputLabel>
@@ -853,7 +872,7 @@ const NewSample = () => {
                 value={form.flowmeter}
                 onChange={handleChange}
                 label="Flowmeter"
-                required={!form.isFieldBlank}
+                required={!isSimplifiedSample}
               >
                 <MenuItem value="">
                   <em>Select a flowmeter</em>
@@ -875,7 +894,7 @@ const NewSample = () => {
               )}
             </FormControl>
           )}
-          {!form.isFieldBlank && (
+          {!isSimplifiedSample && (
             <>
               <Typography
                 variant="h6"

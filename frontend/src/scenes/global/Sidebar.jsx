@@ -23,6 +23,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
+import { usePermissions } from "../../hooks/usePermissions";
 import PermissionGate from "../../components/PermissionGate";
 import { isFeatureEnabled } from "../../config/featureFlags";
 
@@ -313,6 +314,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 const Sidebar = () => {
   const theme = useTheme();
   const { currentUser } = useAuth();
+  const { isAdmin } = usePermissions();
   const location = useLocation();
   const showHidden = true; // Set to true to show hidden components
 
@@ -490,7 +492,7 @@ const Sidebar = () => {
             />
           )}
 
-          {isFeatureEnabled("ADVANCED.RECORDS") && (
+          {isAdmin && isFeatureEnabled("ADVANCED.RECORDS") && (
             <CollapsibleSection
               title="Records"
               to="/records"

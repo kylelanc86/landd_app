@@ -63,6 +63,7 @@ const ClientSuppliedJobs = () => {
   const [selectedJobType, setSelectedJobType] = useState("");
   const [sampleReceiptDate, setSampleReceiptDate] = useState("");
   const [creatingJob, setCreatingJob] = useState(false);
+  const [sampleReceiptDateError, setSampleReceiptDateError] = useState(false);
   const [completingJobs, setCompletingJobs] = useState({});
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [jobToArchive, setJobToArchive] = useState(null);
@@ -183,7 +184,13 @@ const ClientSuppliedJobs = () => {
   const handleCreateJob = async () => {
     if (!selectedProject || !selectedJobType) return;
 
+    if (!sampleReceiptDate || sampleReceiptDate.trim() === "") {
+      setSampleReceiptDateError(true);
+      return;
+    }
+
     try {
+      setSampleReceiptDateError(false);
       setCreatingJob(true);
 
       // Validate project ID
@@ -224,6 +231,7 @@ const ClientSuppliedJobs = () => {
       setSelectedProject(null);
       setSelectedJobType("");
       setSampleReceiptDate("");
+      setSampleReceiptDateError(false);
     } catch (error) {
       console.error("Error creating client supplied job:", error);
       const errorMessage =
@@ -990,10 +998,16 @@ const ClientSuppliedJobs = () => {
                     label="Sample Receipt Date"
                     type="date"
                     value={sampleReceiptDate}
-                    onChange={(e) => setSampleReceiptDate(e.target.value)}
+                    onChange={(e) => {
+                      setSampleReceiptDate(e.target.value);
+                      if (sampleReceiptDateError) {
+                        setSampleReceiptDateError(false);
+                      }
+                    }}
                     InputLabelProps={{
                       shrink: true,
                     }}
+                    error={sampleReceiptDateError}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
@@ -1012,6 +1026,11 @@ const ClientSuppliedJobs = () => {
                       ),
                     }}
                   />
+                  {sampleReceiptDateError && (
+                    <Typography variant="body2" sx={{ color: "error.main" }}>
+                      Enter the sample receipt date to create the new job.
+                    </Typography>
+                  )}
                 </>
               ) : (
                 <Box sx={{ textAlign: "center", py: 2 }}>

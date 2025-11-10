@@ -6,6 +6,10 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     ref: 'Project',
     required: true
   },
+  jobNumber: {
+    type: String,
+    trim: true
+  },
   status: {
     type: String,
     enum: ['In Progress', 'Analysis Complete', 'Completed'],
@@ -28,7 +32,8 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     default: 0
   },
   sampleReceiptDate: {
-    type: Date
+    type: Date,
+    required: true
   },
   archived: {
     type: Boolean,
@@ -128,11 +133,26 @@ const clientSuppliedJobSchema = new mongoose.Schema({
 // Update the updatedAt timestamp before saving
 clientSuppliedJobSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
+
+  if (this.jobNumber === null || this.jobNumber === undefined || this.jobNumber === '') {
+    this.jobNumber = undefined;
+  }
+
   next();
 });
 
 // Create indexes
 clientSuppliedJobSchema.index({ projectId: 1 });
 clientSuppliedJobSchema.index({ status: 1 });
+clientSuppliedJobSchema.index(
+  { jobNumber: 1 },
+  {
+    unique: true,
+    name: 'clientSuppliedJob_jobNumber_unique',
+    partialFilterExpression: {
+      jobNumber: { $exists: true, $type: 'string', $ne: '' }
+    }
+  }
+);
 
 module.exports = mongoose.model('ClientSuppliedJob', clientSuppliedJobSchema); 

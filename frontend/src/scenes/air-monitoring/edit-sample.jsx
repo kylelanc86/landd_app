@@ -24,6 +24,9 @@ import { equipmentService } from "../../services/equipmentService";
 import { useAuth } from "../../context/AuthContext";
 import { formatDateForInput } from "../../utils/dateUtils";
 
+const FIELD_BLANK_LOCATION = "Field blank";
+const NEG_AIR_EXHAUST_LOCATION = "Neg air exhaust";
+
 const EditSample = () => {
   const theme = useTheme();
   const { shiftId, sampleId } = useParams();
@@ -58,6 +61,8 @@ const EditSample = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
 
   // Fetch asbestos assessors when component mounts
   useEffect(() => {
@@ -154,10 +159,22 @@ const EditSample = () => {
           }
         }
 
+        const isFieldBlankSample =
+          !!sampleData.isFieldBlank ||
+          sampleData.location === FIELD_BLANK_LOCATION;
+        const isNegAirSample =
+          !isFieldBlankSample &&
+          (sampleData.isNegAirExhaust ||
+            sampleData.location === NEG_AIR_EXHAUST_LOCATION);
+
         setForm({
           sampleNumber: sampleNumber,
           type: sampleData.type,
-          location: sampleData.location,
+          location: isFieldBlankSample
+            ? FIELD_BLANK_LOCATION
+            : isNegAirSample
+            ? NEG_AIR_EXHAUST_LOCATION
+            : sampleData.location || "",
           pumpNo: sampleData.pumpNo || "",
           flowmeter: sampleData.flowmeter || "",
           cowlNo: sampleData.cowlNo || "",
@@ -169,11 +186,8 @@ const EditSample = () => {
           averageFlowrate: sampleData.averageFlowrate || "",
           notes: sampleData.notes || "",
           sampler: sampleData.collectedBy?._id || sampleData.collectedBy || "",
-          isFieldBlank:
-            sampleData.isFieldBlank || sampleData.location === "Field blank"
-              ? true
-              : false,
-          isNegAirExhaust: sampleData.isNegAirExhaust || false,
+          isFieldBlank: isFieldBlankSample,
+          isNegAirExhaust: isNegAirSample,
           status: sampleData.status || "pending",
         });
         setJob(sampleData.job);
@@ -198,11 +212,19 @@ const EditSample = () => {
     }
 
     if (name === "isFieldBlank") {
-      setForm((prev) => ({
-        ...prev,
-        [name]: checked,
-        location: checked ? "Field blank" : prev.location,
-      }));
+      setForm((prev) => {
+        const next = {
+          ...prev,
+          [name]: checked,
+          location: checked ? FIELD_BLANK_LOCATION : prev.location,
+        };
+
+        if (checked) {
+          next.isNegAirExhaust = false;
+        }
+
+        return next;
+      });
       return;
     }
 
@@ -210,6 +232,8 @@ const EditSample = () => {
       setForm((prev) => ({
         ...prev,
         [name]: checked,
+        isFieldBlank: checked ? false : prev.isFieldBlank,
+        location: checked ? NEG_AIR_EXHAUST_LOCATION : prev.location,
         // Clear flowrate fields when checked
         initialFlowrate: checked ? "" : prev.initialFlowrate,
         finalFlowrate: checked ? "" : prev.finalFlowrate,
@@ -321,11 +345,11 @@ const EditSample = () => {
       errors.sampleNumber = "Sample number is required";
     }
 
-    if (!form.flowmeter) {
+    if (!isSimplifiedSample && !form.flowmeter) {
       errors.flowmeter = "Flowmeter is required";
     }
 
-    if (!form.isFieldBlank) {
+    if (!isSimplifiedSample) {
       if (!form.location) {
         errors.location = "Location is required";
       }
@@ -553,7 +577,7 @@ const EditSample = () => {
               label="Neg Air Exhaust"
             />
           </Box>
-          {!form.isFieldBlank && (
+          {!isSimplifiedSample && (
             <>
               <FormControl fullWidth required error={!!fieldErrors.type}>
                 <InputLabel>Type</InputLabel>
@@ -583,6 +607,24 @@ const EditSample = () => {
                 error={!!fieldErrors.location}
                 helperText={fieldErrors.location}
               />
+            </>
+          )}
+          {isSimplifiedSample && (
+            <TextField
+              name="location"
+              label="Location"
+              value={
+                form.isFieldBlank
+                  ? FIELD_BLANK_LOCATION
+                  : form.location || NEG_AIR_EXHAUST_LOCATION
+              }
+              disabled
+              required
+              fullWidth
+            />
+          )}
+          {!isSimplifiedSample && (
+            <>
               <FormControl fullWidth>
                 <InputLabel>Pump No.</InputLabel>
                 <Select
@@ -601,16 +643,6 @@ const EditSample = () => {
                   ))}
                 </Select>
               </FormControl>
-              <TextField
-                name="cowlNo"
-                label="Cowl No."
-                value={form.cowlNo}
-                onChange={handleChange}
-                required
-                fullWidth
-                error={!!fieldErrors.cowlNo}
-                helperText={fieldErrors.cowlNo}
-              />
               <FormControl fullWidth>
                 <InputLabel>Filter Size</InputLabel>
                 <Select
@@ -623,38 +655,54 @@ const EditSample = () => {
                   <MenuItem value="13mm">13mm</MenuItem>
                 </Select>
               </FormControl>
-              <FormControl
-                fullWidth
-                required={!form.isFieldBlank}
-                error={!!fieldErrors.flowmeter}
+            </>
+          )}
+          <TextField
+            name="cowlNo"
+            label="Cowl No."
+            value={form.cowlNo}
+            onChange={handleChange}
+            required
+            fullWidth
+            error={!!fieldErrors.cowlNo}
+            helperText={fieldErrors.cowlNo}
+          />
+          {!isSimplifiedSample && (
+            <FormControl
+              fullWidth
+              required={!isSimplifiedSample}
+              error={!!fieldErrors.flowmeter}
+            >
+              <InputLabel>Flowmeter</InputLabel>
+              <Select
+                name="flowmeter"
+                value={form.flowmeter}
+                onChange={handleChange}
+                label="Flowmeter"
+                required={!isSimplifiedSample}
               >
-                <InputLabel>Flowmeter</InputLabel>
-                <Select
-                  name="flowmeter"
-                  value={form.flowmeter}
-                  onChange={handleChange}
-                  label="Flowmeter"
-                  required={!form.isFieldBlank}
-                >
-                  <MenuItem value="">
-                    <em>Select a flowmeter</em>
+                <MenuItem value="">
+                  <em>Select a flowmeter</em>
+                </MenuItem>
+                {flowmeters.map((flowmeter) => (
+                  <MenuItem
+                    key={flowmeter._id}
+                    value={flowmeter.equipmentReference}
+                  >
+                    {flowmeter.equipmentReference} - {flowmeter.brandModel} (
+                    {flowmeter.equipmentType})
                   </MenuItem>
-                  {flowmeters.map((flowmeter) => (
-                    <MenuItem
-                      key={flowmeter._id}
-                      value={flowmeter.equipmentReference}
-                    >
-                      {flowmeter.equipmentReference} - {flowmeter.brandModel} (
-                      {flowmeter.equipmentType})
-                    </MenuItem>
-                  ))}
-                </Select>
-                {fieldErrors.flowmeter && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {fieldErrors.flowmeter}
-                  </Typography>
-                )}
-              </FormControl>
+                ))}
+              </Select>
+              {fieldErrors.flowmeter && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  {fieldErrors.flowmeter}
+                </Typography>
+              )}
+            </FormControl>
+          )}
+          {!isSimplifiedSample && (
+            <>
               <Typography
                 variant="h6"
                 sx={{
@@ -758,16 +806,6 @@ const EditSample = () => {
                 }}
               />
             </>
-          )}
-          {form.isFieldBlank && (
-            <TextField
-              name="location"
-              label="Location"
-              value="Field blank"
-              disabled
-              required
-              fullWidth
-            />
           )}
           <TextField
             name="notes"
