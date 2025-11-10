@@ -173,6 +173,58 @@ const AsbestosRemovalJobDetails = () => {
       const fetchId = Date.now();
       latestFetchIdRef.current = fetchId;
 
+      const timingLabel = `asbestosRemovalJobDetails:${jobId}`;
+      const startTime =
+        typeof performance !== "undefined" && performance.now
+          ? performance.now()
+          : Date.now();
+
+      const logTiming = (stage) => {
+        if (typeof console === "undefined") {
+          return;
+        }
+
+        if (console.timeLog) {
+          console.timeLog(timingLabel, stage);
+        } else {
+          const elapsed =
+            (typeof performance !== "undefined" && performance.now
+              ? performance.now()
+              : Date.now()) - startTime;
+          console.log(
+            `[${timingLabel}] ${stage} (${Math.round(elapsed)}ms elapsed)`
+          );
+        }
+      };
+
+      const finishTiming = (stage) => {
+        if (typeof console === "undefined") {
+          return;
+        }
+
+        if (stage) {
+          logTiming(stage);
+        }
+
+        if (console.timeEnd) {
+          console.timeEnd(timingLabel);
+        } else {
+          const totalElapsed =
+            (typeof performance !== "undefined" && performance.now
+              ? performance.now()
+              : Date.now()) - startTime;
+          console.log(
+            `[${timingLabel}] completed (${Math.round(totalElapsed)}ms total)`
+          );
+        }
+      };
+
+      if (typeof console !== "undefined" && console.time) {
+        console.time(timingLabel);
+      } else {
+        logTiming("start");
+      }
+
       if (!silent) {
         setLoading(true);
       }
@@ -185,10 +237,12 @@ const AsbestosRemovalJobDetails = () => {
         const jobData = jobResponse.data;
 
         if (!isActive()) {
+          finishTiming("stale job response");
           return;
         }
 
         setJob(jobData);
+        logTiming("job resolved");
 
         const resolvedProjectId =
           jobData?.projectId?._id || jobData?.projectId || null;
@@ -214,6 +268,7 @@ const AsbestosRemovalJobDetails = () => {
           ]);
 
         if (!isActive()) {
+          finishTiming("stale project fetch results");
           return;
         }
 
@@ -221,6 +276,7 @@ const AsbestosRemovalJobDetails = () => {
           airMonitoringJobsResponse?.data ||
           airMonitoringJobsResponse?.jobs ||
           [];
+        logTiming(`project jobs fetched (${airMonitoringJobs.length})`);
 
         const jobNameMap = new Map();
         if (jobData?._id || jobId) {
@@ -261,16 +317,20 @@ const AsbestosRemovalJobDetails = () => {
                   : [],
               };
             });
+            logTiming(`shift data fetched (${combinedShifts.length})`);
           } catch (error) {
             console.error("Error fetching shifts:", error);
+            logTiming("shift fetch failed");
           }
         }
 
         if (!isActive()) {
+          finishTiming("stale shift data");
           return;
         }
 
         setAirMonitoringShifts(combinedShifts);
+        logTiming("shifts set");
 
         if (combinedShifts.some((shift) => !shift.sampleNumbers?.length)) {
           Promise.all(
@@ -310,6 +370,7 @@ const AsbestosRemovalJobDetails = () => {
             })
           ).then((results) => {
             if (!isActive()) {
+              finishTiming("stale sample hydration");
               return;
             }
 
@@ -329,10 +390,12 @@ const AsbestosRemovalJobDetails = () => {
                   : shift
               )
             );
+            logTiming("sample numbers hydrated");
           });
         }
 
         if (!isActive()) {
+          finishTiming("stale post-sample processing");
           return;
         }
 
@@ -359,18 +422,23 @@ const AsbestosRemovalJobDetails = () => {
         });
 
         setClearances(projectClearances);
+        logTiming(`clearances filtered (${projectClearances.length})`);
       } catch (err) {
         if (!isActive()) {
+          finishTiming("stale error result");
           return;
         }
 
         console.error("Error fetching job details:", err);
         setError(err.message || "Failed to fetch job details");
+        finishTiming("error");
+        return;
       } finally {
         if (!silent && isActive()) {
           setLoading(false);
         }
       }
+      finishTiming();
     },
     [jobId]
   );
