@@ -222,196 +222,56 @@ const AsbestosRemovalJobDetails = () => {
       const isActive = () => latestFetchIdRef.current === fetchId;
 
       try {
-        const jobResponse = await asbestosRemovalJobService.getById(jobId);
-        const jobData = jobResponse.data;
+        const jobResponse = await asbestosRemovalJobService.getDetails(jobId);
+        const jobPayload = jobResponse.data || {};
 
         if (!isActive()) {
           finishTiming("stale job response");
           return;
         }
 
-        setJob(jobData);
+        setJob(jobPayload.job || null);
         logTiming("job resolved");
 
-        const resolvedProjectId =
-          jobData?.projectId?._id || jobData?.projectId || null;
+        const shiftsPayload = Array.isArray(jobPayload.shifts)
+          ? jobPayload.shifts
+          : [];
+        setAirMonitoringShifts(shiftsPayload);
+        logTiming(`shifts set (${shiftsPayload.length})`);
 
-        const [airMonitoringJobsResponse, clearancesResponse] =
-          await Promise.all([
-            resolvedProjectId
-              ? jobService
-                  .getAll({ projectId: resolvedProjectId, minimal: true })
-                  .catch((error) => {
-                    console.error("Error fetching air monitoring jobs:", error);
-                    return null;
-                  })
-              : Promise.resolve(null),
-            resolvedProjectId
-              ? asbestosClearanceService
-                  .getAll({ projectId: resolvedProjectId })
-                  .catch((error) => {
-                    console.error("Error fetching project clearances:", error);
-                    return null;
-                  })
-              : Promise.resolve(null),
-          ]);
+        const clearancesPayload = Array.isArray(jobPayload.clearances)
+          ? jobPayload.clearances
+          : [];
+        setClearances(clearancesPayload);
+        logTiming(`clearances set (${clearancesPayload.length})`);
 
-        if (!isActive()) {
-          finishTiming("stale project fetch results");
-          return;
-        }
+        if (Array.isArray(jobPayload.sampleNumbers)) {
+          const sampleNumberMap = new Map(
+            jobPayload.sampleNumbers
+              .filter(
+                (entry) =>
+                  entry &&
+                  entry.shiftId &&
+                  Array.isArray(entry.sampleNumbers) &&
+                  entry.sampleNumbers.length
+              )
+              .map((entry) => [entry.shiftId, entry.sampleNumbers])
+          );
 
-        const airMonitoringJobs =
-          airMonitoringJobsResponse?.data ||
-          airMonitoringJobsResponse?.jobs ||
-          [];
-        logTiming(`project jobs fetched (${airMonitoringJobs.length})`);
-
-        const jobNameMap = new Map();
-        if (jobData?._id || jobId) {
-          jobNameMap.set(jobId, jobData?.name || "Asbestos Removal Job");
-        }
-
-        airMonitoringJobs.forEach((monitoringJob) => {
-          if (monitoringJob?._id) {
-            jobNameMap.set(
-              monitoringJob._id,
-              monitoringJob.name || "Air Monitoring Job"
-            );
-          }
-        });
-
-        const shiftJobIds = Array.from(jobNameMap.keys());
-
-        let combinedShifts = [];
-
-        if (shiftJobIds.length) {
-          try {
-            const shiftsResponse = await shiftService.getByJobs(shiftJobIds);
-            const shiftData = shiftsResponse.data || [];
-
-            combinedShifts = shiftData.map((shift) => {
-              const associatedJobId =
-                shift.job?._id || shift.jobId || shift.job || jobId;
-
-              return {
-                ...shift,
-                jobId: associatedJobId,
-                jobName:
-                  jobNameMap.get(associatedJobId) ||
-                  jobData?.name ||
-                  "Asbestos Removal Job",
-                sampleNumbers: Array.isArray(shift.sampleNumbers)
-                  ? shift.sampleNumbers
-                  : [],
-              };
-            });
-            logTiming(`shift data fetched (${combinedShifts.length})`);
-          } catch (error) {
-            console.error("Error fetching shifts:", error);
-            logTiming("shift fetch failed");
-          }
-        }
-
-        if (!isActive()) {
-          finishTiming("stale shift data");
-          return;
-        }
-
-        setAirMonitoringShifts(combinedShifts);
-        logTiming("shifts set");
-
-        if (combinedShifts.some((shift) => !shift.sampleNumbers?.length)) {
-          Promise.all(
-            combinedShifts.map(async (shift) => {
-              if (!shift?._id) {
-                return { shiftId: null, sampleNumbers: [] };
-              }
-
-              try {
-                const samplesResponse = await sampleService.getByShift(
-                  shift._id
-                );
-                const samples = samplesResponse.data || [];
-
-                const sampleNumbers = samples
-                  .map((sample) => {
-                    const match = sample.fullSampleID?.match(/AM(\d+)$/);
-                    return match ? match[1] : null;
-                  })
-                  .filter(Boolean)
-                  .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
-
-                return {
-                  shiftId: shift._id,
-                  sampleNumbers,
-                };
-              } catch (error) {
-                console.error(
-                  `Error fetching samples for shift ${shift._id}:`,
-                  error
-                );
-                return {
-                  shiftId: shift._id,
-                  sampleNumbers: [],
-                };
-              }
-            })
-          ).then((results) => {
-            if (!isActive()) {
-              finishTiming("stale sample hydration");
-              return;
-            }
-
-            const sampleMap = new Map(
-              results
-                .filter((result) => result.shiftId)
-                .map((result) => [result.shiftId, result.sampleNumbers])
-            );
-
+          if (sampleNumberMap.size) {
             setAirMonitoringShifts((prevShifts) =>
               prevShifts.map((shift) =>
-                sampleMap.has(shift._id)
+                sampleNumberMap.has(shift._id)
                   ? {
                       ...shift,
-                      sampleNumbers: sampleMap.get(shift._id),
+                      sampleNumbers: sampleNumberMap.get(shift._id),
                     }
                   : shift
               )
             );
             logTiming("sample numbers hydrated");
-          });
+          }
         }
-
-        if (!isActive()) {
-          finishTiming("stale post-sample processing");
-          return;
-        }
-
-        const projectClearancesRaw =
-          Array.isArray(clearancesResponse) && clearancesResponse.length > 0
-            ? clearancesResponse
-            : clearancesResponse?.data ||
-              clearancesResponse?.jobs ||
-              clearancesResponse?.clearances ||
-              [];
-
-        const projectClearances = projectClearancesRaw.filter((clearance) => {
-          const clearanceProjectId =
-            clearance?.projectId?._id ||
-            clearance?.projectId ||
-            clearance?.project?._id ||
-            clearance?.project;
-
-          return (
-            clearanceProjectId &&
-            resolvedProjectId &&
-            clearanceProjectId.toString() === resolvedProjectId.toString()
-          );
-        });
-
-        setClearances(projectClearances);
-        logTiming(`clearances filtered (${projectClearances.length})`);
       } catch (err) {
         if (!isActive()) {
           finishTiming("stale error result");

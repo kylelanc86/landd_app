@@ -7,6 +7,7 @@ const asbestosRemovalJobService = {
   },
   
   getById: (id) => axiosInstance.get(`/asbestos-removal-jobs/${id}`),
+  getDetails: (id) => axiosInstance.get(`/asbestos-removal-jobs/${id}/details`),
   
   create: (data) => axiosInstance.post("/asbestos-removal-jobs", data),
   

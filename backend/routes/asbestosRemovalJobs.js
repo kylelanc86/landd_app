@@ -1,7 +1,12 @@
 const express = require("express");
+const { performance } = require("perf_hooks");
 const router = express.Router();
 const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
 const Project = require("../models/Project");
+const AirMonitoringJob = require("../models/Job");
+const Shift = require("../models/Shift");
+const Sample = require("../models/Sample");
+const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 
@@ -120,6 +125,179 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Get asbestos removal job with related data by ID
+router.get(
+  "/:id/details",
+  auth,
+  checkPermission("asbestos.view"),
+  async (req, res) => {
+    const routeStart = performance.now();
+    try {
+      const job = await AsbestosRemovalJob.findById(req.params.id)
+        .populate({
+          path: "projectId",
+          select: "projectID name client",
+          populate: {
+            path: "client",
+            select: "name contact1Name contact1Email invoiceEmail contact2Email",
+          },
+        })
+        .populate("createdBy", "firstName lastName")
+        .populate("updatedBy", "firstName lastName")
+        .lean();
+
+      if (!job) {
+        return res
+          .status(404)
+          .json({ message: "Asbestos removal job not found" });
+      }
+
+      const projectId =
+        job.projectId?._id?.toString() ||
+        (typeof job.projectId === "string" ? job.projectId : null);
+
+      const metrics = {
+        timings: {},
+        counts: {},
+      };
+
+      if (!projectId) {
+        metrics.timings.total = `${(performance.now() - routeStart).toFixed(
+          2
+        )}ms`;
+        console.log("[AsbestosRemovalJobs] Details fetch metrics:", metrics);
+        return res.json({
+          job,
+          shifts: [],
+          clearances: [],
+          sampleNumbers: [],
+        });
+      }
+
+      const jobsStart = performance.now();
+      const airMonitoringJobs = await AirMonitoringJob.find({ projectId })
+        .select("_id name")
+        .lean();
+      metrics.timings.projectJobs = `${(
+        performance.now() - jobsStart
+      ).toFixed(2)}ms`;
+      metrics.counts.projectJobs = airMonitoringJobs.length;
+
+      const jobNameMap = new Map();
+      jobNameMap.set(job._id.toString(), job.projectName || "Asbestos Removal Job");
+      airMonitoringJobs.forEach((monitoringJob) => {
+        if (monitoringJob?._id) {
+          jobNameMap.set(
+            monitoringJob._id.toString(),
+            monitoringJob.name || "Air Monitoring Job"
+          );
+        }
+      });
+
+      const shiftJobIds = Array.from(jobNameMap.keys());
+
+      const shiftsStart = performance.now();
+      const shiftDocs = shiftJobIds.length
+        ? await Shift.find({ job: { $in: shiftJobIds } })
+            .populate("supervisor", "firstName lastName")
+            .populate("defaultSampler", "firstName lastName")
+            .lean()
+        : [];
+      metrics.timings.shifts = `${(
+        performance.now() - shiftsStart
+      ).toFixed(2)}ms`;
+      metrics.counts.shifts = shiftDocs.length;
+
+      const decoratedShifts = shiftDocs.map((shift) => {
+        const jobKey = shift.job?.toString();
+        return {
+          ...shift,
+          jobId: jobKey,
+          jobName:
+            (jobKey && jobNameMap.get(jobKey)) ||
+            job.projectName ||
+            "Asbestos Removal Job",
+        };
+      });
+
+      const shiftIds = decoratedShifts.map((shift) => shift._id);
+
+      const samplesStart = performance.now();
+      const sampleDocs = shiftIds.length
+        ? await Sample.find({ shift: { $in: shiftIds } })
+            .select("shift fullSampleID")
+            .lean()
+        : [];
+      metrics.timings.samples = `${(
+        performance.now() - samplesStart
+      ).toFixed(2)}ms`;
+      metrics.counts.samples = sampleDocs.length;
+
+      const sampleMap = new Map();
+      sampleDocs.forEach((sample) => {
+        const shiftKey = sample.shift?.toString();
+        if (!shiftKey) return;
+
+        const match = sample.fullSampleID?.match(/AM(\d+)$/);
+        if (!match) return;
+
+        if (!sampleMap.has(shiftKey)) {
+          sampleMap.set(shiftKey, []);
+        }
+        sampleMap.get(shiftKey).push(match[1]);
+      });
+
+      const sampleNumbers = Array.from(sampleMap.entries()).map(
+        ([shiftId, numbers]) => ({
+          shiftId,
+          sampleNumbers: numbers
+            .map((value) => parseInt(value, 10))
+            .filter((n) => !Number.isNaN(n))
+            .sort((a, b) => a - b)
+            .map((value) => value.toString()),
+        })
+      );
+
+      const clearancesStart = performance.now();
+      const clearances = await AsbestosClearance.find({ projectId })
+        .populate({
+          path: "projectId",
+          select: "projectID name client",
+          populate: {
+            path: "client",
+            select: "name",
+          },
+        })
+        .populate("createdBy", "firstName lastName")
+        .populate("updatedBy", "firstName lastName")
+        .lean();
+      metrics.timings.clearances = `${(
+        performance.now() - clearancesStart
+      ).toFixed(2)}ms`;
+      metrics.counts.clearances = clearances.length;
+
+      metrics.timings.total = `${(performance.now() - routeStart).toFixed(
+        2
+      )}ms`;
+
+      console.log("[AsbestosRemovalJobs] Details fetch metrics:", {
+        jobId: job._id,
+        ...metrics,
+      });
+
+      res.json({
+        job,
+        shifts: decoratedShifts,
+        clearances,
+        sampleNumbers,
+      });
+    } catch (error) {
+      console.error("Error fetching asbestos removal job details:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 // Get asbestos removal job by ID
 router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
