@@ -183,18 +183,15 @@ const AsbestosRemovalJobDetails = () => {
         if (typeof console === "undefined") {
           return;
         }
-
-        if (console.timeLog) {
-          console.timeLog(timingLabel, stage);
-        } else {
-          const elapsed =
-            (typeof performance !== "undefined" && performance.now
-              ? performance.now()
-              : Date.now()) - startTime;
-          console.log(
-            `[${timingLabel}] ${stage} (${Math.round(elapsed)}ms elapsed)`
-          );
-        }
+        const elapsed =
+          (typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now()) - startTime;
+        console.log(
+          `[${timingLabel}] ${stage}${stage ? " " : ""}(${Math.round(
+            elapsed
+          )}ms elapsed)`
+        );
       };
 
       const finishTiming = (stage) => {
@@ -206,24 +203,16 @@ const AsbestosRemovalJobDetails = () => {
           logTiming(stage);
         }
 
-        if (console.timeEnd) {
-          console.timeEnd(timingLabel);
-        } else {
-          const totalElapsed =
-            (typeof performance !== "undefined" && performance.now
-              ? performance.now()
-              : Date.now()) - startTime;
-          console.log(
-            `[${timingLabel}] completed (${Math.round(totalElapsed)}ms total)`
-          );
-        }
+        const totalElapsed =
+          (typeof performance !== "undefined" && performance.now
+            ? performance.now()
+            : Date.now()) - startTime;
+        console.log(
+          `[${timingLabel}] completed (${Math.round(totalElapsed)}ms total)`
+        );
       };
 
-      if (typeof console !== "undefined" && console.time) {
-        console.time(timingLabel);
-      } else {
-        logTiming("start");
-      }
+      logTiming("start");
 
       if (!silent) {
         setLoading(true);
