@@ -119,6 +119,26 @@ const ClearanceItems = () => {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
+  const getProjectFolderName = () => {
+    const project = clearance?.projectId;
+
+    if (project) {
+      if (typeof project === "string") {
+        return project;
+      }
+      return (
+        project.projectId ||
+        project.externalId ||
+        project._id ||
+        project.name ||
+        clearanceId ||
+        "clearance-photos"
+      );
+    }
+
+    return clearanceId || "clearance-photos";
+  };
+
   // Set up video stream when camera dialog opens
   useEffect(() => {
     if (cameraDialogOpen && stream && videoRef) {
@@ -630,7 +650,9 @@ const ClearanceItems = () => {
 
             // Save full-size original to device
             try {
-              await saveFileToDevice(fullQualityFile, filename);
+              await saveFileToDevice(fullQualityFile, filename, {
+                projectId: getProjectFolderName(),
+              });
             } catch (error) {
               console.error("Error saving photo to device:", error);
               // Continue with upload even if device save fails
@@ -684,16 +706,29 @@ const ClearanceItems = () => {
   // Handle site plan save
   const handleSitePlanSave = async (sitePlanData) => {
     try {
-      console.log("Saving site plan data:", {
-        clearanceId,
-        sitePlanDataLength: sitePlanData?.length,
-        sitePlanSource: "drawn",
-      });
+      const imageData =
+        typeof sitePlanData === "string"
+          ? sitePlanData
+          : sitePlanData?.imageData;
+      const legendEntries = Array.isArray(sitePlanData?.legend)
+        ? sitePlanData.legend
+        : [];
+      const legendTitle =
+        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
+          ? sitePlanData.legendTitle.trim()
+          : "Site Plan Key";
+
+      if (!imageData) {
+        showSnackbar("No site plan image data was provided", "error");
+        return;
+      }
 
       // Save the drawn site plan to the clearance
       const response = await asbestosClearanceService.update(clearanceId, {
         sitePlan: true, // Enable site plan functionality
-        sitePlanFile: sitePlanData, // This will be the base64 image data
+        sitePlanFile: imageData, // Base64 image data
+        sitePlanLegend: legendEntries,
+        sitePlanLegendTitle: legendTitle,
         sitePlanSource: "drawn", // Mark it as a drawn site plan
       });
 
@@ -868,23 +903,6 @@ const ClearanceItems = () => {
       });
 
       try {
-        // Save full-size original to device (if not already saved in handleCapturePhoto)
-        // Only save if this is an uploaded file (not from camera capture)
-        if (file.name !== "camera-photo.jpg") {
-          try {
-            const timestamp = new Date()
-              .toISOString()
-              .replace(/[:.]/g, "-")
-              .slice(0, -5);
-            const originalFilename =
-              file.name || `clearance-photo-${timestamp}.jpg`;
-            await saveFileToDevice(file, originalFilename);
-          } catch (error) {
-            console.error("Error saving photo to device:", error);
-            // Continue with upload even if device save fails
-          }
-        }
-
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
 
@@ -1108,6 +1126,8 @@ const ClearanceItems = () => {
           // Update the clearance with the site plan file
           await asbestosClearanceService.update(clearanceId, {
             sitePlanFile: base64Data,
+            sitePlanLegend: [],
+            sitePlanLegendTitle: null,
           });
 
           showSnackbar("Site plan uploaded successfully", "success");
@@ -1137,6 +1157,8 @@ const ClearanceItems = () => {
         await asbestosClearanceService.update(clearanceId, {
           sitePlanFile: null,
           sitePlanSource: null, // Backend will convert null to undefined to remove the field
+          sitePlanLegend: [],
+          sitePlanLegendTitle: null,
         });
 
         showSnackbar("Site plan removed successfully", "success");
@@ -3296,6 +3318,8 @@ const ClearanceItems = () => {
               onSave={handleSitePlanSave}
               onCancel={() => setSitePlanDrawingDialogOpen(false)}
               existingSitePlan={clearance?.sitePlanFile}
+              existingLegend={clearance?.sitePlanLegend}
+              existingLegendTitle={clearance?.sitePlanLegendTitle}
             />
           </DialogContent>
         </Dialog>

@@ -552,18 +552,18 @@ pdfMake.fonts = {
               body: [
                 isClientSupplied 
                   ? [
-                      { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                      { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                      { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'L&D Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Client Sample Reference', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                     ]
                   : [
-                      { text: 'Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'L&D Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Sample Location', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Time On', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Time Off', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Ave flow (L/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                      { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Reported Conc. (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                     ],
@@ -611,11 +611,11 @@ pdfMake.fonts = {
               paddingRight: function(i, node) { return 4; },
               paddingTop: function(i, node) { 
                 // Increase row height by 75% for client supplied reports (4 * 1.75 = 7)
-                return isClientSupplied ? (i === 0 ? 4 : 7) : 4; 
+                return isClientSupplied ? 7 : 4; 
               },
               paddingBottom: function(i, node) { 
                 // Increase row height by 75% for client supplied reports (4 * 1.75 = 7)
-                return isClientSupplied ? (i === 0 ? 4 : 7) : 4; 
+                return isClientSupplied ? 7 : 4; 
               },
             },
             margin: [0, 0, 0, 20]

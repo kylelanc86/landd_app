@@ -25,6 +25,22 @@ const formatClearanceDate = (dateString) => {
 
 // Performance monitoring removed
 
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const normalizeColorForDisplay = (value) => {
+  const color = String(value || "").trim();
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) {
+    return color;
+  }
+  return "#FFFFFF";
+};
+
 /**
  * Generate complete HTML content for clearance report using DocRaptor-optimized templates
  */
@@ -1020,7 +1036,17 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
  * @param {string} footerText - Footer text to display
  * @returns {string} - HTML for site plan content page
  */
-const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, footerText = '', fileField = 'sitePlanFile', title = 'SITE PLAN', figureTitle = 'Asbestos Removal Site Plan') => {
+const generateSitePlanContentPage = (
+  data,
+  appendixLetter = 'B',
+  logoBase64,
+  footerText = '',
+  fileField = 'sitePlanFile',
+  title = 'SITE PLAN',
+  figureTitle = 'Asbestos Removal Site Plan',
+  legendField = 'sitePlanLegend',
+  legendTitleField = 'sitePlanLegendTitle'
+) => {
   // Determine the file type and create appropriate HTML
   const fileData = data[fileField];
   
@@ -1047,11 +1073,11 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, foo
     // For images, embed directly with caption in a grey bordered box
     // Container stays full width, image is 10% smaller and shifted 20px to the right
     content = `
-      <div class="site-plan-container" style="width: calc(100vh - 120px); margin-left: 40px; margin-right: auto; padding: 10px 10px 10px 50px; border: 2px solid #ccc; background-color: #f9f9f9; border-radius: 8px; max-width: calc(100vh - 120px); box-sizing: border-box;">
+      <div class="site-plan-container" style="width: 100%; max-width: 720px; margin: 0 auto; padding: 16px 24px; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box;">
         <img src="${imageSrc}" 
              alt="${title}" 
-             style="width: 90% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
-        <div style="font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 10px;">
+             style="width: 100% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
+        <div style="font-size: 14px; font-weight: 600; color: #1f2937; text-align: center; margin-top: 12px;">
           Figure 1: ${figureTitle}
         </div>
       </div>
@@ -1065,6 +1091,41 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, foo
           <div class="photographs-text">${title}</div>
           <div class="file-note">Document attached</div>
         </div>
+      </div>
+    `;
+  }
+
+  let legendHtml = '';
+  const legendEntries = Array.isArray(data[legendField])
+    ? data[legendField].filter((entry) => entry && entry.color)
+    : [];
+
+  if (legendEntries.length > 0) {
+    const legendHeading =
+      (data[legendTitleField] && data[legendTitleField].trim()) ||
+      'Site Plan Key';
+    const legendRows = legendEntries
+      .map((entry) => {
+        const description =
+          entry.description && entry.description.trim()
+            ? escapeHtml(entry.description.trim())
+            : '<span style="color:#9ca3af;">(no description provided)</span>';
+
+        return `
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+            <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)};"></span>
+            <span style="font-size:12px; color:#334155;">${description}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    legendHtml = `
+      <div class="site-plan-legend" style="margin: 24px auto 0 auto; width: 100%; max-width: 720px; padding: 16px 20px; border: 1px solid #d1d5db; border-radius: 10px; background-color: #ffffff; box-sizing: border-box;">
+        <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; color: #1f2937;">
+          ${escapeHtml(legendHeading)}
+        </div>
+        ${legendRows}
       </div>
     `;
   }
@@ -1083,6 +1144,7 @@ const generateSitePlanContentPage = (data, appendixLetter = 'B', logoBase64, foo
           <div class="green-line"></div>
           <div class="content">
             ${content}
+            ${legendHtml}
           </div>
           <div class="footer">
             <div class="footer-line"></div>

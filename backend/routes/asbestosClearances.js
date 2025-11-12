@@ -89,7 +89,27 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes, vehicleEquipmentDescription } = req.body;
+    const {
+      projectId,
+      clearanceDate,
+      inspectionTime,
+      status,
+      clearanceType,
+      jurisdiction,
+      secondaryHeader,
+      LAA,
+      asbestosRemovalist,
+      airMonitoring,
+      airMonitoringReport,
+      sitePlan,
+      sitePlanFile,
+      sitePlanSource,
+      sitePlanLegend,
+      sitePlanLegendTitle,
+      jobSpecificExclusions,
+      notes,
+      vehicleEquipmentDescription,
+    } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
@@ -106,6 +126,8 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       sitePlan: sitePlan || false,
       sitePlanFile: sitePlanFile || null,
       ...(sitePlanSource && { sitePlanSource }),
+      sitePlanLegend: sitePlanLegend || [],
+      sitePlanLegendTitle: sitePlanLegendTitle || undefined,
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
       vehicleEquipmentDescription,
@@ -146,7 +168,29 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, jurisdiction, secondaryHeader, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, sitePlanSource, jobSpecificExclusions, notes, revision, revisionReasons, vehicleEquipmentDescription } = req.body;
+    const {
+      projectId,
+      clearanceDate,
+      inspectionTime,
+      status,
+      clearanceType,
+      jurisdiction,
+      secondaryHeader,
+      LAA,
+      asbestosRemovalist,
+      airMonitoring,
+      airMonitoringReport,
+      sitePlan,
+      sitePlanFile,
+      sitePlanSource,
+      sitePlanLegend,
+      sitePlanLegendTitle,
+      jobSpecificExclusions,
+      notes,
+      revision,
+      revisionReasons,
+      vehicleEquipmentDescription,
+    } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
@@ -170,6 +214,12 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.airMonitoringReport = airMonitoringReport !== undefined ? airMonitoringReport : clearance.airMonitoringReport;
     clearance.sitePlan = sitePlan !== undefined ? sitePlan : clearance.sitePlan;
     clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
+    if (sitePlanLegend !== undefined) {
+      clearance.sitePlanLegend = sitePlanLegend;
+    }
+    if (sitePlanLegendTitle !== undefined) {
+      clearance.sitePlanLegendTitle = sitePlanLegendTitle;
+    }
     if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
       clearance.sitePlanSource = sitePlanSource;
     } else if (sitePlanSource === null) {

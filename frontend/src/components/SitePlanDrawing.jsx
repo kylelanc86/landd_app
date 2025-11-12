@@ -7,6 +7,11 @@ import {
   Slider,
   Button,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import {
   Edit as EditIcon,
@@ -29,7 +34,55 @@ import {
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
 import GoogleMapsDialog from "./GoogleMapsDialog";
 
-const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
+const CANVAS_SAFE_WIDTH = 1000;
+const CANVAS_SAFE_HEIGHT = 720;
+
+const normalizeLegendEntries = (entries = []) => {
+  const seen = new Set();
+  const normalized = [];
+
+  entries.forEach((entry) => {
+    if (!entry || !entry.color) {
+      return;
+    }
+    const colorValue = String(entry.color).trim();
+    if (!colorValue) {
+      return;
+    }
+    const key = colorValue.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    normalized.push({
+      color: colorValue,
+      description: entry.description || "",
+    });
+  });
+
+  return normalized;
+};
+
+const legendArraysEqual = (a = [], b = []) => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (
+      a[i].color?.toLowerCase() !== b[i].color?.toLowerCase() ||
+      (a[i].description || "") !== (b[i].description || "")
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const SitePlanDrawing = ({
+  onSave,
+  onCancel,
+  existingSitePlan,
+  existingLegend = [],
+  existingLegendTitle = "Site Plan Key",
+}) => {
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -59,44 +112,129 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const prevItemsLengthRef = useRef(0);
+  const [legendEntries, setLegendEntries] = useState(() =>
+    normalizeLegendEntries(existingLegend)
+  );
+  const [legendTitle, setLegendTitle] = useState(
+    existingLegendTitle || "Site Plan Key"
+  );
+  const [legendDialogOpen, setLegendDialogOpen] = useState(false);
+  const [legendDraftEntries, setLegendDraftEntries] = useState(() =>
+    normalizeLegendEntries(existingLegend)
+  );
+  const [legendDraftTitle, setLegendDraftTitle] = useState(
+    existingLegendTitle || "Site Plan Key"
+  );
+  const [imageScale, setImageScale] = useState(100);
+  const renderForExportRef = useRef(false);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
+    setLegendEntries(normalizeLegendEntries(existingLegend));
+    setLegendDraftEntries(normalizeLegendEntries(existingLegend));
+  }, [existingLegend]);
 
-      // Set up responsive canvas sizing
-      const resizeCanvas = () => {
-        const container = canvas.parentElement;
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
+  useEffect(() => {
+    const nextTitle = existingLegendTitle || "Site Plan Key";
+    setLegendTitle(nextTitle);
+    setLegendDraftTitle(nextTitle);
+  }, [existingLegendTitle]);
 
-        // Set canvas size to match container
-        canvas.width = containerWidth;
-        canvas.height = containerHeight;
+  const openLegendDialog = () => {
+    setLegendDraftTitle(legendTitle || "Site Plan Key");
+    setLegendDraftEntries(
+      legendEntries.map((entry) => ({ ...entry }))
+    );
+    setLegendDialogOpen(true);
+  };
 
-        // Set CSS size to maintain aspect ratio
-        canvas.style.width = containerWidth + "px";
-        canvas.style.height = containerHeight + "px";
+  const handleLegendDialogClose = () => {
+    setLegendDialogOpen(false);
+  };
 
-        // Redraw all items after resizing
-        setTimeout(() => {
-          // eslint-disable-next-line react-hooks/exhaustive-deps
-          redrawCanvas();
-        }, 0);
-      };
+  const handleLegendEntryChange = (colorKey, value) => {
+    setLegendDraftEntries((prev) =>
+      prev.map((entry) =>
+        entry.color.toLowerCase() === colorKey.toLowerCase()
+          ? { ...entry, description: value }
+          : entry
+      )
+    );
+  };
 
-      resizeCanvas();
-      window.addEventListener("resize", resizeCanvas);
+  const handleLegendDialogClear = () => {
+    setLegendDraftEntries((prev) =>
+      prev.map((entry) => ({ ...entry, description: "" }))
+    );
+  };
 
-      return () => {
-        window.removeEventListener("resize", resizeCanvas);
-      };
+  const handleLegendDialogSave = () => {
+    const cleanedTitle = legendDraftTitle.trim() || "Site Plan Key";
+    const cleanedEntries = legendDraftEntries.map((entry) => ({
+      color: entry.color,
+      description: entry.description.trim(),
+    }));
+
+    setLegendTitle(cleanedTitle);
+    setLegendEntries(cleanedEntries);
+    setLegendDialogOpen(false);
+  };
+
+  useEffect(() => {
+    if (!drawnItems || drawnItems.length === 0) {
+      return;
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const seenColors = new Map();
+    const registerColor = (rawColor) => {
+      if (!rawColor) return;
+      const colorValue = String(rawColor).trim();
+      if (!colorValue) return;
+      const key = colorValue.toLowerCase();
+      if (!seenColors.has(key)) {
+        seenColors.set(key, colorValue);
+      }
+    };
+
+    drawnItems.forEach((item) => {
+      registerColor(item.color);
+      if (
+        (item.type === "circle" || item.type === "rectangle") &&
+        item.isFilled
+      ) {
+        registerColor(item.fillColor);
+      }
+    });
+
+    if (seenColors.size === 0) {
+      return;
+    }
+
+    const orderedColors = Array.from(seenColors.values());
+
+    setLegendEntries((prev) => {
+      const prevMap = new Map(
+        prev.map((entry) => [entry.color?.toLowerCase(), entry.description || ""])
+      );
+      const nextEntries = orderedColors.map((colorValue) => ({
+        color: colorValue,
+        description: prevMap.get(colorValue.toLowerCase()) || "",
+      }));
+
+      return legendArraysEqual(nextEntries, prev) ? prev : nextEntries;
+    });
+  }, [drawnItems]);
+
+  useEffect(() => {
+    if (selectedItem?.type === "image") {
+      const baseWidth = selectedItem.originalWidth || selectedItem.width;
+      if (baseWidth) {
+        const ratio = (selectedItem.width / baseWidth) * 100;
+        setImageScale(Math.round(ratio));
+        return;
+      }
+    }
+    setImageScale(100);
+  }, [selectedItem]);
 
   // Initialize Google Maps when showGoogleMaps changes
   useEffect(() => {
@@ -670,6 +808,34 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
     return updatedItem;
   };
 
+  const updateImageScale = useCallback((item, scalePercent) => {
+    if (!item || item.type !== "image") {
+      return item;
+    }
+
+    const baseWidth = item.originalWidth || item.width;
+    const baseHeight = item.originalHeight || item.height;
+    if (!baseWidth || !baseHeight) {
+      return item;
+    }
+
+    const ratio = Math.max(0.1, scalePercent / 100);
+    const newWidth = Math.max(20, baseWidth * ratio);
+    const newHeight = Math.max(20, baseHeight * ratio);
+    const centerX = item.x + item.width / 2;
+    const centerY = item.y + item.height / 2;
+
+    return {
+      ...item,
+      width: newWidth,
+      height: newHeight,
+      x: centerX - newWidth / 2,
+      y: centerY - newHeight / 2,
+      originalWidth: baseWidth,
+      originalHeight: baseHeight,
+    };
+  }, []);
+
   const saveToHistory = useCallback(() => {
     // Save the current drawnItems array to history instead of canvas snapshot
     const newHistory = history.slice(0, historyIndex + 1);
@@ -718,8 +884,17 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
 
   const handleSave = () => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
+    renderForExportRef.current = true;
+    redrawCanvas();
     const imageData = canvas.toDataURL("image/png");
-    onSave(imageData);
+    renderForExportRef.current = false;
+    redrawCanvas();
+    onSave({
+      imageData,
+      legend: legendEntries,
+      legendTitle,
+    });
   };
 
   const handleInlineTextSubmit = () => {
@@ -829,6 +1004,95 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
     }
   };
 
+  const drawLegend = useCallback(
+    (ctx, canvas) => {
+      if (!legendEntries.length) {
+        return;
+      }
+
+      const padding = 16;
+      const rowHeight = 28;
+      const colorBoxSize = 18;
+      const columnGap = 12;
+      const maxAllowedWidth = canvas.width * 0.45;
+      const minWidth = 240;
+      const headerText = legendTitle || "Site Plan Key";
+
+      ctx.save();
+
+      ctx.font = "16px Arial";
+      ctx.textBaseline = "top";
+      let maxTextWidth = ctx.measureText(headerText).width;
+
+      ctx.font = "14px Arial";
+      legendEntries.forEach((entry) => {
+        const width = ctx.measureText(entry.description || "").width;
+        if (width > maxTextWidth) {
+          maxTextWidth = width;
+        }
+      });
+
+      const contentWidth =
+        padding * 2 + colorBoxSize + columnGap + maxTextWidth;
+      const width = Math.max(
+        minWidth,
+        Math.min(maxAllowedWidth, contentWidth)
+      );
+      const height = padding * 2 + 24 + legendEntries.length * rowHeight;
+      const x = canvas.width - width - 20;
+      const y = canvas.height - height - 20;
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+      ctx.fillRect(x, y, width, height);
+
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, width, height);
+
+      ctx.fillStyle = "#1f1f1f";
+      ctx.font = "16px Arial";
+      ctx.textBaseline = "top";
+      ctx.fillText(headerText, x + padding, y + padding);
+
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+      ctx.beginPath();
+      ctx.moveTo(x + padding, y + padding + 22);
+      ctx.lineTo(x + width - padding, y + padding + 22);
+      ctx.stroke();
+
+      const tableTop = y + padding + 28;
+      ctx.font = "14px Arial";
+      ctx.textBaseline = "middle";
+
+      legendEntries.forEach((entry, index) => {
+        const rowTop = tableTop + index * rowHeight;
+        const boxY = rowTop + (rowHeight - colorBoxSize) / 2;
+
+        ctx.fillStyle = entry.color || "#6b7280";
+        ctx.fillRect(x + padding, boxY, colorBoxSize, colorBoxSize);
+
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.25)";
+        ctx.strokeRect(x + padding, boxY, colorBoxSize, colorBoxSize);
+
+        ctx.fillStyle = "#1f1f1f";
+        ctx.fillText(
+          entry.description || "",
+          x + padding + colorBoxSize + columnGap,
+          rowTop + rowHeight / 2
+        );
+
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
+        ctx.beginPath();
+        ctx.moveTo(x + padding, rowTop + rowHeight);
+        ctx.lineTo(x + width - padding, rowTop + rowHeight);
+        ctx.stroke();
+      });
+
+      ctx.restore();
+    },
+    [legendEntries, legendTitle]
+  );
+
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -848,11 +1112,61 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
       drawItem(ctx, item);
     });
 
+    // Draw legend overlay if configured (only during editing)
+    if (!renderForExportRef.current) {
+      drawLegend(ctx, canvas);
+    }
+
     // Draw selected item with selection handles
-    if (selectedItem) {
+    if (selectedItem && !renderForExportRef.current) {
       drawSelectionHandles(ctx, selectedItem);
     }
-  }, [drawnItems, selectedItem, drawSelectionHandles]);
+  }, [drawnItems, selectedItem, drawLegend, drawSelectionHandles]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    canvas.width = CANVAS_SAFE_WIDTH;
+    canvas.height = CANVAS_SAFE_HEIGHT;
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+
+    redrawCanvas();
+  }, [redrawCanvas]);
+
+  const handleImageScaleChange = useCallback(
+    (event, value) => {
+      if (!selectedItem || selectedItem.type !== "image") {
+        return;
+      }
+
+      const scaleValue = Array.isArray(value) ? value[0] : value;
+      setImageScale(scaleValue);
+
+      const updatedItem = updateImageScale(selectedItem, scaleValue);
+      if (!updatedItem) {
+        return;
+      }
+
+      setSelectedItem(updatedItem);
+      setDrawnItems((prev) =>
+        prev.map((item) => (item.id === selectedItem.id ? updatedItem : item))
+      );
+      redrawCanvas();
+    },
+    [selectedItem, updateImageScale, redrawCanvas]
+  );
+
+  const handleImageScaleChangeCommitted = useCallback(() => {
+    if (selectedItem?.type === "image") {
+      saveToHistory();
+    }
+  }, [selectedItem, saveToHistory]);
 
   const getSelectionHandles = (item) => {
     const handles = [];
@@ -1043,10 +1357,10 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
     prevItemsLengthRef.current = drawnItems.length;
   }, [drawnItems.length, saveToHistory]);
 
-  // Redraw canvas when drawnItems or selectedItem change
+  // Redraw canvas when drawn items, selected item, or legend configuration changes
   useEffect(() => {
     redrawCanvas();
-  }, [drawnItems, selectedItem, redrawCanvas]);
+  }, [drawnItems, selectedItem, legendEntries, legendTitle, redrawCanvas]);
 
   // Handle keyboard events
   useEffect(() => {
@@ -1502,11 +1816,48 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
               Remove Map
             </Button>
           )}
+          <Button
+            variant={legendEntries.length > 0 ? "contained" : "outlined"}
+            onClick={openLegendDialog}
+            size="small"
+          >
+            {legendEntries.length > 0 ? "Edit Key" : "Add Key"}
+          </Button>
+          {selectedItem?.type === "image" && (
+            <Box sx={{ minWidth: 200 }}>
+              <Typography variant="caption" display="block">
+                Image Size: {imageScale}%
+              </Typography>
+              <Slider
+                value={imageScale}
+                onChange={handleImageScaleChange}
+                onChangeCommitted={handleImageScaleChangeCommitted}
+                min={25}
+                max={300}
+                size="small"
+              />
+            </Box>
+          )}
         </Box>
       </Paper>
 
       {/* Drawing Canvas */}
-      <Paper sx={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <Paper
+        sx={{
+          position: "relative",
+          backgroundColor: "#dfe3e8",
+          borderRadius: 3,
+          p: 3,
+          width: "100%",
+          maxWidth: 900,
+          aspectRatio: `${CANVAS_SAFE_WIDTH} / ${CANVAS_SAFE_HEIGHT}`,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          overflow: "hidden",
+          mx: "auto",
+        }}
+      >
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -1524,8 +1875,9 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
                 : "crosshair",
             width: "100%",
             height: "100%",
-            backgroundColor: "#fff",
-            display: "block",
+            backgroundColor: "#ffffff",
+            borderRadius: 8,
+            boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.4)",
             transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
             transformOrigin: "top left",
           }}
@@ -1648,6 +2000,157 @@ const SitePlanDrawing = ({ onSave, onCancel, existingSitePlan }) => {
           Save Site Plan
         </Button>
       </Box>
+
+      {legendEntries.length > 0 && (
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 900,
+            mx: "auto",
+            mt: 3,
+          }}
+        >
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              borderRadius: 2,
+              backgroundColor: "#fafbfc",
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              sx={{ fontWeight: 600, mb: 1, textTransform: "uppercase" }}
+            >
+              {legendTitle || "Site Plan Key"}
+            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              {legendEntries.map((entry) => (
+                <Box
+                  key={entry.color}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: "4px",
+                      border: "1px solid rgba(55, 65, 81, 0.4)",
+                      backgroundColor: entry.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Typography variant="body2" sx={{ color: entry.description ? "inherit" : "text.secondary", fontStyle: entry.description ? "normal" : "italic" }}>
+                    {entry.description || "No description provided"}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Paper>
+        </Box>
+      )}
+
+      <Dialog
+        open={legendDialogOpen}
+        onClose={handleLegendDialogClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Manage Site Plan Key</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            label="Key header"
+            fullWidth
+            value={legendDraftTitle}
+            onChange={(event) => setLegendDraftTitle(event.target.value)}
+            sx={{ mb: 3 }}
+          />
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {legendDraftEntries.length === 0 && (
+              <Typography variant="body2" color="text.secondary">
+                Colours are added automatically as you draw on the plan.
+              </Typography>
+            )}
+            {legendDraftEntries.map((entry, index) => (
+              <Box
+                key={entry.color}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr",
+                  columnGap: 16,
+                  rowGap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 1,
+                      border: "1px solid rgba(55, 65, 81, 0.4)",
+                      backgroundColor: entry.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Colour
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {entry.color}
+                    </Typography>
+                  </Box>
+                </Box>
+                <TextField
+                  label={`Description ${index + 1}`}
+                  value={entry.description}
+                  onChange={(event) =>
+                    handleLegendEntryChange(entry.color, event.target.value)
+                  }
+                  fullWidth
+                />
+              </Box>
+            ))}
+          </Box>
+          {legendDraftEntries.length > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "flex-end",
+                mt: 3,
+              }}
+            >
+              <Button
+                onClick={handleLegendDialogClear}
+                variant="text"
+                color="error"
+                size="small"
+              >
+                Clear Descriptions
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleLegendDialogClose} variant="outlined">
+            Cancel
+          </Button>
+          <Button onClick={handleLegendDialogSave} variant="contained">
+            Save Key
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Google Maps Dialog */}
       <GoogleMapsDialog
