@@ -96,6 +96,9 @@ const ROLE_PERMISSIONS = {
     'equipment.view',
     'equipment.create',
     'equipment.edit',
+    'asbestos.view',
+    'asbestos.create',
+    'asbestos.edit'
   ], // Employees can view, create and edit projects but not change status
 };
 
