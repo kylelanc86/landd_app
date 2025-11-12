@@ -36,7 +36,6 @@ import GoogleMapsDialog from "./GoogleMapsDialog";
 
 const CANVAS_SAFE_WIDTH = 1000;
 const CANVAS_SAFE_HEIGHT = 720;
-
 const normalizeLegendEntries = (entries = []) => {
   const seen = new Set();
   const normalized = [];
@@ -55,6 +54,7 @@ const normalizeLegendEntries = (entries = []) => {
     }
     seen.add(key);
     normalized.push({
+      id: key,
       color: colorValue,
       description: entry.description || "",
     });
@@ -67,6 +67,7 @@ const legendArraysEqual = (a = [], b = []) => {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
     if (
+      a[i].id !== b[i].id ||
       a[i].color?.toLowerCase() !== b[i].color?.toLowerCase() ||
       (a[i].description || "") !== (b[i].description || "")
     ) {
@@ -141,9 +142,7 @@ const SitePlanDrawing = ({
 
   const openLegendDialog = () => {
     setLegendDraftTitle(legendTitle || "Site Plan Key");
-    setLegendDraftEntries(
-      legendEntries.map((entry) => ({ ...entry }))
-    );
+    setLegendDraftEntries(legendEntries.map((entry) => ({ ...entry })));
     setLegendDialogOpen(true);
   };
 
@@ -151,12 +150,10 @@ const SitePlanDrawing = ({
     setLegendDialogOpen(false);
   };
 
-  const handleLegendEntryChange = (colorKey, value) => {
+  const handleLegendEntryChange = (entryId, value) => {
     setLegendDraftEntries((prev) =>
       prev.map((entry) =>
-        entry.color.toLowerCase() === colorKey.toLowerCase()
-          ? { ...entry, description: value }
-          : entry
+        entry.id === entryId ? { ...entry, description: value } : entry
       )
     );
   };
@@ -170,6 +167,7 @@ const SitePlanDrawing = ({
   const handleLegendDialogSave = () => {
     const cleanedTitle = legendDraftTitle.trim() || "Site Plan Key";
     const cleanedEntries = legendDraftEntries.map((entry) => ({
+      id: entry.id,
       color: entry.color,
       description: entry.description.trim(),
     }));
@@ -213,12 +211,20 @@ const SitePlanDrawing = ({
 
     setLegendEntries((prev) => {
       const prevMap = new Map(
-        prev.map((entry) => [entry.color?.toLowerCase(), entry.description || ""])
+        prev.map((entry) => [
+          entry.color?.toLowerCase(),
+          { description: entry.description || "", id: entry.id },
+        ])
       );
-      const nextEntries = orderedColors.map((colorValue) => ({
-        color: colorValue,
-        description: prevMap.get(colorValue.toLowerCase()) || "",
-      }));
+      const nextEntries = orderedColors.map((colorValue) => {
+        const lower = colorValue.toLowerCase();
+        const previous = prevMap.get(lower);
+        return {
+          id: previous?.id || lower,
+          color: colorValue,
+          description: previous?.description || "",
+        };
+      });
 
       return legendArraysEqual(nextEntries, prev) ? prev : nextEntries;
     });
@@ -1034,10 +1040,7 @@ const SitePlanDrawing = ({
 
       const contentWidth =
         padding * 2 + colorBoxSize + columnGap + maxTextWidth;
-      const width = Math.max(
-        minWidth,
-        Math.min(maxAllowedWidth, contentWidth)
-      );
+      const width = Math.max(minWidth, Math.min(maxAllowedWidth, contentWidth));
       const height = padding * 2 + 24 + legendEntries.length * rowHeight;
       const x = canvas.width - width - 20;
       const y = canvas.height - height - 20;
@@ -1133,8 +1136,8 @@ const SitePlanDrawing = ({
 
     canvas.width = CANVAS_SAFE_WIDTH;
     canvas.height = CANVAS_SAFE_HEIGHT;
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
+    canvas.style.width = `${CANVAS_SAFE_WIDTH}px`;
+    canvas.style.height = `${CANVAS_SAFE_HEIGHT}px`;
 
     redrawCanvas();
   }, [redrawCanvas]);
@@ -1842,150 +1845,154 @@ const SitePlanDrawing = ({
       </Paper>
 
       {/* Drawing Canvas */}
-      <Paper
+      <Box
         sx={{
-          position: "relative",
-          backgroundColor: "#dfe3e8",
-          borderRadius: 3,
-          p: 3,
           width: "100%",
-          maxWidth: 900,
-          aspectRatio: `${CANVAS_SAFE_WIDTH} / ${CANVAS_SAFE_HEIGHT}`,
+          overflow: "auto",
+          mx: "auto",
           display: "flex",
           justifyContent: "center",
-          alignItems: "center",
-          overflow: "hidden",
-          mx: "auto",
+          backgroundColor: "#cfd8dc",
+          py: 3,
         }}
       >
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={(e) => stopDrawing(e)}
-          onMouseLeave={(e) => stopDrawing(e)}
-          style={{
-            cursor:
-              currentTool === "hand"
-                ? isPanning
-                  ? "grabbing"
-                  : "grab"
-                : currentTool === "select" && selectedItem
-                ? "pointer"
-                : "crosshair",
-            width: "100%",
-            height: "100%",
-            backgroundColor: "#ffffff",
-            borderRadius: 8,
-            boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.4)",
-            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
-            transformOrigin: "top left",
+        <Box
+          sx={{
+            position: "relative",
+            borderRadius: 3,
+            width: CANVAS_SAFE_WIDTH,
+            height: CANVAS_SAFE_HEIGHT,
           }}
-        />
-
-        {/* Inline Text Input Overlay */}
-        {showInlineTextInput && (
-          <Box
-            sx={{
-              position: "absolute",
-              left: inlineTextPosition.x,
-              top: inlineTextPosition.y,
-              zIndex: 1000,
-              backgroundColor: "white",
-              border: "2px solid #007bff",
-              borderRadius: 1,
-              padding: 1,
-              minWidth: 200,
-              boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+        >
+          <canvas
+            ref={canvasRef}
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={(e) => stopDrawing(e)}
+            onMouseLeave={(e) => stopDrawing(e)}
+            style={{
+              cursor:
+                currentTool === "hand"
+                  ? isPanning
+                    ? "grabbing"
+                    : "grab"
+                  : currentTool === "select" && selectedItem
+                  ? "pointer"
+                  : "crosshair",
+              width: `${CANVAS_SAFE_WIDTH}px`,
+              height: `${CANVAS_SAFE_HEIGHT}px`,
+              backgroundColor: "#ffffff",
+              borderRadius: 8,
+              border: "1px solid rgba(69, 90, 100, 0.5)",
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
+              transformOrigin: "top left",
             }}
-          >
-            <input
-              ref={inlineTextInputRef}
-              autoFocus
-              type="text"
-              value={inlineTextInput}
-              onChange={(e) => setInlineTextInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleInlineTextSubmit();
-                } else if (e.key === "Escape") {
-                  handleInlineTextCancel();
-                }
-              }}
-              placeholder="Enter text..."
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                fontSize: fontSize,
-                fontFamily: "Arial, sans-serif",
-                border: "1px solid #ccc",
-                borderRadius: "4px",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-            <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-              <Button
-                size="small"
-                variant="contained"
-                onClick={handleInlineTextSubmit}
-                disabled={!inlineTextInput.trim()}
-              >
-                Add
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={handleInlineTextCancel}
-              >
-                Cancel
-              </Button>
-            </Box>
-          </Box>
-        )}
+          />
 
-        {/* Google Maps Overlay */}
-        {showGoogleMaps && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              pointerEvents: "none",
-            }}
-          >
-            <div
-              ref={mapRef}
-              style={{
-                width: "100%",
-                height: "100%",
-                opacity: 0.7,
+          {/* Inline Text Input Overlay */}
+          {showInlineTextInput && (
+            <Box
+              sx={{
+                position: "absolute",
+                left: inlineTextPosition.x,
+                top: inlineTextPosition.y,
+                zIndex: 1000,
+                backgroundColor: "white",
+                border: "2px solid #007bff",
+                borderRadius: 1,
+                padding: 1,
+                minWidth: 200,
+                boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
               }}
-            />
-            {!mapLoaded && (
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "rgba(0, 0, 0, 0.1)",
+            >
+              <input
+                ref={inlineTextInputRef}
+                autoFocus
+                type="text"
+                value={inlineTextInput}
+                onChange={(e) => setInlineTextInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleInlineTextSubmit();
+                  } else if (e.key === "Escape") {
+                    handleInlineTextCancel();
+                  }
                 }}
-              >
-                <Typography variant="h6" color="text.secondary">
-                  Loading Google Maps...
-                </Typography>
+                placeholder="Enter text..."
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  fontSize: fontSize,
+                  fontFamily: "Arial, sans-serif",
+                  border: "1px solid #ccc",
+                  borderRadius: "4px",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={handleInlineTextSubmit}
+                  disabled={!inlineTextInput.trim()}
+                >
+                  Add
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleInlineTextCancel}
+                >
+                  Cancel
+                </Button>
               </Box>
-            )}
-          </Box>
-        )}
-      </Paper>
+            </Box>
+          )}
+
+          {/* Google Maps Overlay */}
+          {showGoogleMaps && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                ref={mapRef}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  opacity: 0.7,
+                }}
+              />
+              {!mapLoaded && (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "rgba(0, 0, 0, 0.1)",
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    Loading Google Maps...
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      </Box>
 
       {/* Action Buttons */}
       <Box display="flex" justifyContent="flex-end" gap={2} sx={{ mt: 2 }}>
@@ -2027,7 +2034,7 @@ const SitePlanDrawing = ({
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               {legendEntries.map((entry) => (
                 <Box
-                  key={entry.color}
+                  key={entry.id || entry.color}
                   sx={{
                     display: "flex",
                     alignItems: "center",
@@ -2044,7 +2051,13 @@ const SitePlanDrawing = ({
                       flexShrink: 0,
                     }}
                   />
-                  <Typography variant="body2" sx={{ color: entry.description ? "inherit" : "text.secondary", fontStyle: entry.description ? "normal" : "italic" }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: entry.description ? "inherit" : "text.secondary",
+                      fontStyle: entry.description ? "normal" : "italic",
+                    }}
+                  >
                     {entry.description || "No description provided"}
                   </Typography>
                 </Box>
@@ -2077,7 +2090,7 @@ const SitePlanDrawing = ({
             )}
             {legendDraftEntries.map((entry, index) => (
               <Box
-                key={entry.color}
+                key={entry.id || `${entry.color}-${index}`}
                 sx={{
                   display: "grid",
                   gridTemplateColumns: "auto 1fr",
@@ -2116,7 +2129,10 @@ const SitePlanDrawing = ({
                   label={`Description ${index + 1}`}
                   value={entry.description}
                   onChange={(event) =>
-                    handleLegendEntryChange(entry.color, event.target.value)
+                    handleLegendEntryChange(
+                      entry.id || entry.color.toLowerCase(),
+                      event.target.value
+                    )
                   }
                   fullWidth
                 />

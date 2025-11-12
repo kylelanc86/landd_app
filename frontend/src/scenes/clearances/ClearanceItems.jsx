@@ -711,7 +711,10 @@ const ClearanceItems = () => {
           ? sitePlanData
           : sitePlanData?.imageData;
       const legendEntries = Array.isArray(sitePlanData?.legend)
-        ? sitePlanData.legend
+        ? sitePlanData.legend.map((entry) => ({
+            color: entry.color,
+            description: entry.description,
+          }))
         : [];
       const legendTitle =
         sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
