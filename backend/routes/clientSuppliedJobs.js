@@ -329,9 +329,7 @@ router.post('/:id/send-for-approval', auth, async (req, res) => {
     const projectID = job.projectId?.projectID || 'N/A';
     const jobType = job.jobType || 'Analysis';
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const basePath = req.headers.referer?.includes('/client-supplied') 
-      ? '/client-supplied' 
-      : '/fibre-id/client-supplied';
+    const basePath = '/client-supplied';
     const jobUrl = `${frontendUrl}${basePath}`;
 
     // Send email to all signatory users

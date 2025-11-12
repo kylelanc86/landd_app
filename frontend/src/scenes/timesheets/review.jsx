@@ -146,7 +146,9 @@ const TimesheetReview = () => {
         let duration = endTotalMinutes - startTotalMinutes;
         if (duration < 0) duration += 24 * 60;
 
-        organized[userId][entryDate] += duration;
+        if (!entry.isBreak) {
+          organized[userId][entryDate] += duration;
+        }
 
         // Track approval status - count how many entries are approved
         approvalTracking[approvalKey].total++;

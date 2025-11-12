@@ -785,11 +785,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
       localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(progressData));
 
       showSnackbar("Analysis saved successfully", "success");
-      // Navigate back to samples page
+      // Navigate back to client supplied jobs page
       const basePath = location.pathname.startsWith("/client-supplied")
         ? "/client-supplied"
         : "/fibre-id/client-supplied";
-      navigate(`${basePath}/${jobId}/samples`);
+      navigate(basePath);
     } catch (error) {
       console.error("Error saving progress data:", error);
       showSnackbar("Failed to save analysis", "error");

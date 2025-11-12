@@ -220,6 +220,33 @@ pdfMake.fonts = {
     return aNum - bNum;
   });
 
+  const totalSamples = sortedSamples.length;
+
+  const reportDetailsColumns = [
+    {
+      text: [{ text: 'L&D Job Reference: ', bold: true }, { text: job?.projectId?.projectID || 'N/A' }],
+      style: 'tableContent',
+      margin: [0, 0, 0, 2],
+      width: '50%'
+    }
+  ];
+
+  if (isClientSupplied) {
+    reportDetailsColumns.push({
+      text: [{ text: 'Number of Samples: ', bold: true }, { text: `${totalSamples}` }],
+      style: 'tableContent',
+      margin: [0, 0, 0, 2],
+      width: '50%'
+    });
+  } else {
+    reportDetailsColumns.push({
+      text: [{ text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || 'N/A' }],
+      style: 'tableContent',
+      margin: [0, 0, 0, 2],
+      width: '50%'
+    });
+  }
+
   // Unique samplers
   const uniqueSamplers = Array.from(new Set(samples.map(s => {
     if (s.collectedBy && typeof s.collectedBy === 'object') {
@@ -359,18 +386,7 @@ pdfMake.fonts = {
                 [
                   {
                     columns: [
-                      {
-                        text: [ { text: 'L&D Job Reference: ', bold: true }, { text: job?.projectId?.projectID || 'N/A' } ],
-                        style: 'tableContent',
-                        margin: [0, 0, 0, 2],
-                        width: isClientSupplied ? '100%' : '50%'
-                      },
-                      ...(isClientSupplied ? [] : [{
-                        text: [ { text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || 'N/A' } ],
-                        style: 'tableContent',
-                        margin: [0, 0, 0, 2],
-                        width: '50%'
-                      }])
+                      ...reportDetailsColumns
                     ]
                   }
                 ],

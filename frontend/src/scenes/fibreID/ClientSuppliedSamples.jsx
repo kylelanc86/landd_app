@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -57,6 +57,8 @@ const ClientSuppliedSamples = () => {
   const [uploadingCOC, setUploadingCOC] = useState(false);
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   useEffect(() => {
     // Reset data when jobId changes
@@ -522,30 +524,20 @@ const ClientSuppliedSamples = () => {
               </Button>
 
               {/* Upload/View COC Button */}
-              {job?.chainOfCustody ? (
-                <Button
-                  variant="outlined"
-                  startIcon={<DescriptionIcon />}
-                  onClick={() => setCocDialogOpen(true)}
-                >
-                  View/Edit COC
-                </Button>
-              ) : (
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<UploadFileIcon />}
-                  disabled={uploadingCOC}
-                >
-                  {uploadingCOC ? "Uploading..." : "Upload COC"}
-                  <input
-                    type="file"
-                    hidden
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    onChange={handleCOCUpload}
-                  />
-                </Button>
-              )}
+              <Button
+                variant="outlined"
+                startIcon={
+                  job?.chainOfCustody ? <DescriptionIcon /> : <UploadFileIcon />
+                }
+                onClick={() => setCocDialogOpen(true)}
+                disabled={uploadingCOC}
+              >
+                {job?.chainOfCustody
+                  ? "View/Edit COC"
+                  : uploadingCOC
+                  ? "Uploading..."
+                  : "Upload COC"}
+              </Button>
 
               {/* Analysis Status Chip */}
               {samples.length > 0 && (
@@ -739,31 +731,29 @@ const ClientSuppliedSamples = () => {
             </Box>
           </DialogTitle>
           <DialogContent>
-            {job?.chainOfCustody && (
-              <Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 3 }}
-                >
-                  File: {job.chainOfCustody.fileName}
-                  <br />
-                  Uploaded:{" "}
-                  {new Date(job.chainOfCustody.uploadedAt).toLocaleString(
-                    "en-GB"
-                  )}
-                </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {job?.chainOfCustody
+                ? `File: ${job.chainOfCustody.fileName}`
+                : "No Chain of Custody file uploaded yet."}
+              <br />
+              {job?.chainOfCustody?.uploadedAt &&
+                `Uploaded: ${new Date(
+                  job.chainOfCustody.uploadedAt
+                ).toLocaleString("en-GB")}`}
+            </Typography>
 
-                <Box sx={{ display: "flex", gap: 3 }}>
-                  {/* Action Buttons - Left Side */}
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 1.5,
-                      minWidth: "140px",
-                    }}
-                  >
+            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+              {/* Action Buttons - Left Side */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1.5,
+                  minWidth: "160px",
+                }}
+              >
+                {job?.chainOfCustody && (
+                  <>
                     <Button
                       variant="outlined"
                       startIcon={<DownloadIcon />}
@@ -784,92 +774,119 @@ const ClientSuppliedSamples = () => {
                     >
                       Remove
                     </Button>
-                    <Button
-                      variant="contained"
-                      component="label"
-                      startIcon={<UploadFileIcon />}
-                      disabled={uploadingCOC}
-                      size="small"
+                  </>
+                )}
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileIcon />}
+                  disabled={uploadingCOC}
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingCOC
+                    ? "Uploading..."
+                    : job?.chainOfCustody
+                    ? "Replace"
+                    : "Upload File"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  disabled={uploadingCOC}
+                  size="small"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  {uploadingCOC ? "Uploading..." : "Take Photo"}
+                </Button>
+              </Box>
+
+              {/* Preview - Right Side */}
+              {job?.chainOfCustody && (
+                <Box sx={{ flex: 1, minWidth: "220px" }}>
+                  {/* Preview COC if it's an image */}
+                  {job.chainOfCustody.fileType?.startsWith("image/") && (
+                    <Box
+                      sx={{
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        overflow: "hidden",
+                        maxHeight: "400px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          opacity: 0.9,
+                        },
+                      }}
+                      onClick={() => setCocFullScreenOpen(true)}
+                      title="Click to view full size"
                     >
-                      {uploadingCOC ? "Uploading..." : "Replace"}
-                      <input
-                        type="file"
-                        hidden
-                        accept=".pdf,.jpg,.jpeg,.png,.webp"
-                        onChange={(e) => {
-                          handleCOCUpload(e);
-                          setCocDialogOpen(false);
+                      <img
+                        src={job.chainOfCustody.data}
+                        alt="Chain of Custody"
+                        style={{
+                          maxHeight: "400px",
+                          maxWidth: "100%",
+                          objectFit: "contain",
+                          display: "block",
                         }}
                       />
-                    </Button>
-                  </Box>
+                    </Box>
+                  )}
 
-                  {/* Preview - Right Side */}
-                  <Box sx={{ flex: 1 }}>
-                    {/* Preview COC if it's an image */}
-                    {job.chainOfCustody.fileType?.startsWith("image/") && (
-                      <Box
-                        sx={{
-                          border: "1px solid #ddd",
-                          borderRadius: 1,
-                          overflow: "hidden",
-                          maxHeight: "400px",
-                          display: "flex",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          backgroundColor: "#f5f5f5",
-                          cursor: "pointer",
-                          "&:hover": {
-                            opacity: 0.9,
-                          },
-                        }}
-                        onClick={() => setCocFullScreenOpen(true)}
-                        title="Click to view full size"
-                      >
-                        <img
-                          src={job.chainOfCustody.data}
-                          alt="Chain of Custody"
-                          style={{
-                            maxHeight: "400px",
-                            maxWidth: "100%",
-                            objectFit: "contain",
-                            display: "block",
-                          }}
-                        />
-                      </Box>
-                    )}
-
-                    {/* Show PDF icon for PDFs */}
-                    {job.chainOfCustody.fileType === "application/pdf" && (
-                      <Box
-                        sx={{
-                          p: 4,
-                          border: "1px solid #ddd",
-                          borderRadius: 1,
-                          textAlign: "center",
-                          backgroundColor: "#f5f5f5",
-                          cursor: "pointer",
-                          "&:hover": {
-                            backgroundColor: "#e8e8e8",
-                          },
-                        }}
-                        onClick={handleDownloadCOC}
-                        title="Click to download PDF"
-                      >
-                        <DescriptionIcon
-                          sx={{ fontSize: 60, color: "#1976d2", mb: 1 }}
-                        />
-                        <Typography variant="body2">
-                          PDF Document
-                          <br />
-                          Click to download
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
+                  {/* Show PDF icon for PDFs */}
+                  {job.chainOfCustody.fileType === "application/pdf" && (
+                    <Box
+                      sx={{
+                        p: 4,
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        textAlign: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "#e8e8e8",
+                        },
+                      }}
+                      onClick={handleDownloadCOC}
+                      title="Click to download PDF"
+                    >
+                      <DescriptionIcon
+                        sx={{ fontSize: 60, color: "#1976d2", mb: 1 }}
+                      />
+                      <Typography variant="body2">
+                        PDF Document
+                        <br />
+                        Click to download
+                      </Typography>
+                    </Box>
+                  )}
                 </Box>
-              </Box>
-            )}
+              )}
+            </Box>
+
+            <input
+              type="file"
+              hidden
+              ref={fileInputRef}
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => {
+                handleCOCUpload(e);
+                setCocDialogOpen(false);
+              }}
+            />
+            <input
+              type="file"
+              hidden
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                handleCOCUpload(e);
+                setCocDialogOpen(false);
+              }}
+            />
           </DialogContent>
         </Dialog>
 
