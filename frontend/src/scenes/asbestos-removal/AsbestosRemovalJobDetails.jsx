@@ -68,12 +68,32 @@ import { formatDate } from "../../utils/dateFormat";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
 
+const TIMING_LOG_PREFIX = "[AsbestosRemovalJobDetails]";
+const TIMING_ENABLED = true;
+
+const getTimestamp = () =>
+  typeof performance !== "undefined" && performance.now
+    ? performance.now()
+    : Date.now();
+
 const AsbestosRemovalJobDetails = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
   const { jobId } = useParams();
   const { currentUser } = useAuth();
+
+  const logDebug = useCallback((stage, details) => {
+    if (!TIMING_ENABLED || typeof console === "undefined") {
+      return;
+    }
+
+    if (details === undefined) {
+      console.log(`${TIMING_LOG_PREFIX} ${stage}`);
+    } else {
+      console.log(`${TIMING_LOG_PREFIX} ${stage}`, details);
+    }
+  }, []);
 
   // Debug logging for current user
   useEffect(() => {
@@ -138,9 +158,15 @@ const AsbestosRemovalJobDetails = () => {
 
   const fetchAsbestosAssessors = useCallback(async () => {
     if (assessorsLoading || assessorsLoaded) {
+      logDebug("fetchAsbestosAssessors skipped", {
+        assessorsLoaded,
+        assessorsLoading,
+      });
       return;
     }
 
+    const startTs = getTimestamp();
+    logDebug("fetchAsbestosAssessors start");
     setAssessorsLoading(true);
 
     try {
@@ -168,12 +194,20 @@ const AsbestosRemovalJobDetails = () => {
 
       setAsbestosAssessors(sortedAssessors);
       setAssessorsLoaded(true);
+      logDebug("fetchAsbestosAssessors success", {
+        assessorCount: sortedAssessors.length,
+        durationMs: Math.round(getTimestamp() - startTs),
+      });
     } catch (error) {
       console.error("Error fetching asbestos assessors:", error);
+      logDebug("fetchAsbestosAssessors error", {
+        durationMs: Math.round(getTimestamp() - startTs),
+        message: error?.message,
+      });
     } finally {
       setAssessorsLoading(false);
     }
-  }, [assessorsLoaded, assessorsLoading]);
+  }, [assessorsLoaded, assessorsLoading, logDebug]);
 
   const latestFetchIdRef = useRef(0);
 
@@ -185,28 +219,46 @@ const AsbestosRemovalJobDetails = () => {
       latestFetchIdRef.current = fetchId;
 
       const timingLabel = `asbestosRemovalJobDetails:${jobId}`;
-      const startTime =
-        typeof performance !== "undefined" && performance.now
-          ? performance.now()
-          : Date.now();
+      const startTime = getTimestamp();
 
-      const logTiming = (stage) => {
-        if (typeof console === "undefined") {
+      const logTiming = (stage, details) => {
+        if (!TIMING_ENABLED || typeof console === "undefined") {
           return;
         }
-        const elapsed =
-          (typeof performance !== "undefined" && performance.now
-            ? performance.now()
-            : Date.now()) - startTime;
-        console.log(
-          `[${timingLabel}] ${stage}${stage ? " " : ""}(${Math.round(
-            elapsed
-          )}ms elapsed)`
-        );
+
+        const elapsed = getTimestamp() - startTime;
+        const baseMessage = `[${timingLabel}] ${stage}${
+          stage ? " " : ""
+        }(${Math.round(elapsed)}ms elapsed)`;
+
+        if (details === undefined) {
+          console.log(baseMessage);
+        } else {
+          console.log(baseMessage, details);
+        }
+      };
+
+      const scheduleCommitLog = (stage, details) => {
+        if (!TIMING_ENABLED) {
+          return;
+        }
+
+        const commitStart = getTimestamp();
+        const runner = () =>
+          logTiming(stage, {
+            ...details,
+            commitDelayMs: Math.round(getTimestamp() - commitStart),
+          });
+
+        if (typeof window !== "undefined" && window.requestAnimationFrame) {
+          window.requestAnimationFrame(runner);
+        } else {
+          setTimeout(runner, 0);
+        }
       };
 
       const finishTiming = (stage) => {
-        if (typeof console === "undefined") {
+        if (!TIMING_ENABLED || typeof console === "undefined") {
           return;
         }
 
@@ -214,16 +266,14 @@ const AsbestosRemovalJobDetails = () => {
           logTiming(stage);
         }
 
-        const totalElapsed =
-          (typeof performance !== "undefined" && performance.now
-            ? performance.now()
-            : Date.now()) - startTime;
+        const totalElapsed = getTimestamp() - startTime;
         console.log(
           `[${timingLabel}] completed (${Math.round(totalElapsed)}ms total)`
         );
       };
 
       logTiming("start");
+      logDebug("fetchJobDetails invoked", { silent, fetchId, jobId });
 
       if (!silent) {
         setLoading(true);
@@ -233,8 +283,17 @@ const AsbestosRemovalJobDetails = () => {
       const isActive = () => latestFetchIdRef.current === fetchId;
 
       try {
+        const requestStart = getTimestamp();
+        logTiming("job details request start");
         const jobResponse = await asbestosRemovalJobService.getDetails(jobId);
+        logTiming("job details response received", {
+          requestDurationMs: Math.round(getTimestamp() - requestStart),
+        });
         const jobPayload = jobResponse.data || {};
+        logDebug("job details payload received", {
+          keys: Object.keys(jobPayload || {}),
+          fetchId,
+        });
 
         if (!isActive()) {
           finishTiming("stale job response");
@@ -242,7 +301,12 @@ const AsbestosRemovalJobDetails = () => {
         }
 
         setJob(jobPayload.job || null);
-        logTiming("job resolved");
+        logTiming("job resolved", {
+          hasJob: Boolean(jobPayload.job),
+        });
+        scheduleCommitLog("job state committed", {
+          hasJob: Boolean(jobPayload.job),
+        });
 
         const shiftsPayload = Array.isArray(jobPayload.shifts)
           ? jobPayload.shifts
@@ -264,6 +328,9 @@ const AsbestosRemovalJobDetails = () => {
           );
 
           if (sampleNumberMap.size) {
+            logTiming("sample number map created", {
+              hydratedShiftCount: sampleNumberMap.size,
+            });
             enrichedShifts = shiftsPayload.map((shift) =>
               sampleNumberMap.has(shift._id)
                 ? {
@@ -278,12 +345,23 @@ const AsbestosRemovalJobDetails = () => {
 
         setAirMonitoringShifts(enrichedShifts);
         logTiming(`shifts set (${enrichedShifts.length})`);
+        scheduleCommitLog("airMonitoringShifts committed", {
+          shiftCount: enrichedShifts.length,
+        });
 
         const clearancesPayload = Array.isArray(jobPayload.clearances)
           ? jobPayload.clearances
           : [];
         setClearances(clearancesPayload);
         logTiming(`clearances set (${clearancesPayload.length})`);
+        scheduleCommitLog("clearances committed", {
+          clearanceCount: clearancesPayload.length,
+        });
+
+        scheduleCommitLog("job detail state committed", {
+          shiftCount: enrichedShifts.length,
+          clearanceCount: clearancesPayload.length,
+        });
       } catch (err) {
         if (!isActive()) {
           finishTiming("stale error result");
@@ -292,19 +370,24 @@ const AsbestosRemovalJobDetails = () => {
 
         console.error("Error fetching job details:", err);
         setError(err.message || "Failed to fetch job details");
+        logTiming("error state set", { message: err?.message });
         finishTiming("error");
         return;
       } finally {
         if (!silent && isActive()) {
           setLoading(false);
+          scheduleCommitLog("loading indicator dismissed");
         }
       }
       finishTiming();
     },
-    [jobId]
+    [jobId, logDebug]
   );
 
   const fetchAsbestosRemovalists = useCallback(async () => {
+    const startTs = getTimestamp();
+    logDebug("fetchAsbestosRemovalists start");
+
     try {
       const data = await customDataFieldGroupService.getFieldsByType(
         "asbestos_removalist"
@@ -313,18 +396,29 @@ const AsbestosRemovalJobDetails = () => {
         (a.text || "").localeCompare(b.text || "")
       );
       setAsbestosRemovalists(sortedData);
+      logDebug("fetchAsbestosRemovalists success", {
+        removalistCount: sortedData.length,
+        durationMs: Math.round(getTimestamp() - startTs),
+      });
     } catch (error) {
       console.error("Error fetching asbestos removalists:", error);
+      logDebug("fetchAsbestosRemovalists error", {
+        durationMs: Math.round(getTimestamp() - startTs),
+        message: error?.message,
+      });
       setAsbestosRemovalists([]);
     }
-  }, []);
+  }, [logDebug]);
 
   useEffect(() => {
     if (jobId) {
+      logDebug("jobId effect triggered", {
+        jobId,
+      });
       fetchJobDetails();
       fetchAsbestosRemovalists();
     }
-  }, [jobId, fetchJobDetails, fetchAsbestosRemovalists]);
+  }, [jobId, fetchJobDetails, fetchAsbestosRemovalists, logDebug]);
 
   useEffect(() => {
     const requiresAssessorLookup = clearances.some(
@@ -335,6 +429,9 @@ const AsbestosRemovalJobDetails = () => {
     );
 
     if (requiresAssessorLookup && !assessorsLoaded && !assessorsLoading) {
+      logDebug("assessor lookup triggered by clearances", {
+        clearanceCount: clearances.length,
+      });
       fetchAsbestosAssessors();
     }
   }, [
@@ -342,7 +439,24 @@ const AsbestosRemovalJobDetails = () => {
     assessorsLoaded,
     assessorsLoading,
     fetchAsbestosAssessors,
+    logDebug,
   ]);
+
+  useEffect(() => {
+    logDebug("airMonitoringShifts state updated", {
+      shiftCount: airMonitoringShifts.length,
+    });
+  }, [airMonitoringShifts, logDebug]);
+
+  useEffect(() => {
+    logDebug("clearances state updated", {
+      clearanceCount: clearances.length,
+    });
+  }, [clearances, logDebug]);
+
+  useEffect(() => {
+    logDebug("loading state updated", { loading });
+  }, [loading, logDebug]);
 
   const getStatusColor = (status) => {
     switch (status) {
