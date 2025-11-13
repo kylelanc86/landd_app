@@ -105,10 +105,10 @@ The Air Monitoring Application uses a role-based access control (RBAC) system wi
 ### 10. Fibre ID Permissions
 | Permission | Description | Admin | Manager | Employee |
 |------------|-------------|-------|---------|----------|
-| `fibre.view` | View fibre ID data | ✅ | ✅ | ✅ |
-| `fibre.create` | Create fibre ID records | ✅ | ✅ | ✅ |
-| `fibre.edit` | Edit fibre ID records | ✅ | ✅ | ✅ |
-| `fibre.delete` | Delete fibre ID records | ✅ | ✅ | ❌ |
+| `clientSup.view` | View client supplied jobs | ✅ | ✅ | ✅ |
+| `clientSup.create` | Create client supplied jobs | ✅ | ✅ | ✅ |
+| `clientSup.edit` | Edit client supplied jobs | ✅ | ✅ | ✅ |
+| `clientSup.delete` | Delete client supplied jobs | ✅ | ✅ | ❌ |
 
 ### 11. Xero Integration Permissions
 | Permission | Description | Admin | Manager | Employee |

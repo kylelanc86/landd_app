@@ -719,7 +719,7 @@ const ClearanceItems = () => {
       const legendTitle =
         sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
           ? sitePlanData.legendTitle.trim()
-          : "Site Plan Key";
+          : "Key";
 
       if (!imageData) {
         showSnackbar("No site plan image data was provided", "error");

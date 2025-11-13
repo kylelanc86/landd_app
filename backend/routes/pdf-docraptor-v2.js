@@ -1047,10 +1047,73 @@ const generateSitePlanContentPage = (
   legendField = 'sitePlanLegend',
   legendTitleField = 'sitePlanLegendTitle'
 ) => {
-  // Determine the file type and create appropriate HTML
   const fileData = data[fileField];
-  
-  // Check if it's already a data URL
+  const legendEntries = Array.isArray(data[legendField])
+    ? data[legendField]
+        .filter((entry) => entry && entry.color)
+        .map((entry) => ({
+          color: entry.color,
+          description: entry.description,
+        }))
+    : [];
+
+  const legendHeading =
+    (data[legendTitleField] && data[legendTitleField].trim()) || 'Key';
+
+  if (!fileData) {
+    const legendColumn =
+      legendEntries.length > 0
+        ? `
+          <div class="site-plan-legend-container" style="flex: 0 0 15%; max-width: 180px; border: 1px solid #d1d5db; border-radius: 10px; background-color: #ffffff; padding: 16px 20px;">
+            <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
+              ${escapeHtml(legendHeading)}
+            </div>
+            ${legendEntries
+              .map((entry) => {
+                const description =
+                  entry.description && entry.description.trim()
+                    ? escapeHtml(entry.description.trim())
+                    : '<span style="color:#9ca3af;">(-)</span>';
+              return `
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                  <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0;"></span>
+                  <span style="font-size:12px; color:#334155; line-height:1.4; flex:1;">${description}</span>
+                </div>
+              `;
+              })
+              .join('')}
+          </div>`
+        : '';
+
+    return `
+      <div class="page site-plan-page">
+        <div class="header">
+          <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Company Logo" />
+          <div class="company-details">
+            Lancaster & Dickenson Consulting Pty Ltd<br />
+            4/6 Dacre Street<br />
+            Mitchell ACT 2911<br />
+            <span class="website">www.landd.com.au</span>
+          </div>
+        </div>
+        <div class="green-line"></div>
+        <div class="content">
+          <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
+            <div class="site-plan-container" style="flex: 0 0 60%; max-width: 600px; padding: 32px; border: 2px dashed #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box; color: #4b5563; text-align:center;">
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No Site Plan Provided</div>
+              <div style="font-size: 12px;">A site plan has not been uploaded or drawn for this clearance.</div>
+            </div>
+            ${legendColumn}
+          </div>
+        </div>
+        <div class="footer">
+          <div class="footer-line"></div>
+          ${footerText || `Asbestos Assessment Report: ${data.projectId?.name || data.siteName || 'Unknown Site'}`}
+        </div>
+      </div>
+    `;
+  }
+
   const isDataUrl = fileData.startsWith('data:');
   
   let fileType, imageSrc;
@@ -1069,67 +1132,60 @@ const generateSitePlanContentPage = (
   
   let content = '';
   
+  const legendColumn =
+    legendEntries.length > 0
+        ? `
+          <div class="site-plan-legend-container" style="flex: 0 0 18%; max-width: 220px; border: 1px solid #d1d5db; border-radius: 10px; background-color: #ffffff; padding: 16px 20px; align-self: stretch;">
+            <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
+              ${escapeHtml(
+                (data[legendTitleField] && data[legendTitleField].trim()) ||
+                  "Key"
+              )}
+            </div>
+            ${legendEntries
+              .map((entry) => {
+                const description =
+                  entry.description && entry.description.trim()
+                    ? escapeHtml(entry.description.trim())
+                    : '<span style="color:#9ca3af;">(-)</span>';
+                return `
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)};"></span>
+                    <span style="font-size:12px; color:#334155;">${description}</span>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>`
+        : '';
+
   if (fileType.startsWith('image/') || isDataUrl) {
-    // For images, embed directly with caption in a grey bordered box
-    // Container stays full width, image is 10% smaller and shifted 20px to the right
     content = `
-      <div class="site-plan-container" style="width: 100%; max-width: 720px; margin: 0 auto; padding: 16px 24px; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box;">
-        <img src="${imageSrc}" 
-             alt="${title}" 
-             style="width: 100% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
-        <div style="font-size: 14px; font-weight: 600; color: #1f2937; text-align: center; margin-top: 12px;">
-          Figure 1: ${figureTitle}
+      <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
+        <div class="site-plan-container" style="flex: 0 0 75%; max-width: 760px; padding: 16px 24px; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box;">
+          <img src="${imageSrc}" 
+               alt="${title}" 
+               style="width: 100% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
+          <div style="font-size: 14px; font-weight: 600; color: #1f2937; text-align: center; margin-top: 12px;">
+            Figure 1: ${figureTitle}
+          </div>
         </div>
+        ${legendColumn}
       </div>
     `;
   } else {
-    // For PDFs, show a placeholder (PDFs will be merged separately)
     content = `
-      <div class="file-content">
-        <div class="centered-text">
-          <div class="appendix-title">APPENDIX ${appendixLetter}</div>
-          <div class="photographs-text">${title}</div>
-          <div class="file-note">Document attached</div>
+      <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
+        <div class="site-plan-container" style="flex: 0 0 75%; max-width: 760px; padding: 32px; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box; text-align:center;">
+          <div class="appendix-title" style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">APPENDIX ${appendixLetter}</div>
+          <div class="photographs-text" style="font-size: 14px; text-transform: uppercase; margin-bottom: 8px;">${title}</div>
+          <div class="file-note" style="font-size: 12px; color: #4b5563;">Document attached</div>
         </div>
+        ${legendColumn}
       </div>
     `;
   }
 
-  let legendHtml = '';
-  const legendEntries = Array.isArray(data[legendField])
-    ? data[legendField].filter((entry) => entry && entry.color)
-    : [];
-
-  if (legendEntries.length > 0) {
-    const legendHeading =
-      (data[legendTitleField] && data[legendTitleField].trim()) ||
-      'Site Plan Key';
-    const legendRows = legendEntries
-      .map((entry) => {
-        const description =
-          entry.description && entry.description.trim()
-            ? escapeHtml(entry.description.trim())
-            : '<span style="color:#9ca3af;">(no description provided)</span>';
-
-        return `
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
-            <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)};"></span>
-            <span style="font-size:12px; color:#334155;">${description}</span>
-          </div>
-        `;
-      })
-      .join('');
-
-    legendHtml = `
-      <div class="site-plan-legend" style="margin: 24px auto 0 auto; width: 100%; max-width: 720px; padding: 16px 20px; border: 1px solid #d1d5db; border-radius: 10px; background-color: #ffffff; box-sizing: border-box;">
-        <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; color: #1f2937;">
-          ${escapeHtml(legendHeading)}
-        </div>
-        ${legendRows}
-      </div>
-    `;
-  }
-  
   return `
         <div class="page site-plan-page">
           <div class="header">
@@ -1144,7 +1200,6 @@ const generateSitePlanContentPage = (
           <div class="green-line"></div>
           <div class="content">
             ${content}
-            ${legendHtml}
           </div>
           <div class="footer">
             <div class="footer-line"></div>

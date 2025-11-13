@@ -6,7 +6,7 @@ const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
 const projectsRouter = require('./projects');
 
 // Get all custom data field groups
-router.get('/', auth, checkPermission(['admin.view']), async (req, res) => {
+router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const groups = await CustomDataFieldGroup.find({ isActive: true })
       .populate('createdBy', 'firstName lastName')
@@ -20,7 +20,7 @@ router.get('/', auth, checkPermission(['admin.view']), async (req, res) => {
 });
 
 // Get custom data field group by type
-router.get('/type/:type', auth, checkPermission(['admin.view']), async (req, res) => {
+router.get('/type/:type', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const { type } = req.params;
     const group = await CustomDataFieldGroup.findOne({ 
@@ -51,7 +51,7 @@ router.get('/project-statuses', auth, checkPermission(['projects.view']), async 
 });
 
 // Get fields by type (simplified interface)
-router.get('/fields/:type', auth, checkPermission(['admin.view']), async (req, res) => {
+router.get('/fields/:type', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const { type } = req.params;
     const fields = await CustomDataFieldGroup.getFieldsByType(type);

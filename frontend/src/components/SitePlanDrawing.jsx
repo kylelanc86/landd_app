@@ -82,7 +82,7 @@ const SitePlanDrawing = ({
   onCancel,
   existingSitePlan,
   existingLegend = [],
-  existingLegendTitle = "Site Plan Key",
+  existingLegendTitle = "Key",
 }) => {
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
@@ -113,21 +113,14 @@ const SitePlanDrawing = ({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const prevItemsLengthRef = useRef(0);
-  const [legendEntries, setLegendEntries] = useState(() =>
-    normalizeLegendEntries(existingLegend)
-  );
-  const [legendTitle, setLegendTitle] = useState(
-    existingLegendTitle || "Site Plan Key"
-  );
+  const [legendEntries, setLegendEntries] = useState([]);
+  const [legendTitle, setLegendTitle] = useState("Key");
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
-  const [legendDraftEntries, setLegendDraftEntries] = useState(() =>
-    normalizeLegendEntries(existingLegend)
-  );
-  const [legendDraftTitle, setLegendDraftTitle] = useState(
-    existingLegendTitle || "Site Plan Key"
-  );
+  const [legendDraftEntries, setLegendDraftEntries] = useState([]);
+  const [legendDraftTitle, setLegendDraftTitle] = useState("Key");
   const [imageScale, setImageScale] = useState(100);
   const renderForExportRef = useRef(false);
+  const activePointerIdRef = useRef(null);
 
   useEffect(() => {
     setLegendEntries(normalizeLegendEntries(existingLegend));
@@ -135,13 +128,13 @@ const SitePlanDrawing = ({
   }, [existingLegend]);
 
   useEffect(() => {
-    const nextTitle = existingLegendTitle || "Site Plan Key";
+    const nextTitle = existingLegendTitle || "Key";
     setLegendTitle(nextTitle);
     setLegendDraftTitle(nextTitle);
   }, [existingLegendTitle]);
 
   const openLegendDialog = () => {
-    setLegendDraftTitle(legendTitle || "Site Plan Key");
+    setLegendDraftTitle(legendTitle || "Key");
     setLegendDraftEntries(legendEntries.map((entry) => ({ ...entry })));
     setLegendDialogOpen(true);
   };
@@ -165,7 +158,7 @@ const SitePlanDrawing = ({
   };
 
   const handleLegendDialogSave = () => {
-    const cleanedTitle = legendDraftTitle.trim() || "Site Plan Key";
+    const cleanedTitle = legendDraftTitle.trim() || "Key";
     const cleanedEntries = legendDraftEntries.map((entry) => ({
       id: entry.id,
       color: entry.color,
@@ -612,6 +605,82 @@ const SitePlanDrawing = ({
     }
   };
 
+  const finalizePointerInteraction = (event) => {
+    if (
+      activePointerIdRef.current !== null &&
+      event.pointerId !== activePointerIdRef.current
+    ) {
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (canvas && canvas.releasePointerCapture) {
+      try {
+        canvas.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore release errors (e.g., if capture was never set)
+      }
+    }
+
+    activePointerIdRef.current = null;
+    stopDrawing(event);
+  };
+
+  const handlePointerDown = (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    activePointerIdRef.current = event.pointerId;
+
+    if (canvas.setPointerCapture) {
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch (error) {
+        // Ignore pointer capture errors
+      }
+    }
+
+    if (event.pointerType !== "mouse") {
+      event.preventDefault();
+    }
+
+    startDrawing(event);
+  };
+
+  const handlePointerMove = (event) => {
+    if (
+      activePointerIdRef.current !== null &&
+      event.pointerId !== activePointerIdRef.current
+    ) {
+      return;
+    }
+
+    if (event.pointerType !== "mouse") {
+      event.preventDefault();
+    }
+
+    draw(event);
+  };
+
+  const handlePointerUp = (event) => {
+    if (event.pointerType !== "mouse") {
+      event.preventDefault();
+    }
+    finalizePointerInteraction(event);
+  };
+
+  const handlePointerLeave = (event) => {
+    finalizePointerInteraction(event);
+  };
+
+  const handlePointerCancel = (event) => {
+    finalizePointerInteraction(event);
+  };
+
   const moveItem = (item, deltaX, deltaY) => {
     const updatedItem = { ...item };
 
@@ -1010,92 +1079,6 @@ const SitePlanDrawing = ({
     }
   };
 
-  const drawLegend = useCallback(
-    (ctx, canvas) => {
-      if (!legendEntries.length) {
-        return;
-      }
-
-      const padding = 16;
-      const rowHeight = 28;
-      const colorBoxSize = 18;
-      const columnGap = 12;
-      const maxAllowedWidth = canvas.width * 0.45;
-      const minWidth = 240;
-      const headerText = legendTitle || "Site Plan Key";
-
-      ctx.save();
-
-      ctx.font = "16px Arial";
-      ctx.textBaseline = "top";
-      let maxTextWidth = ctx.measureText(headerText).width;
-
-      ctx.font = "14px Arial";
-      legendEntries.forEach((entry) => {
-        const width = ctx.measureText(entry.description || "").width;
-        if (width > maxTextWidth) {
-          maxTextWidth = width;
-        }
-      });
-
-      const contentWidth =
-        padding * 2 + colorBoxSize + columnGap + maxTextWidth;
-      const width = Math.max(minWidth, Math.min(maxAllowedWidth, contentWidth));
-      const height = padding * 2 + 24 + legendEntries.length * rowHeight;
-      const x = canvas.width - width - 20;
-      const y = canvas.height - height - 20;
-
-      ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-      ctx.fillRect(x, y, width, height);
-
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, width, height);
-
-      ctx.fillStyle = "#1f1f1f";
-      ctx.font = "16px Arial";
-      ctx.textBaseline = "top";
-      ctx.fillText(headerText, x + padding, y + padding);
-
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
-      ctx.beginPath();
-      ctx.moveTo(x + padding, y + padding + 22);
-      ctx.lineTo(x + width - padding, y + padding + 22);
-      ctx.stroke();
-
-      const tableTop = y + padding + 28;
-      ctx.font = "14px Arial";
-      ctx.textBaseline = "middle";
-
-      legendEntries.forEach((entry, index) => {
-        const rowTop = tableTop + index * rowHeight;
-        const boxY = rowTop + (rowHeight - colorBoxSize) / 2;
-
-        ctx.fillStyle = entry.color || "#6b7280";
-        ctx.fillRect(x + padding, boxY, colorBoxSize, colorBoxSize);
-
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.25)";
-        ctx.strokeRect(x + padding, boxY, colorBoxSize, colorBoxSize);
-
-        ctx.fillStyle = "#1f1f1f";
-        ctx.fillText(
-          entry.description || "",
-          x + padding + colorBoxSize + columnGap,
-          rowTop + rowHeight / 2
-        );
-
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
-        ctx.beginPath();
-        ctx.moveTo(x + padding, rowTop + rowHeight);
-        ctx.lineTo(x + width - padding, rowTop + rowHeight);
-        ctx.stroke();
-      });
-
-      ctx.restore();
-    },
-    [legendEntries, legendTitle]
-  );
-
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1115,16 +1098,11 @@ const SitePlanDrawing = ({
       drawItem(ctx, item);
     });
 
-    // Draw legend overlay if configured (only during editing)
-    if (!renderForExportRef.current) {
-      drawLegend(ctx, canvas);
-    }
-
     // Draw selected item with selection handles
     if (selectedItem && !renderForExportRef.current) {
       drawSelectionHandles(ctx, selectedItem);
     }
-  }, [drawnItems, selectedItem, drawLegend, drawSelectionHandles]);
+  }, [drawnItems, selectedItem, drawSelectionHandles]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1138,6 +1116,7 @@ const SitePlanDrawing = ({
     canvas.height = CANVAS_SAFE_HEIGHT;
     canvas.style.width = `${CANVAS_SAFE_WIDTH}px`;
     canvas.style.height = `${CANVAS_SAFE_HEIGHT}px`;
+    canvas.style.touchAction = "none";
 
     redrawCanvas();
   }, [redrawCanvas]);
@@ -1824,7 +1803,7 @@ const SitePlanDrawing = ({
             onClick={openLegendDialog}
             size="small"
           >
-            {legendEntries.length > 0 ? "Edit Key" : "Add Key"}
+            {legendEntries.length > 0 ? "View/Edit Key" : "View/Edit Key"}
           </Button>
           {selectedItem?.type === "image" && (
             <Box sx={{ minWidth: 200 }}>
@@ -1866,10 +1845,11 @@ const SitePlanDrawing = ({
         >
           <canvas
             ref={canvasRef}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={(e) => stopDrawing(e)}
-            onMouseLeave={(e) => stopDrawing(e)}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onPointerCancel={handlePointerCancel}
             style={{
               cursor:
                 currentTool === "hand"
@@ -2007,65 +1987,6 @@ const SitePlanDrawing = ({
           Save Site Plan
         </Button>
       </Box>
-
-      {legendEntries.length > 0 && (
-        <Box
-          sx={{
-            width: "100%",
-            maxWidth: 900,
-            mx: "auto",
-            mt: 3,
-          }}
-        >
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              borderRadius: 2,
-              backgroundColor: "#fafbfc",
-            }}
-          >
-            <Typography
-              variant="subtitle1"
-              sx={{ fontWeight: 600, mb: 1, textTransform: "uppercase" }}
-            >
-              {legendTitle || "Site Plan Key"}
-            </Typography>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {legendEntries.map((entry) => (
-                <Box
-                  key={entry.id || entry.color}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1.5,
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: "4px",
-                      border: "1px solid rgba(55, 65, 81, 0.4)",
-                      backgroundColor: entry.color,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: entry.description ? "inherit" : "text.secondary",
-                      fontStyle: entry.description ? "normal" : "italic",
-                    }}
-                  >
-                    {entry.description || "No description provided"}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          </Paper>
-        </Box>
-      )}
 
       <Dialog
         open={legendDialogOpen}

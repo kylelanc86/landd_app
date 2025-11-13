@@ -5,9 +5,10 @@ const Project = require('../models/Project');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
 const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 
 // GET /api/client-supplied-jobs - get all client supplied jobs (excludes archived by default)
-router.get('/', async (req, res) => {
+router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
   try {
     // Filter out archived jobs by default
     const filter = { archived: { $ne: true } };
@@ -30,7 +31,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/client-supplied-jobs/by-project/:projectId - get jobs by project
-router.get('/by-project/:projectId', async (req, res) => {
+router.get('/by-project/:projectId', auth, checkPermission('clientSup.view'), async (req, res) => {
   try {
     const { projectId } = req.params;
     
@@ -64,7 +65,7 @@ router.get('/by-project/:projectId', async (req, res) => {
 });
 
 // GET /api/client-supplied-jobs/:id - get single job
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, checkPermission('clientSup.view'), async (req, res) => {
   try {
     const job = await ClientSuppliedJob.findById(req.params.id)
       .populate({
@@ -87,7 +88,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/client-supplied-jobs - create new job
-router.post('/', async (req, res) => {
+router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => {
   try {
     const { projectId, jobType, sampleReceiptDate, sampleCount } = req.body;
     
@@ -219,7 +220,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/client-supplied-jobs/:id - update job
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, checkPermission('clientSup.edit'), async (req, res) => {
   try {
     const job = await ClientSuppliedJob.findByIdAndUpdate(
       req.params.id,
@@ -246,7 +247,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PUT /api/client-supplied-jobs/:id/archive - archive job
-router.put('/:id/archive', async (req, res) => {
+router.put('/:id/archive', auth, checkPermission('clientSup.edit'), async (req, res) => {
   try {
     const job = await ClientSuppliedJob.findByIdAndUpdate(
       req.params.id,
@@ -268,7 +269,7 @@ router.put('/:id/archive', async (req, res) => {
 });
 
 // DELETE /api/client-supplied-jobs/:id - delete job
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, checkPermission('clientSup.delete'), async (req, res) => {
   try {
     const job = await ClientSuppliedJob.findByIdAndDelete(req.params.id);
     
@@ -285,7 +286,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/client-supplied-jobs/:id/send-for-approval - send approval request emails
-router.post('/:id/send-for-approval', auth, async (req, res) => {
+router.post('/:id/send-for-approval', auth, checkPermission('clientSup.edit'), async (req, res) => {
   try {
     const job = await ClientSuppliedJob.findById(req.params.id)
       .populate({

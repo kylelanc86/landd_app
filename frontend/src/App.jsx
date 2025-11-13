@@ -668,7 +668,7 @@ function App() {
                                   path="/fibre-id"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <FibreIdIndex />
                                     </PermissionRoute>
@@ -680,7 +680,7 @@ function App() {
                                   path="/fibre-id/client-supplied"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <ClientSuppliedJobs />
                                     </PermissionRoute>
@@ -692,7 +692,7 @@ function App() {
                                   path="/fibre-id/ldjobs"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <LDsuppliedJobs />
                                     </PermissionRoute>
@@ -704,7 +704,7 @@ function App() {
                                   path="/fibre-id/assessment/:assessmentId/items"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <LDsuppliedItems />
@@ -718,7 +718,7 @@ function App() {
                                   path="/fibre-id/assessment/:assessmentId/item/:itemNumber/analysis"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <LDsuppliedAnalysisPage />
@@ -732,7 +732,7 @@ function App() {
                                   path="/fibre-id/client-supplied/:jobId/samples"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <ClientSuppliedSamples />
@@ -751,7 +751,7 @@ function App() {
                                     <PermissionRoute
                                       requiredPermissions={
                                         isFeatureEnabled("ADVANCED.FIBRE_ID")
-                                          ? ["fibre.view"]
+                                          ? ["clientSup.view"]
                                           : ["projects.view"]
                                       }
                                     >
@@ -783,7 +783,7 @@ function App() {
                                   path="/fibre-id/client-supplied/:jobId/sample/:sampleIndex/analysis"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <ClientSuppliedFibreIDAnalysis />
@@ -797,7 +797,7 @@ function App() {
                                   path="/fibre-id/client-supplied/:jobId/analysis"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["fibre.view"]}
+                                      requiredPermissions={["clientSup.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <ClientSuppliedFibreCountAnalysis />
@@ -915,7 +915,7 @@ function App() {
                                 path="/laboratory"
                                 element={
                                   <PermissionRoute
-                                    requiredPermissions={["fibre.view"]}
+                                    requiredPermissions={["clientSup.view"]}
                                   >
                                     <Suspense fallback={<LoadingSpinner />}>
                                       <LaboratoryDashboard />
