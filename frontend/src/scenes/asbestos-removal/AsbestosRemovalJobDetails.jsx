@@ -95,6 +95,8 @@ const AsbestosRemovalJobDetails = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [asbestosAssessors, setAsbestosAssessors] = useState([]);
+  const [assessorsLoaded, setAssessorsLoaded] = useState(false);
+  const [assessorsLoading, setAssessorsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Clearance modal state
@@ -135,6 +137,12 @@ const AsbestosRemovalJobDetails = () => {
   });
 
   const fetchAsbestosAssessors = useCallback(async () => {
+    if (assessorsLoading || assessorsLoaded) {
+      return;
+    }
+
+    setAssessorsLoading(true);
+
     try {
       const response = await userService.getAll();
       const users = response.data;
@@ -159,10 +167,13 @@ const AsbestosRemovalJobDetails = () => {
       });
 
       setAsbestosAssessors(sortedAssessors);
+      setAssessorsLoaded(true);
     } catch (error) {
       console.error("Error fetching asbestos assessors:", error);
+    } finally {
+      setAssessorsLoading(false);
     }
-  }, []);
+  }, [assessorsLoaded, assessorsLoading]);
 
   const latestFetchIdRef = useRef(0);
 
@@ -236,14 +247,8 @@ const AsbestosRemovalJobDetails = () => {
         const shiftsPayload = Array.isArray(jobPayload.shifts)
           ? jobPayload.shifts
           : [];
-        setAirMonitoringShifts(shiftsPayload);
-        logTiming(`shifts set (${shiftsPayload.length})`);
 
-        const clearancesPayload = Array.isArray(jobPayload.clearances)
-          ? jobPayload.clearances
-          : [];
-        setClearances(clearancesPayload);
-        logTiming(`clearances set (${clearancesPayload.length})`);
+        let enrichedShifts = shiftsPayload;
 
         if (Array.isArray(jobPayload.sampleNumbers)) {
           const sampleNumberMap = new Map(
@@ -259,19 +264,26 @@ const AsbestosRemovalJobDetails = () => {
           );
 
           if (sampleNumberMap.size) {
-            setAirMonitoringShifts((prevShifts) =>
-              prevShifts.map((shift) =>
-                sampleNumberMap.has(shift._id)
-                  ? {
-                      ...shift,
-                      sampleNumbers: sampleNumberMap.get(shift._id),
-                    }
-                  : shift
-              )
+            enrichedShifts = shiftsPayload.map((shift) =>
+              sampleNumberMap.has(shift._id)
+                ? {
+                    ...shift,
+                    sampleNumbers: sampleNumberMap.get(shift._id),
+                  }
+                : shift
             );
             logTiming("sample numbers hydrated");
           }
         }
+
+        setAirMonitoringShifts(enrichedShifts);
+        logTiming(`shifts set (${enrichedShifts.length})`);
+
+        const clearancesPayload = Array.isArray(jobPayload.clearances)
+          ? jobPayload.clearances
+          : [];
+        setClearances(clearancesPayload);
+        logTiming(`clearances set (${clearancesPayload.length})`);
       } catch (err) {
         if (!isActive()) {
           finishTiming("stale error result");
@@ -311,12 +323,24 @@ const AsbestosRemovalJobDetails = () => {
     if (jobId) {
       fetchJobDetails();
       fetchAsbestosRemovalists();
+    }
+  }, [jobId, fetchJobDetails, fetchAsbestosRemovalists]);
+
+  useEffect(() => {
+    const requiresAssessorLookup = clearances.some(
+      (clearance) =>
+        clearance &&
+        typeof clearance.LAA === "string" &&
+        /^[0-9a-fA-F]{24}$/.test(clearance.LAA)
+    );
+
+    if (requiresAssessorLookup && !assessorsLoaded && !assessorsLoading) {
       fetchAsbestosAssessors();
     }
   }, [
-    jobId,
-    fetchJobDetails,
-    fetchAsbestosRemovalists,
+    clearances,
+    assessorsLoaded,
+    assessorsLoading,
     fetchAsbestosAssessors,
   ]);
 
@@ -632,6 +656,9 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleCreateClearance = () => {
+    if (!assessorsLoaded && !assessorsLoading) {
+      fetchAsbestosAssessors();
+    }
     setEditingClearance(null);
     resetClearanceForm();
     setClearanceDialogOpen(true);
@@ -868,6 +895,9 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleEditClearance = (clearance, event) => {
     event.stopPropagation();
+    if (!assessorsLoaded && !assessorsLoading) {
+      fetchAsbestosAssessors();
+    }
     setEditingClearance(clearance);
     const clearanceType = clearance.clearanceType || "Non-friable";
     setClearanceForm({

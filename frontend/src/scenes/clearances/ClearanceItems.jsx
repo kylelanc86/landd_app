@@ -42,6 +42,7 @@ import {
   Check as CheckIcon,
   Close as CloseIcon,
   Map as MapIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { Checkbox, FormControlLabel } from "@mui/material";
 
@@ -1299,6 +1300,15 @@ const ClearanceItems = () => {
 
         {/* Breadcrumbs */}
         <Breadcrumbs sx={{ marginBottom: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={() => navigate("/asbestos-removal")}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Asbestos Removal Jobs
+          </Link>
           <Link
             component="button"
             variant="body1"

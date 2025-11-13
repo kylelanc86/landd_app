@@ -67,6 +67,8 @@ const NewSample = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState(null);
+  const [projectSamples, setProjectSamples] = useState([]);
+  const [shiftSamples, setShiftSamples] = useState([]);
 
   const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
 
@@ -178,6 +180,7 @@ const NewSample = () => {
               projectID
             );
             const allProjectSamples = allProjectSamplesResponse.data || [];
+            setProjectSamples(allProjectSamples);
             console.log("All project samples:", allProjectSamples);
             console.log("Project ID:", projectID);
 
@@ -232,6 +235,7 @@ const NewSample = () => {
         const samplesResponse = await sampleService.getByShift(shiftId);
         const samplesInShift = samplesResponse.data || [];
         console.log("Number of samples in shift:", samplesInShift.length);
+        setShiftSamples(samplesInShift);
 
         // If there's no default sampler but we have samples, check the first sample
         if (!response.data.defaultSampler && samplesInShift.length > 0) {
@@ -513,32 +517,24 @@ const NewSample = () => {
     if (!form.sampleNumber) {
       errors.sampleNumber = "Sample number is required";
     } else {
-      // Check if sample number is unique across the project
-      try {
-        if (projectID) {
-          const allProjectSamplesResponse = await sampleService.getByProject(
-            projectID
-          );
-          const allProjectSamples = allProjectSamplesResponse.data || [];
-
-          const isDuplicate = allProjectSamples.some((sample) => {
-            // Only check against air monitoring samples (with AM prefix in sample number)
-            if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
-              const extractedNumber =
-                sample.fullSampleID?.match(/AM(\d+)$/)?.[1];
-              return extractedNumber === form.sampleNumber.replace("AM", "");
-            }
-            return false; // Not an AM sample, so no conflict
-          });
-
-          if (isDuplicate) {
-            errors.sampleNumber =
-              "Sample number already exists in this project. Please use a different number.";
+      // Check if sample number is unique across the project using cached samples
+      if (projectID && projectSamples.length > 0) {
+        const isDuplicate = projectSamples.some((sample) => {
+          if (sample.fullSampleID?.startsWith(`${projectID}-AM`)) {
+            const extractedNumber = sample.fullSampleID?.match(/AM(\d+)$/)?.[1];
+            return extractedNumber === form.sampleNumber.replace("AM", "");
           }
+          return false;
+        });
+
+        if (isDuplicate) {
+          errors.sampleNumber =
+            "Sample number already exists in this project. Please use a different number.";
         }
-      } catch (error) {
-        console.error("Error checking sample number uniqueness:", error);
-        // Don't block submission if we can't check uniqueness
+      } else if (projectID && projectSamples.length === 0) {
+        console.warn(
+          "[NewSample] Unable to validate sample number uniqueness - project samples not loaded"
+        );
       }
     }
 
@@ -581,12 +577,18 @@ const NewSample = () => {
       e.stopPropagation();
     }
 
+    const logLabel = "[NewSample] handleSubmit";
+    console.time(`${logLabel} total`);
+    console.time(`${logLabel} validation`);
+
     setError("");
     setFieldErrors({});
 
     // Validate form before submission
     const isValid = await validateForm();
+    console.timeEnd(`${logLabel} validation`);
     if (!isValid) {
+      console.timeEnd(`${logLabel} total`);
       return;
     }
 
@@ -605,33 +607,34 @@ const NewSample = () => {
         throw new Error("Shift ID is required");
       }
 
-      // Get the number of samples in this shift for first sample detection
-      const samplesResponse = await sampleService.getByShift(shiftId);
-      const samplesInShift = samplesResponse.data || [];
-
+      const currentShiftSampleCount = shiftSamples.length;
+      const shiftUpdatePayload = {};
       // If this is the first sample in the shift and we have a sampler, set it as the default
-      if (samplesInShift.length === 0 && form.sampler) {
-        try {
-          await shiftService.update(shiftId, {
-            defaultSampler: form.sampler,
-          });
-        } catch (error) {
-          // Don't throw the error, just log it and continue
-        }
+      if (currentShiftSampleCount === 0 && form.sampler) {
+        shiftUpdatePayload.defaultSampler = form.sampler;
       }
 
       // If this is the first sample in the shift and we have a flowmeter, set it as the default
-      if (samplesInShift.length === 0 && form.flowmeter) {
+      if (currentShiftSampleCount === 0 && form.flowmeter) {
+        shiftUpdatePayload.defaultFlowmeter = form.flowmeter;
+      }
+
+      if (Object.keys(shiftUpdatePayload).length > 0) {
+        console.time(`${logLabel} shiftUpdate`);
         try {
-          await shiftService.update(shiftId, {
-            defaultFlowmeter: form.flowmeter,
-          });
-        } catch (error) {
-          // Don't throw the error, just log it and continue
+          await shiftService.update(shiftId, shiftUpdatePayload);
+        } catch (updateError) {
+          console.error(
+            "[NewSample] Error updating shift defaults:",
+            updateError
+          );
+        } finally {
+          console.timeEnd(`${logLabel} shiftUpdate`);
         }
       }
 
       // Create the sample
+      console.time(`${logLabel} create`);
       const sampleData = {
         ...form,
         shift: shiftId,
@@ -653,10 +656,22 @@ const NewSample = () => {
       };
 
       await sampleService.create(sampleData);
+      console.timeEnd(`${logLabel} create`);
+
+      // Update local cache to reflect the new sample
+      setShiftSamples((prev) => [...prev, sampleData]);
+      setProjectSamples((prev) => [...prev, sampleData]);
 
       // Navigate immediately after successful creation
       navigate(`/air-monitoring/shift/${shiftId}/samples`);
     } catch (error) {
+      if (console.timeLog) {
+        try {
+          console.timeLog(`${logLabel} total`);
+        } catch (logError) {
+          // ignore consoles without timeLog
+        }
+      }
       console.error("Error creating sample:", error);
       setError(
         error.response?.data?.message ||
@@ -664,6 +679,12 @@ const NewSample = () => {
           "Failed to create sample"
       );
       setIsSubmitting(false);
+    } finally {
+      try {
+        console.timeEnd(`${logLabel} total`);
+      } catch (endError) {
+        // ignore console timer errors (e.g., double-ending)
+      }
     }
   };
 

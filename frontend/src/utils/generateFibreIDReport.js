@@ -251,14 +251,20 @@ pdfMake.fonts = {
               widths: ['50%', '50%'],
               body: [
                 [
-                  { text: 'REPORT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' },
-                  { text: '', style: 'tableHeader', fillColor: '#f0f0f0' }
+                  { text: 'REPORT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0', colSpan: 2 },
+                  {}
                 ],
                 [
                   {
                     stack: [
                       { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                    ]
+                  },
+                  {
+                    stack: [
                       { text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Samples Received: ', bold: true }, { text: (() => {
                         if (assessment?.projectId?.d_Date) {
@@ -271,13 +277,8 @@ pdfMake.fonts = {
                           return formatDate(new Date());
                         }
                       })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                    ]
-                  },
-                  {
-                    stack: [
-                      { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: ' ', style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Report Approved by: ', bold: true }, { text: reportApprovedBy || 'Report not approved', color: reportApprovedBy ? 'black' : 'red' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   }
                 ]
@@ -368,7 +369,7 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['11%', '14%', '11%', '20%', '12%', '15%', '17%'],
+              widths: ['11%', '16.8%', '11%', '17.2%', '12%', '15%', '17%'],
               body: [
                 [
                   { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
@@ -478,12 +479,12 @@ pdfMake.fonts = {
                     }
                     
                     const result = {
-                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(', ') : 'None detected',
-                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(', ') : 'None detected'
+                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(' ') : 'None',
+                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(' ') : 'None detected'
                     };
                     
                     // Ensure we never return undefined values
-                    if (!result.nonAsbestos) result.nonAsbestos = 'None detected';
+                    if (!result.nonAsbestos) result.nonAsbestos = 'None';
                     if (!result.asbestos) result.asbestos = 'None detected';
                     
                     console.log('Final fibre results:', result);
@@ -518,7 +519,7 @@ pdfMake.fonts = {
                   const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) ? 
                     (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) : 'No description';
                   const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
-                  const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None detected';
+                  const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None';
                   const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'None detected';
                   
                   // DEBUG: Log every single value being passed to pdfMake

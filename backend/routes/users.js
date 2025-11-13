@@ -256,18 +256,57 @@ router.get('/preferences/me', auth, async (req, res) => {
 });
 
 // Update user preferences
+const isPlainObject = (value) => {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  );
+};
+
+const mergeDeep = (target = {}, source = {}) => {
+  const output = { ...target };
+
+  Object.keys(source || {}).forEach((key) => {
+    const sourceValue = source[key];
+    const targetValue = output[key];
+
+    if (Array.isArray(sourceValue)) {
+      output[key] = [...sourceValue];
+    } else if (isPlainObject(sourceValue)) {
+      output[key] = mergeDeep(
+        isPlainObject(targetValue) ? targetValue : {},
+        sourceValue
+      );
+    } else {
+      output[key] = sourceValue;
+    }
+  });
+
+  return output;
+};
+
 router.put('/preferences/me', auth, async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      { userPreferences: req.body },
-      { new: true, runValidators: true }
-    ).select('userPreferences');
-    
+    const user = await User.findById(req.user.id).select('userPreferences');
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
+    const existingPreferences = user.userPreferences
+      ? (typeof user.userPreferences.toObject === 'function'
+          ? user.userPreferences.toObject()
+          : user.userPreferences)
+      : {};
+
+    const mergedPreferences = mergeDeep(existingPreferences, req.body || {});
+
+    user.userPreferences = mergedPreferences;
+    user.markModified('userPreferences');
+
+    await user.save();
+
     res.json(user.userPreferences || {});
   } catch (error) {
     console.error('Error updating user preferences:', error);

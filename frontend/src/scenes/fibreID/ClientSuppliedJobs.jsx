@@ -839,17 +839,19 @@ const ClientSuppliedJobs = () => {
                               <ArchiveIcon />
                             </IconButton>
                           )}
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteJob(job._id);
-                            }}
-                            color="error"
-                            size="small"
-                            title="Delete Job"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
+                          {hasPermission(currentUser, "clientSup.delete") && (
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteJob(job._id);
+                              }}
+                              color="error"
+                              size="small"
+                              title="Delete Job"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>

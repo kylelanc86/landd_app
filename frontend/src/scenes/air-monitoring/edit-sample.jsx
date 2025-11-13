@@ -278,6 +278,12 @@ const EditSample = () => {
   useEffect(() => {
     const calculateSampleNumber = async () => {
       if (!projectID) return;
+      if (form.sampleNumber) {
+        console.debug(
+          "[EditSample] Skipping sample number recalculation; existing sample number present"
+        );
+        return;
+      }
 
       try {
         const allProjectSamplesResponse = await sampleService.getByProject(
@@ -305,21 +311,17 @@ const EditSample = () => {
         );
 
         // Only update if we don't already have a sample number
-        if (!form.sampleNumber) {
-          setForm((prev) => ({
-            ...prev,
-            sampleNumber: nextSampleNumber.toString(),
-          }));
-        }
+        setForm((prev) => ({
+          ...prev,
+          sampleNumber: nextSampleNumber.toString(),
+        }));
       } catch (error) {
         console.error("Error auto-calculating sample number for edit:", error);
         // Set default if calculation fails and no sample number exists
-        if (!form.sampleNumber) {
-          setForm((prev) => ({
-            ...prev,
-            sampleNumber: "AM1",
-          }));
-        }
+        setForm((prev) => ({
+          ...prev,
+          sampleNumber: prev.sampleNumber || "AM1",
+        }));
       }
     };
 
@@ -375,11 +377,17 @@ const EditSample = () => {
       e.stopPropagation();
     }
 
+    const logLabel = "[EditSample] handleSubmit";
+    console.time(`${logLabel} total`);
+    console.time(`${logLabel} validation`);
+
     setError("");
     setFieldErrors({});
 
-    // Validate form before submission
-    if (!validateForm()) {
+    const isValid = validateForm();
+    console.timeEnd(`${logLabel} validation`);
+    if (!isValid) {
+      console.timeEnd(`${logLabel} total`);
       return;
     }
 
@@ -445,7 +453,9 @@ const EditSample = () => {
         collectedBy: form.sampler,
       };
 
+      console.time(`${logLabel} update`);
       await sampleService.update(sampleId, sampleData);
+      console.timeEnd(`${logLabel} update`);
       navigate(`/air-monitoring/shift/${shiftId}/samples`);
     } catch (error) {
       console.error("Error updating sample:", error);
@@ -456,6 +466,11 @@ const EditSample = () => {
       );
     } finally {
       setIsSubmitting(false);
+      try {
+        console.timeEnd(`${logLabel} total`);
+      } catch (timerError) {
+        // ignore timer errors (e.g., already ended)
+      }
     }
   };
 
