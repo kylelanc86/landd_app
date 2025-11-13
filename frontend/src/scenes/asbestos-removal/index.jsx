@@ -39,6 +39,67 @@ import customDataFieldGroupService from "../../services/customDataFieldGroupServ
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 
+const CACHE_KEY = "asbestosRemovalJobsCache";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const loadJobsCache = () => {
+  if (typeof window === "undefined" || !window.sessionStorage) {
+    return null;
+  }
+
+  try {
+    const cachedRaw = window.sessionStorage.getItem(CACHE_KEY);
+    if (!cachedRaw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(cachedRaw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    if (!Array.isArray(parsed.jobs) || typeof parsed.timestamp !== "number") {
+      window.sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+
+    if (Date.now() - parsed.timestamp > CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.warn("[Asbestos Removal] Failed to parse jobs cache", error);
+    return null;
+  }
+};
+
+const saveJobsCache = (jobs) => {
+  if (typeof window === "undefined" || !window.sessionStorage) {
+    return;
+  }
+
+  try {
+    const payload = JSON.stringify({ jobs, timestamp: Date.now() });
+    window.sessionStorage.setItem(CACHE_KEY, payload);
+  } catch (error) {
+    console.warn("[Asbestos Removal] Failed to write jobs cache", error);
+  }
+};
+
+const clearJobsCache = () => {
+  if (typeof window === "undefined" || !window.sessionStorage) {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(CACHE_KEY);
+  } catch (error) {
+    console.warn("[Asbestos Removal] Failed to clear jobs cache", error);
+  }
+};
+
 const AsbestosRemoval = () => {
   const theme = useTheme();
   const colors = tokens;
@@ -94,134 +155,159 @@ const AsbestosRemoval = () => {
     []
   );
 
-  const fetchAsbestosRemovalJobs = useCallback(async () => {
-    const startTime = performance.now();
-    console.log("[Asbestos Removal] Starting fetchAsbestosRemovalJobs");
+  const fetchAsbestosRemovalJobs = useCallback(
+    async ({ force = false, silent = false } = {}) => {
+      const startTime = performance.now();
+      console.log("[Asbestos Removal] Starting fetchAsbestosRemovalJobs");
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const jobsFetchStart = performance.now();
-      console.log("[Asbestos Removal] Fetching asbestos removal jobs...");
-
-      const jobsResponse = await asbestosRemovalJobService.getAll({
-        excludeStatus: "completed,cancelled",
-        limit: 1000,
-        minimal: true,
-      });
-
-      const jobsFetchTime = performance.now() - jobsFetchStart;
-      console.log(
-        `[Asbestos Removal] Asbestos removal jobs fetched in ${jobsFetchTime.toFixed(
-          2
-        )}ms`
-      );
-
-      let jobs = [];
-      if (
-        jobsResponse &&
-        jobsResponse.jobs &&
-        Array.isArray(jobsResponse.jobs)
-      ) {
-        jobs = jobsResponse.jobs;
-      } else if (
-        jobsResponse &&
-        jobsResponse.data &&
-        Array.isArray(jobsResponse.data)
-      ) {
-        jobs = jobsResponse.data;
-      } else if (Array.isArray(jobsResponse)) {
-        jobs = jobsResponse;
+      if (!silent) {
+        setLoading(true);
       }
+      setError(null);
 
-      if (!Array.isArray(jobs)) {
-        console.error("Jobs is not an array:", jobs);
-        setAsbestosRemovalJobs([]);
-        return;
-      }
+      try {
+        if (!force) {
+          const cached = loadJobsCache();
+          if (cached) {
+            console.log(
+              "[Asbestos Removal] Serving asbestos removal jobs from cache"
+            );
+            setAsbestosRemovalJobs(cached.jobs);
+            if (!silent) {
+              setLoading(false);
+            }
+            return;
+          }
+        }
 
-      console.log(
-        `[Asbestos Removal] Found ${jobs.length} active asbestos removal jobs`
-      );
+        const jobsFetchStart = performance.now();
+        console.log("[Asbestos Removal] Fetching asbestos removal jobs...");
 
-      if (jobs.length === 0) {
-        const elapsed = performance.now() - startTime;
+        const jobsResponse = await asbestosRemovalJobService.getAll({
+          excludeStatus: "completed,cancelled",
+          limit: 1000,
+          minimal: true,
+        });
+
+        const jobsFetchTime = performance.now() - jobsFetchStart;
         console.log(
-          `[Asbestos Removal] No active asbestos removal jobs found (elapsed ${elapsed.toFixed(
+          `[Asbestos Removal] Asbestos removal jobs fetched in ${jobsFetchTime.toFixed(
             2
-          )}ms)`
+          )}ms`
         );
-        setAsbestosRemovalJobs([]);
-        return;
+
+        let jobs = [];
+        if (
+          jobsResponse &&
+          jobsResponse.jobs &&
+          Array.isArray(jobsResponse.jobs)
+        ) {
+          jobs = jobsResponse.jobs;
+        } else if (
+          jobsResponse &&
+          jobsResponse.data &&
+          Array.isArray(jobsResponse.data)
+        ) {
+          jobs = jobsResponse.data;
+        } else if (Array.isArray(jobsResponse)) {
+          jobs = jobsResponse;
+        }
+
+        if (!Array.isArray(jobs)) {
+          console.error("Jobs is not an array:", jobs);
+          setAsbestosRemovalJobs([]);
+          return;
+        }
+
+        console.log(
+          `[Asbestos Removal] Found ${jobs.length} active asbestos removal jobs`
+        );
+
+        if (jobs.length === 0) {
+          const elapsed = performance.now() - startTime;
+          console.log(
+            `[Asbestos Removal] No active asbestos removal jobs found (elapsed ${elapsed.toFixed(
+              2
+            )}ms)`
+          );
+          setAsbestosRemovalJobs([]);
+          return;
+        }
+
+        const processingStart = performance.now();
+        const processedJobs = jobs.map((job) => {
+          const projectRef = job.projectId || {};
+          const projectIdentifier =
+            projectRef?.projectID || job.projectID || "Unknown";
+          const projectName =
+            projectRef?.name || job.projectName || "Unknown Project";
+
+          const airMonitoringFlag = !!job.airMonitoring;
+          const clearanceFlag = !!job.clearance;
+          const jobTypeRaw = job.jobType || "none";
+          const jobTypeLabel = resolveJobTypeLabel(
+            jobTypeRaw,
+            airMonitoringFlag,
+            clearanceFlag
+          );
+
+          return {
+            id: job._id,
+            projectID: projectIdentifier,
+            projectName: projectName,
+            asbestosRemovalist: job.asbestosRemovalist || "Not assigned",
+            status: job.status || "Active",
+            jobTypeLabel,
+            jobTypeRaw,
+            airMonitoring: airMonitoringFlag,
+            clearance: clearanceFlag,
+            originalData: job,
+          };
+        });
+        const processingTime = performance.now() - processingStart;
+
+        const sortStart = performance.now();
+        const sortedJobs = processedJobs.sort((a, b) => {
+          const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
+          const bNum = parseInt(b.projectID?.replace(/\D/g, "") || 0);
+          return bNum - aNum;
+        });
+        const sortTime = performance.now() - sortStart;
+
+        const totalTime = performance.now() - startTime;
+        console.log("[Asbestos Removal] Timing breakdown:", {
+          jobsFetch: `${jobsFetchTime.toFixed(2)}ms`,
+          processing: `${processingTime.toFixed(2)}ms`,
+          sorting: `${sortTime.toFixed(2)}ms`,
+          total: `${totalTime.toFixed(2)}ms`,
+        });
+
+        setAsbestosRemovalJobs(sortedJobs);
+        saveJobsCache(sortedJobs);
+      } catch (err) {
+        const errorTime = performance.now() - startTime;
+        console.error(
+          `[Asbestos Removal] Error after ${errorTime.toFixed(2)}ms:`,
+          err
+        );
+        setError(err.message || "Failed to fetch jobs");
+        if (!force) {
+          clearJobsCache();
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+        const finalTime = performance.now() - startTime;
+        console.log(
+          `[Asbestos Removal] fetchAsbestosRemovalJobs completed in ${finalTime.toFixed(
+            2
+          )}ms`
+        );
       }
-
-      const processingStart = performance.now();
-      const processedJobs = jobs.map((job) => {
-        const projectRef = job.projectId || {};
-        const projectIdentifier =
-          projectRef?.projectID || job.projectID || "Unknown";
-        const projectName =
-          projectRef?.name || job.projectName || "Unknown Project";
-
-        const airMonitoringFlag = !!job.airMonitoring;
-        const clearanceFlag = !!job.clearance;
-        const jobTypeRaw = job.jobType || "none";
-        const jobTypeLabel = resolveJobTypeLabel(
-          jobTypeRaw,
-          airMonitoringFlag,
-          clearanceFlag
-        );
-
-        return {
-          id: job._id,
-          projectID: projectIdentifier,
-          projectName: projectName,
-          asbestosRemovalist: job.asbestosRemovalist || "Not assigned",
-          status: job.status || "Active",
-          jobTypeLabel,
-          jobTypeRaw,
-          airMonitoring: airMonitoringFlag,
-          clearance: clearanceFlag,
-          originalData: job,
-        };
-      });
-      const processingTime = performance.now() - processingStart;
-
-      const sortStart = performance.now();
-      const sortedJobs = processedJobs.sort((a, b) => {
-        const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
-        const bNum = parseInt(b.projectID?.replace(/\D/g, "") || 0);
-        return bNum - aNum;
-      });
-      const sortTime = performance.now() - sortStart;
-
-      const totalTime = performance.now() - startTime;
-      console.log("[Asbestos Removal] Timing breakdown:", {
-        jobsFetch: `${jobsFetchTime.toFixed(2)}ms`,
-        processing: `${processingTime.toFixed(2)}ms`,
-        sorting: `${sortTime.toFixed(2)}ms`,
-        total: `${totalTime.toFixed(2)}ms`,
-      });
-
-      setAsbestosRemovalJobs(sortedJobs);
-    } catch (err) {
-      const errorTime = performance.now() - startTime;
-      console.error(
-        `[Asbestos Removal] Error after ${errorTime.toFixed(2)}ms:`,
-        err
-      );
-      setError(err.message || "Failed to fetch jobs");
-    } finally {
-      setLoading(false);
-      const finalTime = performance.now() - startTime;
-      console.log(
-        `[Asbestos Removal] fetchAsbestosRemovalJobs completed in ${finalTime.toFixed(
-          2
-        )}ms`
-      );
-    }
-  }, [resolveJobTypeLabel]);
+    },
+    [resolveJobTypeLabel]
+  );
 
   // Lazy load projects and removalists only when modal opens
   const fetchProjects = useCallback(async () => {
@@ -271,7 +357,16 @@ const AsbestosRemoval = () => {
 
   // Only fetch jobs on mount, lazy load modal data when needed
   useEffect(() => {
-    fetchAsbestosRemovalJobs();
+    const cached = loadJobsCache();
+
+    if (cached) {
+      console.log("[Asbestos Removal] Using cached asbestos removal jobs");
+      setAsbestosRemovalJobs(cached.jobs);
+      setLoading(false);
+      fetchAsbestosRemovalJobs({ force: true, silent: true });
+    } else {
+      fetchAsbestosRemovalJobs();
+    }
   }, [fetchAsbestosRemovalJobs]);
 
   // Memoize color functions
@@ -387,7 +482,7 @@ const AsbestosRemoval = () => {
 
       if (response.data) {
         // Refresh the jobs list
-        await fetchAsbestosRemovalJobs();
+        await fetchAsbestosRemovalJobs({ force: true });
         handleCloseModal();
       }
     } catch (err) {
@@ -418,7 +513,7 @@ const AsbestosRemoval = () => {
     try {
       await asbestosRemovalJobService.delete(jobToDelete.id);
       // Refresh the jobs list
-      await fetchAsbestosRemovalJobs();
+      await fetchAsbestosRemovalJobs({ force: true });
       setDeleteDialogOpen(false);
       setJobToDelete(null);
     } catch (err) {
