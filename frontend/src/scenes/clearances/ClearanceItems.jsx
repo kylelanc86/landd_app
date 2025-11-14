@@ -2038,7 +2038,7 @@ const ClearanceItems = () => {
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Select an air monitoring report from the list below. This will
-                be included in the clearance report as Appendix B.
+                be included in the clearance report appendices.
               </Typography>
 
               {loadingReports ? (

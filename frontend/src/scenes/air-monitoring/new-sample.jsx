@@ -143,8 +143,7 @@ const NewSample = () => {
 
         const flowmeters = allEquipment.filter(
           (equipment) =>
-            (equipment.equipmentType === "Bubble flowmeter" ||
-              equipment.equipmentType === "Site flowmeter") &&
+            equipment.equipmentType === "Site flowmeter" &&
             equipment.status === "active"
         );
         console.log("Filtered flowmeters:", flowmeters);

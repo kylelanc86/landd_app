@@ -634,20 +634,22 @@ const ClientSuppliedJobs = () => {
             <Table stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                  <TableCell sx={{ fontWeight: "bold", width: "115px" }}>
                     Project ID
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
+                  <TableCell sx={{ fontWeight: "bold", width: "130px" }}>
                     Job Type
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "165px" }}>
                     Sample Receipt Date
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "290px" }}>
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -671,7 +673,7 @@ const ClientSuppliedJobs = () => {
                       onClick={() => handleViewJob(job._id)}
                       sx={{ cursor: "pointer" }}
                     >
-                      <TableCell>
+                      <TableCell sx={{ width: "115px" }}>
                         <Typography
                           variant="body2"
                           sx={{ fontWeight: "medium" }}
@@ -684,7 +686,7 @@ const ClientSuppliedJobs = () => {
                           {job.projectId?.name || "Unnamed Project"}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ width: "130px" }}>
                         <Chip
                           label={job.jobType || "Fibre ID"}
                           color={
@@ -698,7 +700,7 @@ const ClientSuppliedJobs = () => {
                           variant="outlined"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ width: "165px" }}>
                         <Typography variant="body2">
                           {job.sampleReceiptDate
                             ? new Date(
@@ -707,14 +709,17 @@ const ClientSuppliedJobs = () => {
                             : "N/A"}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx ={{ width:'150px'}}>
                         <Chip
                           label={job.status || "In Progress"}
                           color={getStatusColor(job.status)}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()}
+                        sx={{ minWidth: "290px" }}
+                      >
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                           <Box
                             sx={{

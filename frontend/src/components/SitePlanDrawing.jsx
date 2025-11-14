@@ -36,6 +36,37 @@ import GoogleMapsDialog from "./GoogleMapsDialog";
 
 const CANVAS_SAFE_WIDTH = 1000;
 const CANVAS_SAFE_HEIGHT = 720;
+const DEFAULT_DRAW_OPACITY = 1;
+const TRANSPARENT_DRAW_OPACITY = 0.35;
+
+const applyOpacitySettings = (item, transparent) => {
+  if (!item) {
+    return item;
+  }
+
+  const strokeOpacity = transparent
+    ? TRANSPARENT_DRAW_OPACITY
+    : DEFAULT_DRAW_OPACITY;
+
+  if (item.type === "circle" || item.type === "rectangle") {
+    const next = { ...item, strokeOpacity };
+    if (item.isFilled && item.fillColor) {
+      next.fillOpacity = transparent
+        ? TRANSPARENT_DRAW_OPACITY
+        : DEFAULT_DRAW_OPACITY;
+    } else if ("fillOpacity" in next) {
+      delete next.fillOpacity;
+    }
+    return next;
+  }
+
+  if (item.type === "line" || item.type === "pen") {
+    return { ...item, strokeOpacity };
+  }
+
+  return { ...item };
+};
+
 const normalizeLegendEntries = (entries = []) => {
   const seen = new Set();
   const normalized = [];
@@ -94,6 +125,7 @@ const SitePlanDrawing = ({
   const [color, setColor] = useState("#000000");
   const [fillColor, setFillColor] = useState("#ffffff");
   const [isFilled, setIsFilled] = useState(false);
+  const [useTransparentDrawing, setUseTransparentDrawing] = useState(false);
   const [showGoogleMaps, setShowGoogleMaps] = useState(false);
   const [history, setHistory] = useState([[]]); // Initialize with empty array
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -412,6 +444,9 @@ const SitePlanDrawing = ({
 
     ctx.strokeStyle = color;
     ctx.lineWidth = brushSize;
+    const previewOpacity = useTransparentDrawing
+      ? TRANSPARENT_DRAW_OPACITY
+      : DEFAULT_DRAW_OPACITY;
 
     if (currentTool === "pen") {
       // Add point to pen path
@@ -439,12 +474,20 @@ const SitePlanDrawing = ({
       });
 
       // Draw preview circle
+      ctx.save();
+      ctx.globalAlpha = previewOpacity;
       const radius = Math.sqrt(
         Math.pow(x - canvas.startX, 2) + Math.pow(y - canvas.startY, 2)
       );
       ctx.beginPath();
       ctx.arc(canvas.startX, canvas.startY, radius, 0, 2 * Math.PI);
+      if (isFilled && fillColor) {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+      }
+      ctx.strokeStyle = color;
       ctx.stroke();
+      ctx.restore();
     } else if (currentTool === "rectangle") {
       // Clear and redraw background + existing items for preview
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -466,11 +509,19 @@ const SitePlanDrawing = ({
       });
 
       // Draw preview rectangle
+      ctx.save();
+      ctx.globalAlpha = previewOpacity;
       const width = x - canvas.startX;
       const height = y - canvas.startY;
       ctx.beginPath();
       ctx.rect(canvas.startX, canvas.startY, width, height);
+      if (isFilled && fillColor) {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+      }
+      ctx.strokeStyle = color;
       ctx.stroke();
+      ctx.restore();
     } else if (currentTool === "line") {
       // Clear and redraw background + existing items for preview
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -492,10 +543,14 @@ const SitePlanDrawing = ({
       });
 
       // Draw preview line
+      ctx.save();
+      ctx.globalAlpha = previewOpacity;
       ctx.beginPath();
       ctx.moveTo(canvas.startX, canvas.startY);
       ctx.lineTo(x, y);
+      ctx.strokeStyle = color;
       ctx.stroke();
+      ctx.restore();
     }
   };
 
@@ -999,12 +1054,29 @@ const SitePlanDrawing = ({
   };
 
   const addDrawnItem = (item) => {
-    setDrawnItems((prev) => [...prev, item]);
+    const itemWithOpacity = applyOpacitySettings(item, useTransparentDrawing);
+    setDrawnItems((prev) => [...prev, itemWithOpacity]);
+  };
+
+  const handleTransparencyToggle = (checked) => {
+    setUseTransparentDrawing(checked);
+    setDrawnItems((prev) => {
+      const nextItems = prev.map((item) => applyOpacitySettings(item, checked));
+      setSelectedItem((current) => {
+        if (!current) {
+          return current;
+        }
+        const match = nextItems.find((item) => item.id === current.id);
+        return match || applyOpacitySettings(current, checked);
+      });
+      return nextItems;
+    });
   };
 
   const drawSelectionHandles = useCallback((ctx, item) => {
     const handles = getSelectionHandles(item);
 
+    ctx.save();
     ctx.strokeStyle = "#007bff";
     ctx.fillStyle = "#007bff";
     ctx.lineWidth = 2;
@@ -1015,15 +1087,24 @@ const SitePlanDrawing = ({
       ctx.fill();
       ctx.stroke();
     });
+    ctx.restore();
   }, []);
 
   const drawItem = (ctx, item) => {
-    ctx.strokeStyle = item.color;
-    ctx.fillStyle = item.color;
-    ctx.lineWidth = item.lineWidth || 2;
+    if (!item) {
+      return;
+    }
+
+    const strokeOpacity = item.strokeOpacity ?? 1;
+    const fillOpacity = item.fillOpacity ?? strokeOpacity;
+
+    ctx.save();
 
     switch (item.type) {
       case "line":
+        ctx.globalAlpha = strokeOpacity;
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = item.lineWidth || 2;
         ctx.beginPath();
         ctx.moveTo(item.x1, item.y1);
         ctx.lineTo(item.x2, item.y2);
@@ -1031,39 +1112,51 @@ const SitePlanDrawing = ({
         break;
       case "pen":
         if (item.path && item.path.length > 0) {
+          ctx.globalAlpha = strokeOpacity;
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = item.lineWidth || 2;
           ctx.beginPath();
           ctx.moveTo(item.path[0].x, item.path[0].y);
-          for (let i = 1; i < item.path.length; i++) {
+          for (let i = 1; i < item.path.length; i += 1) {
             ctx.lineTo(item.path[i].x, item.path[i].y);
           }
           ctx.stroke();
         }
         break;
       case "circle":
+        ctx.lineWidth = item.lineWidth || 2;
         ctx.beginPath();
         ctx.arc(item.centerX, item.centerY, item.radius, 0, 2 * Math.PI);
-        if (item.isFilled) {
+        if (item.isFilled && item.fillColor) {
+          ctx.globalAlpha = fillOpacity;
           ctx.fillStyle = item.fillColor;
           ctx.fill();
-          ctx.fillStyle = item.color; // Reset to stroke color
         }
+        ctx.globalAlpha = strokeOpacity;
+        ctx.strokeStyle = item.color;
         ctx.stroke();
         break;
       case "rectangle":
+        ctx.lineWidth = item.lineWidth || 2;
         ctx.beginPath();
         ctx.rect(item.x, item.y, item.width, item.height);
-        if (item.isFilled) {
+        if (item.isFilled && item.fillColor) {
+          ctx.globalAlpha = fillOpacity;
           ctx.fillStyle = item.fillColor;
           ctx.fill();
-          ctx.fillStyle = item.color; // Reset to stroke color
         }
+        ctx.globalAlpha = strokeOpacity;
+        ctx.strokeStyle = item.color;
         ctx.stroke();
         break;
       case "text":
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = item.color;
         ctx.font = `${item.fontSize}px Arial`;
         ctx.fillText(item.text, item.x, item.y);
         break;
       case "image":
+        ctx.globalAlpha = 1;
         if (item.imageElement) {
           ctx.drawImage(
             item.imageElement,
@@ -1077,6 +1170,8 @@ const SitePlanDrawing = ({
       default:
         break;
     }
+
+    ctx.restore();
   };
 
   const redrawCanvas = useCallback(() => {
@@ -1698,6 +1793,15 @@ const SitePlanDrawing = ({
                 </Box>
               </>
             )}
+            <Box display="flex" flexDirection="column" alignItems="center">
+              <Typography variant="caption">Transparent</Typography>
+              <input
+                type="checkbox"
+                checked={useTransparentDrawing}
+                onChange={(e) => handleTransparencyToggle(e.target.checked)}
+                style={{ width: 20, height: 20 }}
+              />
+            </Box>
           </Box>
 
           {/* Action Buttons */}
