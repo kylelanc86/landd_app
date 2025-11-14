@@ -258,49 +258,138 @@ const SampleList = () => {
         })
       );
 
-      // Prepare CSV headers
-      const headers = [
-        ...Object.keys(samples[0] || {}),
-        ...(samples[0]?.analysis ? Object.keys(samples[0].analysis) : []),
-        ...(samples[0]?.analysis?.fibreCounts
-          ? samples[0].analysis.fibreCounts.map((_, i) => `fibreCount_${i + 1}`)
-          : []),
+      const escapeCsvCell = (value) => {
+        if (value === undefined || value === null) return "";
+        return `"${String(value).replace(/"/g, '""')}"`;
+      };
+
+      const formatPersonName = (value) => {
+        if (!value) return "";
+        if (typeof value === "string") return value;
+        if (typeof value === "object") {
+          const { firstName, lastName, name, fullName, displayName, email } =
+            value;
+          if (firstName || lastName) {
+            return [firstName, lastName].filter(Boolean).join(" ").trim();
+          }
+          if (name) return name;
+          if (fullName) return fullName;
+          if (displayName) return displayName;
+          if (email) return email;
+          return "";
+        }
+        return "";
+      };
+
+      const csvRows = [
+        ["Project ID", job?.projectId?.projectID || ""],
+        ["Project Name", job?.projectName || job?.name || ""],
+        ["Sample Date", shift?.date ? formatDate(shift.date) : ""],
+        ["Description of Works", descriptionOfWorks || ""],
+        [],
+        [],
       ];
 
-      // Prepare CSV rows
-      const rows = samples.map((sample) => {
+      const excludedColumns = new Set([
+        "analysis",
+        "_id",
+        "shift",
+        "job",
+        "jobModel",
+        "sampleNumber",
+        "status",
+        "collectedBy",
+        "createdAt",
+        "updatedAt",
+        "__v",
+        "fibreCount_1",
+        "fibreCount_2",
+        "fibreCount_3",
+        "fibreCount_4",
+        "fibreCount_5",
+        "counted",
+        "reportedConcentration",
+      ]);
+
+      const sampleRows = samples.map((sample) => {
         const base = { ...sample };
-        const analysis = sample.analysis || {};
-        // Flatten fibreCounts if present
-        let fibreCounts = {};
+        const analysis = base.analysis || {};
+
+        delete base.analysis;
+
+        const row = Object.entries(base).reduce((acc, [key, value]) => {
+          if (!excludedColumns.has(key)) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
+
+        Object.entries(analysis).forEach(([key, value]) => {
+          if (!excludedColumns.has(key) && key !== "fibreCounts") {
+            row[key] = value;
+          }
+        });
+
         if (Array.isArray(analysis.fibreCounts)) {
           analysis.fibreCounts.forEach((val, i) => {
-            fibreCounts[`fibreCount_${i + 1}`] = Array.isArray(val)
+            row[`fibreCount_${i + 1}`] = Array.isArray(val)
               ? val.join("|")
               : val;
           });
         }
-        // Merge all fields
-        return {
-          ...base,
-          ...analysis,
-          ...fibreCounts,
-        };
+
+        if (row.counted === undefined) {
+          const countedValue =
+            analysis.fieldsCounted ??
+            analysis.fibresCounted ??
+            analysis.counted ??
+            "";
+          row.counted = countedValue;
+        }
+
+        if (row.reportedConcentration === undefined) {
+          row.reportedConcentration = analysis.reportedConcentration ?? "";
+        }
+
+        if (sample.sampler || sample.collectedBy) {
+          row.sampler = formatPersonName(sample.sampler || sample.collectedBy);
+        } else if (row.sampler) {
+          row.sampler = formatPersonName(row.sampler);
+        }
+
+        if (row.analyst) {
+          row.analyst = formatPersonName(row.analyst);
+        }
+
+        return row;
       });
 
-      // Convert to CSV string
-      const csv = [
-        headers.join(","),
-        ...rows.map((row) =>
-          headers
-            .map((field) =>
-              row[field] !== undefined && row[field] !== null
-                ? `"${String(row[field]).replace(/"/g, '""')}"`
-                : ""
-            )
-            .join(",")
-        ),
-      ].join("\r\n");
+      if (sampleRows.length > 0) {
+        const headers = [];
+        sampleRows.forEach((row) => {
+          Object.keys(row).forEach((key) => {
+            if (!excludedColumns.has(key) && !headers.includes(key)) {
+              headers.push(key);
+            }
+          });
+        });
+
+        if (!headers.includes("reportedConcentration")) {
+          headers.push("reportedConcentration");
+        }
+
+        csvRows.push(headers);
+
+        sampleRows.forEach((row) => {
+          csvRows.push(headers.map((header) => row[header] ?? ""));
+        });
+      }
+
+      const csv = csvRows
+        .map((row) =>
+          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : ""
+        )
+        .join("\r\n");
 
       // Download CSV
       const blob = new Blob([csv], { type: "text/csv" });
@@ -844,7 +933,7 @@ const SampleList = () => {
             },
           }}
         >
-          Download Raw Data
+          Download Sample Data
         </Button>
       </Stack>
 
