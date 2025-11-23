@@ -21,7 +21,6 @@ import {
   IconButton,
   Autocomplete,
   InputAdornment,
-  Stack,
   Checkbox,
   FormControlLabel,
 } from "@mui/material";
@@ -80,8 +79,19 @@ const Timesheets = () => {
   const [processingEntries, setProcessingEntries] = useState(new Set());
   const [successEntries, setSuccessEntries] = useState(new Set());
   const [show24HourView, setShow24HourView] = useState(false);
+  const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState(null);
   const calendarRef = useRef(null);
   const navigate = useNavigate();
+
+  // Detect if device is touch-enabled for better tablet/mobile support
+  const isTouchDevice = useMemo(() => {
+    return (
+      "ontouchstart" in window ||
+      navigator.maxTouchPoints > 0 ||
+      navigator.msMaxTouchPoints > 0
+    );
+  }, []);
 
   useEffect(() => {
     if (!currentUser?._id) {
@@ -201,22 +211,67 @@ const Timesheets = () => {
     }
   };
 
-  const handleStatusUpdate = async (status) => {
+  // Calculate total hours from time entries (excluding breaks)
+  const calculateTotalHours = () => {
+    let totalMinutes = 0;
+    timeEntries.forEach((entry) => {
+      if (!entry.isBreak) {
+        const [startHours, startMinutes] = entry.startTime
+          .split(":")
+          .map(Number);
+        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        let duration = endTotalMinutes - startTotalMinutes;
+        if (duration < 0) duration += 24 * 60; // Handle overnight entries
+        totalMinutes += duration;
+      }
+    });
+    return totalMinutes / 60;
+  };
+
+  const performStatusUpdate = async (status, forceFinalize = false) => {
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
+
+      if (!targetUserId) {
+        setErrorMessage(
+          "Error: No user ID available. Please try logging in again."
+        );
+        setErrorDialogOpen(true);
+        return;
+      }
 
       const response = await api.put(`/timesheets/status/${formattedDate}`, {
         status,
         userId: targetUserId,
-        date: formattedDate,
+        forceFinalize: forceFinalize,
       });
 
       setTimesheetStatus(status);
       await fetchTimeEntries();
     } catch (error) {
-      setErrorMessage("Failed to update timesheet status. Please try again.");
+      const errorMessage =
+        error.response?.data?.message ||
+        "Failed to update timesheet status. Please try again.";
+      setErrorMessage(errorMessage);
       setErrorDialogOpen(true);
     }
+  };
+
+  const handleStatusUpdate = async (status) => {
+    // If finalizing, check if hours are less than 7.5
+    if (status === "finalised") {
+      const totalHours = calculateTotalHours();
+      if (totalHours < 7.5) {
+        setPendingStatus(status);
+        setFinalizeConfirmOpen(true);
+        return;
+      }
+    }
+
+    // Otherwise, proceed directly
+    await performStatusUpdate(status);
   };
 
   const handleSubmit = async (e) => {
@@ -635,6 +690,13 @@ const Timesheets = () => {
       setErrorDialogOpen(true);
       return;
     }
+    if (timesheetStatus === "absent") {
+      setErrorMessage(
+        "Cannot add entries to an absent timesheet. Please mark as present first."
+      );
+      setErrorDialogOpen(true);
+      return;
+    }
 
     const startTime = format(info.start, "HH:mm");
     const endTime = format(info.end, "HH:mm");
@@ -653,7 +715,7 @@ const Timesheets = () => {
   };
 
   const handleEventClick = (info) => {
-    if (timesheetStatus === "finalised") return;
+    if (timesheetStatus === "finalised" || timesheetStatus === "absent") return;
 
     const entry = timeEntries.find((e) => e._id === info.event.id);
     if (entry) {
@@ -677,6 +739,14 @@ const Timesheets = () => {
       info.revert();
       setErrorMessage(
         "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+      );
+      setErrorDialogOpen(true);
+      return;
+    }
+    if (timesheetStatus === "absent") {
+      info.revert();
+      setErrorMessage(
+        "Cannot modify entries for an absent timesheet. Please mark as present first."
       );
       setErrorDialogOpen(true);
       return;
@@ -720,6 +790,14 @@ const Timesheets = () => {
       info.revert();
       setErrorMessage(
         "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+      );
+      setErrorDialogOpen(true);
+      return;
+    }
+    if (timesheetStatus === "absent") {
+      info.revert();
+      setErrorMessage(
+        "Cannot modify entries for an absent timesheet. Please mark as present first."
       );
       setErrorDialogOpen(true);
       return;
@@ -887,25 +965,19 @@ const Timesheets = () => {
         <Box
           sx={{
             background: `linear-gradient(135deg, ${theme.palette.primary.main}08 0%, ${theme.palette.primary.light}05 100%)`,
-            p: 4,
+            p: 2.5,
             borderBottom: `2px solid ${theme.palette.divider}`,
           }}
         >
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-            flexWrap="wrap"
-            gap={3}
-          >
+          <Box display="flex" alignItems="center" flexWrap="wrap" gap={2}>
             {/* Date Navigation */}
             <Box
               display="flex"
               alignItems="center"
-              gap={2}
+              gap={1.5}
               sx={{
                 background: theme.palette.background.paper,
-                p: 2,
+                p: 1.5,
                 borderRadius: 3,
                 boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 border: `1px solid ${theme.palette.divider}`,
@@ -913,6 +985,7 @@ const Timesheets = () => {
             >
               <IconButton
                 onClick={() => handleDayChange("prev")}
+                size="small"
                 sx={{
                   background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
                   color: theme.palette.primary.contrastText,
@@ -924,25 +997,27 @@ const Timesheets = () => {
                   transition: "all 0.2s ease",
                 }}
               >
-                <ArrowBackIosNewIcon />
+                <ArrowBackIosNewIcon fontSize="small" />
               </IconButton>
-              <Box textAlign="center" minWidth="280px">
+              <Box textAlign="center" minWidth="200px">
                 <Typography
-                  variant="h4"
+                  variant="h6"
                   sx={{
                     fontWeight: 700,
                     color: theme.palette.primary.main,
                     textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                    mb: 0.5,
+                    mb: 0.25,
+                    fontSize: "1rem",
                   }}
                 >
                   {format(selectedDate, "EEEE")}
                 </Typography>
                 <Typography
-                  variant="h5"
+                  variant="body1"
                   sx={{
                     fontWeight: 600,
                     color: theme.palette.text.secondary,
+                    fontSize: "0.875rem",
                   }}
                 >
                   {format(selectedDate, "d MMMM yyyy")}
@@ -950,6 +1025,7 @@ const Timesheets = () => {
               </Box>
               <IconButton
                 onClick={() => handleDayChange("next")}
+                size="small"
                 sx={{
                   background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
                   color: theme.palette.primary.contrastText,
@@ -961,118 +1037,82 @@ const Timesheets = () => {
                   transition: "all 0.2s ease",
                 }}
               >
-                <ArrowForwardIosIcon />
+                <ArrowForwardIosIcon fontSize="small" />
               </IconButton>
             </Box>
 
-            {/* Status Controls */}
-            <Stack
-              direction="row"
-              spacing={2}
-              flexWrap="wrap"
-              alignItems="center"
-            >
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={show24HourView}
-                    onChange={(e) => setShow24HourView(e.target.checked)}
-                    sx={{
-                      color: theme.palette.primary.main,
-                      "&.Mui-checked": {
-                        color: theme.palette.primary.main,
-                      },
-                    }}
-                  />
-                }
-                label={
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 600,
-                      color: theme.palette.text.primary,
-                      fontSize: "0.9rem",
-                    }}
-                  >
-                    Show 24 Hours
-                  </Typography>
-                }
-                sx={{
-                  mr: 2,
-                  "& .MuiFormControlLabel-label": {
-                    fontSize: "0.9rem",
-                  },
-                }}
-              />
-              <Button
-                variant={
-                  timesheetStatus === "finalised" ? "contained" : "outlined"
-                }
-                color="success"
-                startIcon={<CheckCircleIcon />}
-                onClick={() =>
-                  handleStatusUpdate(
-                    timesheetStatus === "finalised" ? "incomplete" : "finalised"
-                  )
-                }
-                sx={{
-                  borderRadius: "16px",
-                  fontWeight: 600,
-                  textTransform: "none",
-                  px: 4,
-                  py: 1.5,
-                  fontSize: "1rem",
+            {/* Status Controls - Inline */}
+
+            <Button
+              variant={
+                timesheetStatus === "finalised" ? "contained" : "outlined"
+              }
+              color="success"
+              size="small"
+              startIcon={<CheckCircleIcon />}
+              disabled={timesheetStatus === "absent"}
+              onClick={() =>
+                handleStatusUpdate(
+                  timesheetStatus === "finalised" ? "incomplete" : "finalised"
+                )
+              }
+              sx={{
+                borderRadius: "12px",
+                fontWeight: 600,
+                textTransform: "none",
+                px: 2.5,
+                py: 1,
+                fontSize: "0.875rem",
+                boxShadow:
+                  timesheetStatus === "finalised"
+                    ? "0 8px 24px rgba(76, 175, 80, 0.3)"
+                    : "0 4px 12px rgba(0,0,0,0.1)",
+                "&:hover": {
                   boxShadow:
                     timesheetStatus === "finalised"
-                      ? "0 8px 24px rgba(76, 175, 80, 0.3)"
-                      : "0 4px 12px rgba(0,0,0,0.1)",
-                  "&:hover": {
-                    boxShadow:
-                      timesheetStatus === "finalised"
-                        ? "0 12px 32px rgba(76, 175, 80, 0.4)"
-                        : "0 6px 16px rgba(0,0,0,0.15)",
-                    transform: "translateY(-1px)",
-                  },
-                  transition: "all 0.3s ease",
-                }}
-              >
-                {timesheetStatus === "finalised" ? "Unfinalise" : "Finalise"}
-              </Button>
-              <Button
-                variant={
-                  timesheetStatus === "absent" ? "contained" : "outlined"
-                }
-                color="error"
-                startIcon={<EventBusyIcon />}
-                onClick={() =>
-                  handleStatusUpdate(
-                    timesheetStatus === "absent" ? "incomplete" : "absent"
-                  )
-                }
-                sx={{
-                  borderRadius: "16px",
-                  fontWeight: 600,
-                  textTransform: "none",
-                  px: 4,
-                  py: 1.5,
-                  fontSize: "1rem",
+                      ? "0 12px 32px rgba(76, 175, 80, 0.4)"
+                      : "0 6px 16px rgba(0,0,0,0.15)",
+                  transform: "translateY(-1px)",
+                },
+                transition: "all 0.3s ease",
+              }}
+            >
+              {timesheetStatus === "finalised" ? "Unfinalise" : "Finalise"}
+            </Button>
+            <Button
+              variant={timesheetStatus === "absent" ? "contained" : "outlined"}
+              color="error"
+              size="small"
+              startIcon={<EventBusyIcon />}
+              disabled={timesheetStatus === "finalised"}
+              onClick={() =>
+                handleStatusUpdate(
+                  timesheetStatus === "absent" ? "incomplete" : "absent"
+                )
+              }
+              sx={{
+                borderRadius: "12px",
+                fontWeight: 600,
+                textTransform: "none",
+                px: 2.5,
+                py: 1,
+                fontSize: "0.875rem",
+                boxShadow:
+                  timesheetStatus === "absent"
+                    ? "0 8px 24px rgba(244, 67, 54, 0.3)"
+                    : "0 4px 12px rgba(0,0,0,0.1)",
+                "&:hover": {
                   boxShadow:
                     timesheetStatus === "absent"
-                      ? "0 8px 24px rgba(244, 67, 54, 0.3)"
-                      : "0 4px 12px rgba(0,0,0,0.1)",
-                  "&:hover": {
-                    boxShadow:
-                      timesheetStatus === "absent"
-                        ? "0 12px 32px rgba(244, 67, 54, 0.4)"
-                        : "0 6px 16px rgba(0,0,0,0.15)",
-                    transform: "translateY(-1px)",
-                  },
-                  transition: "all 0.3s ease",
-                }}
-              >
-                {timesheetStatus === "absent" ? "Mark Present" : "Mark Absent"}
-              </Button>
-            </Stack>
+                      ? "0 12px 32px rgba(244, 67, 54, 0.4)"
+                      : "0 6px 16px rgba(0,0,0,0.15)",
+                  transform: "translateY(-1px)",
+                },
+                transition: "all 0.3s ease",
+              }}
+            >
+              {timesheetStatus === "absent" ? "Mark Present" : "Mark Absent"}
+            </Button>
           </Box>
         </Box>
 
@@ -1082,6 +1122,7 @@ const Timesheets = () => {
             height: "625px", // Reduced by 10% from 850px
             p: 3,
             background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
+            position: "relative",
             "& .fc": {
               fontFamily: theme.typography.fontFamily,
               backgroundColor: "transparent",
@@ -1121,12 +1162,15 @@ const Timesheets = () => {
             "& .fc-timegrid-slot": {
               borderColor: theme.palette.divider,
               backgroundColor: theme.palette.background.paper,
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
             },
             "& .fc-timegrid-slot-lane": {
               borderColor: theme.palette.divider,
             },
             "& .fc-timegrid-slot-minor": {
               borderColor: theme.palette.divider,
+              backgroundColor: theme.palette.grey[25],
             },
             "& .fc-timegrid-slot-minor .fc-timegrid-slot-label": {
               backgroundColor: theme.palette.grey[100],
@@ -1151,6 +1195,12 @@ const Timesheets = () => {
             },
             "& .fc-timegrid-col-events": {
               backgroundColor: "transparent",
+            },
+            "& .fc-timegrid": {
+              touchAction: "pan-y pinch-zoom",
+            },
+            "& .fc-timegrid-body": {
+              touchAction: "pan-y pinch-zoom",
             },
             "& .fc-event": {
               borderRadius: "12px",
@@ -1193,16 +1243,6 @@ const Timesheets = () => {
             "& .weekend-day": {
               background: `linear-gradient(135deg, ${theme.palette.grey[100]}, ${theme.palette.grey[50]})`,
             },
-            "& .fc-timegrid-slot-minor": {
-              borderColor: theme.palette.divider,
-              backgroundColor: theme.palette.grey[25],
-            },
-            "& .fc-timegrid-slot-minor .fc-timegrid-slot-label": {
-              backgroundColor: theme.palette.grey[100],
-              color: theme.palette.text.secondary,
-              fontSize: "0.8rem",
-              fontWeight: 500,
-            },
             "& .fc-col-header": {
               display: "none !important", // Hide the day header
             },
@@ -1236,7 +1276,9 @@ const Timesheets = () => {
             plugins={[timeGridPlugin, interactionPlugin]}
             initialView="timeGridDay"
             initialDate={selectedDate}
-            selectable={true}
+            selectable={
+              timesheetStatus !== "finalised" && timesheetStatus !== "absent"
+            }
             selectMirror={true}
             unselectAuto={false}
             select={handleSelect}
@@ -1249,13 +1291,18 @@ const Timesheets = () => {
             slotDuration="00:15:00"
             height="100%"
             events={calendarEvents}
-            editable={timesheetStatus !== "finalised"}
-            droppable={timesheetStatus !== "finalised"}
+            editable={
+              timesheetStatus !== "finalised" && timesheetStatus !== "absent"
+            }
+            droppable={
+              timesheetStatus !== "finalised" && timesheetStatus !== "absent"
+            }
             eventOverlap={false}
             firstDay={1}
             headerToolbar={false}
             allDaySlot={false}
-            selectMinDistance={15}
+            selectMinDistance={isTouchDevice ? 5 : 15}
+            selectLongPressDelay={isTouchDevice ? 200 : undefined}
             slotLaneClassNames={(arg) => {
               // Calculate slot index based on the current time range
               const startHour = show24HourView ? 0 : 6;
@@ -1512,6 +1559,74 @@ const Timesheets = () => {
               );
             }}
           />
+          {/* Absent Overlay */}
+          {timesheetStatus === "absent" && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: `${theme.palette.error.main}80`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1000,
+                pointerEvents: "none",
+                borderRadius: 3,
+              }}
+            >
+              <Typography
+                variant="h3"
+                sx={{
+                  color:
+                    theme.palette.error.contrastText ||
+                    theme.palette.common.white,
+                  fontWeight: 800,
+                  textShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                  fontSize: "3rem",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                ABSENT
+              </Typography>
+            </Box>
+          )}
+          {/* Finalised Overlay */}
+          {timesheetStatus === "finalised" && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: `${theme.palette.success.main}80`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1000,
+                pointerEvents: "none",
+                borderRadius: 3,
+              }}
+            >
+              <Typography
+                variant="h3"
+                sx={{
+                  color:
+                    theme.palette.success.contrastText ||
+                    theme.palette.common.white,
+                  fontWeight: 800,
+                  textShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                  fontSize: "3rem",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                FINALISED
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Paper>
 
@@ -1886,6 +2001,103 @@ const Timesheets = () => {
             }}
           >
             Delete Entry
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Finalize Confirmation Dialog */}
+      <Dialog
+        open={finalizeConfirmOpen}
+        onClose={() => {
+          setFinalizeConfirmOpen(false);
+          setPendingStatus(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <CheckCircleIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Confirm Finalize
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
+            You have entered less than 7.5 hours (
+            {calculateTotalHours().toFixed(1)} hours). The minimum recommended
+            hours is 7.5 hours.
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+            Do you still want to finalize this timesheet?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => {
+              setFinalizeConfirmOpen(false);
+              setPendingStatus(null);
+            }}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              setFinalizeConfirmOpen(false);
+              const status = pendingStatus;
+              setPendingStatus(null);
+              await performStatusUpdate(status, true); // Pass forceFinalize = true
+            }}
+            variant="contained"
+            color="success"
+            startIcon={<CheckCircleIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(76, 175, 80, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(76, 175, 80, 0.4)",
+              },
+            }}
+          >
+            Finalize Anyway
           </Button>
         </DialogActions>
       </Dialog>

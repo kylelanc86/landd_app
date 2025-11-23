@@ -1577,6 +1577,10 @@ const SitePlanDrawing = ({
   };
 
   const handleMapSelection = (mapData) => {
+    if (!mapData) {
+      return;
+    }
+
     setShowGoogleMaps(true);
 
     // If map already exists, update it instead of recreating
@@ -1955,6 +1959,8 @@ const SitePlanDrawing = ({
             onPointerLeave={handlePointerLeave}
             onPointerCancel={handlePointerCancel}
             style={{
+              position: "relative",
+              zIndex: 2,
               cursor:
                 currentTool === "hand"
                   ? isPanning
@@ -1965,7 +1971,7 @@ const SitePlanDrawing = ({
                   : "crosshair",
               width: `${CANVAS_SAFE_WIDTH}px`,
               height: `${CANVAS_SAFE_HEIGHT}px`,
-              backgroundColor: "#ffffff",
+              backgroundColor: showGoogleMaps ? "transparent" : "#ffffff",
               borderRadius: 8,
               border: "1px solid rgba(69, 90, 100, 0.5)",
               transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
@@ -2044,6 +2050,7 @@ const SitePlanDrawing = ({
                 right: 0,
                 bottom: 0,
                 pointerEvents: "none",
+                zIndex: 1,
               }}
             >
               <div

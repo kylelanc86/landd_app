@@ -3,6 +3,8 @@ const router = express.Router();
 const Shift = require('../models/Shift');
 const Sample = require('../models/Sample');
 const Project = require('../models/Project');
+const User = require('../models/User');
+const Client = require('../models/Client');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const mongoose = require('mongoose');
@@ -10,6 +12,7 @@ const axios = require('axios');
 const {
   syncAirMonitoringForJob,
 } = require("../services/asbestosRemovalJobSyncService");
+const { sendMail } = require("../services/mailer");
 
 // Debug middleware to log all requests to shifts routes
 router.use((req, res, next) => {
@@ -756,5 +759,169 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     res.status(500).json({ message: error.message });
   }
 });
+
+router.post(
+  '/:id/send-for-authorisation',
+  auth,
+  checkPermission(['jobs.edit']),
+  async (req, res) => {
+    try {
+      const shift = await Shift.findById(req.params.id)
+        .populate({
+          path: 'job',
+          populate: {
+            path: 'projectId',
+            select: 'projectID name client',
+            populate: {
+              path: 'client',
+              select: 'name',
+            },
+          },
+        });
+
+      if (!shift) {
+        return res.status(404).json({ message: 'Shift not found' });
+      }
+
+      if (!['analysis_complete', 'shift_complete'].includes(shift.status)) {
+        return res.status(400).json({
+          message:
+            'Shift must have analysis completed before sending for authorisation',
+        });
+      }
+
+      if (shift.reportApprovedBy) {
+        return res
+          .status(400)
+          .json({ message: 'Report has already been authorised' });
+      }
+
+      const signatoryUsers = await User.find({
+        labSignatory: true,
+        isActive: true,
+      }).select('firstName lastName email');
+
+      if (signatoryUsers.length === 0) {
+        return res
+          .status(400)
+          .json({ message: 'No lab signatory users found' });
+      }
+
+      let projectName =
+        shift.job?.projectId?.name ||
+        shift.job?.projectName ||
+        'Unknown Project';
+      let projectID =
+        shift.job?.projectId?.projectID || shift.job?.jobID || 'N/A';
+      let clientName =
+        shift.job?.projectId?.client?.name ||
+        shift.job?.client ||
+        'the client';
+
+      if (
+        shift.job?.projectId &&
+        typeof shift.job.projectId === 'string'
+      ) {
+        const projectDoc = await Project.findById(
+          shift.job.projectId
+        ).populate('client', 'name');
+        if (projectDoc) {
+          projectName = projectDoc.name || projectName;
+          projectID = projectDoc.projectID || projectID;
+          clientName = projectDoc.client?.name || clientName;
+        }
+      } else if (
+        shift.job?.projectId &&
+        shift.job.projectId?.client &&
+        typeof shift.job.projectId.client === 'string'
+      ) {
+        const clientDoc = await Client.findById(
+          shift.job.projectId.client
+        ).select('name');
+        if (clientDoc) {
+          clientName = clientDoc.name || clientName;
+        }
+      }
+
+      const requesterName =
+        req.user?.firstName && req.user?.lastName
+          ? `${req.user.firstName} ${req.user.lastName}`
+          : req.user?.email || 'A user';
+
+      const shiftName = shift.name || 'Air Monitoring Shift';
+      const shiftDate = shift.date
+        ? new Date(shift.date).toLocaleDateString('en-GB')
+        : 'N/A';
+
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const jobId =
+        typeof shift.job?.id === 'string'
+          ? shift.job.id
+          : shift.job?._id?.toString() || shift.job?.toString();
+      const jobUrl = `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`;
+
+      await Promise.all(
+        signatoryUsers.map(async (user) => {
+          await sendMail({
+            to: user.email,
+            subject: `Report Authorisation Required - ${projectID}: ${shiftName}`,
+            text: `
+An air monitoring shift report is ready for authorisation.
+
+Project: ${projectName} (${projectID})
+Client: ${clientName}
+Shift: ${shiftName}
+Shift Date: ${shiftDate}
+Requested by: ${requesterName}
+
+Review the report at: ${jobUrl}
+            `.trim(),
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                <div style="margin-bottom: 30px;">
+                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+                </div>
+                <div style="color: #333; line-height: 1.6;">
+                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                  <p>Hello ${user.firstName},</p>
+                  <p>An air monitoring shift report is ready for your authorisation:</p>
+                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                    <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
+                    <p style="margin: 5px 0;"><strong>Shift:</strong> ${shiftName}</p>
+                    <p style="margin: 5px 0;"><strong>Shift Date:</strong> ${shiftDate}</p>
+                    <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                  </div>
+                  <p>Please review and authorise the report at your earliest convenience.</p>
+                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+                </div>
+              </div>
+            `,
+          });
+        })
+      );
+
+      return res.json({
+        message: `Authorisation request emails sent successfully to ${signatoryUsers.length} signatory user(s)`,
+        recipients: signatoryUsers.map((user) => ({
+          email: user.email,
+          name: `${user.firstName} ${user.lastName}`,
+        })),
+      });
+    } catch (error) {
+      console.error('Error sending authorisation request emails:', error);
+      return res.status(500).json({
+        message: 'Failed to send authorisation request emails',
+        error: error.message,
+      });
+    }
+  }
+);
 
 module.exports = router;

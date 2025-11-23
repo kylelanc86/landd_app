@@ -6,11 +6,8 @@ import {
   Paper,
   Grid,
   IconButton,
-  Button,
   Chip,
 } from "@mui/material";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../services/api";
 import {
@@ -18,7 +15,6 @@ import {
   startOfMonth,
   endOfMonth,
   eachDayOfInterval,
-  isSameMonth,
   isToday,
   isSameDay,
 } from "date-fns";
@@ -202,32 +198,38 @@ const MonthlyTimesheet = () => {
   }
 
   return (
-    <Box m="20px">
+    <Box m="10px">
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
-        mb="20px"
+        mb="10px"
       >
-        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1" sx={{ mb: 0 }}>
           Timesheets
-        </Typography>{" "}
+        </Typography>
       </Box>
 
       <Paper
         elevation={3}
         sx={{
-          p: 3,
+          p: 1.5,
           backgroundColor: theme.palette.background.alt,
-          borderRadius: 3,
+          borderRadius: 2,
           boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
           border: `1px solid ${theme.palette.divider}`,
         }}
       >
-        <Box display="flex" justifyContent="center" alignItems="center" mb={3}>
-          <Box display="flex" alignItems="center" gap={2}>
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          mb={1.5}
+        >
+          <Box display="flex" alignItems="center" gap={1.5}>
             <IconButton
               onClick={() => handleMonthChange("prev")}
+              size="small"
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 color: theme.palette.primary.contrastText,
@@ -237,22 +239,24 @@ const MonthlyTimesheet = () => {
                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               }}
             >
-              <ArrowBackIosNewIcon />
+              <ArrowBackIosNewIcon fontSize="small" />
             </IconButton>
             <Typography
-              variant="h4"
+              variant="h6"
               sx={{
                 fontWeight: 700,
                 color: theme.palette.primary.main,
                 textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                minWidth: "200px",
+                minWidth: "160px",
                 textAlign: "center",
+                fontSize: "1rem",
               }}
             >
               {format(selectedDate, "MMMM yyyy")}
             </Typography>
             <IconButton
               onClick={() => handleMonthChange("next")}
+              size="small"
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 color: theme.palette.primary.contrastText,
@@ -262,26 +266,26 @@ const MonthlyTimesheet = () => {
                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               }}
             >
-              <ArrowForwardIosIcon />
+              <ArrowForwardIosIcon fontSize="small" />
             </IconButton>
           </Box>
         </Box>
 
-        <Grid container spacing={1}>
+        <Grid container spacing={0.5}>
           {/* Day headers */}
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
             <Grid item xs={12 / 7} key={day}>
               <Box
                 sx={{
-                  p: 2,
+                  p: 0.75,
                   textAlign: "center",
                   fontWeight: 700,
                   backgroundColor: theme.palette.primary.main,
                   color: theme.palette.primary.contrastText,
-                  borderRadius: "12px 12px 0 0",
-                  fontSize: "1rem",
+                  borderRadius: "8px 8px 0 0",
+                  fontSize: "0.75rem",
                   textShadow: "0 1px 2px rgba(0,0,0,0.2)",
-                  borderBottom: `3px solid ${theme.palette.primary.dark}`,
+                  borderBottom: `2px solid ${theme.palette.primary.dark}`,
                   boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
                 }}
               >
@@ -323,11 +327,11 @@ const MonthlyTimesheet = () => {
                 <Box
                   onClick={() => day && handleDayClick(day)}
                   sx={{
-                    p: 1.5,
-                    height: "100px",
-                    border: "2px solid",
+                    p: 0.75,
+                    height: "60px",
+                    border: "1px solid",
                     borderColor: day ? theme.palette.divider : "transparent",
-                    borderRadius: "0 0 12px 12px",
+                    borderRadius: "0 0 8px 8px",
                     cursor: day ? "pointer" : "default",
                     backgroundColor: day
                       ? isCompleted
@@ -341,12 +345,16 @@ const MonthlyTimesheet = () => {
                     transition: "all 0.2s ease-in-out",
                     position: "relative",
                     overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    alignItems: "center",
                     "&:hover": {
                       backgroundColor: day
                         ? theme.palette.action.hover
                         : "transparent",
-                      transform: day ? "translateY(-2px)" : "none",
-                      boxShadow: day ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
+                      transform: day ? "translateY(-1px)" : "none",
+                      boxShadow: day ? "0 2px 8px rgba(0,0,0,0.15)" : "none",
                     },
                     "&::before":
                       day && isToday(day)
@@ -356,9 +364,9 @@ const MonthlyTimesheet = () => {
                             top: 0,
                             left: 0,
                             right: 0,
-                            height: "4px",
+                            height: "3px",
                             backgroundColor: theme.palette.error.main,
-                            borderRadius: "12px 12px 0 0",
+                            borderRadius: "8px 8px 0 0",
                           }
                         : {},
                   }}
@@ -366,17 +374,18 @@ const MonthlyTimesheet = () => {
                   {day && (
                     <>
                       <Typography
-                        variant="h6"
+                        variant="body2"
                         sx={{
-                          fontWeight: isToday(day) ? 800 : 500,
+                          fontWeight: isToday(day) ? 800 : 600,
                           color: isToday(day)
                             ? theme.palette.error.main
                             : isWeekend
                             ? theme.palette.text.secondary
                             : theme.palette.text.primary,
-                          fontSize: "1.1rem",
+                          fontSize: "0.85rem",
                           textAlign: "center",
-                          mb: 1,
+                          mb: 0.25,
+                          lineHeight: 1.2,
                           textShadow: isToday(day)
                             ? "0 1px 2px rgba(0,0,0,0.2)"
                             : "none",
@@ -389,7 +398,7 @@ const MonthlyTimesheet = () => {
                           sx={{
                             display: "flex",
                             justifyContent: "center",
-                            mb: 0.5,
+                            mb: 0.25,
                           }}
                         >
                           <Chip
@@ -403,17 +412,20 @@ const MonthlyTimesheet = () => {
                                 : "warning"
                             }
                             sx={{
-                              fontSize: "0.7rem",
+                              fontSize: "0.6rem",
                               fontWeight: 600,
+                              height: "16px",
                               backgroundColor: isWeekend
                                 ? theme.palette.common.white
                                 : undefined,
                               color: isWeekend
                                 ? theme.palette.text.primary
                                 : undefined,
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                              boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
                               "& .MuiChip-label": {
-                                px: 1,
+                                px: 0.5,
+                                py: 0,
+                                lineHeight: 1.2,
                               },
                             }}
                           />
@@ -425,11 +437,12 @@ const MonthlyTimesheet = () => {
                           sx={{
                             display: "block",
                             textAlign: "center",
-                            fontSize: "0.65rem",
+                            fontSize: "0.55rem",
                             color: isWeekend
                               ? theme.palette.text.secondary
                               : theme.palette.text.secondary,
                             fontWeight: 500,
+                            lineHeight: 1,
                           }}
                         >
                           {formatTime(totalTime)}

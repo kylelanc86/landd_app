@@ -48,7 +48,7 @@ import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
-import { useTheme } from "@mui/material";
+import { useTheme, useMediaQuery } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   projectService,
@@ -167,6 +167,9 @@ const Projects = ({ initialFilters = {} }) => {
     useJobStatus() || {};
   const { isAdmin, isManager, can } = usePermissions();
   const { currentUser } = useAuth();
+
+  // Detect tablet screens for responsive table adjustments (600px - 1024px)
+  const isTablet = useMediaQuery("(min-width: 600px) and (max-width: 1024px)");
   const [projects, setProjects] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1344,24 +1347,26 @@ const Projects = ({ initialFilters = {} }) => {
     loadUserPreferences();
   }, []);
 
-  // Memoize columns configuration
+  // Memoize columns configuration with responsive widths for tablets
   const columns = useMemo(
     () => [
       {
         field: "projectID",
         headerName: "Project ID",
         flex: 0,
-        width: 105,
-        minWidth: 105,
-        maxWidth: 105,
+        width: isTablet ? 90 : 105,
+        minWidth: isTablet ? 80 : 105,
+        maxWidth: isTablet ? 100 : 105,
+        sortable: false,
         renderCell: (params) => <Box>{params.value}</Box>,
       },
       {
         field: "name",
         headerName: "Project",
-        flex: 3,
-        minWidth: 250,
-        maxWidth: 500,
+        flex: isTablet ? 2.5 : 3,
+        minWidth: isTablet ? 180 : 250,
+        maxWidth: isTablet ? 350 : 500,
+        sortable: false,
         renderCell: ({ row }) => {
           const clientName = row.client?.name || row.client || "";
           const projectName = row.name || "";
@@ -1440,9 +1445,11 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "d_Date",
         headerName: "Due Date",
-        flex: 1,
-        minWidth: 100,
-        maxWidth: 120,
+        flex: 0,
+        width: isTablet ? 90 : undefined,
+        minWidth: isTablet ? 80 : 100,
+        maxWidth: isTablet ? 100 : 120,
+        sortable: false,
         renderCell: ({ row }) => {
           const daysDiff = calculateDaysDifference(row.d_Date);
 
@@ -1542,15 +1549,20 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "workOrder",
         headerName: "Work Order/Job Reference",
-        flex: 1,
-        minWidth: 100,
+        flex: 0,
+        width: isTablet ? 120 : undefined,
+        minWidth: isTablet ? 100 : 100,
+        maxWidth: isTablet ? 140 : undefined,
+        sortable: false,
       },
       {
         field: "status",
         headerName: "Status",
-        flex: 1,
-        minWidth: 160,
-        maxWidth: 200,
+        flex: 0,
+        width: isTablet ? 110 : undefined,
+        minWidth: isTablet ? 100 : 160,
+        maxWidth: isTablet ? 130 : 200,
+        sortable: false,
         renderCell: (params) => (
           <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
             {/* Status display - no click functionality */}
@@ -1583,9 +1595,11 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "users",
         headerName: "Users",
-        flex: 1,
-        minWidth: 60,
-        maxWidth: 120,
+        flex: 0,
+        width: isTablet ? 70 : undefined,
+        minWidth: isTablet ? 60 : 60,
+        maxWidth: isTablet ? 90 : 120,
+        sortable: false,
         renderCell: (params) => {
           // Debug logging to see what data we're getting
 
@@ -1599,9 +1613,11 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "actions",
         headerName: "Actions",
-        flex: 1,
-        minWidth: 150,
-        maxWidth: 160,
+        flex: 0,
+        width: isTablet ? 110 : undefined,
+        minWidth: isTablet ? 100 : 150,
+        maxWidth: isTablet ? 130 : 160,
+        sortable: false,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
             {/* Project Details button */}
@@ -1658,7 +1674,15 @@ const Projects = ({ initialFilters = {} }) => {
         ),
       },
     ],
-    [navigate, isAdmin, isManager, can, handleDeleteClick, handleStatusClick]
+    [
+      navigate,
+      isAdmin,
+      isManager,
+      can,
+      handleDeleteClick,
+      handleStatusClick,
+      isTablet,
+    ]
   );
 
   // Client-side filtering for live status updates
@@ -2065,8 +2089,17 @@ const Projects = ({ initialFilters = {} }) => {
       <Box
         m="40px 0 0 0"
         sx={{
+          width: "100%",
+          overflowX: "hidden",
+          maxWidth: "100%",
           "& .MuiDataGrid-root": {
             border: "none",
+            width: "100%",
+            maxWidth: "100%",
+          },
+          "& .MuiDataGrid-main": {
+            width: "100%",
+            maxWidth: "100%",
           },
           "& .MuiDataGrid-cell": {
             borderBottom: `1px solid ${theme.palette.divider}`,
@@ -2080,9 +2113,21 @@ const Projects = ({ initialFilters = {} }) => {
           "& .MuiDataGrid-columnHeader": {
             color: "#FFFFFF",
             fontWeight: 600,
+            "& .MuiDataGrid-iconButtonContainer": {
+              display: "none !important",
+            },
+            "& .MuiDataGrid-sortIcon": {
+              display: "none !important",
+            },
+            "& .MuiDataGrid-menuIcon": {
+              display: "none !important",
+            },
           },
           "& .MuiDataGrid-virtualScroller": {
             backgroundColor: "#FFFFFF",
+            overflowX: "hidden !important",
+            width: "100%",
+            maxWidth: "100%",
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
@@ -2114,9 +2159,7 @@ const Projects = ({ initialFilters = {} }) => {
       >
         <DataGrid
           rows={filteredProjects}
-          sortingOrder={["desc", "asc"]}
           columns={columns}
-          disableColumnUnsort={true}
           getRowId={(row) => row._id || row.id}
           loading={loading && !searchLoading}
           error={error}
@@ -2129,17 +2172,16 @@ const Projects = ({ initialFilters = {} }) => {
           columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
           paginationMode="client"
-          sortingMode="client"
           paginationModel={paginationModel}
           onPaginationModelChange={(newModel) => {
             setPaginationModel(newModel);
           }}
           pageSizeOptions={[25, 50, 100]}
           autoHeight
-          disableColumnMenu={false}
+          disableColumnMenu={true}
           disableSelectionOnClick
-          disableColumnFilter={false}
-          disableMultipleColumnsFiltering={true}
+          disableColumnFilter={true}
+          disableSorting={true}
           disableColumnSelector={false}
           disableDensitySelector={false}
           // disableColumnReorder={false}
@@ -2148,17 +2190,12 @@ const Projects = ({ initialFilters = {} }) => {
             pagination: {
               paginationModel: { pageSize: 50, page: 0 },
             },
-            sorting: {
-              sortModel: [
-                {
-                  field: "projectID",
-                  sort: "desc",
-                },
-              ],
-            },
           }}
           sx={{
             cursor: "pointer",
+            width: "100%",
+            maxWidth: "100%",
+            overflowX: "hidden",
             "& .MuiDataGrid-row:nth-of-type(even)": {
               backgroundColor: "#f8f9fa",
             },
@@ -2174,7 +2211,25 @@ const Projects = ({ initialFilters = {} }) => {
             "& .MuiDataGrid-cell": {
               display: "flex",
               alignItems: "center",
-              padding: "4px 16px",
+              padding: isTablet ? "4px 8px" : "4px 16px",
+            },
+            "& .MuiDataGrid-columnHeader": {
+              padding: isTablet ? "8px" : "16px",
+              "& .MuiDataGrid-iconButtonContainer": {
+                display: "none !important",
+              },
+              "& .MuiDataGrid-sortIcon": {
+                display: "none !important",
+              },
+            },
+            "& .MuiDataGrid-virtualScroller": {
+              overflowX: "hidden !important",
+            },
+            "& .MuiDataGrid-container--top": {
+              overflowX: "hidden !important",
+            },
+            "& .MuiDataGrid-container--bottom": {
+              overflowX: "hidden !important",
             },
           }}
         />

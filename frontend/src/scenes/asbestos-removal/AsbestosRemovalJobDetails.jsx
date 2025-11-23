@@ -47,6 +47,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import MailIcon from "@mui/icons-material/Mail";
 import { tokens } from "../../theme/tokens";
 import api from "../../services/api";
 import {
@@ -129,6 +130,8 @@ const AsbestosRemovalJobDetails = () => {
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const { showSnackbar } = useSnackbar();
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
+  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
+    useState({});
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
   const [editingShift, setEditingShift] = useState(null);
@@ -757,6 +760,41 @@ const AsbestosRemovalJobDetails = () => {
     } catch (error) {
       console.error("Error authorising report:", error);
       showSnackbar("Failed to authorise report. Please try again.", "error");
+    }
+  };
+
+  const handleSendForAuthorisation = async (shift) => {
+    if (!shift?._id) {
+      return;
+    }
+
+    try {
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [shift._id]: true,
+      }));
+
+      const response = await shiftService.sendForAuthorisation(shift._id);
+
+      showSnackbar(
+        response.data?.message ||
+          `Authorisation request emails sent successfully to ${
+            response.data?.recipients?.length || 0
+          } signatory user(s)`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error sending authorisation request emails:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to send authorisation request emails. Please try again.",
+        "error"
+      );
+    } finally {
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [shift._id]: false,
+      }));
     }
   };
 
@@ -1531,13 +1569,34 @@ const AsbestosRemovalJobDetails = () => {
                                       currentUser,
                                       "admin.view"
                                     ),
-                                    isLabSignatory: currentUser?.labSignatory,
+                                    hasEditPermission: hasPermission(
+                                      currentUser,
+                                      "jobs.edit"
+                                    ),
+                                    isLabSignatory: Boolean(
+                                      currentUser?.labSignatory
+                                    ),
                                   };
+                                  const baseVisible =
+                                    conditions.notApproved &&
+                                    conditions.reportViewed;
+                                  const visibility = {
+                                    showAuthorise:
+                                      baseVisible &&
+                                      conditions.hasAdminPermission &&
+                                      conditions.isLabSignatory,
+                                    showSend:
+                                      baseVisible &&
+                                      !conditions.isLabSignatory &&
+                                      conditions.hasEditPermission,
+                                  };
+
                                   console.log(
-                                    "Authorise Report Button Conditions:",
+                                    "Authorisation action visibility:",
                                     {
                                       shiftId: shift._id,
                                       conditions,
+                                      visibility,
                                       currentUser: {
                                         id: currentUser?._id,
                                         role: currentUser?.role,
@@ -1545,40 +1604,57 @@ const AsbestosRemovalJobDetails = () => {
                                       },
                                     }
                                   );
-                                  // Temporarily test without lab signatory requirement
-                                  const showButton =
-                                    conditions.notApproved &&
-                                    conditions.reportViewed &&
-                                    conditions.hasAdminPermission;
-                                  console.log(
-                                    "Should show button:",
-                                    showButton,
-                                    "Lab signatory check:",
-                                    conditions.isLabSignatory
+
+                                  return (
+                                    <>
+                                      {visibility.showAuthorise && (
+                                        <Button
+                                          variant="contained"
+                                          size="small"
+                                          color="success"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleAuthoriseReport(shift);
+                                          }}
+                                          sx={{
+                                            backgroundColor:
+                                              theme.palette.success.main,
+                                            color: theme.palette.common.white,
+                                            "&:hover": {
+                                              backgroundColor:
+                                                theme.palette.success.dark,
+                                            },
+                                          }}
+                                        >
+                                          Authorise
+                                        </Button>
+                                      )}
+                                      {visibility.showSend && (
+                                        <Button
+                                          variant="outlined"
+                                          size="small"
+                                          color="primary"
+                                          startIcon={<MailIcon />}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSendForAuthorisation(shift);
+                                          }}
+                                          disabled={Boolean(
+                                            sendingAuthorisationRequests[
+                                              shift._id
+                                            ]
+                                          )}
+                                        >
+                                          {sendingAuthorisationRequests[
+                                            shift._id
+                                          ]
+                                            ? "Sending..."
+                                            : "Send for Authorisation"}
+                                        </Button>
+                                      )}
+                                    </>
                                   );
-                                  return showButton;
-                                })() && (
-                                  <Button
-                                    variant="contained"
-                                    size="small"
-                                    color="success"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAuthoriseReport(shift);
-                                    }}
-                                    sx={{
-                                      backgroundColor:
-                                        theme.palette.success.main,
-                                      color: theme.palette.common.white,
-                                      "&:hover": {
-                                        backgroundColor:
-                                          theme.palette.success.dark,
-                                      },
-                                    }}
-                                  >
-                                    Authorise
-                                  </Button>
-                                )}
+                                })()}
                                 {hasPermission(currentUser, "admin.view") && (
                                   <IconButton
                                     size="small"

@@ -596,7 +596,7 @@ router.put("/:id/reject", auth, async (req, res) => {
 // Update timesheet status for a specific date
 router.put("/status/:date", auth, async (req, res) => {
   try {
-    const { status, userId } = req.body;
+    const { status, userId, forceFinalize } = req.body;
     
     // Parse date in yyyy-MM-dd format
     const date = new Date(req.params.date);
@@ -607,6 +607,7 @@ router.put("/status/:date", auth, async (req, res) => {
       parsedDate: date.toISOString(),
       status,
       userId,
+      forceFinalize,
       user: req.user._id
     });
 
@@ -625,6 +626,28 @@ router.put("/status/:date", auth, async (req, res) => {
     try {
       // Convert userId to ObjectId to validate format
       const targetUserId = new mongoose.Types.ObjectId(userId);
+      
+      // Check current status to prevent conflicts
+      const currentStatus = await TimesheetStatus.findOne({
+        userId: targetUserId,
+        date: date
+      });
+      
+      // Prevent setting finalised if currently absent
+      if (status === "finalised" && currentStatus?.status === "absent") {
+        console.log('Cannot finalise - timesheet is marked as absent');
+        return res.status(400).json({ 
+          message: "Cannot finalise a timesheet that is marked as absent. Please mark as present first." 
+        });
+      }
+      
+      // Prevent setting absent if currently finalised
+      if (status === "absent" && currentStatus?.status === "finalised") {
+        console.log('Cannot mark as absent - timesheet is finalised');
+        return res.status(400).json({ 
+          message: "Cannot mark a finalised timesheet as absent. Please unfinalise first." 
+        });
+      }
       
       // Find or create the timesheet status for this date
       const timesheetStatus = await TimesheetStatus.findOneAndUpdate(
@@ -654,7 +677,8 @@ router.put("/status/:date", auth, async (req, res) => {
       }
 
       // If status is finalised, validate that at least 7.5 hours have been entered
-      if (status === "finalised") {
+      // Unless forceFinalize is true (user confirmed they want to finalize anyway)
+      if (status === "finalised" && !forceFinalize) {
         try {
           const existingEntries = await Timesheet.find({
             userId: targetUserId,
@@ -677,7 +701,7 @@ router.put("/status/:date", auth, async (req, res) => {
 
           const totalHours = totalMinutes / 60;
           
-          // Require at least 7.5 hours to finalize
+          // Require at least 7.5 hours to finalize (unless forceFinalize is true)
           if (totalHours < 7.5) {
             console.log('Cannot finalize - insufficient hours:', totalHours);
             return res.status(400).json({ 
@@ -692,6 +716,9 @@ router.put("/status/:date", auth, async (req, res) => {
             message: "Error validating timesheet hours" 
           });
         }
+      } else if (status === "finalised" && forceFinalize) {
+        // User confirmed they want to finalize with less than 7.5 hours
+        console.log('Finalizing timesheet with forceFinalize flag (bypassing 7.5 hour requirement)');
       }
 
       res.json(timesheetStatus);

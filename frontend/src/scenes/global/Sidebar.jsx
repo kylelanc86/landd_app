@@ -356,6 +356,19 @@ const Sidebar = () => {
       .pro-menu-item:not(:first-child) .pro-inner-item {
         padding: 5px 15px !important;
       }
+
+      /* Reduce sidebar width by 20% on tablet and mobile */
+      @media (max-width: 899px) {
+        .pro-sidebar {
+          width: 193.6px !important;
+        }
+        .pro-sidebar-inner {
+          width: 193.6px !important;
+        }
+        .pro-sidebar img {
+          max-width: 193.6px !important;
+        }
+      }
     `;
     document.head.appendChild(style);
 

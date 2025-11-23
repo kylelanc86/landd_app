@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const Project = require('./backend/models/Project');
+const Project = require('../models/Project');
 require('dotenv').config();
 
 async function testProjectsAPI() {

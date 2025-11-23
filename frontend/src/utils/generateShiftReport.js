@@ -390,13 +390,25 @@ pdfMake.fonts = {
                     ]
                   }
                 ],
-                ...(isClientSupplied ? [] : [
-                  {
-                    text: [ { text: 'Description of Works: ', bold: true }, { text: shift?.descriptionOfWorks || job?.description || 'N/A' } ],
-                    style: 'tableContent',
-                    margin: [0, 0, 0, 2]
-                  }
-                ]),
+                ...(isClientSupplied
+                  ? []
+                  : [
+                      [
+                        {
+                          text: [
+                            { text: 'Description of Works: ', bold: true },
+                            {
+                              text:
+                                shift?.descriptionOfWorks ||
+                                job?.description ||
+                                'N/A',
+                            },
+                          ],
+                          style: 'tableContent',
+                          margin: [0, 0, 0, 2],
+                        },
+                      ],
+                    ]),
                 [
                   {
                     columns: [
