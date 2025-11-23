@@ -640,10 +640,10 @@ const ClientSuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", width: "130px" }}>
+                  <TableCell sx={{ fontWeight: "bold", width: "110px" }}>
                     Job Type
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "165px" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "135px" }}>
                     Sample Receipt Date
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
@@ -686,7 +686,7 @@ const ClientSuppliedJobs = () => {
                           {job.projectId?.name || "Unnamed Project"}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ width: "130px" }}>
+                      <TableCell sx={{ width: "110px" }}>
                         <Chip
                           label={job.jobType || "Fibre ID"}
                           color={
@@ -700,7 +700,7 @@ const ClientSuppliedJobs = () => {
                           variant="outlined"
                         />
                       </TableCell>
-                      <TableCell sx={{ width: "165px" }}>
+                      <TableCell sx={{ width: "135px" }}>
                         <Typography variant="body2">
                           {job.sampleReceiptDate
                             ? new Date(

@@ -597,13 +597,13 @@ const AsbestosRemoval = () => {
                     <TableCell sx={{ fontWeight: "bold", minWidth: "240px" }}>
                       Site Name (Project)
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "200px" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
                       Asbestos Removalist
                     </TableCell>
                     <TableCell sx={{ fontWeight: "bold", minWidth: "140px" }}>
                       Status
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "200px" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
                       Job Type
                     </TableCell>
                     {hasPermission(currentUser, "asbestos.delete") && (

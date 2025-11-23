@@ -328,7 +328,7 @@ const MonthlyTimesheet = () => {
                   onClick={() => day && handleDayClick(day)}
                   sx={{
                     p: 0.75,
-                    height: "60px",
+                    height: "75px",
                     border: "1px solid",
                     borderColor: day ? theme.palette.divider : "transparent",
                     borderRadius: "0 0 8px 8px",
