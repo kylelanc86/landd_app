@@ -23,6 +23,7 @@ import {
   InputAdornment,
   Checkbox,
   FormControlLabel,
+  useMediaQuery,
 } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
@@ -92,6 +93,10 @@ const Timesheets = () => {
       navigator.msMaxTouchPoints > 0
     );
   }, []);
+
+  // Detect tablet screens - disable calendar selection and show Add button
+  // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
+  const isTablet = useMediaQuery("(max-width: 1280px)");
 
   useEffect(() => {
     if (!currentUser?._id) {
@@ -714,6 +719,37 @@ const Timesheets = () => {
     setOpenDialog(true);
   };
 
+  const handleAddEntryClick = () => {
+    if (timesheetStatus === "finalised") {
+      setErrorMessage(
+        "Cannot add entries to a finalised timesheet. Please unfinalise first."
+      );
+      setErrorDialogOpen(true);
+      return;
+    }
+    if (timesheetStatus === "absent") {
+      setErrorMessage(
+        "Cannot add entries to an absent timesheet. Please mark as present first."
+      );
+      setErrorDialogOpen(true);
+      return;
+    }
+
+    setProjectSearch("");
+    setFormData({
+      startTime: "",
+      endTime: "",
+      projectId: "",
+      description: "",
+      isAdminWork: false,
+      isBreak: false,
+      projectInputType: "",
+    });
+    setIsEditing(false);
+    setEditingEntryId(null);
+    setOpenDialog(true);
+  };
+
   const handleEventClick = (info) => {
     if (timesheetStatus === "finalised" || timesheetStatus === "absent") return;
 
@@ -1043,6 +1079,37 @@ const Timesheets = () => {
 
             {/* Status Controls - Inline */}
 
+            {/* Add Timesheet Entry Button - Visible on tablets */}
+            {isTablet && (
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={handleAddEntryClick}
+                disabled={
+                  timesheetStatus === "finalised" ||
+                  timesheetStatus === "absent"
+                }
+                sx={{
+                  borderRadius: "12px",
+                  fontWeight: 600,
+                  textTransform: "none",
+                  px: 2.5,
+                  py: 1,
+                  fontSize: "0.875rem",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  "&:hover": {
+                    boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
+                    transform: "translateY(-1px)",
+                  },
+                  transition: "all 0.3s ease",
+                }}
+              >
+                Add Timesheet Entry
+              </Button>
+            )}
+
             <Button
               variant={
                 timesheetStatus === "finalised" ? "contained" : "outlined"
@@ -1277,7 +1344,9 @@ const Timesheets = () => {
             initialView="timeGridDay"
             initialDate={selectedDate}
             selectable={
-              timesheetStatus !== "finalised" && timesheetStatus !== "absent"
+              !isTablet &&
+              timesheetStatus !== "finalised" &&
+              timesheetStatus !== "absent"
             }
             selectMirror={true}
             unselectAuto={false}

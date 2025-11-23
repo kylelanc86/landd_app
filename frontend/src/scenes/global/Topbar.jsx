@@ -10,17 +10,25 @@ import {
   Tooltip,
   Typography,
   Divider,
+  useMediaQuery,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import MenuIcon from "@mui/icons-material/Menu";
 import { useTheme } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
+import MobileDrawer from "../../components/MobileDrawer";
 
 const Topbar = () => {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+
+  // Detect tablet and mobile screens - show hamburger menu
+  // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
+  const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
 
   const handleProfileClick = (event) => setAnchorEl(event.currentTarget);
   const handleClose = () => {
@@ -65,55 +73,81 @@ const Topbar = () => {
           alignItems: "center",
           padding: "0 24px",
           width: "100%",
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2, mr: 2 }}>
-          <Typography
-            variant="subtitle1"
-            sx={{
-              color: "#FFFFFF", // White text for user name
-              fontWeight: "medium",
-            }}
-          >
-            {currentUser
-              ? `${currentUser.firstName} ${currentUser.lastName}`
-              : "Unknown User"}
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              fontStyle: "bold",
-              color: "black",
-              textTransform: "capitalize",
-            }}
-          >
-            {currentUser ? currentUser.role : "Guest"}
-          </Typography>
-        </Box>
-        <Divider
-          orientation="vertical"
-          flexItem
-          sx={{ mx: 2, borderColor: "rgba(255,255,255,0.3)" }}
-        />
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Tooltip title="Profile">
-            <IconButton onClick={handleProfileClick} sx={{ color: "#FFF" }}>
-              <Avatar
-                sx={{
-                  width: 32,
-                  height: 32,
-                  bgcolor: "#FFF0", // Transparent so icon color shows
-                  color: "#FFF", // White icon
-                  border: `2px solid ${theme.palette.primary.light}`,
-                }}
-              >
-                <AccountCircleIcon
-                  sx={{ color: "#FFF", width: 28, height: 28 }}
-                />
-              </Avatar>
+        {/* Hamburger menu for tablets/mobile - far left */}
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          {isMobileOrTablet && (
+            <IconButton
+              edge="start"
+              color="inherit"
+              aria-label="menu"
+              onClick={(e) => {
+                setMobileDrawerOpen((prev) => !prev);
+                // Unfocus the button after toggling
+                e.currentTarget.blur();
+              }}
+              sx={{
+                color: "#FFF",
+                ml: -1,
+                mr: 1,
+              }}
+            >
+              <MenuIcon />
             </IconButton>
-          </Tooltip>
+          )}
+        </Box>
+
+        {/* User info on the right */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mr: 2 }}>
+            <Typography
+              variant="subtitle1"
+              sx={{
+                color: "#FFFFFF", // White text for user name
+                fontWeight: "medium",
+              }}
+            >
+              {currentUser
+                ? `${currentUser.firstName} ${currentUser.lastName}`
+                : "Unknown User"}
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontStyle: "bold",
+                color: "black",
+                textTransform: "capitalize",
+              }}
+            >
+              {currentUser ? currentUser.role : "Guest"}
+            </Typography>
+          </Box>
+          <Divider
+            orientation="vertical"
+            flexItem
+            sx={{ mx: 2, borderColor: "rgba(255,255,255,0.3)" }}
+          />
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Tooltip title="Profile">
+              <IconButton onClick={handleProfileClick} sx={{ color: "#FFF" }}>
+                <Avatar
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    bgcolor: "#FFF0", // Transparent so icon color shows
+                    color: "#FFF", // White icon
+                    border: `2px solid ${theme.palette.primary.light}`,
+                  }}
+                >
+                  <AccountCircleIcon
+                    sx={{ color: "#FFF", width: 28, height: 28 }}
+                  />
+                </Avatar>
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
         <Menu
           anchorEl={anchorEl}
@@ -126,6 +160,14 @@ const Topbar = () => {
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </Menu>
       </Toolbar>
+
+      {/* Mobile Drawer */}
+      {isMobileOrTablet && (
+        <MobileDrawer
+          open={mobileDrawerOpen}
+          onClose={() => setMobileDrawerOpen(false)}
+        />
+      )}
     </AppBar>
   );
 };

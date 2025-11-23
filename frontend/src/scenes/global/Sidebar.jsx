@@ -1,7 +1,13 @@
 import React, { useEffect } from "react";
 import "react-pro-sidebar/dist/css/styles.css";
 import { ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
-import { Box, Typography, useTheme, Divider } from "@mui/material";
+import {
+  Box,
+  Typography,
+  useTheme,
+  Divider,
+  useMediaQuery,
+} from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
@@ -318,6 +324,10 @@ const Sidebar = () => {
   const location = useLocation();
   const showHidden = true; // Set to true to show hidden components
 
+  // Detect tablet and mobile screens - hide sidebar completely
+  // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
+  const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
+
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = `
@@ -327,13 +337,32 @@ const Sidebar = () => {
         left: 0 !important;
         height: 100vh !important;
         z-index: 1300 !important;
+      }
+      
+      /* Expanded sidebar width */
+      .pro-sidebar:not(.collapsed) {
         width: 242px !important;
       }
+      
+      /* Collapsed sidebar width */
+      .pro-sidebar.collapsed {
+        width: 80px !important;
+      }
+      
       .pro-sidebar-inner {
         background: #ffffff !important;
         border-right: 1px solid #e0e0e0 !important;
-        width: 242px !important;
         position: relative !important;
+      }
+      
+      /* Expanded sidebar inner width */
+      .pro-sidebar:not(.collapsed) .pro-sidebar-inner {
+        width: 242px !important;
+      }
+      
+      /* Collapsed sidebar inner width */
+      .pro-sidebar.collapsed .pro-sidebar-inner {
+        width: 80px !important;
       }
       
       /* Reduce spacing between menu items */
@@ -356,18 +385,13 @@ const Sidebar = () => {
       .pro-menu-item:not(:first-child) .pro-inner-item {
         padding: 5px 15px !important;
       }
-
-      /* Reduce sidebar width by 20% on tablet and mobile */
-      @media (max-width: 899px) {
-        .pro-sidebar {
-          width: 193.6px !important;
-        }
-        .pro-sidebar-inner {
-          width: 193.6px !important;
-        }
-        .pro-sidebar img {
-          max-width: 193.6px !important;
-        }
+      
+      /* Adjust logo/image size when collapsed */
+      .pro-sidebar.collapsed img {
+        max-width: 80px !important;
+      }
+      .pro-sidebar:not(.collapsed) img {
+        max-width: 242px !important;
       }
     `;
     document.head.appendChild(style);
@@ -377,22 +401,10 @@ const Sidebar = () => {
     };
   }, [theme.palette.mode]);
 
-  const getInitials = (user) => {
-    if (!user) return "?";
-    if (user.firstName && user.lastName) {
-      return `${user.firstName.charAt(0)}${user.lastName.charAt(
-        0
-      )}`.toUpperCase();
-    }
-    if (user.name) {
-      return user.name
-        .split(" ")
-        .map((word) => word[0])
-        .join("")
-        .toUpperCase();
-    }
-    return "?";
-  };
+  // Hide sidebar completely on tablets and mobile (drawer will be used instead)
+  if (isMobileOrTablet) {
+    return null;
+  }
 
   return (
     <ProSidebar collapsed={false}>
