@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   IconButton,
@@ -23,12 +23,36 @@ const Topbar = () => {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
 
   // Detect tablet and mobile screens - show hamburger menu
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
   const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
+
+  // Check if sidebar is collapsed
+  useEffect(() => {
+    const checkSidebarCollapsed = () => {
+      const sidebar = document.querySelector(".pro-sidebar");
+      setIsSidebarCollapsed(sidebar?.classList.contains("collapsed") || false);
+    };
+
+    // Check initially
+    checkSidebarCollapsed();
+
+    // Watch for changes using MutationObserver
+    const observer = new MutationObserver(checkSidebarCollapsed);
+    const sidebar = document.querySelector(".pro-sidebar");
+    if (sidebar) {
+      observer.observe(sidebar, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleProfileClick = (event) => setAnchorEl(event.currentTarget);
   const handleClose = () => {
@@ -77,7 +101,7 @@ const Topbar = () => {
         }}
       >
         {/* Hamburger menu for tablets/mobile - far left */}
-        <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           {isMobileOrTablet && (
             <IconButton
               edge="start"
@@ -96,6 +120,21 @@ const Topbar = () => {
             >
               <MenuIcon />
             </IconButton>
+          )}
+          {/* Logo text to the right of hamburger icon when sidebar is collapsed or on mobile/tablet */}
+          {(isMobileOrTablet || isSidebarCollapsed) && (
+            <Typography
+              variant="h6"
+              sx={{
+                color: "#FFF",
+                fontWeight: 600,
+                fontSize: "1rem",
+                letterSpacing: "0.5px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              LANCASTER & DICKENSON CONSULTING
+            </Typography>
           )}
         </Box>
 

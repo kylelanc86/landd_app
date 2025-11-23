@@ -8,6 +8,7 @@ import {
   CardActionArea,
   CardMedia,
   useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   PeopleOutlined as PeopleIcon,
@@ -28,6 +29,7 @@ const AdminDashboard = () => {
   const colors = tokens;
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isTablet = useMediaQuery("(min-width: 600px) and (max-width: 1024px)");
 
   const adminModules = [
     {
@@ -114,7 +116,7 @@ const AdminDashboard = () => {
                     <CardMedia
                       component="div"
                       sx={{
-                        height: 200,
+                        height: isTablet ? 150 : 200,
                         backgroundColor: module.color,
                         display: "flex",
                         alignItems: "center",
@@ -123,7 +125,7 @@ const AdminDashboard = () => {
                       }}
                     >
                       {React.cloneElement(module.icon, {
-                        sx: { fontSize: 80, color: "white" },
+                        sx: { fontSize: isTablet ? 64 : 80, color: "white" },
                       })}
                     </CardMedia>
                     <CardContent

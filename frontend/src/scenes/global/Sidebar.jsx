@@ -366,9 +366,14 @@ const Sidebar = () => {
       }
       
       /* Reduce spacing between menu items */
-      .pro-menu-item:not(:first-child) {
+      .pro-menu-item {
         margin: 2px 0 !important;
         padding: 2px 8px !important;
+      }
+
+      /* Regular menu items padding */
+      .pro-menu-item .pro-inner-item {
+        padding: 5px 15px !important;
       }
 
       /* Special handling for logo container */
@@ -381,17 +386,14 @@ const Sidebar = () => {
         margin: 0 !important;
       }
 
-      /* Regular menu items padding */
-      .pro-menu-item:not(:first-child) .pro-inner-item {
-        padding: 5px 15px !important;
+      /* Hide logo when collapsed */
+      .pro-sidebar.collapsed .pro-menu-item:first-child {
+        display: none !important;
       }
       
-      /* Adjust logo/image size when collapsed */
-      .pro-sidebar.collapsed img {
-        max-width: 80px !important;
-      }
-      .pro-sidebar:not(.collapsed) img {
-        max-width: 242px !important;
+      /* Show logo when expanded */
+      .pro-sidebar:not(.collapsed) .pro-menu-item:first-child {
+        display: block !important;
       }
     `;
     document.head.appendChild(style);

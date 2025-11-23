@@ -1164,16 +1164,24 @@ const Timesheets = () => {
                 px: 2.5,
                 py: 1,
                 fontSize: "0.875rem",
+                borderColor: theme.palette.error.main,
+                color: theme.palette.error.main,
+                "&:hover": {
+                  borderColor: theme.palette.error.dark,
+                  backgroundColor: `${theme.palette.error.main}10`,
+                  transform: "translateY(-1px)",
+                },
                 boxShadow:
                   timesheetStatus === "absent"
                     ? "0 8px 24px rgba(244, 67, 54, 0.3)"
-                    : "0 4px 12px rgba(0,0,0,0.1)",
-                "&:hover": {
-                  boxShadow:
-                    timesheetStatus === "absent"
-                      ? "0 12px 32px rgba(244, 67, 54, 0.4)"
-                      : "0 6px 16px rgba(0,0,0,0.15)",
-                  transform: "translateY(-1px)",
+                    : "0 4px 12px rgba(244, 67, 54, 0.2)",
+                "&.MuiButton-contained": {
+                  backgroundColor: theme.palette.error.main,
+                  color: theme.palette.error.contrastText,
+                  "&:hover": {
+                    backgroundColor: theme.palette.error.dark,
+                    boxShadow: "0 12px 32px rgba(244, 67, 54, 0.4)",
+                  },
                 },
                 transition: "all 0.3s ease",
               }}
@@ -1186,7 +1194,7 @@ const Timesheets = () => {
         {/* Enhanced Calendar Container with alternating shading */}
         <Box
           sx={{
-            height: "625px", // Reduced by 10% from 850px
+            height: isTablet ? "450px" : "625px", // 25% smaller on tablets
             p: 3,
             background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
             position: "relative",

@@ -123,43 +123,6 @@ const MobileDrawer = ({ open, onClose }) => {
           pt: "40px", // Shift content down 30px to account for topbar
         }}
       >
-        {/* Logo */}
-        <Box
-          sx={{
-            p: 2,
-            display: "flex",
-            justifyContent: "flex-start",
-            alignItems: "center",
-            borderBottom: `1px solid ${tokens.grey[200]}`,
-          }}
-        >
-          <picture>
-            <source srcSet="/logo.png 1x, /logo.png 2x" type="image/png" />
-            <img
-              src="/logo.png"
-              alt="Lancaster and Dickenson Consulting"
-              style={{
-                maxHeight: "80px",
-                maxWidth: "240px",
-                width: "auto",
-                height: "auto",
-                objectFit: "contain",
-              }}
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.style.display = "none";
-                const parent = e.target.parentNode;
-                const text = document.createElement("span");
-                text.textContent = "L&D";
-                text.style.fontSize = "28px";
-                text.style.fontWeight = "bold";
-                text.style.color = "#000000";
-                parent.appendChild(text);
-              }}
-            />
-          </picture>
-        </Box>
-
         {/* Menu Items */}
         <Box sx={{ flex: 1, overflowY: "auto", pt: 1 }}>
           <List>
