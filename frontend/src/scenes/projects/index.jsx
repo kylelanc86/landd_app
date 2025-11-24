@@ -170,6 +170,8 @@ const Projects = ({ initialFilters = {} }) => {
 
   // Detect tablet screens for responsive table adjustments (600px - 1024px)
   const isTablet = useMediaQuery("(min-width: 600px) and (max-width: 1024px)");
+  // Detect desktop and tablet (>= 600px) for showing Details button
+  const isDesktopOrTablet = useMediaQuery("(min-width: 600px)");
   const [projects, setProjects] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1363,9 +1365,9 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "name",
         headerName: "Project",
-        flex: isTablet ? 2.5 : 3,
-        minWidth: isTablet ? 180 : 250,
-        maxWidth: isTablet ? 350 : 500,
+        flex: isTablet ? 2.2 : 2.5,
+        minWidth: isTablet ? 160 : 220,
+        maxWidth: isTablet ? 320 : 450,
         sortable: false,
         renderCell: ({ row }) => {
           const clientName = row.client?.name || row.client || "";
@@ -1614,25 +1616,44 @@ const Projects = ({ initialFilters = {} }) => {
         field: "actions",
         headerName: "Actions",
         flex: 0,
-        width: isTablet ? 110 : undefined,
-        minWidth: isTablet ? 100 : 150,
-        maxWidth: isTablet ? 130 : 160,
+        width: isTablet ? 140 : undefined,
+        minWidth: isTablet ? 130 : 180,
+        maxWidth: isTablet ? 160 : 200,
         sortable: false,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
             {/* Project Details button */}
-            <Tooltip title="View Project Details">
-              <IconButton
+            {isDesktopOrTablet ? (
+              <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/projects/${params.row._id}`);
                 }}
                 size="small"
+                variant="outlined"
                 color="primary"
+                sx={{
+                  minWidth: "auto",
+                  px: 1.5,
+                  fontSize: "0.75rem",
+                }}
               >
-                <InfoIcon />
-              </IconButton>
-            </Tooltip>
+                Details
+              </Button>
+            ) : (
+              <Tooltip title="View Project Details">
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/projects/${params.row._id}`);
+                  }}
+                  size="small"
+                  color="primary"
+                >
+                  <InfoIcon />
+                </IconButton>
+              </Tooltip>
+            )}
 
             {/* Delete button - only show for admin and manager users */}
             {(isAdmin || isManager) && (
@@ -1682,6 +1703,7 @@ const Projects = ({ initialFilters = {} }) => {
       handleDeleteClick,
       handleStatusClick,
       isTablet,
+      isDesktopOrTablet,
     ]
   );
 

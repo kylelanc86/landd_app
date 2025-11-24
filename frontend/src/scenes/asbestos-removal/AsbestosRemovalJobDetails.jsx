@@ -135,6 +135,7 @@ const AsbestosRemovalJobDetails = () => {
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
   const [editingShift, setEditingShift] = useState(null);
+  const [shiftCreating, setShiftCreating] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetShiftId, setResetShiftId] = useState(null);
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
@@ -826,11 +827,9 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleShiftSubmit = async () => {
+    setShiftCreating(true);
     try {
-      // First update the job status to 'in_progress'
-      await asbestosRemovalJobService.update(jobId, { status: "in_progress" });
-
-      // Then create the new shift
+      // Create the new shift
       const shiftData = {
         job: jobId,
         jobModel: "AsbestosRemovalJob",
@@ -874,6 +873,8 @@ const AsbestosRemovalJobDetails = () => {
         "Failed to create shift. Please try again.";
 
       showSnackbar(errorMessage, "error");
+    } finally {
+      setShiftCreating(false);
     }
   };
 
@@ -1091,6 +1092,7 @@ const AsbestosRemovalJobDetails = () => {
   const handleUpdateShiftDate = async () => {
     if (!editingShift || !newShiftDate) return;
 
+    setShiftCreating(true);
     try {
       await shiftService.update(editingShift._id, { date: newShiftDate });
       await fetchJobDetails();
@@ -1099,6 +1101,8 @@ const AsbestosRemovalJobDetails = () => {
     } catch (error) {
       console.error("Error updating shift date:", error);
       showSnackbar("Failed to update shift date", "error");
+    } finally {
+      setShiftCreating(false);
     }
   };
 
@@ -1106,6 +1110,7 @@ const AsbestosRemovalJobDetails = () => {
     setShiftDialogOpen(false);
     setNewShiftDate("");
     setEditingShift(null);
+    setShiftCreating(false);
   };
 
   const handleDeleteShift = (shift, event) => {
@@ -2132,7 +2137,7 @@ const AsbestosRemovalJobDetails = () => {
       {/* Air Monitoring Shift Modal */}
       <Dialog
         open={shiftDialogOpen}
-        onClose={handleCloseShiftDialog}
+        onClose={shiftCreating ? undefined : handleCloseShiftDialog}
         maxWidth="sm"
         fullWidth
         PaperProps={{
@@ -2174,6 +2179,26 @@ const AsbestosRemovalJobDetails = () => {
           </Typography>
         </DialogTitle>
         <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          {shiftCreating && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                mb: 2,
+                p: 2,
+                backgroundColor: "action.hover",
+                borderRadius: 1,
+              }}
+            >
+              <CircularProgress size={20} />
+              <Typography variant="body2" color="text.secondary">
+                {editingShift
+                  ? "Updating shift..."
+                  : "Creating air monitoring shift..."}
+              </Typography>
+            </Box>
+          )}
           <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2 }}>
             <TextField
               autoFocus
@@ -2183,6 +2208,7 @@ const AsbestosRemovalJobDetails = () => {
               fullWidth
               value={newShiftDate}
               onChange={(e) => setNewShiftDate(e.target.value)}
+              disabled={shiftCreating}
               InputLabelProps={{
                 shrink: true,
               }}
@@ -2190,16 +2216,53 @@ const AsbestosRemovalJobDetails = () => {
             <Button
               variant="outlined"
               onClick={handleSetToday}
+              disabled={shiftCreating}
               sx={{ height: "56px" }}
             >
               Today
             </Button>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+            pt: 2,
+            gap: 2,
+            border: "none",
+            justifyContent: "flex-start",
+          }}
+        >
+          <Button
+            onClick={editingShift ? handleUpdateShiftDate : handleShiftSubmit}
+            variant="contained"
+            startIcon={
+              shiftCreating ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <MonitorIcon />
+              )
+            }
+            disabled={!newShiftDate || shiftCreating}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            {shiftCreating
+              ? editingShift
+                ? "Updating..."
+                : "Creating..."
+              : editingShift
+              ? "Update Shift"
+              : "Add Shift"}
+          </Button>
           <Button
             onClick={handleCloseShiftDialog}
             variant="outlined"
+            disabled={shiftCreating}
             sx={{
               minWidth: 100,
               borderRadius: 2,
@@ -2208,20 +2271,6 @@ const AsbestosRemovalJobDetails = () => {
             }}
           >
             Cancel
-          </Button>
-          <Button
-            onClick={editingShift ? handleUpdateShiftDate : handleShiftSubmit}
-            variant="contained"
-            startIcon={<MonitorIcon />}
-            disabled={!newShiftDate}
-            sx={{
-              minWidth: 120,
-              borderRadius: 2,
-              textTransform: "none",
-              fontWeight: 500,
-            }}
-          >
-            {editingShift ? "Update Shift" : "Add Shift"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Sample = require('../models/Sample');
+const AirMonitoringJob = require('../models/Job');
+const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -42,10 +45,31 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
 // Get samples by project
 router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    console.log('Getting samples for project:', req.params.projectId);
-    
-    // First, let's get all samples and see what we have
-    const allSamples = await Sample.find()
+    // First, find the Project by projectID to get its _id
+    const project = await Project.findOne({ projectID: req.params.projectId });
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Find all jobs (both types) that reference this project
+    const [airMonitoringJobs, asbestosRemovalJobs] = await Promise.all([
+      AirMonitoringJob.find({ projectId: project._id }).select('_id'),
+      AsbestosRemovalJob.find({ projectId: project._id }).select('_id')
+    ]);
+
+    // Combine job IDs
+    const jobIds = [
+      ...airMonitoringJobs.map(job => job._id),
+      ...asbestosRemovalJobs.map(job => job._id)
+    ];
+
+    if (jobIds.length === 0) {
+      // No jobs found for this project, return empty array
+      return res.json([]);
+    }
+
+    // Find samples that reference these jobs and populate necessary fields
+    const samples = await Sample.find({ job: { $in: jobIds } })
       .populate('collectedBy')
       .populate('sampler')
       .populate('analyzedBy')
@@ -57,24 +81,7 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
       })
       .sort({ createdAt: -1 });
 
-    console.log('All samples found:', allSamples.length);
-    console.log('Sample details:', allSamples.map(s => ({
-      _id: s._id,
-      fullSampleID: s.fullSampleID,
-      sampleNumber: s.sampleNumber,
-      job: s.job,
-      jobProjectId: s.job?.projectId?.projectID
-    })));
-
-    // Filter samples where the job's project matches the requested projectId
-    const projectSamples = allSamples.filter(sample => {
-      const matches = sample.job?.projectId?.projectID === req.params.projectId;
-      console.log(`Sample ${sample.fullSampleID}: job project ${sample.job?.projectId?.projectID} matches ${req.params.projectId}? ${matches}`);
-      return matches;
-    });
-
-    console.log('Filtered project samples:', projectSamples.length);
-    res.json(projectSamples);
+    res.json(samples);
   } catch (err) {
     console.error('Error getting samples by project:', err);
     res.status(500).json({ message: err.message });

@@ -29,7 +29,7 @@ const AdminDashboard = () => {
   const colors = tokens;
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isTablet = useMediaQuery("(min-width: 600px) and (max-width: 1024px)");
+  const isTablet = useMediaQuery(theme.breakpoints.down("md"));
 
   const adminModules = [
     {
@@ -91,13 +91,15 @@ const AdminDashboard = () => {
           Admin Dashboard
         </Typography>
         <Box sx={{ mt: 4 }}>
-          <Grid container spacing={4}>
+          <Grid container spacing={isTablet ? 3 : 4}>
             {adminModules.map((module) => (
               <Grid item xs={12} md={4} lg={4} key={module.id}>
                 <Card
                   sx={{
-                    height: "100%",
+                    height: isTablet ? "auto" : "100%",
+                    maxHeight: isTablet ? "320px" : "none",
                     transition: "all 0.3s ease-in-out",
+                    overflow: "hidden",
                     "&:hover": {
                       transform: "translateY(-4px)",
                       boxShadow: 4,
@@ -107,7 +109,7 @@ const AdminDashboard = () => {
                   <CardActionArea
                     onClick={() => handleModuleClick(module)}
                     sx={{
-                      height: "100%",
+                      height: isTablet ? "auto" : "100%",
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "stretch",
@@ -116,32 +118,54 @@ const AdminDashboard = () => {
                     <CardMedia
                       component="div"
                       sx={{
-                        height: isTablet ? 150 : 200,
+                        height: 160,
                         backgroundColor: module.color,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "relative",
+                        "@media (max-width: 1181px)": {
+                          height: "120px !important",
+                        },
                       }}
                     >
                       {React.cloneElement(module.icon, {
-                        sx: { fontSize: isTablet ? 64 : 80, color: "white" },
+                        sx: {
+                          fontSize: isTablet ? 64 : 80,
+                          color: "white",
+                        },
                       })}
                     </CardMedia>
                     <CardContent
                       sx={{
-                        flexGrow: 1,
+                        flexGrow: isTablet ? 0 : 1,
                         display: "flex",
                         flexDirection: "column",
+                        padding: isTablet ? "12px" : "16px",
+                        "&:last-child": {
+                          paddingBottom: isTablet ? "12px" : "16px",
+                        },
+                        overflow: isTablet ? "hidden" : "visible",
                       }}
                     >
-                      <Typography variant="h5" component="h2" gutterBottom>
+                      <Typography
+                        variant="h5"
+                        component="h2"
+                        gutterBottom
+                        sx={{
+                          fontSize: isTablet ? "1.15rem" : "1.5rem",
+                          marginBottom: isTablet ? "8px" : "12px",
+                        }}
+                      >
                         {module.title}
                       </Typography>
                       <Typography
                         variant="body2"
                         color="text.secondary"
-                        sx={{ mb: 2 }}
+                        sx={{
+                          mb: isTablet ? 1.5 : 2,
+                          fontSize: isTablet ? "0.8rem" : "0.875rem",
+                        }}
                       >
                         {module.description}
                       </Typography>
@@ -156,11 +180,17 @@ const AdminDashboard = () => {
                         <Typography
                           variant="body2"
                           color="primary"
-                          sx={{ fontWeight: "bold" }}
+                          sx={{
+                            fontWeight: "bold",
+                            fontSize: isTablet ? "0.75rem" : "0.875rem",
+                          }}
                         >
                           View {module.title}
                         </Typography>
-                        <ArrowForwardIcon color="primary" />
+                        <ArrowForwardIcon
+                          color="primary"
+                          sx={{ fontSize: isTablet ? "18px" : "24px" }}
+                        />
                       </Box>
                     </CardContent>
                   </CardActionArea>

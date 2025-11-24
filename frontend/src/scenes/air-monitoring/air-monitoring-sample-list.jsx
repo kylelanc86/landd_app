@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -25,11 +25,9 @@ import {
   DialogActions,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
-import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
-import AssessmentIcon from "@mui/icons-material/Assessment";
 import MicIcon from "@mui/icons-material/Mic";
 import DownloadIcon from "@mui/icons-material/Download";
 import MapIcon from "@mui/icons-material/Map";
@@ -81,115 +79,108 @@ const SampleList = () => {
     return match ? parseInt(match[1]) : 0;
   };
 
-  // Function to generate the next sample number
-  const generateNextSampleNumber = async (samples, projectID) => {
-    if (!projectID) return 1;
-
-    try {
-      // Get all samples for the project
-      const allSamplesResponse = await sampleService.getByProject(projectID);
-      const allSamples = allSamplesResponse.data;
-      console.log("All samples for project:", allSamples);
-
-      // Get the highest sample number from all samples in the project
-      const highestNumber = Math.max(
-        ...allSamples.map((sample) => {
-          const number = extractSampleNumber(sample.fullSampleID);
-          console.log(`Sample ${sample.fullSampleID} has number ${number}`);
-          return number;
-        })
-      );
-      console.log("Highest sample number found:", highestNumber);
-
-      const nextNumber = highestNumber + 1;
-      console.log("Next sample number will be:", nextNumber);
-      return nextNumber;
-    } catch (err) {
-      console.error("Error generating next sample number:", err);
-      return 1;
-    }
-  };
-
   // Load shift and samples data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const shiftResponse = await shiftService.getById(shiftId);
-        console.log("Shift response data:", shiftResponse.data);
-        setShift(shiftResponse.data);
 
-        // Load site plan data if available
-        try {
-          const sitePlanResponse = await shiftService.getSitePlan(shiftId);
-          setSitePlanData(sitePlanResponse.data);
-        } catch (error) {
-          console.log("No site plan data found for shift:", error);
-          setSitePlanData(null);
+        // Parallelize critical API calls
+        const [shiftResponse, samplesResponse] = await Promise.all([
+          shiftService.getById(shiftId),
+          sampleService.getByShift(shiftId),
+        ]);
+
+        const shiftData = shiftResponse.data;
+        setShift(shiftData);
+        const fetchedSamples = samplesResponse.data || [];
+        setSamples(fetchedSamples);
+
+        // Set description immediately if available
+        if (shiftData?.descriptionOfWorks) {
+          setDescriptionOfWorks(shiftData.descriptionOfWorks);
         }
 
-        // Fetch job data if available
-        const jobId = shiftResponse.data?.job?._id || shiftResponse.data?.job;
-        if (jobId) {
-          console.log("Attempting to fetch job with ID:", jobId);
-          try {
-            const jobResponse = await asbestosRemovalJobService.getById(jobId);
-            console.log("Job response data:", jobResponse.data);
-            setJob(jobResponse.data);
-          } catch (error) {
-            console.log("Could not fetch job data:", error);
-            // Try to fetch as air monitoring job as fallback
-            try {
-              const { jobService } = await import("../../services/api");
-              const airMonitoringJobResponse = await jobService.getById(jobId);
-              console.log(
-                "Air monitoring job response data:",
-                airMonitoringJobResponse.data
-              );
-              setJob(airMonitoringJobResponse.data);
-            } catch (airMonitoringError) {
-              console.log(
-                "Could not fetch air monitoring job data either:",
-                airMonitoringError
-              );
-            }
-          }
-        } else {
-          console.log("No job ID found in shift data");
-        }
-
-        const samplesResponse = await sampleService.getByShift(shiftId);
-        setSamples(samplesResponse.data || []);
-
-        // Get project ID from shift data
-        const projectId = shiftResponse.data?.job?.projectId?.projectID;
-        if (projectId) {
-          // Fetch all samples for the project to determine next sample number
-          const projectSamplesResponse = await sampleService.getByProject(
-            projectId
-          );
-          const allProjectSamples = projectSamplesResponse.data || [];
-
-          // Find the highest sample number
-          const highestNumber = allProjectSamples.reduce((max, sample) => {
-            const match = sample.fullSampleID?.match(/AM(\d+)$/);
-            const number = match ? parseInt(match[1]) : 0;
+        // Calculate next sample number from fetched samples (if samples exist)
+        const projectId = shiftData?.job?.projectId?.projectID;
+        if (projectId && fetchedSamples.length > 0) {
+          const highestNumber = fetchedSamples.reduce((max, sample) => {
+            const number = extractSampleNumber(sample.fullSampleID);
             return Math.max(max, number);
           }, 0);
-
-          // Set next sample number
           setNextSampleNumber(highestNumber + 1);
+        } else {
+          // Default to 1 for now - will be calculated in background if needed
+          setNextSampleNumber(1);
         }
 
-        if (shiftResponse.data?.descriptionOfWorks) {
-          setDescriptionOfWorks(shiftResponse.data.descriptionOfWorks);
-        }
-
+        // Set loading to false early so page can render
         setError(null);
+        setLoading(false);
+
+        // Fetch non-critical data in parallel (don't block page render)
+        const backgroundPromises = [];
+
+        // Site plan (non-critical, can fail silently)
+        backgroundPromises.push(
+          shiftService
+            .getSitePlan(shiftId)
+            .then((response) => setSitePlanData(response.data))
+            .catch(() => setSitePlanData(null))
+        );
+
+        // Job data (non-critical for initial render)
+        const jobId = shiftData?.job?._id || shiftData?.job;
+        if (jobId) {
+          backgroundPromises.push(
+            asbestosRemovalJobService
+              .getById(jobId)
+              .then((response) => setJob(response.data))
+              .catch(async (error) => {
+                // Try to fetch as air monitoring job as fallback
+                try {
+                  const { jobService } = await import("../../services/api");
+                  const airMonitoringJobResponse = await jobService.getById(
+                    jobId
+                  );
+                  setJob(airMonitoringJobResponse.data);
+                } catch (airMonitoringError) {
+                  // Silently fail - job data is not critical for page load
+                }
+              })
+          );
+        }
+
+        // Fetch project samples in background only if needed (when no samples exist)
+        if (projectId && fetchedSamples.length === 0) {
+          backgroundPromises.push(
+            sampleService
+              .getByProject(projectId)
+              .then((projectSamplesResponse) => {
+                const allProjectSamples = projectSamplesResponse.data || [];
+                const highestNumber = allProjectSamples.reduce(
+                  (max, sample) => {
+                    const number = extractSampleNumber(sample.fullSampleID);
+                    return Math.max(max, number);
+                  },
+                  0
+                );
+                setNextSampleNumber(highestNumber + 1);
+              })
+              .catch((err) => {
+                console.error("Error fetching project samples:", err);
+                // Keep default of 1 if fetch fails
+              })
+          );
+        }
+
+        // Execute background fetches (don't await - let them complete asynchronously)
+        Promise.allSettled(backgroundPromises).catch(() => {
+          // Silently handle any unhandled promise rejections
+        });
       } catch (err) {
         console.error("Error fetching data:", err);
         setError("Failed to load data. Please try again later.");
-      } finally {
         setLoading(false);
       }
     };
@@ -197,15 +188,55 @@ const SampleList = () => {
     fetchData();
   }, [shiftId]);
 
+  // Memoize validation function to avoid recreating it on every render
+  const validateSamplesCompleteMemo = useCallback((samplesToValidate) => {
+    if (!samplesToValidate || samplesToValidate.length === 0) {
+      return false;
+    }
+
+    return samplesToValidate.every((sample) => {
+      // Handle sampler field - use sampler if available, fall back to collectedBy
+      const sampler = sample.sampler || sample.collectedBy;
+
+      // If it's a field blank sample, only validate basic required fields
+      if (sample.location === "Field blank") {
+        return (
+          sample.sampleNumber && sample.location && sampler && sample.cowlNo
+        );
+      }
+
+      // For non-field blank samples, validate all required fields
+      return (
+        sample.sampleNumber &&
+        sample.type &&
+        sample.location &&
+        sampler &&
+        sample.pumpNo &&
+        sample.flowmeter &&
+        sample.cowlNo &&
+        sample.filterSize &&
+        sample.startTime &&
+        sample.endTime &&
+        sample.initialFlowrate &&
+        sample.finalFlowrate &&
+        sample.averageFlowrate &&
+        // Ensure flowrates are valid numbers and not failed
+        parseFloat(sample.initialFlowrate) > 0 &&
+        parseFloat(sample.finalFlowrate) > 0 &&
+        sample.status !== "failed"
+      );
+    });
+  }, []);
+
   // Re-validate samples whenever samples change
   useEffect(() => {
     if (samples.length > 0) {
-      const isValid = validateSamplesComplete(samples);
+      const isValid = validateSamplesCompleteMemo(samples);
       setIsCompleteDisabled(!isValid);
     } else {
       setIsCompleteDisabled(true);
     }
-  }, [samples]);
+  }, [samples, validateSamplesCompleteMemo]);
 
   const handleSort = (field) => {
     if (field === sortField) {
@@ -407,90 +438,25 @@ const SampleList = () => {
     }
   };
 
-  const filteredSamples = samples;
-
-  const sortedSamples = [...filteredSamples].sort((a, b) => {
-    if (sortField === "sampleNumber" || sortField === "fullSampleID") {
-      // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
-      const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
-      const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
-      const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
-      const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
-      return sortAsc ? aNum - bNum : bNum - aNum;
-    } else {
-      const aValue = a[sortField];
-      const bValue = b[sortField];
-      if (aValue < bValue) return sortAsc ? -1 : 1;
-      if (aValue > bValue) return sortAsc ? 1 : -1;
-      return 0;
-    }
-  });
-
-  // Add validation function
-  const validateSamplesComplete = (samples) => {
-    if (!samples || samples.length === 0) {
-      console.log("No samples to validate");
-      return false; // No samples means not complete
-    }
-
-    console.log("Validating samples:", samples.length, "samples");
-
-    const result = samples.every((sample) => {
-      // Handle sampler field - use sampler if available, fall back to collectedBy
-      const sampler = sample.sampler || sample.collectedBy;
-
-      console.log(`Sample ${sample.fullSampleID}:`, {
-        sampleNumber: sample.sampleNumber,
-        type: sample.type,
-        location: sample.location,
-        sampler: sampler,
-        pumpNo: sample.pumpNo,
-        flowmeter: sample.flowmeter,
-        cowlNo: sample.cowlNo,
-        filterSize: sample.filterSize,
-        startTime: sample.startTime,
-        endTime: sample.endTime,
-        initialFlowrate: sample.initialFlowrate,
-        finalFlowrate: sample.finalFlowrate,
-        averageFlowrate: sample.averageFlowrate,
-        status: sample.status,
-      });
-
-      // If it's a field blank sample, only validate basic required fields
-      if (sample.location === "Field blank") {
-        const isValid =
-          sample.sampleNumber && sample.location && sampler && sample.cowlNo;
-        console.log(`Field blank sample validation:`, isValid);
-        return isValid;
+  // Memoize sorted samples to avoid recalculating on every render
+  const sortedSamples = useMemo(() => {
+    return [...samples].sort((a, b) => {
+      if (sortField === "sampleNumber" || sortField === "fullSampleID") {
+        // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
+        const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
+        const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
+        const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
+        const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
+        return sortAsc ? aNum - bNum : bNum - aNum;
+      } else {
+        const aValue = a[sortField];
+        const bValue = b[sortField];
+        if (aValue < bValue) return sortAsc ? -1 : 1;
+        if (aValue > bValue) return sortAsc ? 1 : -1;
+        return 0;
       }
-
-      // For non-field blank samples, validate all required fields
-      const isValid =
-        sample.sampleNumber &&
-        sample.type &&
-        sample.location &&
-        sampler &&
-        sample.pumpNo &&
-        sample.flowmeter &&
-        sample.cowlNo &&
-        sample.filterSize &&
-        sample.startTime &&
-        sample.endTime &&
-        sample.initialFlowrate &&
-        sample.finalFlowrate &&
-        sample.averageFlowrate &&
-        // Ensure flowrates are valid numbers and not failed
-        parseFloat(sample.initialFlowrate) > 0 &&
-        parseFloat(sample.finalFlowrate) > 0 &&
-        sample.status !== "failed";
-
-      console.log(`Regular sample validation:`, isValid);
-      return isValid;
     });
-
-    console.log("Overall validation result:", result);
-    return result;
-  };
+  }, [samples, sortField, sortAsc]);
 
   // Add handleSampleComplete function
   const handleSampleComplete = () => {
@@ -596,14 +562,9 @@ const SampleList = () => {
 
   const saveDescriptionOfWorks = async () => {
     try {
-      console.log("Saving description of works:", {
-        shiftId,
+      await shiftService.update(shiftId, {
         descriptionOfWorks,
       });
-      const response = await shiftService.update(shiftId, {
-        descriptionOfWorks,
-      });
-      console.log("Save response:", response);
       setDescSaveStatus("Saved");
     } catch (err) {
       console.error("Error saving description of works:", err);
@@ -640,14 +601,11 @@ const SampleList = () => {
 
       recognition.onresult = (event) => {
         let finalTranscript = "";
-        let interimTranscript = "";
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
           }
         }
 
