@@ -12,6 +12,10 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import {
   Edit as EditIcon,
@@ -21,7 +25,6 @@ import {
   TextFields as TextIcon,
   Undo as UndoIcon,
   Redo as RedoIcon,
-  Clear as ClearIcon,
   Save as SaveIcon,
   Upload as UploadIcon,
   Mouse as SelectIcon,
@@ -30,12 +33,12 @@ import {
   ZoomOut as ZoomOutIcon,
   Refresh as RefreshIcon,
   PanTool as HandIcon,
+  Add as AddIcon,
 } from "@mui/icons-material";
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
 import GoogleMapsDialog from "./GoogleMapsDialog";
 
-const CANVAS_SAFE_WIDTH = 1000;
-const CANVAS_SAFE_HEIGHT = 720;
+// Canvas dimensions will be set dynamically based on viewport
 const DEFAULT_DRAW_OPACITY = 1;
 const TRANSPARENT_DRAW_OPACITY = 0.35;
 
@@ -118,13 +121,14 @@ const SitePlanDrawing = ({
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const canvasContainerRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentTool, setCurrentTool] = useState("pen");
   const [brushSize, setBrushSize] = useState(2);
   const [fontSize, setFontSize] = useState(16);
   const [color, setColor] = useState("#000000");
-  const [fillColor, setFillColor] = useState("#ffffff");
-  const [isFilled, setIsFilled] = useState(false);
+  const [fillColor] = useState("#ffffff");
+  const [isFilled] = useState(false);
   const [useTransparentDrawing, setUseTransparentDrawing] = useState(false);
   const [showGoogleMaps, setShowGoogleMaps] = useState(false);
   const [history, setHistory] = useState([[]]); // Initialize with empty array
@@ -141,7 +145,8 @@ const SitePlanDrawing = ({
   const [isResizingItem, setIsResizingItem] = useState(false);
   const [resizeHandle, setResizeHandle] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [canvasSize, setCanvasSize] = useState({ width: 1000, height: 720 });
+  const [zoom, setZoom] = useState(1); // Default zoom at 100%
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const prevItemsLengthRef = useRef(0);
@@ -150,7 +155,6 @@ const SitePlanDrawing = ({
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
   const [legendDraftEntries, setLegendDraftEntries] = useState([]);
   const [legendDraftTitle, setLegendDraftTitle] = useState("Key");
-  const [imageScale, setImageScale] = useState(100);
   const renderForExportRef = useRef(false);
   const activePointerIdRef = useRef(null);
 
@@ -186,6 +190,32 @@ const SitePlanDrawing = ({
   const handleLegendDialogClear = () => {
     setLegendDraftEntries((prev) =>
       prev.map((entry) => ({ ...entry, description: "" }))
+    );
+  };
+
+  const handleAddLegendEntry = () => {
+    const newId = `custom-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+    const newEntry = {
+      id: newId,
+      color: "#000000",
+      description: "",
+    };
+    setLegendDraftEntries((prev) => [...prev, newEntry]);
+  };
+
+  const handleRemoveLegendEntry = (entryId) => {
+    setLegendDraftEntries((prev) =>
+      prev.filter((entry) => entry.id !== entryId)
+    );
+  };
+
+  const handleLegendColorChange = (entryId, newColor) => {
+    setLegendDraftEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === entryId ? { ...entry, color: newColor } : entry
+      )
     );
   };
 
@@ -255,18 +285,6 @@ const SitePlanDrawing = ({
     });
   }, [drawnItems]);
 
-  useEffect(() => {
-    if (selectedItem?.type === "image") {
-      const baseWidth = selectedItem.originalWidth || selectedItem.width;
-      if (baseWidth) {
-        const ratio = (selectedItem.width / baseWidth) * 100;
-        setImageScale(Math.round(ratio));
-        return;
-      }
-    }
-    setImageScale(100);
-  }, [selectedItem]);
-
   // Initialize Google Maps when showGoogleMaps changes
   useEffect(() => {
     if (showGoogleMaps && !mapLoaded) {
@@ -319,16 +337,29 @@ const SitePlanDrawing = ({
     }
   };
 
+  // Constrain coordinates to canvas boundaries
+  const constrainToCanvas = (x, y) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    return {
+      x: Math.max(0, Math.min(canvas.width, x)),
+      y: Math.max(0, Math.min(canvas.height, y)),
+    };
+  };
+
   const startDrawing = (e) => {
     setIsDrawing(true);
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
 
-    // Calculate proper coordinates accounting for canvas scaling
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    // Calculate proper coordinates accounting for canvas scaling, zoom, and pan
+    const scaleX = canvas.width / (rect.width / zoom);
+    const scaleY = canvas.height / (rect.height / zoom);
+    const rawX = ((e.clientX - rect.left - panOffset.x) / zoom) * scaleX;
+    const rawY = ((e.clientY - rect.top - panOffset.y) / zoom) * scaleY;
+
+    // Constrain to canvas boundaries
+    const { x, y } = constrainToCanvas(rawX, rawY);
 
     // Store starting coordinates for shape tools
     canvas.startX = x;
@@ -385,17 +416,29 @@ const SitePlanDrawing = ({
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const rect = canvas.getBoundingClientRect();
 
-    // Calculate proper coordinates accounting for canvas scaling
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    // Calculate proper coordinates accounting for canvas scaling, zoom, and pan
+    const scaleX = canvas.width / (rect.width / zoom);
+    const scaleY = canvas.height / (rect.height / zoom);
+    const rawX = ((e.clientX - rect.left - panOffset.x) / zoom) * scaleX;
+    const rawY = ((e.clientY - rect.top - panOffset.y) / zoom) * scaleY;
+
+    // Constrain to canvas boundaries
+    const { x, y } = constrainToCanvas(rawX, rawY);
 
     if (isPanning) {
-      // Handle panning
+      // Handle panning - constrain to keep canvas in view
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const container = canvasContainerRef.current;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const maxPanX = (rect.width * zoom - containerRect.width) / 2;
+      const maxPanY = (rect.height * zoom - containerRect.height) / 2;
+
       const newPanOffset = {
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
+        x: Math.max(-maxPanX, Math.min(maxPanX, e.clientX - dragStart.x)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, e.clientY - dragStart.y)),
       };
       setPanOffset(newPanOffset);
       return;
@@ -585,10 +628,11 @@ const SitePlanDrawing = ({
         canvas.penPath = null;
       } else if (e && currentTool !== "pen") {
         const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
+        const scaleX = canvas.width / (rect.width / zoom);
+        const scaleY = canvas.height / (rect.height / zoom);
+        const rawX = ((e.clientX - rect.left - panOffset.x) / zoom) * scaleX;
+        const rawY = ((e.clientY - rect.top - panOffset.y) / zoom) * scaleY;
+        const { x, y } = constrainToCanvas(rawX, rawY);
 
         // Restore to the state before preview started
         if (canvas.previewImageData) {
@@ -938,34 +982,6 @@ const SitePlanDrawing = ({
     return updatedItem;
   };
 
-  const updateImageScale = useCallback((item, scalePercent) => {
-    if (!item || item.type !== "image") {
-      return item;
-    }
-
-    const baseWidth = item.originalWidth || item.width;
-    const baseHeight = item.originalHeight || item.height;
-    if (!baseWidth || !baseHeight) {
-      return item;
-    }
-
-    const ratio = Math.max(0.1, scalePercent / 100);
-    const newWidth = Math.max(20, baseWidth * ratio);
-    const newHeight = Math.max(20, baseHeight * ratio);
-    const centerX = item.x + item.width / 2;
-    const centerY = item.y + item.height / 2;
-
-    return {
-      ...item,
-      width: newWidth,
-      height: newHeight,
-      x: centerX - newWidth / 2,
-      y: centerY - newHeight / 2,
-      originalWidth: baseWidth,
-      originalHeight: baseHeight,
-    };
-  }, []);
-
   const saveToHistory = useCallback(() => {
     // Save the current drawnItems array to history instead of canvas snapshot
     const newHistory = history.slice(0, historyIndex + 1);
@@ -992,16 +1008,6 @@ const SitePlanDrawing = ({
     }
   };
 
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setDrawnItems([]);
-    setSelectedItem(null);
-    setHistory([[]]);
-    setHistoryIndex(0);
-  };
-
   const deleteSelectedItem = useCallback(() => {
     if (selectedItem) {
       setDrawnItems((prev) =>
@@ -1012,14 +1018,62 @@ const SitePlanDrawing = ({
     }
   }, [selectedItem, saveToHistory]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     renderForExportRef.current = true;
-    redrawCanvas();
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw background image first if it exists
+    if (canvas.backgroundImage) {
+      ctx.drawImage(canvas.backgroundImage, 0, 0, canvas.width, canvas.height);
+    }
+
+    // If map is shown, capture it and draw it on canvas
+    if (showGoogleMaps && mapRef.current) {
+      try {
+        // Dynamically import html2canvas
+        const html2canvas = (await import("html2canvas")).default;
+
+        // Capture the map container
+        const mapCanvas = await html2canvas(mapRef.current, {
+          backgroundColor: null,
+          scale: 1,
+          useCORS: true,
+          logging: false,
+        });
+
+        // Draw map with 5% bottom crop at full opacity for export
+        const mapHeight = mapCanvas.height * 0.95;
+        ctx.drawImage(
+          mapCanvas,
+          0,
+          0,
+          mapCanvas.width,
+          mapHeight,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+      } catch (error) {
+        console.error("Error capturing map:", error);
+        // Continue with export even if map capture fails
+      }
+    }
+
+    // Draw all items on top
+    drawnItems.forEach((item) => {
+      drawItem(ctx, item);
+    });
+
     const imageData = canvas.toDataURL("image/png");
     renderForExportRef.current = false;
     redrawCanvas();
+
     onSave({
       imageData,
       legend: legendEntries,
@@ -1199,51 +1253,45 @@ const SitePlanDrawing = ({
     }
   }, [drawnItems, selectedItem, drawSelectionHandles]);
 
+  // Calculate canvas size to fill viewport
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      if (!canvasContainerRef.current) return;
+
+      const container = canvasContainerRef.current;
+      const containerRect = container.getBoundingClientRect();
+
+      // Calculate available space (accounting for padding)
+      // Use full container size - padding is handled by the container Box
+      const availableWidth = containerRect.width;
+      const availableHeight = containerRect.height;
+
+      // Set canvas size to fill available space
+      setCanvasSize({ width: availableWidth, height: availableHeight });
+    };
+
+    updateCanvasSize();
+    window.addEventListener("resize", updateCanvasSize);
+    return () => window.removeEventListener("resize", updateCanvasSize);
+  }, []);
+
+  // Initialize canvas with calculated size
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !canvasSize.width || !canvasSize.height) return;
 
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    canvas.width = CANVAS_SAFE_WIDTH;
-    canvas.height = CANVAS_SAFE_HEIGHT;
-    canvas.style.width = `${CANVAS_SAFE_WIDTH}px`;
-    canvas.style.height = `${CANVAS_SAFE_HEIGHT}px`;
+    canvas.width = canvasSize.width;
+    canvas.height = canvasSize.height;
+    canvas.style.width = `${canvasSize.width}px`;
+    canvas.style.height = `${canvasSize.height}px`;
     canvas.style.touchAction = "none";
 
     redrawCanvas();
-  }, [redrawCanvas]);
-
-  const handleImageScaleChange = useCallback(
-    (event, value) => {
-      if (!selectedItem || selectedItem.type !== "image") {
-        return;
-      }
-
-      const scaleValue = Array.isArray(value) ? value[0] : value;
-      setImageScale(scaleValue);
-
-      const updatedItem = updateImageScale(selectedItem, scaleValue);
-      if (!updatedItem) {
-        return;
-      }
-
-      setSelectedItem(updatedItem);
-      setDrawnItems((prev) =>
-        prev.map((item) => (item.id === selectedItem.id ? updatedItem : item))
-      );
-      redrawCanvas();
-    },
-    [selectedItem, updateImageScale, redrawCanvas]
-  );
-
-  const handleImageScaleChangeCommitted = useCallback(() => {
-    if (selectedItem?.type === "image") {
-      saveToHistory();
-    }
-  }, [selectedItem, saveToHistory]);
+  }, [canvasSize, redrawCanvas]);
 
   const getSelectionHandles = (item) => {
     const handles = [];
@@ -1484,17 +1532,38 @@ const SitePlanDrawing = ({
   // Handle wheel zoom
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = canvasContainerRef.current;
+    if (!canvas || !container) return;
 
     const handleWheel = (e) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom((prevZoom) => Math.max(0.25, Math.min(3, prevZoom + delta)));
+      setZoom((prevZoom) => {
+        const newZoom = Math.max(1, Math.min(3, prevZoom + delta)); // No zoom out below 100%
+        // Constrain pan offset when zooming
+        const rect = canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const maxPanX = Math.max(
+          0,
+          (rect.width * newZoom - containerRect.width) / 2
+        );
+        const maxPanY = Math.max(
+          0,
+          (rect.height * newZoom - containerRect.height) / 2
+        );
+
+        setPanOffset((prev) => ({
+          x: Math.max(-maxPanX, Math.min(maxPanX, prev.x)),
+          y: Math.max(-maxPanY, Math.min(maxPanY, prev.y)),
+        }));
+
+        return newZoom;
+      });
     };
 
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("wheel", handleWheel, { passive: false });
     return () => {
-      canvas.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("wheel", handleWheel);
     };
   }, []);
 
@@ -1700,43 +1769,99 @@ const SitePlanDrawing = ({
   ];
 
   return (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "row" }}>
       {/* Toolbar */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+      <Paper
+        sx={{
+          p: 2,
+          mr: 2,
+          width: 280,
+          height: "100%",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <Box display="flex" flexDirection="column" gap={2}>
           {/* Drawing Tools */}
-          <Box display="flex" gap={1}>
-            {tools.map((tool) => (
-              <Tooltip key={tool.id} title={tool.label}>
-                <IconButton
-                  onClick={() => setCurrentTool(tool.id)}
-                  color={currentTool === tool.id ? "primary" : "default"}
-                  variant={currentTool === tool.id ? "contained" : "outlined"}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Tools
+            </Typography>
+            <Box
+              display="flex"
+              gap={1}
+              alignItems="center"
+              flexWrap="wrap"
+              sx={{ mb: 1 }}
+            >
+              {tools.map((tool) => (
+                <Tooltip key={tool.id} title={tool.label}>
+                  <IconButton
+                    onClick={() => setCurrentTool(tool.id)}
+                    color={currentTool === tool.id ? "primary" : "default"}
+                    variant={currentTool === tool.id ? "contained" : "outlined"}
+                    size="small"
+                  >
+                    {tool.icon}
+                  </IconButton>
+                </Tooltip>
+              ))}
+              <FormControl size="small" sx={{ minWidth: 100, ml: 1 }}>
+                <InputLabel>Brush Size</InputLabel>
+                <Select
+                  value={brushSize}
+                  label="Brush Size"
+                  onChange={(e) => setBrushSize(e.target.value)}
                 >
-                  {tool.icon}
-                </IconButton>
-              </Tooltip>
-            ))}
+                  {Array.from({ length: 20 }, (_, i) => i + 1).map((size) => (
+                    <MenuItem key={size} value={size}>
+                      {size}px
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
           </Box>
 
-          {/* Brush Size */}
-          <Box sx={{ minWidth: 120 }}>
-            <Typography variant="caption" display="block">
-              Brush Size: {brushSize}px
+          {/* Colors */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Colors
             </Typography>
-            <Slider
-              value={brushSize}
-              onChange={(e, value) => setBrushSize(value)}
-              min={1}
-              max={20}
-              size="small"
-            />
+            <Box display="flex" flexDirection="column" gap={2}>
+              {/* Stroke Color */}
+              <Box display="flex" alignItems="center" gap={2}>
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  style={{
+                    width: 60,
+                    height: 40,
+                    border: "none",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                  }}
+                />
+                <Box display="flex" alignItems="center" gap={1}>
+                  <input
+                    type="checkbox"
+                    checked={useTransparentDrawing}
+                    onChange={(e) => handleTransparencyToggle(e.target.checked)}
+                    style={{ width: 20, height: 20 }}
+                  />
+                  <Typography variant="caption">Transparent</Typography>
+                </Box>
+              </Box>
+            </Box>
           </Box>
 
           {/* Font Size - only show when text tool is selected */}
           {currentTool === "text" && (
-            <Box sx={{ minWidth: 120 }}>
-              <Typography variant="caption" display="block">
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Font Size: {fontSize}px
               </Typography>
               <Slider
@@ -1749,163 +1874,347 @@ const SitePlanDrawing = ({
             </Box>
           )}
 
-          {/* Color Controls */}
-          <Box display="flex" gap={2} alignItems="center">
-            {/* Stroke Color */}
-            <Box display="flex" flexDirection="column" alignItems="center">
-              <Typography variant="caption">Stroke</Typography>
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                style={{
-                  width: 40,
-                  height: 40,
-                  border: "none",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                }}
-              />
-            </Box>
-
-            {/* Fill Color - only show for shapes */}
-            {(currentTool === "circle" || currentTool === "rectangle") && (
-              <>
-                <Box display="flex" flexDirection="column" alignItems="center">
-                  <Typography variant="caption">Fill</Typography>
-                  <input
-                    type="color"
-                    value={fillColor}
-                    onChange={(e) => setFillColor(e.target.value)}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      border: "none",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                    }}
-                  />
-                </Box>
-                <Box display="flex" flexDirection="column" alignItems="center">
-                  <Typography variant="caption">Fill</Typography>
-                  <input
-                    type="checkbox"
-                    checked={isFilled}
-                    onChange={(e) => setIsFilled(e.target.checked)}
-                    style={{ width: 20, height: 20 }}
-                  />
-                </Box>
-              </>
-            )}
-            <Box display="flex" flexDirection="column" alignItems="center">
-              <Typography variant="caption">Transparent</Typography>
-              <input
-                type="checkbox"
-                checked={useTransparentDrawing}
-                onChange={(e) => handleTransparencyToggle(e.target.checked)}
-                style={{ width: 20, height: 20 }}
-              />
-            </Box>
-          </Box>
-
           {/* Action Buttons */}
-          <Box display="flex" gap={1}>
-            <Tooltip title="Undo">
-              <IconButton onClick={undo} disabled={historyIndex <= 0}>
-                <UndoIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Redo">
-              <IconButton
-                onClick={redo}
-                disabled={historyIndex >= history.length - 1}
-              >
-                <RedoIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Clear">
-              <IconButton onClick={clearCanvas}>
-                <ClearIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete Selected">
-              <IconButton
-                onClick={deleteSelectedItem}
-                disabled={!selectedItem}
-                color="error"
-              >
-                <DeleteIcon />
-              </IconButton>
-            </Tooltip>
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Actions
+            </Typography>
+            <Box display="flex" gap={1} flexWrap="wrap">
+              <Tooltip title="Undo">
+                <Button
+                  onClick={undo}
+                  disabled={historyIndex <= 0}
+                  startIcon={<UndoIcon />}
+                  size="small"
+                  variant="outlined"
+                  sx={{ flex: 1, minWidth: 60 }}
+                >
+                  Undo
+                </Button>
+              </Tooltip>
+              <Tooltip title="Redo">
+                <Button
+                  onClick={redo}
+                  disabled={historyIndex >= history.length - 1}
+                  startIcon={<RedoIcon />}
+                  size="small"
+                  variant="outlined"
+                  sx={{ flex: 1, minWidth: 60 }}
+                >
+                  Redo
+                </Button>
+              </Tooltip>
+              <Tooltip title="Delete Selected">
+                <Button
+                  onClick={deleteSelectedItem}
+                  disabled={!selectedItem}
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  size="small"
+                  variant="outlined"
+                  sx={{ flex: 1, minWidth: 60 }}
+                >
+                  Delete
+                </Button>
+              </Tooltip>
+            </Box>
           </Box>
 
           {/* Zoom Controls */}
-          <Box display="flex" gap={1} alignItems="center">
-            <Tooltip title="Zoom Out">
-              <IconButton onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}>
-                <ZoomOutIcon />
-              </IconButton>
-            </Tooltip>
-            <Typography
-              variant="body2"
-              sx={{ minWidth: 60, textAlign: "center" }}
-            >
-              {Math.round(zoom * 100)}%
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Zoom
             </Typography>
-            <Tooltip title="Zoom In">
-              <IconButton onClick={() => setZoom(Math.min(3, zoom + 0.25))}>
-                <ZoomInIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Reset View">
-              <IconButton
-                onClick={() => {
-                  setZoom(1);
-                  setPanOffset({ x: 0, y: 0 });
-                }}
+            <Box display="flex" alignItems="center" gap={1}>
+              <Tooltip title="Zoom Out">
+                <IconButton
+                  onClick={() => setZoom(Math.max(1, zoom - 0.25))}
+                  size="small"
+                  disabled={zoom <= 1}
+                >
+                  <ZoomOutIcon />
+                </IconButton>
+              </Tooltip>
+              <Typography
+                variant="body2"
+                sx={{ textAlign: "center", minWidth: 50 }}
               >
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
+                {Math.round(zoom * 100)}%
+              </Typography>
+              <Tooltip title="Zoom In">
+                <IconButton
+                  onClick={() => setZoom(Math.min(3, zoom + 0.25))}
+                  size="small"
+                  disabled={zoom >= 3}
+                >
+                  <ZoomInIcon />
+                </IconButton>
+              </Tooltip>
+              <Box sx={{ ml: 2 }}>
+                <Tooltip title="Reset View">
+                  <IconButton
+                    onClick={() => {
+                      setZoom(1); // Reset to 100%
+                      setPanOffset({ x: 0, y: 0 });
+                    }}
+                    size="small"
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
           </Box>
 
-          {/* Upload Image Button */}
-          <Button
-            variant="outlined"
-            component="label"
-            startIcon={<UploadIcon />}
-            sx={{ whiteSpace: "nowrap" }}
-          >
-            Upload Image
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={handleImageUpload}
-            />
-          </Button>
+          {/* Image Section */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Image
+            </Typography>
+            <Box display="flex" flexDirection="column" gap={1}>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<UploadIcon />}
+                size="small"
+                fullWidth
+              >
+                Add Image Layer
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={handleImageUpload}
+                />
+              </Button>
+              {selectedItem?.type === "image" && (
+                <Button
+                  variant="outlined"
+                  onClick={deleteSelectedItem}
+                  size="small"
+                  color="error"
+                  fullWidth
+                  startIcon={<DeleteIcon />}
+                >
+                  Delete Image
+                </Button>
+              )}
+            </Box>
+          </Box>
 
-          {/* Google Maps Controls */}
-          <Button
-            variant={showGoogleMaps ? "contained" : "outlined"}
-            onClick={() => setShowGoogleMapsDialog(true)}
-            size="small"
+          {/* Map Section */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Map
+            </Typography>
+            <Box display="flex" flexDirection="column" gap={1}>
+              <Button
+                variant={showGoogleMaps ? "contained" : "outlined"}
+                onClick={() => setShowGoogleMapsDialog(true)}
+                size="small"
+                fullWidth
+              >
+                {showGoogleMaps ? "Change Map Layer" : "Add Map Layer"}
+              </Button>
+              {showGoogleMaps && (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setShowGoogleMaps(false);
+                    setMapLoaded(false);
+                  }}
+                  size="small"
+                  color="error"
+                  fullWidth
+                  startIcon={<DeleteIcon />}
+                >
+                  Remove Map
+                </Button>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+
+      {/* Drawing Canvas */}
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          ref={canvasContainerRef}
+          sx={{
+            flex: 1,
+            overflow: "hidden",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "#cfd8dc",
+            position: "relative",
+          }}
+        >
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
           >
-            {showGoogleMaps ? "Change Map View" : "Add Map Layer"}
-          </Button>
-          {showGoogleMaps && (
-            <Button
-              variant="outlined"
-              onClick={() => {
-                setShowGoogleMaps(false);
-                setMapLoaded(false);
+            <canvas
+              ref={canvasRef}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerLeave}
+              onPointerCancel={handlePointerCancel}
+              style={{
+                position: "relative",
+                zIndex: 2,
+                cursor:
+                  currentTool === "hand"
+                    ? isPanning
+                      ? "grabbing"
+                      : "grab"
+                    : currentTool === "select" && selectedItem
+                    ? "pointer"
+                    : "crosshair",
+                width: `${canvasSize.width}px`,
+                height: `${canvasSize.height}px`,
+                backgroundColor: showGoogleMaps ? "transparent" : "#ffffff",
+                borderRadius: 8,
+                border: "1px solid rgba(69, 90, 100, 0.5)",
+                transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
+                transformOrigin: "top left",
+                display: "block",
               }}
-              size="small"
-              color="error"
-            >
-              Remove Map
-            </Button>
-          )}
+            />
+
+            {/* Inline Text Input Overlay */}
+            {showInlineTextInput && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  left: inlineTextPosition.x,
+                  top: inlineTextPosition.y,
+                  zIndex: 1000,
+                  backgroundColor: "white",
+                  border: "2px solid #007bff",
+                  borderRadius: 1,
+                  padding: 1,
+                  minWidth: 200,
+                  boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
+                }}
+              >
+                <input
+                  ref={inlineTextInputRef}
+                  autoFocus
+                  type="text"
+                  value={inlineTextInput}
+                  onChange={(e) => setInlineTextInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleInlineTextSubmit();
+                    } else if (e.key === "Escape") {
+                      handleInlineTextCancel();
+                    }
+                  }}
+                  placeholder="Enter text..."
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    fontSize: fontSize,
+                    fontFamily: "Arial, sans-serif",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={handleInlineTextSubmit}
+                    disabled={!inlineTextInput.trim()}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={handleInlineTextCancel}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Box>
+            )}
+
+            {/* Google Maps Overlay */}
+            {showGoogleMaps && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: `${canvasSize.width}px`,
+                  height: `${canvasSize.height}px`,
+                  pointerEvents: "none",
+                  zIndex: 1,
+                  overflow: "hidden",
+                  clipPath: "inset(0 0 5% 0)",
+                  transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
+                  transformOrigin: "top left",
+                }}
+              >
+                <div
+                  ref={mapRef}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    opacity: 0.7,
+                  }}
+                />
+                {!mapLoaded && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: "rgba(0, 0, 0, 0.1)",
+                    }}
+                  >
+                    <Typography variant="h6" color="text.secondary">
+                      Loading Google Maps...
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+        </Box>
+
+        {/* Action Buttons */}
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          gap={2}
+          sx={{ p: 2, borderTop: 1, borderColor: "divider" }}
+        >
           <Button
             variant={legendEntries.length > 0 ? "contained" : "outlined"}
             onClick={openLegendDialog}
@@ -1913,190 +2222,19 @@ const SitePlanDrawing = ({
           >
             {legendEntries.length > 0 ? "View/Edit Key" : "View/Edit Key"}
           </Button>
-          {selectedItem?.type === "image" && (
-            <Box sx={{ minWidth: 200 }}>
-              <Typography variant="caption" display="block">
-                Image Size: {imageScale}%
-              </Typography>
-              <Slider
-                value={imageScale}
-                onChange={handleImageScaleChange}
-                onChangeCommitted={handleImageScaleChangeCommitted}
-                min={25}
-                max={300}
-                size="small"
-              />
-            </Box>
-          )}
-        </Box>
-      </Paper>
-
-      {/* Drawing Canvas */}
-      <Box
-        sx={{
-          width: "100%",
-          overflow: "auto",
-          mx: "auto",
-          display: "flex",
-          justifyContent: "center",
-          backgroundColor: "#cfd8dc",
-          py: 3,
-        }}
-      >
-        <Box
-          sx={{
-            position: "relative",
-            borderRadius: 3,
-            width: CANVAS_SAFE_WIDTH,
-            height: CANVAS_SAFE_HEIGHT,
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerLeave}
-            onPointerCancel={handlePointerCancel}
-            style={{
-              position: "relative",
-              zIndex: 2,
-              cursor:
-                currentTool === "hand"
-                  ? isPanning
-                    ? "grabbing"
-                    : "grab"
-                  : currentTool === "select" && selectedItem
-                  ? "pointer"
-                  : "crosshair",
-              width: `${CANVAS_SAFE_WIDTH}px`,
-              height: `${CANVAS_SAFE_HEIGHT}px`,
-              backgroundColor: showGoogleMaps ? "transparent" : "#ffffff",
-              borderRadius: 8,
-              border: "1px solid rgba(69, 90, 100, 0.5)",
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
-              transformOrigin: "top left",
-            }}
-          />
-
-          {/* Inline Text Input Overlay */}
-          {showInlineTextInput && (
-            <Box
-              sx={{
-                position: "absolute",
-                left: inlineTextPosition.x,
-                top: inlineTextPosition.y,
-                zIndex: 1000,
-                backgroundColor: "white",
-                border: "2px solid #007bff",
-                borderRadius: 1,
-                padding: 1,
-                minWidth: 200,
-                boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-              }}
+          <Box display="flex" gap={2}>
+            <Button onClick={onCancel} variant="outlined">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              variant="contained"
+              startIcon={<SaveIcon />}
             >
-              <input
-                ref={inlineTextInputRef}
-                autoFocus
-                type="text"
-                value={inlineTextInput}
-                onChange={(e) => setInlineTextInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleInlineTextSubmit();
-                  } else if (e.key === "Escape") {
-                    handleInlineTextCancel();
-                  }
-                }}
-                placeholder="Enter text..."
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  fontSize: fontSize,
-                  fontFamily: "Arial, sans-serif",
-                  border: "1px solid #ccc",
-                  borderRadius: "4px",
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
-              <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-                <Button
-                  size="small"
-                  variant="contained"
-                  onClick={handleInlineTextSubmit}
-                  disabled={!inlineTextInput.trim()}
-                >
-                  Add
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={handleInlineTextCancel}
-                >
-                  Cancel
-                </Button>
-              </Box>
-            </Box>
-          )}
-
-          {/* Google Maps Overlay */}
-          {showGoogleMaps && (
-            <Box
-              sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                pointerEvents: "none",
-                zIndex: 1,
-              }}
-            >
-              <div
-                ref={mapRef}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  opacity: 0.7,
-                }}
-              />
-              {!mapLoaded && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: "rgba(0, 0, 0, 0.1)",
-                  }}
-                >
-                  <Typography variant="h6" color="text.secondary">
-                    Loading Google Maps...
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          )}
+              Save Site Plan
+            </Button>
+          </Box>
         </Box>
-      </Box>
-
-      {/* Action Buttons */}
-      <Box display="flex" justifyContent="flex-end" gap={2} sx={{ mt: 2 }}>
-        <Button onClick={onCancel} variant="outlined">
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSave}
-          variant="contained"
-          startIcon={<SaveIcon />}
-        >
-          Save Site Plan
-        </Button>
       </Box>
 
       <Dialog
@@ -2117,7 +2255,8 @@ const SitePlanDrawing = ({
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {legendDraftEntries.length === 0 && (
               <Typography variant="body2" color="text.secondary">
-                Colours are added automatically as you draw on the plan.
+                Colours are added automatically as you draw on the plan. You can
+                also add custom key items.
               </Typography>
             )}
             {legendDraftEntries.map((entry, index) => (
@@ -2125,7 +2264,7 @@ const SitePlanDrawing = ({
                 key={entry.id || `${entry.color}-${index}`}
                 sx={{
                   display: "grid",
-                  gridTemplateColumns: "auto 1fr",
+                  gridTemplateColumns: "auto 1fr auto",
                   columnGap: 16,
                   rowGap: 8,
                   alignItems: "center",
@@ -2138,14 +2277,18 @@ const SitePlanDrawing = ({
                     gap: 1.5,
                   }}
                 >
-                  <Box
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 1,
+                  <input
+                    type="color"
+                    value={entry.color}
+                    onChange={(e) =>
+                      handleLegendColorChange(entry.id, e.target.value)
+                    }
+                    style={{
+                      width: 40,
+                      height: 40,
                       border: "1px solid rgba(55, 65, 81, 0.4)",
-                      backgroundColor: entry.color,
-                      flexShrink: 0,
+                      borderRadius: 4,
+                      cursor: "pointer",
                     }}
                   />
                   <Box>
@@ -2161,15 +2304,29 @@ const SitePlanDrawing = ({
                   label={`Description ${index + 1}`}
                   value={entry.description}
                   onChange={(event) =>
-                    handleLegendEntryChange(
-                      entry.id || entry.color.toLowerCase(),
-                      event.target.value
-                    )
+                    handleLegendEntryChange(entry.id, event.target.value)
                   }
                   fullWidth
                 />
+                <IconButton
+                  onClick={() => handleRemoveLegendEntry(entry.id)}
+                  color="error"
+                  size="small"
+                  sx={{ ml: 1 }}
+                >
+                  <DeleteIcon />
+                </IconButton>
               </Box>
             ))}
+            <Button
+              onClick={handleAddLegendEntry}
+              variant="outlined"
+              startIcon={<AddIcon />}
+              size="small"
+              sx={{ mt: 1 }}
+            >
+              Add Key Item
+            </Button>
           </Box>
           {legendDraftEntries.length > 0 && (
             <Box

@@ -373,7 +373,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           const itemDescription = item.materialDescription || 'No description';
           
           // Generate photo numbers text using sequential numbers
-          let photoNumbersText = 'No photos';
+          let photoNumbersText = '-';
           if (item.sequentialPhotoNumbers.length > 0) {
             if (item.sequentialPhotoNumbers.length === 1) {
               photoNumbersText = item.sequentialPhotoNumbers[0].toString();
@@ -406,7 +406,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         const itemDescription = `${roomArea} - ${locationDescription}`;
         
         // Generate photo numbers text using sequential numbers
-        let photoNumbersText = 'No photos';
+        let photoNumbersText = '-';
         if (item.sequentialPhotoNumbers.length > 0) {
           if (item.sequentialPhotoNumbers.length === 1) {
             photoNumbersText = item.sequentialPhotoNumbers[0].toString();
@@ -971,7 +971,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
 
           /* Reduce content padding for site plan pages */
           .site-plan-page .content {
-            padding: 5px 24px 10px 24px !important;
+            padding: 5px 48px 10px 48px !important;
             min-height: auto !important;
             height: auto !important;
             max-height: calc(100vh - 150px) !important;
@@ -981,20 +981,19 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           /* Site plan container styling */
           .site-plan-container {
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 10px 10px 10px 50px !important;
-            width: calc(100vh - 120px) !important;
-            max-width: calc(100vh - 120px) !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
             box-sizing: border-box !important;
-            margin-left: 40px !important;
-            margin-right: auto !important;
+            margin: 0 !important;
           }
 
           .site-plan-container img {
             border-radius: 4px;
-            max-height: calc((100vw - 200px) * 0.9) !important;
+            max-height: calc((100vw - 200px) * 0.99) !important;
             object-fit: contain !important;
-            width: 90% !important;
-            margin: 0 auto !important;
+            width: 100% !important;
+            margin: 0 !important;
           }
 
         </style>
@@ -1075,7 +1074,7 @@ const generateSitePlanContentPage = (
                     ? escapeHtml(entry.description.trim())
                     : '<span style="color:#9ca3af;">(-)</span>';
               return `
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
                   <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0;"></span>
                   <span style="font-size:12px; color:#334155; line-height:1.4; flex:1;">${description}</span>
                 </div>
@@ -1149,7 +1148,7 @@ const generateSitePlanContentPage = (
                     ? escapeHtml(entry.description.trim())
                     : '<span style="color:#9ca3af;">(-)</span>';
                 return `
-                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
                     <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)};"></span>
                     <span style="font-size:12px; color:#334155;">${description}</span>
                   </div>
@@ -1162,7 +1161,7 @@ const generateSitePlanContentPage = (
   if (fileType.startsWith('image/') || isDataUrl) {
     content = `
       <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
-        <div class="site-plan-container" style="flex: 0 0 75%; max-width: 760px; padding: 16px 24px; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box;">
+        <div class="site-plan-container" style="flex: 1; max-width: 100%; padding: 0; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box;">
           <img src="${imageSrc}" 
                alt="${title}" 
                style="width: 100% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
@@ -1176,7 +1175,7 @@ const generateSitePlanContentPage = (
   } else {
     content = `
       <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
-        <div class="site-plan-container" style="flex: 0 0 75%; max-width: 760px; padding: 32px; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box; text-align:center;">
+        <div class="site-plan-container" style="flex: 1; max-width: 100%; padding: 0; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box; text-align:center;">
           <div class="appendix-title" style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">APPENDIX ${appendixLetter}</div>
           <div class="photographs-text" style="font-size: 14px; text-transform: uppercase; margin-bottom: 8px;">${title}</div>
           <div class="file-note" style="font-size: 12px; color: #4b5563;">Document attached</div>

@@ -120,6 +120,19 @@ const ClearanceItems = () => {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
+  // Track first tap for tablet two-tap behavior
+  const [firstTapFields, setFirstTapFields] = useState({
+    levelFloor: false,
+    roomArea: false,
+    locationDescription: false,
+    materialDescription: false,
+  });
+
+  // Detect if device is a tablet/touch device
+  const isTablet = () => {
+    return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  };
+
   const getProjectFolderName = () => {
     const project = clearance?.projectId;
 
@@ -439,6 +452,13 @@ const ClearanceItems = () => {
     setShowLevelFloor(
       clearance?.clearanceType !== "Vehicle/Equipment" && !!item.levelFloor
     );
+    // Reset first tap state when editing
+    setFirstTapFields({
+      levelFloor: false,
+      roomArea: false,
+      locationDescription: false,
+      materialDescription: false,
+    });
     setDialogOpen(true);
   };
 
@@ -482,6 +502,13 @@ const ClearanceItems = () => {
       notes: "",
     });
     setShowLevelFloor(false);
+    // Reset first tap state when form is reset
+    setFirstTapFields({
+      levelFloor: false,
+      roomArea: false,
+      locationDescription: false,
+      materialDescription: false,
+    });
   };
 
   // Function to automatically determine and update clearance type based on asbestos items
@@ -1321,7 +1348,7 @@ const ClearanceItems = () => {
             }
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            Asbestos Removal Job Details
+            Job Details
           </Link>
           <Typography color="text.primary">
             {clearance.projectId?.name || "Unknown Project"}:{" "}
@@ -1837,6 +1864,38 @@ const ClearanceItems = () => {
                               setForm({ ...form, levelFloor: e.target.value })
                             }
                             placeholder="e.g., Ground Floor, Level 1, Basement"
+                            onTouchStart={(e) => {
+                              if (isTablet() && !firstTapFields.levelFloor) {
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    levelFloor: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (isTablet() && !firstTapFields.levelFloor) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  levelFloor: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              readOnly:
+                                isTablet() && !firstTapFields.levelFloor,
+                            }}
                           />
                         </Grid>
                       )}
@@ -1853,15 +1912,58 @@ const ClearanceItems = () => {
                         options={customDataFields.roomAreas.map(
                           (item) => item.text
                         )}
-                        onOpen={() =>
+                        onOpen={() => {
+                          if (isTablet() && !firstTapFields.roomArea) {
+                            setFirstTapFields((prev) => ({
+                              ...prev,
+                              roomArea: true,
+                            }));
+                          }
                           console.log(
                             "Room areas options:",
                             customDataFields.roomAreas
-                          )
-                        }
+                          );
+                        }}
                         freeSolo
                         renderInput={(params) => (
-                          <TextField {...params} label="Room/Area" required />
+                          <TextField
+                            {...params}
+                            label="Room/Area"
+                            required
+                            onTouchStart={(e) => {
+                              if (isTablet() && !firstTapFields.roomArea) {
+                                // Prevent input focus on first tap, but allow dropdown to open
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    roomArea: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (isTablet() && !firstTapFields.roomArea) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  roomArea: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              readOnly: isTablet() && !firstTapFields.roomArea,
+                            }}
+                          />
                         )}
                       />
                     </Grid>
@@ -1883,12 +1985,64 @@ const ClearanceItems = () => {
                         options={customDataFields.locationDescriptions.map(
                           (item) => item.text
                         )}
+                        onOpen={() => {
+                          if (
+                            isTablet() &&
+                            !firstTapFields.locationDescription
+                          ) {
+                            setFirstTapFields((prev) => ({
+                              ...prev,
+                              locationDescription: true,
+                            }));
+                          }
+                        }}
                         freeSolo
                         renderInput={(params) => (
                           <TextField
                             {...params}
                             label="Location Description"
                             required
+                            onTouchStart={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.locationDescription
+                              ) {
+                                // Prevent input focus on first tap, but allow dropdown to open
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    locationDescription: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.locationDescription
+                              ) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  locationDescription: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              readOnly:
+                                isTablet() &&
+                                !firstTapFields.locationDescription,
+                            }}
                           />
                         )}
                       />
@@ -1911,12 +2065,64 @@ const ClearanceItems = () => {
                         options={customDataFields.materialsDescriptions.map(
                           (item) => item.text
                         )}
+                        onOpen={() => {
+                          if (
+                            isTablet() &&
+                            !firstTapFields.materialDescription
+                          ) {
+                            setFirstTapFields((prev) => ({
+                              ...prev,
+                              materialDescription: true,
+                            }));
+                          }
+                        }}
                         freeSolo
                         renderInput={(params) => (
                           <TextField
                             {...params}
                             label="Materials Description"
                             required
+                            onTouchStart={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.materialDescription
+                              ) {
+                                // Prevent input focus on first tap, but allow dropdown to open
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    materialDescription: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.materialDescription
+                              ) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  materialDescription: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              readOnly:
+                                isTablet() &&
+                                !firstTapFields.materialDescription,
+                            }}
                           />
                         )}
                       />
