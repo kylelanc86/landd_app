@@ -971,7 +971,7 @@ const SampleList = () => {
                 <TableCell
                   sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
                 >
-                  {sample.type}
+                  {sample.location === "Field blank" ? "-" : sample.type}
                 </TableCell>
                 <TableCell sx={{ minWidth: "200px", flex: 2 }}>
                   {sample.location}

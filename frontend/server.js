@@ -80,7 +80,17 @@ app.get('/api/test', (req, res) => {
 });
 
 // Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
+// Exclude static file requests - they should return 404 if not found, not index.html
+app.get('*', (req, res, next) => {
+  // Don't serve index.html for static file requests (js, css, images, etc.)
+  // If express.static couldn't find the file, it means it doesn't exist
+  // and we should return 404, not index.html
+  if (req.url.startsWith('/static/') || 
+      req.url.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
+    console.error(`Static file not found: ${req.url}`);
+    return res.status(404).send('File not found');
+  }
+  
   console.log(`Serving index.html for route: ${req.url}`);
   const indexPath = path.join(buildPath, 'index.html');
   

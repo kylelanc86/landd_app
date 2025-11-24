@@ -168,7 +168,7 @@ const EditSample = () => {
 
         setForm({
           sampleNumber: sampleNumber,
-          type: sampleData.type,
+          type: isFieldBlankSample ? "-" : sampleData.type,
           location: isFieldBlankSample
             ? FIELD_BLANK_LOCATION
             : isNegAirSample
@@ -216,6 +216,7 @@ const EditSample = () => {
           ...prev,
           [name]: checked,
           location: checked ? FIELD_BLANK_LOCATION : prev.location,
+          type: checked ? "-" : prev.type === "-" ? "Background" : prev.type || "Background",
         };
 
         if (checked) {
@@ -416,7 +417,8 @@ const EditSample = () => {
       console.log("Generated full sample ID:", fullSampleID);
 
       // Map sample type to match backend enum
-      const sampleType = form.type;
+      // Field blanks should have type set to "-"
+      const sampleType = form.isFieldBlank ? "-" : form.type;
 
       // Format times to include seconds
       const formatTime = (time) => {

@@ -13,6 +13,9 @@ import {
   IconButton,
   Checkbox,
   FormControlLabel,
+  Backdrop,
+  CircularProgress,
+  Paper,
 } from "@mui/material";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -66,6 +69,7 @@ const NewSample = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingCriticalData, setLoadingCriticalData] = useState(true);
   const [shift, setShift] = useState(null);
   const [projectSamples, setProjectSamples] = useState([]);
   const [shiftSamples, setShiftSamples] = useState([]);
@@ -120,7 +124,7 @@ const NewSample = () => {
     fetchActiveAirPumps();
   }, []);
 
-  // Fetch active flowmeters when component mounts
+  // Fetch active flowmeters when component mounts (critical for form)
   useEffect(() => {
     const fetchActiveFlowmeters = async () => {
       try {
@@ -158,209 +162,161 @@ const NewSample = () => {
   }, []);
 
   useEffect(() => {
-    const fetchShift = async () => {
+    const fetchCriticalData = async () => {
       try {
-        const response = await shiftService.getById(shiftId);
-        console.log("Full shift response:", response.data);
-        setShift(response.data);
+        setLoadingCriticalData(true);
+        setError("");
+
+        // Parallelize critical API calls
+        const [shiftResponse, samplesInShiftResponse] = await Promise.all([
+          shiftService.getById(shiftId),
+          sampleService.getByShift(shiftId),
+        ]);
+
+        const shiftData = shiftResponse.data;
+        setShift(shiftData);
+        const samplesInShift = samplesInShiftResponse.data || [];
+        setShiftSamples(samplesInShift);
+        console.log("Number of samples in shift:", samplesInShift.length);
 
         // Get the project ID from the shift's job
-        const projectID = response.data.job?.projectId?.projectID;
-        if (projectID) {
-          setProjectID(projectID);
+        const projectID = shiftData.job?.projectId?.projectID;
+        if (!projectID) {
+          setError("Project ID not found in shift data");
+          setLoadingCriticalData(false);
+          return;
+        }
 
-          // Get the next sample number from location state (project-based)
-          const nextNumber = location.state?.nextSampleNumber;
-          console.log("Next sample number from location:", nextNumber);
+        setProjectID(projectID);
 
-          // Always calculate the next sample number to ensure proper AM format
-          try {
-            const allProjectSamplesResponse = await sampleService.getByProject(
-              projectID
-            );
-            const allProjectSamples = allProjectSamplesResponse.data || [];
-            setProjectSamples(allProjectSamples);
-            console.log("All project samples:", allProjectSamples);
-            console.log("Project ID:", projectID);
+        // Parallelize project samples fetch and job fetch
+        const [allProjectSamplesResponse, jobResponse] = await Promise.all([
+          sampleService.getByProject(projectID).catch((err) => {
+            console.error("Error fetching project samples:", err);
+            return { data: [] };
+          }),
+          shiftData.job?._id
+            ? asbestosRemovalJobService
+                .getById(shiftData.job._id)
+                .catch((err) => {
+                  console.error("Error fetching job details:", err);
+                  return null;
+                })
+            : Promise.resolve(null),
+        ]);
 
-            // Find the highest sample number across all shifts
-            const highestNumber = Math.max(
-              ...allProjectSamples.map((sample) => {
-                console.log("Processing sample:", {
-                  fullSampleID: sample.fullSampleID,
-                  sampleNumber: sample.sampleNumber,
-                  projectID: projectID,
-                });
+        const allProjectSamples = allProjectSamplesResponse.data || [];
+        setProjectSamples(allProjectSamples);
+        if (jobResponse?.data) {
+          setJob(jobResponse.data);
+        }
 
-                // Check both fullSampleID and sampleNumber for AM prefix
-                const hasAMPrefix =
-                  sample.fullSampleID?.startsWith(`${projectID}-AM`) ||
-                  sample.sampleNumber?.startsWith("AM");
+        // Calculate next sample number
+        try {
+          const highestNumber = Math.max(
+            ...allProjectSamples.map((sample) => {
+              const hasAMPrefix =
+                sample.fullSampleID?.startsWith(`${projectID}-AM`) ||
+                sample.sampleNumber?.startsWith("AM");
 
-                if (hasAMPrefix) {
-                  // Try to extract from fullSampleID first, then sampleNumber
-                  let match = sample.fullSampleID?.match(/AM(\d+)$/);
-                  if (!match && sample.sampleNumber) {
-                    match = sample.sampleNumber.match(/AM(\d+)$/);
-                  }
-                  const number = match ? parseInt(match[1]) : 0;
-                  console.log("Extracted number:", number);
-                  return number;
+              if (hasAMPrefix) {
+                let match = sample.fullSampleID?.match(/AM(\d+)$/);
+                if (!match && sample.sampleNumber) {
+                  match = sample.sampleNumber.match(/AM(\d+)$/);
                 }
-                console.log("Sample ignored - no AM prefix");
-                return 0; // Ignore non-AM samples
-              }),
-              0 // Start from 0 if no samples exist
-            );
-
-            const nextSampleNumber = `AM${highestNumber + 1}`;
-            console.log("Calculated next sample number:", nextSampleNumber);
-
-            setForm((prev) => ({
-              ...prev,
-              sampleNumber: nextSampleNumber.toString(),
-            }));
-          } catch (error) {
-            console.error("Error calculating next sample number:", error);
-            // Start from 1 if we can't calculate
-            setForm((prev) => ({
-              ...prev,
-              sampleNumber: "AM1",
-            }));
-          }
-        }
-
-        // Get the number of samples in this shift for display purposes only
-        const samplesResponse = await sampleService.getByShift(shiftId);
-        const samplesInShift = samplesResponse.data || [];
-        console.log("Number of samples in shift:", samplesInShift.length);
-        setShiftSamples(samplesInShift);
-
-        // If there's no default sampler but we have samples, check the first sample
-        if (!response.data.defaultSampler && samplesInShift.length > 0) {
-          const firstSample = samplesInShift[0];
-          console.log("First sample in shift:", firstSample);
-
-          if (firstSample.collectedBy) {
-            console.log(
-              "Setting default sampler from first sample:",
-              firstSample.collectedBy
-            );
-            try {
-              const shiftUpdateResponse = await shiftService.update(shiftId, {
-                defaultSampler: firstSample.collectedBy,
-              });
-              console.log(
-                "Shift updated with default sampler from first sample:",
-                shiftUpdateResponse
-              );
-
-              // Set the sampler in the form
-              setForm((prev) => ({
-                ...prev,
-                sampler: firstSample.collectedBy,
-              }));
-            } catch (error) {
-              console.error(
-                "Error setting default sampler from first sample:",
-                error
-              );
-            }
-          }
-        }
-        // If there is a default sampler, use it for subsequent samples
-        else if (response.data.defaultSampler) {
-          console.log(
-            "Setting default sampler from shift:",
-            response.data.defaultSampler
+                return match ? parseInt(match[1]) : 0;
+              }
+              return 0;
+            }),
+            0
           );
-          const samplerId =
-            response.data.defaultSampler._id || response.data.defaultSampler;
-          console.log("Setting sampler ID to:", samplerId);
+
+          const nextSampleNumber = `AM${highestNumber + 1}`;
+          console.log("Calculated next sample number:", nextSampleNumber);
+
           setForm((prev) => ({
             ...prev,
-            sampler: samplerId,
+            sampleNumber: nextSampleNumber.toString(),
+          }));
+        } catch (error) {
+          console.error("Error calculating next sample number:", error);
+          setForm((prev) => ({
+            ...prev,
+            sampleNumber: "AM1",
           }));
         }
 
-        // Handle default flowmeter logic
-        if (!response.data.defaultFlowmeter && samplesInShift.length > 0) {
-          const firstSample = samplesInShift[0];
-          console.log("First sample in shift for flowmeter:", firstSample);
-
-          if (firstSample.flowmeter) {
-            console.log(
-              "Setting default flowmeter from first sample:",
-              firstSample.flowmeter
-            );
-            try {
-              const shiftUpdateResponse = await shiftService.update(shiftId, {
-                defaultFlowmeter: firstSample.flowmeter,
-              });
-              console.log(
-                "Shift updated with default flowmeter from first sample:",
-                shiftUpdateResponse
-              );
-
-              // Set the flowmeter in the form
-              setForm((prev) => ({
-                ...prev,
-                flowmeter: firstSample.flowmeter,
-              }));
-            } catch (error) {
-              console.error(
-                "Error setting default flowmeter from first sample:",
-                error
-              );
-            }
-          }
-        }
-        // If there is a default flowmeter, use it for subsequent samples
-        else if (response.data.defaultFlowmeter) {
-          console.log(
-            "Setting default flowmeter from shift:",
-            response.data.defaultFlowmeter
-          );
-          setForm((prev) => {
-            const updatedForm = {
-              ...prev,
-              flowmeter: response.data.defaultFlowmeter,
-            };
-            console.log("Updated form with flowmeter:", updatedForm);
-            return updatedForm;
+        // Determine sampler - prioritize defaultSampler, then first sample
+        let samplerToSet = null;
+        if (shiftData.defaultSampler) {
+          samplerToSet =
+            shiftData.defaultSampler._id || shiftData.defaultSampler;
+          console.log("Using default sampler from shift:", samplerToSet);
+        } else if (samplesInShift.length > 0 && samplesInShift[0].collectedBy) {
+          samplerToSet = samplesInShift[0].collectedBy;
+          console.log("Using sampler from first sample:", samplerToSet);
+          // Update shift with default sampler in background (don't await)
+          shiftService.update(shiftId, {
+            defaultSampler: samplerToSet,
+          }).catch((err) => {
+            console.error("Error updating shift with default sampler:", err);
           });
         }
 
-        // Fetch job details
-        if (response.data.job?._id) {
-          try {
-            const jobResponse = await asbestosRemovalJobService.getById(
-              response.data.job._id
-            );
-            setJob(jobResponse.data);
-          } catch (error) {
-            console.error("Error fetching job details:", error);
-          }
+        if (samplerToSet) {
+          setForm((prev) => ({
+            ...prev,
+            sampler: samplerToSet,
+          }));
         }
+
+        // Determine flowmeter - prioritize defaultFlowmeter, then first sample
+        let flowmeterToSet = null;
+        if (shiftData.defaultFlowmeter) {
+          flowmeterToSet = shiftData.defaultFlowmeter;
+          console.log("Using default flowmeter from shift:", flowmeterToSet);
+        } else if (samplesInShift.length > 0 && samplesInShift[0].flowmeter) {
+          flowmeterToSet = samplesInShift[0].flowmeter;
+          console.log("Using flowmeter from first sample:", flowmeterToSet);
+          // Update shift with default flowmeter in background (don't await)
+          shiftService.update(shiftId, {
+            defaultFlowmeter: flowmeterToSet,
+          }).catch((err) => {
+            console.error("Error updating shift with default flowmeter:", err);
+          });
+        }
+
+        if (flowmeterToSet) {
+          setForm((prev) => ({
+            ...prev,
+            flowmeter: flowmeterToSet,
+          }));
+        }
+
+        // Critical data is now loaded
+        setLoadingCriticalData(false);
       } catch (err) {
-        console.error("Error fetching shift:", err);
+        console.error("Error fetching critical data:", err);
         setError("Failed to load shift details");
+        setLoadingCriticalData(false);
       }
     };
 
-    fetchShift();
+    fetchCriticalData();
   }, [shiftId, location.state]);
 
   // Effect to handle flowmeter persistence when flowmeters are loaded
+  // This ensures the flowmeter is set once flowmeters list is available
   useEffect(() => {
-    if (flowmeters.length > 0 && shift && shift.defaultFlowmeter) {
+    if (
+      flowmeters.length > 0 &&
+      shift &&
+      shift.defaultFlowmeter &&
+      !form.flowmeter
+    ) {
       console.log(
         "Flowmeters loaded, checking for default flowmeter:",
         shift.defaultFlowmeter
-      );
-      console.log(
-        "Available flowmeter references:",
-        flowmeters.map((f) => f.equipmentReference)
       );
 
       // Check if the default flowmeter exists in the available flowmeters
@@ -368,7 +324,7 @@ const NewSample = () => {
         (f) => f.equipmentReference === shift.defaultFlowmeter
       );
 
-      if (defaultFlowmeterExists && !form.flowmeter) {
+      if (defaultFlowmeterExists) {
         console.log(
           "Setting default flowmeter from shift after flowmeters loaded"
         );
@@ -438,6 +394,7 @@ const NewSample = () => {
           ...prev,
           [name]: checked,
           location: checked ? FIELD_BLANK_LOCATION : prev.location,
+          type: checked ? "-" : prev.type === "-" ? "Background" : prev.type || "Background",
         };
 
         if (checked) {
@@ -642,6 +599,7 @@ const NewSample = () => {
         fullSampleID: `${projectID}-${form.sampleNumber}`,
         sampler: form.sampler,
         collectedBy: form.sampler,
+        type: form.isFieldBlank ? "-" : form.type, // Set type to "-" for field blanks
         flowmeter: form.flowmeter || null, // Explicitly include flowmeter
         initialFlowrate: form.initialFlowrate
           ? parseFloat(form.initialFlowrate)
@@ -696,7 +654,53 @@ const NewSample = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+    <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, position: "relative" }}>
+      {/* Loading overlay for critical data */}
+      <Backdrop
+        sx={{
+          color: "#fff",
+          zIndex: (theme) => theme.zIndex.drawer + 1,
+          backgroundColor: "rgba(0, 0, 0, 0.7)",
+        }}
+        open={loadingCriticalData}
+      >
+        <Paper
+          elevation={8}
+          sx={{
+            p: 4,
+            borderRadius: 2,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 2,
+            minWidth: 300,
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          <CircularProgress size={40} thickness={4} sx={{ color: "#1976d2" }} />
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 600,
+              color: "#333",
+              textAlign: "center",
+            }}
+          >
+            Loading sample data...
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "#666",
+              textAlign: "center",
+              maxWidth: 250,
+            }}
+          >
+            Preparing sampler, sample number, and flowmeter information
+          </Typography>
+        </Paper>
+      </Backdrop>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate(-1)}

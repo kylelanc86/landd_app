@@ -28,7 +28,7 @@ const sampleSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['Background', 'Clearance', 'Exposure'],
+    enum: ['Background', 'Clearance', 'Exposure', '-'],
     required: false
   },
   location: {
