@@ -172,7 +172,7 @@ const EditSample = () => {
           location: isFieldBlankSample
             ? FIELD_BLANK_LOCATION
             : isNegAirSample
-            ? NEG_AIR_EXHAUST_LOCATION
+            ? sampleData.location || NEG_AIR_EXHAUST_LOCATION
             : sampleData.location || "",
           pumpNo: sampleData.pumpNo || "",
           flowmeter: sampleData.flowmeter || "",
@@ -216,7 +216,11 @@ const EditSample = () => {
           ...prev,
           [name]: checked,
           location: checked ? FIELD_BLANK_LOCATION : prev.location,
-          type: checked ? "-" : prev.type === "-" ? "Background" : prev.type || "Background",
+          type: checked
+            ? "-"
+            : prev.type === "-"
+            ? "Background"
+            : prev.type || "Background",
         };
 
         if (checked) {
@@ -233,7 +237,8 @@ const EditSample = () => {
         ...prev,
         [name]: checked,
         isFieldBlank: checked ? false : prev.isFieldBlank,
-        location: checked ? NEG_AIR_EXHAUST_LOCATION : prev.location,
+        location:
+          checked && !prev.location ? NEG_AIR_EXHAUST_LOCATION : prev.location,
         // Clear flowrate fields when checked
         initialFlowrate: checked ? "" : prev.initialFlowrate,
         finalFlowrate: checked ? "" : prev.finalFlowrate,
@@ -363,6 +368,11 @@ const EditSample = () => {
       }
       if (!form.isNegAirExhaust && !form.initialFlowrate) {
         errors.initialFlowrate = "Initial flowrate is required";
+      }
+    } else if (form.isNegAirExhaust) {
+      // Neg air exhaust samples require location (field blanks have fixed location)
+      if (!form.location) {
+        errors.location = "Location is required";
       }
     }
 
@@ -630,13 +640,14 @@ const EditSample = () => {
               name="location"
               label="Location"
               value={
-                form.isFieldBlank
-                  ? FIELD_BLANK_LOCATION
-                  : form.location || NEG_AIR_EXHAUST_LOCATION
+                form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
               }
-              disabled
+              onChange={handleChange}
+              disabled={form.isFieldBlank}
               required
               fullWidth
+              error={!!fieldErrors.location}
+              helperText={fieldErrors.location}
             />
           )}
           {!isSimplifiedSample && (

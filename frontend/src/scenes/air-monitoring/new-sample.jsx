@@ -256,11 +256,13 @@ const NewSample = () => {
           samplerToSet = samplesInShift[0].collectedBy;
           console.log("Using sampler from first sample:", samplerToSet);
           // Update shift with default sampler in background (don't await)
-          shiftService.update(shiftId, {
-            defaultSampler: samplerToSet,
-          }).catch((err) => {
-            console.error("Error updating shift with default sampler:", err);
-          });
+          shiftService
+            .update(shiftId, {
+              defaultSampler: samplerToSet,
+            })
+            .catch((err) => {
+              console.error("Error updating shift with default sampler:", err);
+            });
         }
 
         if (samplerToSet) {
@@ -279,11 +281,16 @@ const NewSample = () => {
           flowmeterToSet = samplesInShift[0].flowmeter;
           console.log("Using flowmeter from first sample:", flowmeterToSet);
           // Update shift with default flowmeter in background (don't await)
-          shiftService.update(shiftId, {
-            defaultFlowmeter: flowmeterToSet,
-          }).catch((err) => {
-            console.error("Error updating shift with default flowmeter:", err);
-          });
+          shiftService
+            .update(shiftId, {
+              defaultFlowmeter: flowmeterToSet,
+            })
+            .catch((err) => {
+              console.error(
+                "Error updating shift with default flowmeter:",
+                err
+              );
+            });
         }
 
         if (flowmeterToSet) {
@@ -394,7 +401,11 @@ const NewSample = () => {
           ...prev,
           [name]: checked,
           location: checked ? FIELD_BLANK_LOCATION : prev.location,
-          type: checked ? "-" : prev.type === "-" ? "Background" : prev.type || "Background",
+          type: checked
+            ? "-"
+            : prev.type === "-"
+            ? "Background"
+            : prev.type || "Background",
         };
 
         if (checked) {
@@ -411,7 +422,8 @@ const NewSample = () => {
         ...prev,
         [name]: checked,
         isFieldBlank: checked ? false : prev.isFieldBlank,
-        location: checked ? NEG_AIR_EXHAUST_LOCATION : prev.location,
+        location:
+          checked && !prev.location ? NEG_AIR_EXHAUST_LOCATION : prev.location,
         // Clear flowrate fields when checked
         initialFlowrate: checked ? "" : prev.initialFlowrate,
         finalFlowrate: checked ? "" : prev.finalFlowrate,
@@ -519,6 +531,11 @@ const NewSample = () => {
       }
       if (!form.isNegAirExhaust && !form.initialFlowrate) {
         errors.initialFlowrate = "Initial flowrate is required";
+      }
+    } else if (form.isNegAirExhaust) {
+      // Neg air exhaust samples require location (field blanks have fixed location)
+      if (!form.location) {
+        errors.location = "Location is required";
       }
     }
 
@@ -831,13 +848,14 @@ const NewSample = () => {
               name="location"
               label="Location"
               value={
-                form.isFieldBlank
-                  ? FIELD_BLANK_LOCATION
-                  : form.location || NEG_AIR_EXHAUST_LOCATION
+                form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
               }
-              disabled
+              onChange={handleChange}
+              disabled={form.isFieldBlank}
               required
               fullWidth
+              error={!!fieldErrors.location}
+              helperText={fieldErrors.location}
             />
           )}
           {!isSimplifiedSample && (

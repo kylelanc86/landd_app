@@ -65,11 +65,19 @@ const SampleSummary = React.memo(
     inputRefs,
     isReadOnly,
     onOpenFibreCountModal,
+    isLast,
   }) => {
     const theme = useTheme();
 
     return (
-      <Paper sx={{ p: 3 }}>
+      <Paper
+        sx={{
+          p: 3,
+          display: "block",
+          position: "relative",
+          overflow: "visible",
+        }}
+      >
         <Stack spacing={3}>
           <Box
             sx={{
@@ -287,6 +295,7 @@ const Analysis = () => {
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
   const [activeSampleId, setActiveSampleId] = useState(null);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
+  const [fibreCountSnapshot, setFibreCountSnapshot] = useState(null);
 
   // Load samples and in-progress analysis data
   useEffect(() => {
@@ -650,6 +659,24 @@ const Analysis = () => {
     setSelectedSampleId(null);
   };
 
+  const handleFillZeros = useCallback((sampleId) => {
+    setSampleAnalyses((prev) => {
+      const newAnalyses = { ...prev };
+      const newFibreCounts = Array(5)
+        .fill()
+        .map(() => Array(20).fill("0"));
+
+      // Calculate totals (all zeros means 0 fibres, 100 fields)
+      newAnalyses[sampleId] = {
+        ...newAnalyses[sampleId],
+        fibreCounts: newFibreCounts,
+        fibresCounted: 0,
+        fieldsCounted: 100,
+      };
+      return newAnalyses;
+    });
+  }, []);
+
   const isFilterUncountable = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
     return (
@@ -980,13 +1007,45 @@ const Analysis = () => {
       return;
     }
 
+    // Save a snapshot of the current fibre counts for cancel functionality
+    if (analysis.fibreCounts) {
+      const snapshot = {
+        fibreCounts: analysis.fibreCounts.map((row) => [...row]),
+        fibresCounted: analysis.fibresCounted || 0,
+        fieldsCounted: analysis.fieldsCounted || 0,
+      };
+      setFibreCountSnapshot(snapshot);
+    } else {
+      setFibreCountSnapshot(null);
+    }
+
     setActiveSampleId(sampleId);
     setFibreCountModalOpen(true);
   };
 
-  const handleCloseFibreCountModal = () => {
+  const handleSaveAndCloseFibreCountModal = () => {
     setFibreCountModalOpen(false);
     setActiveSampleId(null);
+    setFibreCountSnapshot(null);
+  };
+
+  const handleCancelFibreCountModal = () => {
+    if (activeSampleId && fibreCountSnapshot) {
+      // Restore the snapshot
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        newAnalyses[activeSampleId] = {
+          ...newAnalyses[activeSampleId],
+          fibreCounts: fibreCountSnapshot.fibreCounts.map((row) => [...row]),
+          fibresCounted: fibreCountSnapshot.fibresCounted,
+          fieldsCounted: fibreCountSnapshot.fieldsCounted,
+        };
+        return newAnalyses;
+      });
+    }
+    setFibreCountModalOpen(false);
+    setActiveSampleId(null);
+    setFibreCountSnapshot(null);
   };
 
   // Check if all microscope calibration fields are selected
@@ -1128,28 +1187,40 @@ const Analysis = () => {
 
   // Render sample forms based on count
   const renderSampleForms = () => {
-    if (samples.length <= 5) {
+    if (samples.length <= 6) {
       // For small sample counts, render directly without virtualization
-      return samples.map((sample) => (
-        <SampleSummary
-          key={sample._id}
-          sample={sample}
-          analysis={sampleAnalyses[sample._id]}
-          analysisDetails={analysisDetails}
-          getMicroscopeConstantInfo={getMicroscopeConstantInfo}
-          onAnalysisChange={handleSampleAnalysisChange}
-          onFibreCountChange={handleFibreCountChange}
-          onKeyDown={handleKeyDown}
-          onClearTable={handleClearTable}
-          isFilterUncountable={isFilterUncountable}
-          isSampleAnalyzed={isSampleAnalyzed}
-          calculateConcentration={calculateConcentration}
-          getReportedConcentration={getReportedConcentration}
-          inputRefs={inputRefs}
-          isReadOnly={shiftStatus === "analysis_complete"}
-          onOpenFibreCountModal={handleOpenFibreCountModal}
-        />
-      ));
+      return (
+        <Box>
+          {samples.map((sample, index) => (
+            <Box
+              key={sample._id}
+              sx={{
+                mb: index < samples.length - 1 ? 4 : 0,
+                display: "block",
+              }}
+            >
+              <SampleSummary
+                sample={sample}
+                analysis={sampleAnalyses[sample._id]}
+                analysisDetails={analysisDetails}
+                getMicroscopeConstantInfo={getMicroscopeConstantInfo}
+                onAnalysisChange={handleSampleAnalysisChange}
+                onFibreCountChange={handleFibreCountChange}
+                onKeyDown={handleKeyDown}
+                onClearTable={handleClearTable}
+                isFilterUncountable={isFilterUncountable}
+                isSampleAnalyzed={isSampleAnalyzed}
+                calculateConcentration={calculateConcentration}
+                getReportedConcentration={getReportedConcentration}
+                inputRefs={inputRefs}
+                isReadOnly={shiftStatus === "analysis_complete"}
+                onOpenFibreCountModal={handleOpenFibreCountModal}
+                isLast={true}
+              />
+            </Box>
+          ))}
+        </Box>
+      );
     }
 
     // For larger sample counts, use virtual scrolling
@@ -1161,7 +1232,7 @@ const Analysis = () => {
               height={height}
               width={width}
               itemCount={samples.length}
-              itemSize={300}
+              itemSize={500}
               overscanCount={2}
             >
               {renderSampleForm}
@@ -1408,7 +1479,7 @@ const Analysis = () => {
           {/* Fibre Count Modal */}
           <Dialog
             open={fibreCountModalOpen}
-            onClose={handleCloseFibreCountModal}
+            onClose={handleCancelFibreCountModal}
             maxWidth="lg"
             fullWidth
           >
@@ -1429,7 +1500,7 @@ const Analysis = () => {
                       startIcon={<ClearIcon />}
                       onClick={() => {
                         handleClearTable(activeSampleId);
-                        handleCloseFibreCountModal();
+                        handleSaveAndCloseFibreCountModal();
                       }}
                       disabled={isFilterUncountable(activeSampleId)}
                       size="small"
@@ -1468,7 +1539,43 @@ const Analysis = () => {
                     <Table size="small" sx={{ tableLayout: "fixed" }}>
                       <TableHead>
                         <TableRow>
-                          <TableCell sx={{ width: "80px" }}>Range</TableCell>
+                          <TableCell
+                            sx={{ width: "80px", position: "relative" }}
+                          >
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                              }}
+                            >
+                              Range
+                              <Button
+                                size="small"
+                                onClick={() => handleFillZeros(activeSampleId)}
+                                disabled={
+                                  isFilterUncountable(activeSampleId) ||
+                                  shiftStatus === "analysis_complete"
+                                }
+                                sx={{
+                                  minWidth: "auto",
+                                  width: "16px",
+                                  height: "16px",
+                                  p: 0,
+                                  backgroundColor: "success.main",
+                                  opacity: 0,
+                                  transition: "opacity 0.2s",
+                                  "&:hover": {
+                                    opacity: 1,
+                                  },
+                                  "&.Mui-disabled": {
+                                    opacity: 0,
+                                  },
+                                }}
+                                title="Fill all cells with 0"
+                              />
+                            </Box>
+                          </TableCell>
                           {Array.from({ length: 20 }, (_, i) => (
                             <TableCell
                               key={i}
@@ -1566,7 +1673,13 @@ const Analysis = () => {
               )}
             </DialogContent>
             <DialogActions>
-              <Button onClick={handleCloseFibreCountModal}>Close</Button>
+              <Button onClick={handleCancelFibreCountModal}>Cancel</Button>
+              <Button
+                onClick={handleSaveAndCloseFibreCountModal}
+                variant="contained"
+              >
+                Save & Close
+              </Button>
             </DialogActions>
           </Dialog>
 
