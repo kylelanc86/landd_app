@@ -44,16 +44,18 @@ export async function generateFibreIDReport({ assessment, sampleItems, analyst, 
   // Detect if this is a client-supplied job (has jobType but no assessorId)
   const isClientSupplied = assessment?.jobType === "Fibre ID" && !assessment?.assessorId;
 
-  // Determine base URL for fonts - use window.location for reliable detection
+  // Determine base URL for fonts - use window.location.origin to avoid CORS issues
   console.log('Fibre ID - Window location:', {
     hostname: window.location.hostname,
     href: window.location.href,
     origin: window.location.origin
   });
   
+  // Use window.location.origin to load fonts from the same origin as the app
+  // This prevents CORS errors when accessing from different domains
   const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000' 
-    : 'https://app.landd.com.au';
+    : window.location.origin;
   
   console.log('Fibre ID - Font base URL:', baseUrl);
 
