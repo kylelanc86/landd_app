@@ -78,6 +78,19 @@ const getTimestamp = () =>
     : Date.now();
 
 const AsbestosRemovalJobDetails = () => {
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+
+  const renderStart = getTimestamp();
+  if (TIMING_ENABLED && renderCountRef.current > 1) {
+    console.log(
+      `${TIMING_LOG_PREFIX} Component render #${renderCountRef.current}`,
+      {
+        timestamp: new Date().toISOString(),
+      }
+    );
+  }
+
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
@@ -174,10 +187,21 @@ const AsbestosRemovalJobDetails = () => {
     setAssessorsLoading(true);
 
     try {
+      const requestStart = getTimestamp();
       const response = await userService.getAll();
+      const requestDuration = Math.round(getTimestamp() - requestStart);
       const users = response.data;
 
+      const usersDataSize = JSON.stringify(users).length;
+      logDebug("fetchAsbestosAssessors - users response received", {
+        userCount: Array.isArray(users) ? users.length : 0,
+        dataSizeBytes: usersDataSize,
+        dataSizeKB: Math.round((usersDataSize / 1024) * 100) / 100,
+        requestDurationMs: requestDuration,
+      });
+
       // Filter users who have Asbestos Assessor licenses
+      const filterStart = getTimestamp();
       const assessors = users.filter(
         (user) =>
           user.isActive &&
@@ -188,12 +212,22 @@ const AsbestosRemovalJobDetails = () => {
               licence.licenceType.toLowerCase().includes("asbestos assessor")
           )
       );
+      const filterDuration = Math.round(getTimestamp() - filterStart);
+      logDebug("fetchAsbestosAssessors - filtering complete", {
+        assessorCount: assessors.length,
+        filterDurationMs: filterDuration,
+      });
 
       // Sort alphabetically by name
+      const sortStart = getTimestamp();
       const sortedAssessors = assessors.sort((a, b) => {
         const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
         const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
         return nameA.localeCompare(nameB);
+      });
+      const sortDuration = Math.round(getTimestamp() - sortStart);
+      logDebug("fetchAsbestosAssessors - sorting complete", {
+        sortDurationMs: sortDuration,
       });
 
       setAsbestosAssessors(sortedAssessors);
@@ -201,6 +235,11 @@ const AsbestosRemovalJobDetails = () => {
       logDebug("fetchAsbestosAssessors success", {
         assessorCount: sortedAssessors.length,
         durationMs: Math.round(getTimestamp() - startTs),
+        breakdown: {
+          requestMs: requestDuration,
+          filterMs: filterDuration,
+          sortMs: sortDuration,
+        },
       });
     } catch (error) {
       console.error("Error fetching asbestos assessors:", error);
@@ -290,9 +329,15 @@ const AsbestosRemovalJobDetails = () => {
         const requestStart = getTimestamp();
         logTiming("job details request start");
         const jobResponse = await asbestosRemovalJobService.getDetails(jobId);
+        const requestDuration = Math.round(getTimestamp() - requestStart);
+
+        const responseDataSize = JSON.stringify(jobResponse.data || {}).length;
         logTiming("job details response received", {
-          requestDurationMs: Math.round(getTimestamp() - requestStart),
+          requestDurationMs: requestDuration,
+          responseDataSizeBytes: responseDataSize,
+          responseDataSizeKB: Math.round((responseDataSize / 1024) * 100) / 100,
         });
+
         const jobPayload = jobResponse.data || {};
         logDebug("job details payload received", {
           keys: Object.keys(jobPayload || {}),
@@ -304,21 +349,50 @@ const AsbestosRemovalJobDetails = () => {
           return;
         }
 
+        // Log job data size
+        const jobDataSize = JSON.stringify(jobPayload.job || {}).length;
+        const jobStart = getTimestamp();
         setJob(jobPayload.job || null);
+        const jobSetDuration = Math.round(getTimestamp() - jobStart);
         logTiming("job resolved", {
           hasJob: Boolean(jobPayload.job),
+          jobDataSizeBytes: jobDataSize,
+          jobDataSizeKB: Math.round((jobDataSize / 1024) * 100) / 100,
+          setStateDurationMs: jobSetDuration,
         });
         scheduleCommitLog("job state committed", {
           hasJob: Boolean(jobPayload.job),
         });
 
+        const shiftsPayloadStart = getTimestamp();
         const shiftsPayload = Array.isArray(jobPayload.shifts)
           ? jobPayload.shifts
           : [];
+        const shiftsPayloadSize = JSON.stringify(shiftsPayload).length;
+        const shiftsPayloadDuration = Math.round(
+          getTimestamp() - shiftsPayloadStart
+        );
+        logTiming("shifts payload extracted", {
+          shiftCount: shiftsPayload.length,
+          shiftsDataSizeBytes: shiftsPayloadSize,
+          shiftsDataSizeKB: Math.round((shiftsPayloadSize / 1024) * 100) / 100,
+          extractionDurationMs: shiftsPayloadDuration,
+        });
 
         let enrichedShifts = shiftsPayload;
 
         if (Array.isArray(jobPayload.sampleNumbers)) {
+          const sampleNumbersSize = JSON.stringify(
+            jobPayload.sampleNumbers
+          ).length;
+          logTiming("sample numbers array found", {
+            sampleNumberEntries: jobPayload.sampleNumbers.length,
+            sampleNumbersDataSizeBytes: sampleNumbersSize,
+            sampleNumbersDataSizeKB:
+              Math.round((sampleNumbersSize / 1024) * 100) / 100,
+          });
+
+          const mapStart = getTimestamp();
           const sampleNumberMap = new Map(
             jobPayload.sampleNumbers
               .filter(
@@ -330,11 +404,14 @@ const AsbestosRemovalJobDetails = () => {
               )
               .map((entry) => [entry.shiftId, entry.sampleNumbers])
           );
+          const mapDuration = Math.round(getTimestamp() - mapStart);
+          logTiming("sample number map created", {
+            hydratedShiftCount: sampleNumberMap.size,
+            mapCreationDurationMs: mapDuration,
+          });
 
           if (sampleNumberMap.size) {
-            logTiming("sample number map created", {
-              hydratedShiftCount: sampleNumberMap.size,
-            });
+            const enrichStart = getTimestamp();
             enrichedShifts = shiftsPayload.map((shift) =>
               sampleNumberMap.has(shift._id)
                 ? {
@@ -343,21 +420,41 @@ const AsbestosRemovalJobDetails = () => {
                   }
                 : shift
             );
-            logTiming("sample numbers hydrated");
+            const enrichDuration = Math.round(getTimestamp() - enrichStart);
+            logTiming("sample numbers hydrated", {
+              enrichmentDurationMs: enrichDuration,
+            });
           }
         }
 
+        const shiftsSetStart = getTimestamp();
         setAirMonitoringShifts(enrichedShifts);
-        logTiming(`shifts set (${enrichedShifts.length})`);
+        const shiftsSetDuration = Math.round(getTimestamp() - shiftsSetStart);
+        const enrichedShiftsSize = JSON.stringify(enrichedShifts).length;
+        logTiming(`shifts set (${enrichedShifts.length})`, {
+          setStateDurationMs: shiftsSetDuration,
+          enrichedShiftsDataSizeBytes: enrichedShiftsSize,
+          enrichedShiftsDataSizeKB:
+            Math.round((enrichedShiftsSize / 1024) * 100) / 100,
+        });
         scheduleCommitLog("airMonitoringShifts committed", {
           shiftCount: enrichedShifts.length,
         });
 
+        const clearancesStart = getTimestamp();
         const clearancesPayload = Array.isArray(jobPayload.clearances)
           ? jobPayload.clearances
           : [];
+        const clearancesSize = JSON.stringify(clearancesPayload).length;
         setClearances(clearancesPayload);
-        logTiming(`clearances set (${clearancesPayload.length})`);
+        const clearancesSetDuration = Math.round(
+          getTimestamp() - clearancesStart
+        );
+        logTiming(`clearances set (${clearancesPayload.length})`, {
+          setStateDurationMs: clearancesSetDuration,
+          clearancesDataSizeBytes: clearancesSize,
+          clearancesDataSizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
+        });
         scheduleCommitLog("clearances committed", {
           clearanceCount: clearancesPayload.length,
         });
@@ -393,16 +490,39 @@ const AsbestosRemovalJobDetails = () => {
     logDebug("fetchAsbestosRemovalists start");
 
     try {
+      const requestStart = getTimestamp();
       const data = await customDataFieldGroupService.getFieldsByType(
         "asbestos_removalist"
       );
+      const requestDuration = Math.round(getTimestamp() - requestStart);
+      const dataSize = JSON.stringify(data || []).length;
+      logDebug("fetchAsbestosRemovalists - response received", {
+        removalistCount: Array.isArray(data) ? data.length : 0,
+        dataSizeBytes: dataSize,
+        dataSizeKB: Math.round((dataSize / 1024) * 100) / 100,
+        requestDurationMs: requestDuration,
+      });
+
+      const sortStart = getTimestamp();
       const sortedData = (data || []).sort((a, b) =>
         (a.text || "").localeCompare(b.text || "")
       );
+      const sortDuration = Math.round(getTimestamp() - sortStart);
+      logDebug("fetchAsbestosRemovalists - sorting complete", {
+        sortDurationMs: sortDuration,
+      });
+
+      const setStart = getTimestamp();
       setAsbestosRemovalists(sortedData);
+      const setDuration = Math.round(getTimestamp() - setStart);
       logDebug("fetchAsbestosRemovalists success", {
         removalistCount: sortedData.length,
         durationMs: Math.round(getTimestamp() - startTs),
+        breakdown: {
+          requestMs: requestDuration,
+          sortMs: sortDuration,
+          setStateMs: setDuration,
+        },
       });
     } catch (error) {
       console.error("Error fetching asbestos removalists:", error);
@@ -416,27 +536,80 @@ const AsbestosRemovalJobDetails = () => {
 
   useEffect(() => {
     if (jobId) {
+      const effectStart = getTimestamp();
       logDebug("jobId effect triggered", {
         jobId,
+        renderNumber: renderCountRef.current,
+        timestamp: new Date().toISOString(),
       });
+
+      const fetchStart = getTimestamp();
       fetchJobDetails();
+      const fetchJobDetailsCallDuration = Math.round(
+        getTimestamp() - fetchStart
+      );
+      logDebug("jobId effect - fetchJobDetails called", {
+        callDurationMs: fetchJobDetailsCallDuration,
+      });
+
+      const removalistsStart = getTimestamp();
       fetchAsbestosRemovalists();
+      const fetchRemovalistsCallDuration = Math.round(
+        getTimestamp() - removalistsStart
+      );
+      logDebug("jobId effect - fetchAsbestosRemovalists called", {
+        callDurationMs: fetchRemovalistsCallDuration,
+      });
+
+      const totalEffectDuration = Math.round(getTimestamp() - effectStart);
+      logDebug("jobId effect complete", {
+        totalEffectDurationMs: totalEffectDuration,
+        breakdown: {
+          fetchJobDetailsCallMs: fetchJobDetailsCallDuration,
+          fetchRemovalistsCallMs: fetchRemovalistsCallDuration,
+        },
+      });
     }
   }, [jobId, fetchJobDetails, fetchAsbestosRemovalists, logDebug]);
 
   useEffect(() => {
+    const effectStart = getTimestamp();
+    const checkStart = getTimestamp();
     const requiresAssessorLookup = clearances.some(
       (clearance) =>
         clearance &&
         typeof clearance.LAA === "string" &&
         /^[0-9a-fA-F]{24}$/.test(clearance.LAA)
     );
+    const checkDuration = Math.round(getTimestamp() - checkStart);
+
+    logDebug("assessor lookup effect - check complete", {
+      clearanceCount: clearances.length,
+      requiresAssessorLookup,
+      assessorsLoaded,
+      assessorsLoading,
+      checkDurationMs: checkDuration,
+    });
 
     if (requiresAssessorLookup && !assessorsLoaded && !assessorsLoading) {
       logDebug("assessor lookup triggered by clearances", {
         clearanceCount: clearances.length,
+        timestamp: new Date().toISOString(),
       });
+      const fetchStart = getTimestamp();
       fetchAsbestosAssessors();
+      const fetchCallDuration = Math.round(getTimestamp() - fetchStart);
+      logDebug("assessor lookup effect - fetchAsbestosAssessors called", {
+        callDurationMs: fetchCallDuration,
+      });
+    }
+
+    const totalEffectDuration = Math.round(getTimestamp() - effectStart);
+    if (totalEffectDuration > 1) {
+      logDebug("assessor lookup effect complete", {
+        totalEffectDurationMs: totalEffectDuration,
+        checkDurationMs: checkDuration,
+      });
     }
   }, [
     clearances,
@@ -447,20 +620,41 @@ const AsbestosRemovalJobDetails = () => {
   ]);
 
   useEffect(() => {
+    const shiftsSize = JSON.stringify(airMonitoringShifts).length;
     logDebug("airMonitoringShifts state updated", {
       shiftCount: airMonitoringShifts.length,
+      dataSizeBytes: shiftsSize,
+      dataSizeKB: Math.round((shiftsSize / 1024) * 100) / 100,
+      timestamp: new Date().toISOString(),
     });
   }, [airMonitoringShifts, logDebug]);
 
   useEffect(() => {
+    const clearancesSize = JSON.stringify(clearances).length;
     logDebug("clearances state updated", {
       clearanceCount: clearances.length,
+      dataSizeBytes: clearancesSize,
+      dataSizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
+      timestamp: new Date().toISOString(),
     });
   }, [clearances, logDebug]);
 
   useEffect(() => {
-    logDebug("loading state updated", { loading });
+    logDebug("loading state updated", {
+      loading,
+      timestamp: new Date().toISOString(),
+    });
   }, [loading, logDebug]);
+
+  useEffect(() => {
+    const jobSize = JSON.stringify(job).length;
+    logDebug("job state updated", {
+      hasJob: Boolean(job),
+      dataSizeBytes: jobSize,
+      dataSizeKB: Math.round((jobSize / 1024) * 100) / 100,
+      timestamp: new Date().toISOString(),
+    });
+  }, [job, logDebug]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1249,6 +1443,13 @@ const AsbestosRemovalJobDetails = () => {
   }
 
   if (!job) {
+    if (TIMING_ENABLED && renderCountRef.current > 1) {
+      const renderDuration = Math.round(getTimestamp() - renderStart);
+      console.log(`${TIMING_LOG_PREFIX} Render complete (no job)`, {
+        renderNumber: renderCountRef.current,
+        renderDurationMs: renderDuration,
+      });
+    }
     return (
       <Box m="20px">
         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1259,6 +1460,31 @@ const AsbestosRemovalJobDetails = () => {
         </Button>
       </Box>
     );
+  }
+
+  // Log render performance before returning JSX
+  if (TIMING_ENABLED && renderCountRef.current > 1) {
+    const renderDuration = Math.round(getTimestamp() - renderStart);
+    const permissionCheckStart = getTimestamp();
+    // Pre-check permissions to see if they're expensive
+    const hasAdminPermission = hasPermission(currentUser, "admin.view");
+    const hasEditPermission = hasPermission(currentUser, "jobs.edit");
+    const permissionCheckDuration = Math.round(
+      getTimestamp() - permissionCheckStart
+    );
+
+    console.log(`${TIMING_LOG_PREFIX} Render complete`, {
+      renderNumber: renderCountRef.current,
+      renderDurationMs: renderDuration,
+      permissionCheckDurationMs: permissionCheckDuration,
+      stateSizes: {
+        job: JSON.stringify(job).length,
+        shifts: JSON.stringify(airMonitoringShifts).length,
+        clearances: JSON.stringify(clearances).length,
+        assessors: JSON.stringify(asbestosAssessors).length,
+        removalists: JSON.stringify(asbestosRemovalists).length,
+      },
+    });
   }
 
   return (
@@ -1565,6 +1791,7 @@ const AsbestosRemovalJobDetails = () => {
                                     : "View Report"}
                                 </Button>
                                 {(() => {
+                                  const permissionCheckStart = getTimestamp();
                                   const conditions = {
                                     notApproved: !shift.reportApprovedBy,
                                     reportViewed: reportViewedShiftIds.has(
@@ -1582,6 +1809,10 @@ const AsbestosRemovalJobDetails = () => {
                                       currentUser?.labSignatory
                                     ),
                                   };
+                                  const permissionCheckDuration = Math.round(
+                                    getTimestamp() - permissionCheckStart
+                                  );
+
                                   const baseVisible =
                                     conditions.notApproved &&
                                     conditions.reportViewed;
@@ -1596,12 +1827,28 @@ const AsbestosRemovalJobDetails = () => {
                                       conditions.hasEditPermission,
                                   };
 
+                                  if (
+                                    TIMING_ENABLED &&
+                                    permissionCheckDuration > 1
+                                  ) {
+                                    console.log(
+                                      `${TIMING_LOG_PREFIX} Permission check took ${permissionCheckDuration}ms`,
+                                      {
+                                        shiftId: shift._id,
+                                        conditions,
+                                        visibility,
+                                      }
+                                    );
+                                  }
+
                                   console.log(
                                     "Authorisation action visibility:",
                                     {
                                       shiftId: shift._id,
                                       conditions,
                                       visibility,
+                                      permissionCheckDurationMs:
+                                        permissionCheckDuration,
                                       currentUser: {
                                         id: currentUser?._id,
                                         role: currentUser?.role,
