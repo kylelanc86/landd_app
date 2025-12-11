@@ -446,6 +446,41 @@ const AsbestosRemovalJobDetails = () => {
           ? jobPayload.clearances
           : [];
         const clearancesSize = JSON.stringify(clearancesPayload).length;
+
+        // Analyze clearance structure to identify large fields
+        if (clearancesPayload.length > 0 && TIMING_ENABLED) {
+          const sampleClearance = clearancesPayload[0];
+          const fieldSizes = {};
+          Object.keys(sampleClearance || {}).forEach((key) => {
+            const fieldValue = sampleClearance[key];
+            const fieldSize = JSON.stringify(fieldValue || {}).length;
+            fieldSizes[key] = {
+              sizeBytes: fieldSize,
+              sizeKB: Math.round((fieldSize / 1024) * 100) / 100,
+              type: Array.isArray(fieldValue)
+                ? `array[${fieldValue.length}]`
+                : typeof fieldValue,
+            };
+          });
+
+          // Sort by size to show largest fields first
+          const sortedFields = Object.entries(fieldSizes)
+            .sort(([, a], [, b]) => b.sizeBytes - a.sizeBytes)
+            .slice(0, 10); // Top 10 largest fields
+
+          console.log(
+            `${TIMING_LOG_PREFIX} Clearance structure analysis (sample)`,
+            {
+              totalFields: Object.keys(fieldSizes).length,
+              largestFields: Object.fromEntries(sortedFields),
+              recommendation:
+                sortedFields[0] && sortedFields[0][1].sizeKB > 10
+                  ? `Field '${sortedFields[0][0]}' is ${sortedFields[0][1].sizeKB}KB - consider reducing or lazy loading`
+                  : "All fields appear reasonable in size",
+            }
+          );
+        }
+
         setClearances(clearancesPayload);
         const clearancesSetDuration = Math.round(
           getTimestamp() - clearancesStart
@@ -463,6 +498,50 @@ const AsbestosRemovalJobDetails = () => {
           shiftCount: enrichedShifts.length,
           clearanceCount: clearancesPayload.length,
         });
+
+        // Performance summary - identify bottlenecks
+        const totalDataSize = responseDataSize;
+        const clearancesPercentage = Math.round(
+          (clearancesSize / totalDataSize) * 100
+        );
+        const jobPercentage = Math.round((jobDataSize / totalDataSize) * 100);
+        const shiftsPercentage = Math.round(
+          (shiftsPayloadSize / totalDataSize) * 100
+        );
+
+        console.warn(
+          `${TIMING_LOG_PREFIX} ⚠️ PERFORMANCE BOTTLENECK DETECTED ⚠️`,
+          {
+            totalResponseSizeKB: Math.round((totalDataSize / 1024) * 100) / 100,
+            breakdown: {
+              clearances: {
+                sizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
+                percentage: `${clearancesPercentage}%`,
+                count: clearancesPayload.length,
+                avgSizePerClearanceKB:
+                  clearancesPayload.length > 0
+                    ? Math.round(
+                        (clearancesSize / clearancesPayload.length / 1024) * 100
+                      ) / 100
+                    : 0,
+              },
+              job: {
+                sizeKB: Math.round((jobDataSize / 1024) * 100) / 100,
+                percentage: `${jobPercentage}%`,
+              },
+              shifts: {
+                sizeKB: Math.round((shiftsPayloadSize / 1024) * 100) / 100,
+                percentage: `${shiftsPercentage}%`,
+                count: shiftsPayload.length,
+              },
+            },
+            requestDurationMs: requestDuration,
+            recommendation:
+              clearancesPercentage > 50
+                ? "Clearances data is the main bottleneck. Consider reducing populated fields or pagination."
+                : "Review backend query to reduce response size.",
+          }
+        );
       } catch (err) {
         if (!isActive()) {
           finishTiming("stale error result");
