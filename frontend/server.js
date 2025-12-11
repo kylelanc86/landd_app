@@ -70,7 +70,8 @@ subdirectories.forEach(subdir => {
 });
 
 // Add a test route to check if server is working
-app.get('/api/test', (req, res) => {
+// Note: This is at /test (not /api/test) because /api/* routes go to backend
+app.get('/test', (req, res) => {
   res.json({ 
     message: 'Frontend server is working',
     timestamp: new Date().toISOString(),

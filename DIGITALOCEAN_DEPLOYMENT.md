@@ -33,8 +33,8 @@ This is the main configuration file for DigitalOcean App Platform. It defines bo
 **Important**: Update the following in `app.yaml`:
 - `region`: Change to your preferred region (e.g., `syd` for Sydney, `sgp` for Singapore)
 - `github.repo`: Update with your actual GitHub repository path
-- `FRONTEND_URL` in backend envs: Update with your actual frontend URL
-- `REACT_APP_API_URL` in frontend envs: Set to `https://landd-app-dev.digitalocean.com/api`
+- `FRONTEND_URL` in backend envs: Set to your DigitalOcean frontend URL
+- `REACT_APP_API_URL` in frontend envs: Set to your DigitalOcean backend API URL (e.g., `https://landd-app-dev-8h6ah.ondigitalocean.app/api`)
 
 ### 2. `package.json` (Root directory) ✅ Already Updated
 The build script has been updated to install frontend dependencies:
@@ -192,11 +192,66 @@ DigitalOcean App Platform pricing:
 - **Frontend**: Basic plan - starts at $5/month
 - Adjust `instance_size_slug` in `app.yaml` based on your needs
 
+## DigitalOcean Domain Configuration
+
+### Understanding DigitalOcean Routing
+
+When you have multiple services in one app:
+- **App-level domain**: `landd-app-dev-8h6ah.ondigitalocean.app` (your app domain)
+- **HTTP Request Routes**: Configure which service handles which URL paths
+
+### Recommended Setup (Current Configuration)
+
+**Shared Domain with Different Routes** ✅
+- **Backend Service**: Route `/api` → Handles all `/api/*` requests
+- **Frontend Service**: Route `/` → Handles all other requests (including React Router routes)
+- **REACT_APP_API_URL**: `https://landd-app-dev-8h6ah.ondigitalocean.app/api`
+- **FRONTEND_URL**: `https://landd-app-dev-8h6ah.ondigitalocean.app`
+
+### Configuring HTTP Request Routes in DigitalOcean Dashboard
+
+**Yes, the HTTP Request Routes section is what you need to update!**
+
+1. **Go to your Backend Service** → Settings → **HTTP Request Routes**
+   - Click "Edit" or "Add Route"
+   - **Path**: `/api`
+   - This will route all `/api/*` requests to your backend service
+   - Save the route
+
+2. **Go to your Frontend Service** → Settings → **HTTP Request Routes**
+   - Click "Edit" or "Add Route"
+   - **Path**: `/`
+   - This will route all other requests (including React Router routes) to your frontend service
+   - Save the route
+
+**Route Matching Order:**
+- DigitalOcean matches routes from most specific to least specific
+- `/api` is more specific than `/`, so `/api/*` requests go to backend first
+- All other requests (`/`, `/dashboard`, `/projects`, etc.) go to frontend
+
+### Current Configuration
+
+The `app.yaml` is configured with:
+- **Backend route**: `/api` (handles `/api/*`)
+- **Frontend route**: `/` (handles everything else)
+- **REACT_APP_API_URL**: `https://landd-app-dev-8h6ah.ondigitalocean.app/api`
+- **FRONTEND_URL**: `https://landd-app-dev-8h6ah.ondigitalocean.app`
+
+### CORS Configuration
+
+The backend CORS has been updated to allow requests from:
+- `https://landd-app-dev-8h6ah.ondigitalocean.app`
+
+If you use a different frontend domain, add it to `backend/server.js` CORS configuration.
+
 ## Next Steps
 
-1. Review and update `app.yaml` with your repository and URLs
+1. ✅ Review and update `app.yaml` with your repository and URLs (already configured for your domain)
 2. Push changes to GitHub
 3. Create app in DigitalOcean App Platform
-4. Configure environment variables/secrets
-5. Deploy and test
+4. **Configure service routes** in DigitalOcean dashboard:
+   - Backend: Ensure `/api` routes are handled
+   - Frontend: Ensure root `/` and React Router routes are handled
+5. Configure environment variables/secrets
+6. Deploy and test
 

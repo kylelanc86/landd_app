@@ -24,7 +24,7 @@ services:
     instance_count: 1
     instance_size_slug: professional-xs  # Adjust based on your needs
     routes:
-      - path: /
+      - path: /api
     envs:
       # Component-level variables (specific to backend service)
       # These override app-level variables with the same name
@@ -39,7 +39,7 @@ services:
       - key: PORT
         value: "5000"
       - key: FRONTEND_URL
-        value: https://app.landd.com.au  # Update with your frontend URL
+        value: https://landd-app-dev-8h6ah.ondigitalocean.app  # DigitalOcean frontend URL
 
   # Frontend service (Node.js)
   - name: frontend
@@ -59,7 +59,7 @@ services:
       # Component-level variables (specific to frontend service)
       # These override app-level variables with the same name
       - key: REACT_APP_API_URL
-        value: https://landd-app-dev.digitalocean.com/api
+        value: https://landd-app-dev-8h6ah.ondigitalocean.app/api
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
         scope: RUN_TIME
         type: SECRET

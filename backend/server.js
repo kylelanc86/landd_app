@@ -49,6 +49,7 @@ const corsOptions = {
       'http://127.0.0.1:3000',  // Added for Windows DNS optimization
       'https://app.landd.com.au',
       'https://landd-app-dev-front.onrender.com',
+      'https://landd-app-dev-8h6ah.ondigitalocean.app',  // DigitalOcean frontend
     ];
     
     // Allow requests with no origin (like mobile apps or curl requests)
