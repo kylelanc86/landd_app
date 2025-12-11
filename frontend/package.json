@@ -51,6 +51,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:prod": "node server.js",
     "build": "GENERATE_SOURCEMAP=false REACT_APP_VERSION=$npm_package_version react-scripts build",
     "build:dev": "GENERATE_SOURCEMAP=false REACT_APP_VERSION=$npm_package_version-dev react-scripts build",
     "test": "react-scripts test",

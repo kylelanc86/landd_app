@@ -54,9 +54,9 @@ services:
       repo: your-username/your-repo-name  # Update with your actual repo
       branch: development
       deploy_on_push: true
-    source_dir: /
-    build_command: npm run build
-    run_command: cd frontend && node server.js
+    source_dir: /frontend
+    build_command: npm install && npm run build
+    run_command: node server.js
     http_port: 3000
     instance_count: 1
     instance_size_slug: basic-xxs  # Adjust based on your needs
