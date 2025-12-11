@@ -134,17 +134,17 @@ router.get(
   async (req, res) => {
     const routeStart = performance.now();
     try {
+      // Only select fields needed for the details page
       const job = await AsbestosRemovalJob.findById(req.params.id)
+        .select("_id projectId projectName asbestosRemovalist status createdAt updatedAt")
         .populate({
           path: "projectId",
           select: "projectID name client",
           populate: {
             path: "client",
-            select: "name contact1Name contact1Email invoiceEmail contact2Email",
+            select: "name",
           },
         })
-        .populate("createdBy", "firstName lastName")
-        .populate("updatedBy", "firstName lastName")
         .lean();
 
       if (!job) {
@@ -175,14 +175,27 @@ router.get(
         });
       }
 
-      const jobsStart = performance.now();
-      const airMonitoringJobs = await AirMonitoringJob.find({ projectId })
-        .select("_id name")
-        .lean();
-      metrics.timings.projectJobs = `${(
-        performance.now() - jobsStart
+      // Run independent queries in parallel for better performance
+      const parallelStart = performance.now();
+      const [airMonitoringJobs, clearances] = await Promise.all([
+        // Fetch air monitoring jobs
+        AirMonitoringJob.find({ projectId })
+          .select("_id name")
+          .lean(),
+        // Fetch clearances - fields needed for table and edit form, but exclude large fields
+        AsbestosClearance.find({ projectId })
+          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
+          .populate({
+            path: "projectId",
+            select: "projectID name",
+          })
+          .lean(),
+      ]);
+      metrics.timings.parallelQueries = `${(
+        performance.now() - parallelStart
       ).toFixed(2)}ms`;
       metrics.counts.projectJobs = airMonitoringJobs.length;
+      metrics.counts.clearances = clearances.length;
 
       const jobNameMap = new Map();
       jobNameMap.set(job._id.toString(), job.projectName || "Asbestos Removal Job");
@@ -198,10 +211,10 @@ router.get(
       const shiftJobIds = Array.from(jobNameMap.keys());
 
       const shiftsStart = performance.now();
+      // Only select fields needed for list view - no need to populate supervisor/sampler for table display
       const shiftDocs = shiftJobIds.length
         ? await Shift.find({ job: { $in: shiftJobIds } })
-            .populate("supervisor", "firstName lastName")
-            .populate("defaultSampler", "firstName lastName")
+            .select("_id job date status jobModel reportApprovedBy reportIssueDate")
             .lean()
         : [];
       metrics.timings.shifts = `${(
@@ -258,26 +271,6 @@ router.get(
             .map((value) => value.toString()),
         })
       );
-
-      const clearancesStart = performance.now();
-      // Exclude large fields not needed for list view (items with photos, base64 files)
-      const clearances = await AsbestosClearance.find({ projectId })
-        .select("-items -airMonitoringReport -sitePlanFile") // Exclude items array (photos) and base64 file fields
-        .populate({
-          path: "projectId",
-          select: "projectID name client",
-          populate: {
-            path: "client",
-            select: "name",
-          },
-        })
-        .populate("createdBy", "firstName lastName")
-        .populate("updatedBy", "firstName lastName")
-        .lean();
-      metrics.timings.clearances = `${(
-        performance.now() - clearancesStart
-      ).toFixed(2)}ms`;
-      metrics.counts.clearances = clearances.length;
 
       metrics.timings.total = `${(performance.now() - routeStart).toFixed(
         2

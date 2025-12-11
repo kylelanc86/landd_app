@@ -69,6 +69,7 @@ const ClientSuppliedJobs = () => {
   const [jobToArchive, setJobToArchive] = useState(null);
   const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
   const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
+  const [closingJobs, setClosingJobs] = useState({});
 
   useEffect(() => {
     fetchClientSuppliedJobs();
@@ -371,6 +372,28 @@ const ClientSuppliedJobs = () => {
   const cancelArchiveJob = () => {
     setArchiveDialogOpen(false);
     setJobToArchive(null);
+  };
+
+  const handleCloseJob = async (jobId) => {
+    try {
+      setClosingJobs((prev) => ({ ...prev, [jobId]: true }));
+
+      // Archive the job via API (this removes it from the table)
+      await clientSuppliedJobsService.archive(jobId);
+
+      // Remove the job from the local state
+      setJobs((prevJobs) => prevJobs.filter((job) => job._id !== jobId));
+
+      showSnackbar("Job closed successfully!", "success");
+    } catch (error) {
+      console.error("Error closing job:", error);
+      showSnackbar(
+        `Error closing job: ${error.response?.data?.message || error.message}`,
+        "error"
+      );
+    } finally {
+      setClosingJobs((prev) => ({ ...prev, [jobId]: false }));
+    }
   };
 
   // Check if all samples in a job have been analyzed (have analysisData)
@@ -709,7 +732,7 @@ const ClientSuppliedJobs = () => {
                             : "N/A"}
                         </Typography>
                       </TableCell>
-                      <TableCell sx ={{ width:'150px'}}>
+                      <TableCell sx={{ width: "150px" }}>
                         <Chip
                           label={job.status || "In Progress"}
                           color={getStatusColor(job.status)}
@@ -832,17 +855,23 @@ const ClientSuppliedJobs = () => {
                               </Button>
                             )}
                           {job.status === "Completed" && (
-                            <IconButton
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="default"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleArchiveJob(job);
+                                handleCloseJob(job._id);
                               }}
-                              color="default"
-                              size="small"
-                              title="Archive Job"
+                              disabled={closingJobs[job._id]}
+                              sx={{
+                                textTransform: "none",
+                              }}
                             >
-                              <ArchiveIcon />
-                            </IconButton>
+                              {closingJobs[job._id]
+                                ? "Closing..."
+                                : "Close Job"}
+                            </Button>
                           )}
                           {hasPermission(currentUser, "clientSup.delete") && (
                             <IconButton
