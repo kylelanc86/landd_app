@@ -123,6 +123,8 @@ const AsbestosRemovalJobDetails = () => {
   const [job, setJob] = useState(null);
   const [airMonitoringShifts, setAirMonitoringShifts] = useState([]);
   const [clearances, setClearances] = useState([]);
+  const [clearancesLoading, setClearancesLoading] = useState(false);
+  const [clearancesLoaded, setClearancesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -169,9 +171,11 @@ const AsbestosRemovalJobDetails = () => {
   });
 
   const latestFetchIdRef = useRef(0);
+  const clearancesBackgroundFetchTriggeredRef = useRef(false);
+  const clearancesLoadingRef = useRef(false);
 
   const fetchJobDetails = useCallback(
-    async ({ silent = false } = {}) => {
+    async ({ silent = false, excludeClearances = false } = {}) => {
       if (!jobId) return;
 
       const fetchId = Date.now();
@@ -232,7 +236,12 @@ const AsbestosRemovalJobDetails = () => {
       };
 
       logTiming("start");
-      logDebug("fetchJobDetails invoked", { silent, fetchId, jobId });
+      logDebug("fetchJobDetails invoked", {
+        silent,
+        fetchId,
+        jobId,
+        excludeClearances,
+      });
 
       if (!silent) {
         setLoading(true);
@@ -244,7 +253,9 @@ const AsbestosRemovalJobDetails = () => {
       try {
         const requestStart = getTimestamp();
         logTiming("job details request start");
-        const jobResponse = await asbestosRemovalJobService.getDetails(jobId);
+        const jobResponse = await asbestosRemovalJobService.getDetails(jobId, {
+          excludeClearances: excludeClearances ? "true" : undefined,
+        });
         const requestDuration = Math.round(getTimestamp() - requestStart);
 
         const responseDataSize = JSON.stringify(jobResponse.data || {}).length;
@@ -357,107 +368,126 @@ const AsbestosRemovalJobDetails = () => {
           shiftCount: enrichedShifts.length,
         });
 
-        const clearancesStart = getTimestamp();
-        const clearancesPayload = Array.isArray(jobPayload.clearances)
-          ? jobPayload.clearances
-          : [];
-        const clearancesSize = JSON.stringify(clearancesPayload).length;
+        // Only process clearances if they weren't excluded
+        if (!excludeClearances) {
+          const clearancesStart = getTimestamp();
+          const clearancesPayload = Array.isArray(jobPayload.clearances)
+            ? jobPayload.clearances
+            : [];
+          const clearancesSize = JSON.stringify(clearancesPayload).length;
 
-        // Analyze clearance structure to identify large fields
-        if (clearancesPayload.length > 0 && TIMING_ENABLED) {
-          const sampleClearance = clearancesPayload[0];
-          const fieldSizes = {};
-          Object.keys(sampleClearance || {}).forEach((key) => {
-            const fieldValue = sampleClearance[key];
-            const fieldSize = JSON.stringify(fieldValue || {}).length;
-            fieldSizes[key] = {
-              sizeBytes: fieldSize,
-              sizeKB: Math.round((fieldSize / 1024) * 100) / 100,
-              type: Array.isArray(fieldValue)
-                ? `array[${fieldValue.length}]`
-                : typeof fieldValue,
-            };
-          });
+          // Analyze clearance structure to identify large fields
+          if (clearancesPayload.length > 0 && TIMING_ENABLED) {
+            const sampleClearance = clearancesPayload[0];
+            const fieldSizes = {};
+            Object.keys(sampleClearance || {}).forEach((key) => {
+              const fieldValue = sampleClearance[key];
+              const fieldSize = JSON.stringify(fieldValue || {}).length;
+              fieldSizes[key] = {
+                sizeBytes: fieldSize,
+                sizeKB: Math.round((fieldSize / 1024) * 100) / 100,
+                type: Array.isArray(fieldValue)
+                  ? `array[${fieldValue.length}]`
+                  : typeof fieldValue,
+              };
+            });
 
-          // Sort by size to show largest fields first
-          const sortedFields = Object.entries(fieldSizes)
-            .sort(([, a], [, b]) => b.sizeBytes - a.sizeBytes)
-            .slice(0, 10); // Top 10 largest fields
+            // Sort by size to show largest fields first
+            const sortedFields = Object.entries(fieldSizes)
+              .sort(([, a], [, b]) => b.sizeBytes - a.sizeBytes)
+              .slice(0, 10); // Top 10 largest fields
 
-          console.log(
-            `${TIMING_LOG_PREFIX} Clearance structure analysis (sample)`,
-            {
-              totalFields: Object.keys(fieldSizes).length,
-              largestFields: Object.fromEntries(sortedFields),
-              recommendation:
-                sortedFields[0] && sortedFields[0][1].sizeKB > 10
-                  ? `Field '${sortedFields[0][0]}' is ${sortedFields[0][1].sizeKB}KB - consider reducing or lazy loading`
-                  : "All fields appear reasonable in size",
-            }
+            console.log(
+              `${TIMING_LOG_PREFIX} Clearance structure analysis (sample)`,
+              {
+                totalFields: Object.keys(fieldSizes).length,
+                largestFields: Object.fromEntries(sortedFields),
+                recommendation:
+                  sortedFields[0] && sortedFields[0][1].sizeKB > 10
+                    ? `Field '${sortedFields[0][0]}' is ${sortedFields[0][1].sizeKB}KB - consider reducing or lazy loading`
+                    : "All fields appear reasonable in size",
+              }
+            );
+          }
+
+          setClearances(clearancesPayload);
+          setClearancesLoaded(true); // Mark as loaded when fetched via fetchJobDetails
+          const clearancesSetDuration = Math.round(
+            getTimestamp() - clearancesStart
           );
+          logTiming(`clearances set (${clearancesPayload.length})`, {
+            setStateDurationMs: clearancesSetDuration,
+            clearancesDataSizeBytes: clearancesSize,
+            clearancesDataSizeKB:
+              Math.round((clearancesSize / 1024) * 100) / 100,
+          });
+          scheduleCommitLog("clearances committed", {
+            clearanceCount: clearancesPayload.length,
+          });
+        } else {
+          logTiming("clearances excluded from fetch");
         }
-
-        setClearances(clearancesPayload);
-        const clearancesSetDuration = Math.round(
-          getTimestamp() - clearancesStart
-        );
-        logTiming(`clearances set (${clearancesPayload.length})`, {
-          setStateDurationMs: clearancesSetDuration,
-          clearancesDataSizeBytes: clearancesSize,
-          clearancesDataSizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
-        });
-        scheduleCommitLog("clearances committed", {
-          clearanceCount: clearancesPayload.length,
-        });
 
         scheduleCommitLog("job detail state committed", {
           shiftCount: enrichedShifts.length,
-          clearanceCount: clearancesPayload.length,
+          clearanceCount: excludeClearances
+            ? 0
+            : Array.isArray(jobPayload.clearances)
+            ? jobPayload.clearances.length
+            : 0,
         });
 
-        // Performance summary - identify bottlenecks
-        const totalDataSize = responseDataSize;
-        const clearancesPercentage = Math.round(
-          (clearancesSize / totalDataSize) * 100
-        );
-        const jobPercentage = Math.round((jobDataSize / totalDataSize) * 100);
-        const shiftsPercentage = Math.round(
-          (shiftsPayloadSize / totalDataSize) * 100
-        );
+        // Performance summary - identify bottlenecks (only if clearances were included)
+        if (!excludeClearances) {
+          const clearancesPayload = Array.isArray(jobPayload.clearances)
+            ? jobPayload.clearances
+            : [];
+          const clearancesSize = JSON.stringify(clearancesPayload).length;
+          const totalDataSize = responseDataSize;
+          const clearancesPercentage = Math.round(
+            (clearancesSize / totalDataSize) * 100
+          );
+          const jobPercentage = Math.round((jobDataSize / totalDataSize) * 100);
+          const shiftsPercentage = Math.round(
+            (shiftsPayloadSize / totalDataSize) * 100
+          );
 
-        console.warn(
-          `${TIMING_LOG_PREFIX} ⚠️ PERFORMANCE BOTTLENECK DETECTED ⚠️`,
-          {
-            totalResponseSizeKB: Math.round((totalDataSize / 1024) * 100) / 100,
-            breakdown: {
-              clearances: {
-                sizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
-                percentage: `${clearancesPercentage}%`,
-                count: clearancesPayload.length,
-                avgSizePerClearanceKB:
-                  clearancesPayload.length > 0
-                    ? Math.round(
-                        (clearancesSize / clearancesPayload.length / 1024) * 100
-                      ) / 100
-                    : 0,
+          console.warn(
+            `${TIMING_LOG_PREFIX} ⚠️ PERFORMANCE BOTTLENECK DETECTED ⚠️`,
+            {
+              totalResponseSizeKB:
+                Math.round((totalDataSize / 1024) * 100) / 100,
+              breakdown: {
+                clearances: {
+                  sizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
+                  percentage: `${clearancesPercentage}%`,
+                  count: clearancesPayload.length,
+                  avgSizePerClearanceKB:
+                    clearancesPayload.length > 0
+                      ? Math.round(
+                          (clearancesSize / clearancesPayload.length / 1024) *
+                            100
+                        ) / 100
+                      : 0,
+                },
+                job: {
+                  sizeKB: Math.round((jobDataSize / 1024) * 100) / 100,
+                  percentage: `${jobPercentage}%`,
+                },
+                shifts: {
+                  sizeKB: Math.round((shiftsPayloadSize / 1024) * 100) / 100,
+                  percentage: `${shiftsPercentage}%`,
+                  count: shiftsPayload.length,
+                },
               },
-              job: {
-                sizeKB: Math.round((jobDataSize / 1024) * 100) / 100,
-                percentage: `${jobPercentage}%`,
-              },
-              shifts: {
-                sizeKB: Math.round((shiftsPayloadSize / 1024) * 100) / 100,
-                percentage: `${shiftsPercentage}%`,
-                count: shiftsPayload.length,
-              },
-            },
-            requestDurationMs: requestDuration,
-            recommendation:
-              clearancesPercentage > 50
-                ? "Clearances data is the main bottleneck. Consider reducing populated fields or pagination."
-                : "Review backend query to reduce response size.",
-          }
-        );
+              requestDurationMs: requestDuration,
+              recommendation:
+                clearancesPercentage > 50
+                  ? "Clearances data is the main bottleneck. Consider reducing populated fields or pagination."
+                  : "Review backend query to reduce response size.",
+            }
+          );
+        }
       } catch (err) {
         if (!isActive()) {
           finishTiming("stale error result");
@@ -479,6 +509,54 @@ const AsbestosRemovalJobDetails = () => {
     },
     [jobId, logDebug]
   );
+
+  const fetchClearances = useCallback(async () => {
+    if (!jobId) return;
+
+    // Prevent duplicate fetches using ref to avoid dependency issues
+    if (clearancesLoadingRef.current) {
+      logDebug("fetchClearances skipped - already loading");
+      return;
+    }
+
+    const startTs = getTimestamp();
+    logDebug("fetchClearances start");
+    clearancesLoadingRef.current = true;
+    setClearancesLoading(true);
+
+    try {
+      const requestStart = getTimestamp();
+      const response = await asbestosRemovalJobService.getClearances(jobId);
+      const requestDuration = Math.round(getTimestamp() - requestStart);
+      const clearancesData = response.data?.clearances || [];
+      const dataSize = JSON.stringify(clearancesData).length;
+
+      logDebug("fetchClearances - response received", {
+        clearanceCount: clearancesData.length,
+        dataSizeBytes: dataSize,
+        dataSizeKB: Math.round((dataSize / 1024) * 100) / 100,
+        requestDurationMs: requestDuration,
+      });
+
+      setClearances(clearancesData);
+      setClearancesLoaded(true);
+      logDebug("fetchClearances success", {
+        clearanceCount: clearancesData.length,
+        durationMs: Math.round(getTimestamp() - startTs),
+      });
+    } catch (error) {
+      console.error("Error fetching clearances:", error);
+      logDebug("fetchClearances error", {
+        durationMs: Math.round(getTimestamp() - startTs),
+        message: error?.message,
+      });
+      setClearances([]);
+      setClearancesLoaded(true); // Still mark as loaded even on error so tab appears
+    } finally {
+      clearancesLoadingRef.current = false;
+      setClearancesLoading(false);
+    }
+  }, [jobId, logDebug]);
 
   const fetchAsbestosRemovalists = useCallback(async () => {
     // Only fetch if not already loaded (lazy loading)
@@ -546,12 +624,24 @@ const AsbestosRemovalJobDetails = () => {
         timestamp: new Date().toISOString(),
       });
 
+      // Reset the background fetch flag when jobId changes
+      clearancesBackgroundFetchTriggeredRef.current = false;
+
       const fetchStart = getTimestamp();
-      fetchJobDetails();
+      // Exclude clearances on initial load for faster page load
+      fetchJobDetails({ excludeClearances: true }).then(() => {
+        // Fetch clearances in background after initial load to update tab count
+        // This doesn't block the initial render but updates the count quickly
+        if (!clearancesBackgroundFetchTriggeredRef.current) {
+          clearancesBackgroundFetchTriggeredRef.current = true;
+          logDebug("Fetching clearances in background for tab count");
+          fetchClearances();
+        }
+      });
       const fetchJobDetailsCallDuration = Math.round(
         getTimestamp() - fetchStart
       );
-      logDebug("jobId effect - fetchJobDetails called", {
+      logDebug("jobId effect - fetchJobDetails called (clearances excluded)", {
         callDurationMs: fetchJobDetailsCallDuration,
       });
 
@@ -563,7 +653,15 @@ const AsbestosRemovalJobDetails = () => {
         },
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, fetchJobDetails, logDebug]);
+
+  // Reset activeTab to 0 if clearances tab is selected but clearances aren't loaded yet
+  useEffect(() => {
+    if (activeTab === 1 && !clearancesLoaded) {
+      setActiveTab(0);
+    }
+  }, [activeTab, clearancesLoaded]);
 
   useEffect(() => {
     const shiftsSize = JSON.stringify(airMonitoringShifts).length;
@@ -928,6 +1026,15 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
+    // Lazy load clearances when user switches to clearances tab (if not already loaded or loading)
+    if (
+      newValue === 1 &&
+      clearances.length === 0 &&
+      !clearancesLoadingRef.current
+    ) {
+      logDebug("Clearances tab selected - fetching clearances");
+      fetchClearances();
+    }
   };
 
   const handleCreateAirMonitoringShift = () => {
@@ -936,8 +1043,11 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleCreateClearance = () => {
-    // Lazy load removalists only when needed
+    // Lazy load removalists and clearances if not already loaded or loading
     fetchAsbestosRemovalists();
+    if (clearances.length === 0 && !clearancesLoadingRef.current) {
+      fetchClearances();
+    }
     setEditingClearance(null);
     resetClearanceForm();
     setClearanceDialogOpen(true);
@@ -1060,11 +1170,12 @@ const AsbestosRemovalJobDetails = () => {
       if (deleteType === "clearance") {
         await asbestosClearanceService.delete(itemToDelete._id);
         showSnackbar("Clearance deleted successfully", "success");
+        await fetchClearances(); // Refresh clearances list
       } else if (deleteType === "shift") {
         await shiftService.delete(itemToDelete._id);
         showSnackbar("Air monitoring shift deleted successfully", "success");
+        await fetchJobDetails({ excludeClearances: true }); // Refresh shifts (exclude clearances)
       }
-      fetchJobDetails(); // Refresh the data
     } catch (error) {
       console.error(`Error deleting ${deleteType}:`, error);
       showSnackbar(`Failed to delete ${deleteType}`, "error");
@@ -1320,8 +1431,8 @@ const AsbestosRemovalJobDetails = () => {
         console.log("Clearance creation response:", response);
       }
 
-      // Close modal and refresh data regardless of response structure
-      await fetchJobDetails();
+      // Close modal and refresh clearances list
+      await fetchClearances();
       setClearanceDialogOpen(false);
       setEditingClearance(null);
       resetClearanceForm();
@@ -1505,11 +1616,13 @@ const AsbestosRemovalJobDetails = () => {
               icon={<MonitorIcon />}
               iconPosition="start"
             />
-            <Tab
-              label={`Clearances (${clearances.length})`}
-              icon={<AssessmentIcon />}
-              iconPosition="start"
-            />
+            {clearancesLoaded && (
+              <Tab
+                label={`Clearances (${clearances.length})`}
+                icon={<AssessmentIcon />}
+                iconPosition="start"
+              />
+            )}
           </Tabs>
           <Box sx={{ pr: 2 }}>
             {activeTab === 0 ? (
@@ -1528,7 +1641,7 @@ const AsbestosRemovalJobDetails = () => {
               >
                 {creating ? "Creating..." : "Add Air Monitoring Shift"}
               </Button>
-            ) : (
+            ) : clearancesLoaded ? (
               <Button
                 variant="contained"
                 startIcon={<AssessmentIcon />}
@@ -1544,7 +1657,7 @@ const AsbestosRemovalJobDetails = () => {
               >
                 {creating ? "Creating..." : "Add Clearance"}
               </Button>
-            )}
+            ) : null}
           </Box>
         </Box>
 
@@ -1857,7 +1970,7 @@ const AsbestosRemovalJobDetails = () => {
         )}
 
         {/* Clearances Tab */}
-        {activeTab === 1 && (
+        {activeTab === 1 && clearancesLoaded && (
           <Box p={3}>
             <Typography variant="h6" gutterBottom>
               Clearances

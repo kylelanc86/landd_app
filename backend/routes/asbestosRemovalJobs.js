@@ -175,27 +175,39 @@ router.get(
         });
       }
 
-      // Run independent queries in parallel for better performance
-      const parallelStart = performance.now();
-      const [airMonitoringJobs, clearances] = await Promise.all([
-        // Fetch air monitoring jobs
-        AirMonitoringJob.find({ projectId })
-          .select("_id name")
-          .lean(),
+      // Check if clearances should be excluded (for lazy loading optimization)
+      const excludeClearances = req.query.excludeClearances === "true";
+
+      // Fetch air monitoring jobs
+      const jobsStart = performance.now();
+      const airMonitoringJobs = await AirMonitoringJob.find({ projectId })
+        .select("_id name")
+        .lean();
+      metrics.timings.projectJobs = `${(
+        performance.now() - jobsStart
+      ).toFixed(2)}ms`;
+      metrics.counts.projectJobs = airMonitoringJobs.length;
+
+      // Only fetch clearances if not excluded (for lazy loading)
+      let clearances = [];
+      if (!excludeClearances) {
+        const clearancesStart = performance.now();
         // Fetch clearances - fields needed for table and edit form, but exclude large fields
-        AsbestosClearance.find({ projectId })
+        clearances = await AsbestosClearance.find({ projectId })
           .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
           .populate({
             path: "projectId",
             select: "projectID name",
           })
-          .lean(),
-      ]);
-      metrics.timings.parallelQueries = `${(
-        performance.now() - parallelStart
-      ).toFixed(2)}ms`;
-      metrics.counts.projectJobs = airMonitoringJobs.length;
-      metrics.counts.clearances = clearances.length;
+          .lean();
+        metrics.timings.clearances = `${(
+          performance.now() - clearancesStart
+        ).toFixed(2)}ms`;
+        metrics.counts.clearances = clearances.length;
+      } else {
+        metrics.timings.clearances = "0.00ms (excluded)";
+        metrics.counts.clearances = 0;
+      }
 
       const jobNameMap = new Map();
       jobNameMap.set(job._id.toString(), job.projectName || "Asbestos Removal Job");
@@ -289,6 +301,51 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching asbestos removal job details:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
+
+// Get clearances for an asbestos removal job (lazy loading endpoint)
+router.get(
+  "/:id/clearances",
+  auth,
+  checkPermission("asbestos.view"),
+  async (req, res) => {
+    const routeStart = performance.now();
+    try {
+      const job = await AsbestosRemovalJob.findById(req.params.id)
+        .select("projectId")
+        .lean();
+
+      if (!job) {
+        return res.status(404).json({ message: "Asbestos removal job not found" });
+      }
+
+      const projectId =
+        job.projectId?._id?.toString() ||
+        (typeof job.projectId === "string" ? job.projectId : null);
+
+      if (!projectId) {
+        return res.json({ clearances: [] });
+      }
+
+      const clearancesStart = performance.now();
+      // Fetch clearances - fields needed for table and edit form, but exclude large fields
+      const clearances = await AsbestosClearance.find({ projectId })
+        .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
+        .populate({
+          path: "projectId",
+          select: "projectID name",
+        })
+        .lean();
+      
+      const queryTime = performance.now() - clearancesStart;
+      console.log(`[AsbestosRemovalJobs] Fetched ${clearances.length} clearances in ${queryTime.toFixed(2)}ms`);
+
+      res.json({ clearances });
+    } catch (error) {
+      console.error("Error fetching clearances:", error);
       res.status(500).json({ message: "Server error" });
     }
   }

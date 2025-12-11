@@ -171,18 +171,39 @@ const ClearanceItems = () => {
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
+    console.log("[ClearanceItems] Component mount effect triggered", {
+      clearanceId,
+      timestamp: new Date().toISOString(),
+    });
+
     if (clearanceId) {
+      console.log("[ClearanceItems] Starting data fetch operations", {
+        clearanceId,
+        timestamp: new Date().toISOString(),
+      });
       fetchData();
       fetchCustomDataFields();
     } else {
-      console.error("No clearanceId provided in URL parameters");
+      console.error(
+        "[ClearanceItems] No clearanceId provided in URL parameters"
+      );
       setError("No clearance ID provided");
       setLoading(false);
     }
   }, [clearanceId]);
 
   const fetchCustomDataFields = async () => {
+    console.log("[ClearanceItems] fetchCustomDataFields - Starting", {
+      timestamp: new Date().toISOString(),
+    });
+    const startTime = performance.now();
+
     try {
+      console.log("[ClearanceItems] fetchCustomDataFields - Making API calls", {
+        timestamp: new Date().toISOString(),
+      });
+      const apiStartTime = performance.now();
+
       const [
         roomAreasData,
         locationDescriptionsData,
@@ -192,6 +213,24 @@ const ClearanceItems = () => {
         customDataFieldGroupService.getFieldsByType("location_description"),
         customDataFieldGroupService.getFieldsByType("materials_description"),
       ]);
+
+      const apiEndTime = performance.now();
+      console.log(
+        "[ClearanceItems] fetchCustomDataFields - API calls completed",
+        {
+          apiCallDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          roomAreasCount: Array.isArray(roomAreasData)
+            ? roomAreasData.length
+            : "unknown",
+          locationDescriptionsCount: Array.isArray(locationDescriptionsData)
+            ? locationDescriptionsData.length
+            : "unknown",
+          materialsDescriptionsCount: Array.isArray(materialsDescriptionsData)
+            ? materialsDescriptionsData.length
+            : "unknown",
+          timestamp: new Date().toISOString(),
+        }
+      );
 
       // Handle both array and object responses and sort alphabetically
       const processData = (data) => {
@@ -217,17 +256,54 @@ const ClearanceItems = () => {
         });
       };
 
-      setCustomDataFields({
+      const processStartTime = performance.now();
+      const processedData = {
         roomAreas: processData(roomAreasData),
         locationDescriptions: processData(locationDescriptionsData),
         materialsDescriptions: processData(materialsDescriptionsData),
+      };
+      const processEndTime = performance.now();
+
+      console.log(
+        "[ClearanceItems] fetchCustomDataFields - Data processing completed",
+        {
+          processingDuration: `${(processEndTime - processStartTime).toFixed(
+            2
+          )}ms`,
+          processedRoomAreasCount: processedData.roomAreas.length,
+          processedLocationDescriptionsCount:
+            processedData.locationDescriptions.length,
+          processedMaterialsDescriptionsCount:
+            processedData.materialsDescriptions.length,
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      setCustomDataFields(processedData);
+
+      const endTime = performance.now();
+      console.log("[ClearanceItems] fetchCustomDataFields - Completed", {
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      console.error("Error fetching custom data fields:", err);
+      const endTime = performance.now();
+      console.error("[ClearanceItems] fetchCustomDataFields - Error", {
+        error: err,
+        errorMessage: err.message,
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
   const fetchData = async () => {
+    console.log("[ClearanceItems] fetchData - Starting", {
+      clearanceId,
+      timestamp: new Date().toISOString(),
+    });
+    const fetchStartTime = performance.now();
+
     try {
       setLoading(true);
 
@@ -236,34 +312,88 @@ const ClearanceItems = () => {
         throw new Error("Clearance ID is missing from URL");
       }
 
-      console.log("Fetching data for clearance ID:", clearanceId);
+      console.log("[ClearanceItems] fetchData - Making API calls", {
+        clearanceId,
+        timestamp: new Date().toISOString(),
+      });
+      const apiStartTime = performance.now();
 
       const [itemsData, clearanceData] = await Promise.all([
         asbestosClearanceService.getItems(clearanceId),
         asbestosClearanceService.getById(clearanceId),
       ]);
 
+      const apiEndTime = performance.now();
+      console.log("[ClearanceItems] fetchData - API calls completed", {
+        apiCallDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+        itemsCount: Array.isArray(itemsData) ? itemsData.length : "unknown",
+        clearanceDataReceived: !!clearanceData,
+        timestamp: new Date().toISOString(),
+      });
+
+      const stateUpdateStartTime = performance.now();
+
       setItems(itemsData || []);
       setClearance(clearanceData);
 
       // Debug: Log clearance data to check site plan fields
-      console.log("Clearance data loaded:", {
+      console.log("[ClearanceItems] fetchData - Clearance data loaded", {
         sitePlan: clearanceData?.sitePlan,
         sitePlanFile: clearanceData?.sitePlanFile ? "Present" : "Missing",
         sitePlanSource: clearanceData?.sitePlanSource,
         clearanceId,
+        status: clearanceData?.status,
+        clearanceType: clearanceData?.clearanceType,
+        projectId: clearanceData?.projectId?._id || clearanceData?.projectId,
+        timestamp: new Date().toISOString(),
       });
 
       // Set job completed state based on clearance status
       setJobCompleted(clearanceData?.status === "complete");
 
+      const stateUpdateEndTime = performance.now();
+      console.log("[ClearanceItems] fetchData - State updated", {
+        stateUpdateDuration: `${(
+          stateUpdateEndTime - stateUpdateStartTime
+        ).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
+
       // Fetch asbestos removal job ID for breadcrumb navigation (separate from main data loading)
       if (clearanceData?.projectId) {
         try {
+          console.log(
+            "[ClearanceItems] fetchData - Fetching asbestos removal job ID",
+            {
+              projectId: clearanceData.projectId._id || clearanceData.projectId,
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const jobFetchStartTime = performance.now();
+
+          const importStartTime = performance.now();
           const asbestosRemovalJobService = (
             await import("../../services/asbestosRemovalJobService")
           ).default;
+          const importEndTime = performance.now();
+          console.log("[ClearanceItems] fetchData - Service imported", {
+            importDuration: `${(importEndTime - importStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          });
+
           const jobsResponse = await asbestosRemovalJobService.getAll();
+          const jobFetchEndTime = performance.now();
+          console.log("[ClearanceItems] fetchData - Jobs fetched", {
+            jobsFetchDuration: `${(jobFetchEndTime - jobFetchStartTime).toFixed(
+              2
+            )}ms`,
+            jobsCount: Array.isArray(jobsResponse?.data)
+              ? jobsResponse.data.length
+              : Array.isArray(jobsResponse?.jobs)
+              ? jobsResponse.jobs.length
+              : 0,
+            timestamp: new Date().toISOString(),
+          });
           const projectId =
             clearanceData.projectId._id || clearanceData.projectId;
 
@@ -311,32 +441,50 @@ const ClearanceItems = () => {
 
           if (matchingJob) {
             setAsbestosRemovalJobId(matchingJob._id);
-            console.log("Set asbestosRemovalJobId to:", matchingJob._id);
+            console.log("[ClearanceItems] fetchData - Matching job found", {
+              jobId: matchingJob._id,
+              timestamp: new Date().toISOString(),
+            });
           } else {
-            console.log(
-              "No matching asbestos removal job found for projectId:",
-              projectId
-            );
-            console.log(
-              "This might cause navigation to go to asbestos removal list instead of job details"
-            );
+            console.log("[ClearanceItems] fetchData - No matching job found", {
+              projectId: projectId,
+              timestamp: new Date().toISOString(),
+            });
           }
         } catch (jobError) {
-          console.error("Error fetching asbestos removal job ID:", jobError);
+          console.error("[ClearanceItems] fetchData - Error fetching job ID", {
+            error: jobError,
+            errorMessage: jobError.message,
+            timestamp: new Date().toISOString(),
+          });
           // Don't fail the entire data loading if job ID fetching fails
         }
       }
+
+      const fetchEndTime = performance.now();
+      console.log("[ClearanceItems] fetchData - Completed successfully", {
+        totalDuration: `${(fetchEndTime - fetchStartTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     } catch (err) {
-      console.error("Error fetching data:", err);
-      console.error("Error details:", {
-        message: err.message,
+      const fetchEndTime = performance.now();
+      console.error("[ClearanceItems] fetchData - Error occurred", {
+        error: err,
+        errorMessage: err.message,
         response: err.response?.data,
         status: err.response?.status,
         clearanceId: clearanceId,
+        totalDuration: `${(fetchEndTime - fetchStartTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
       });
       setError(`Failed to load data: ${err.message || "Unknown error"}`);
     } finally {
+      const loadingEndTime = performance.now();
       setLoading(false);
+      console.log("[ClearanceItems] fetchData - Loading state set to false", {
+        totalDuration: `${(loadingEndTime - fetchStartTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
@@ -713,6 +861,11 @@ const ClearanceItems = () => {
 
   // Open photo gallery for an item
   const handleOpenPhotoGallery = (item) => {
+    console.log("[ClearanceItems] handleOpenPhotoGallery - Opening gallery", {
+      itemId: item._id,
+      photoCount: item.photographs?.length || 0,
+      timestamp: new Date().toISOString(),
+    });
     setSelectedItemForPhotos(item);
     setPhotoGalleryDialogOpen(true);
   };
@@ -927,6 +1080,14 @@ const ClearanceItems = () => {
   const handlePhotoUploadForGallery = async (event) => {
     const file = event.target.files[0];
     if (file) {
+      console.log("[ClearanceItems] handlePhotoUploadForGallery - Starting", {
+        fileName: file.name,
+        fileSize: `${(file.size / 1024).toFixed(2)}KB`,
+        fileType: file.type,
+        timestamp: new Date().toISOString(),
+      });
+      const uploadStartTime = performance.now();
+
       setPhotoFile(file);
       setCompressionStatus({
         type: "processing",
@@ -937,7 +1098,24 @@ const ClearanceItems = () => {
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
 
+        console.log(
+          "[ClearanceItems] handlePhotoUploadForGallery - Compression check",
+          {
+            originalSizeKB,
+            shouldCompress,
+            timestamp: new Date().toISOString(),
+          }
+        );
+
         if (shouldCompress) {
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Starting compression",
+            {
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const compressionStartTime = performance.now();
+
           setCompressionStatus({
             type: "compressing",
             message: "Compressing image...",
@@ -950,6 +1128,17 @@ const ClearanceItems = () => {
             maxSizeKB: 300,
           });
 
+          const compressionEndTime = performance.now();
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Compression completed",
+            {
+              compressionDuration: `${(
+                compressionEndTime - compressionStartTime
+              ).toFixed(2)}ms`,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
           const compressedSizeKB = Math.round(
             (compressedImage.length * 0.75) / 1024
           );
@@ -957,15 +1146,55 @@ const ClearanceItems = () => {
             ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100
           );
 
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Adding compressed photo",
+            {
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const addStartTime = performance.now();
           await handleAddPhotoToItem(compressedImage);
+          const addEndTime = performance.now();
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
+            {
+              addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
           setCompressionStatus({
             type: "success",
             message: `Compressed: ${originalSizeKB}KB → ${compressedSizeKB}KB (${reduction}% reduction)`,
           });
         } else {
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - No compression needed, reading file",
+            {
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const readStartTime = performance.now();
           const reader = new FileReader();
           reader.onload = async (e) => {
+            const readEndTime = performance.now();
+            console.log(
+              "[ClearanceItems] handlePhotoUploadForGallery - File read completed",
+              {
+                readDuration: `${(readEndTime - readStartTime).toFixed(2)}ms`,
+                timestamp: new Date().toISOString(),
+              }
+            );
+            const addStartTime = performance.now();
             await handleAddPhotoToItem(e.target.result);
+            const addEndTime = performance.now();
+            console.log(
+              "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
+              {
+                addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
+                timestamp: new Date().toISOString(),
+              }
+            );
             setCompressionStatus({
               type: "info",
               message: `No compression needed (${originalSizeKB}KB)`,
@@ -973,8 +1202,23 @@ const ClearanceItems = () => {
           };
           reader.readAsDataURL(file);
         }
+
+        const uploadEndTime = performance.now();
+        console.log(
+          "[ClearanceItems] handlePhotoUploadForGallery - Completed",
+          {
+            totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          }
+        );
       } catch (error) {
-        console.error("Error processing image:", error);
+        const uploadEndTime = performance.now();
+        console.error("[ClearanceItems] handlePhotoUploadForGallery - Error", {
+          error: error,
+          errorMessage: error.message,
+          totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
+          timestamp: new Date().toISOString(),
+        });
         setCompressionStatus({
           type: "error",
           message: "Failed to process image",
@@ -984,7 +1228,20 @@ const ClearanceItems = () => {
   };
 
   const fetchAirMonitoringReports = async () => {
+    console.log("[ClearanceItems] fetchAirMonitoringReports - Starting", {
+      projectId: clearance?.projectId?._id,
+      asbestosRemovalJobId,
+      timestamp: new Date().toISOString(),
+    });
+    const startTime = performance.now();
+
     if (!clearance?.projectId?._id) {
+      console.warn(
+        "[ClearanceItems] fetchAirMonitoringReports - No project ID",
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
       showSnackbar("No project found for this clearance", "error");
       return;
     }
@@ -995,29 +1252,73 @@ const ClearanceItems = () => {
       // Use asbestos removal job ID if available, otherwise fall back to project ID
       if (asbestosRemovalJobId) {
         console.log(
-          "Fetching air monitoring reports for job:",
-          asbestosRemovalJobId
+          "[ClearanceItems] fetchAirMonitoringReports - Fetching by job ID",
+          {
+            asbestosRemovalJobId,
+            timestamp: new Date().toISOString(),
+          }
         );
+        const apiStartTime = performance.now();
         const reports =
           await asbestosClearanceService.getAirMonitoringReportsByJob(
             asbestosRemovalJobId
           );
+        const apiEndTime = performance.now();
+        console.log(
+          "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by job",
+          {
+            reportsCount: Array.isArray(reports) ? reports.length : 0,
+            apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          }
+        );
         setAirMonitoringReports(reports);
       } else {
         console.log(
-          "No job ID found, falling back to project ID:",
-          clearance.projectId._id
+          "[ClearanceItems] fetchAirMonitoringReports - Fetching by project ID",
+          {
+            projectId: clearance.projectId._id,
+            timestamp: new Date().toISOString(),
+          }
         );
+        const apiStartTime = performance.now();
         const reports = await asbestosClearanceService.getAirMonitoringReports(
           clearance.projectId._id
         );
+        const apiEndTime = performance.now();
+        console.log(
+          "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by project",
+          {
+            reportsCount: Array.isArray(reports) ? reports.length : 0,
+            apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          }
+        );
         setAirMonitoringReports(reports);
       }
+
+      const endTime = performance.now();
+      console.log("[ClearanceItems] fetchAirMonitoringReports - Completed", {
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
-      console.error("Error fetching air monitoring reports:", error);
+      const endTime = performance.now();
+      console.error("[ClearanceItems] fetchAirMonitoringReports - Error", {
+        error: error,
+        errorMessage: error.message,
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
       showSnackbar("Failed to fetch air monitoring reports", "error");
     } finally {
       setLoadingReports(false);
+      console.log(
+        "[ClearanceItems] fetchAirMonitoringReports - Loading state set to false",
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
     }
   };
 
@@ -1291,7 +1592,21 @@ const ClearanceItems = () => {
     }
   };
 
+  // Log render
+  useEffect(() => {
+    console.log("[ClearanceItems] Component render", {
+      loading,
+      error: !!error,
+      itemsCount: items?.length || 0,
+      clearanceLoaded: !!clearance,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   if (loading) {
+    console.log("[ClearanceItems] Rendering loading state", {
+      timestamp: new Date().toISOString(),
+    });
     return (
       <Box
         display="flex"
@@ -1305,12 +1620,23 @@ const ClearanceItems = () => {
   }
 
   if (error) {
+    console.log("[ClearanceItems] Rendering error state", {
+      error,
+      timestamp: new Date().toISOString(),
+    });
     return (
       <Box m="20px">
         <Alert severity="error">{error}</Alert>
       </Box>
     );
   }
+
+  console.log("[ClearanceItems] Rendering main content", {
+    itemsCount: items?.length || 0,
+    clearanceType: clearance?.clearanceType,
+    jobCompleted,
+    timestamp: new Date().toISOString(),
+  });
 
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>

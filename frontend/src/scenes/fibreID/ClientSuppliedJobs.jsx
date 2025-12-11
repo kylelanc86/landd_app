@@ -858,7 +858,6 @@ const ClientSuppliedJobs = () => {
                             <Button
                               variant="outlined"
                               size="small"
-                              color="default"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleCloseJob(job._id);

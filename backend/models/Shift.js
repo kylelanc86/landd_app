@@ -128,6 +128,9 @@ const shiftSchema = new mongoose.Schema({
   collection: 'air_monitoring_shifts'
 });
 
+// Index for better query performance
+shiftSchema.index({ job: 1 });
+
 // Add pre-find middleware to log queries
 shiftSchema.pre('find', function() {
   console.log('Shift find query:', this.getQuery());

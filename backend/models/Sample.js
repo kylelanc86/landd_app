@@ -118,4 +118,7 @@ sampleSchema.pre('save', function(next) {
   next();
 });
 
+// Indexes for better query performance
+sampleSchema.index({ shift: 1, fullSampleID: 1 }); // Compound index for queries filtering by shift and fullSampleID
+
 module.exports = mongoose.model('Sample', sampleSchema); 
