@@ -260,7 +260,9 @@ router.get(
       );
 
       const clearancesStart = performance.now();
+      // Exclude large fields not needed for list view (items with photos, base64 files)
       const clearances = await AsbestosClearance.find({ projectId })
+        .select("-items -airMonitoringReport -sitePlanFile") // Exclude items array (photos) and base64 file fields
         .populate({
           path: "projectId",
           select: "projectID name client",
