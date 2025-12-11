@@ -1194,7 +1194,6 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
     const mongoose = require('mongoose');
-    const query = {};
     
     // OPTIMIZATION: Use cached allocatedProjectIds for faster queries when filtering active projects
     const useCachedIds = !status || status === 'all_active';
@@ -1202,11 +1201,12 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     let usingCachedIds = false;
     let cachedProjectIds = [];
     let statusFetchTime = 0; // Initialize for logging
+    let query = {}; // Initialize query
 
     if (useCachedIds) {
       // Get user's cached allocated project IDs (skip status fetch since cache only has active projects)
       const userStartTime = Date.now();
-      const user = await User.findById(userId).select('allocatedProjectIds');
+      const user = await User.findById(userId).select('allocatedProjectIds').lean(); // Use lean() for faster query
       const userFetchTime = Date.now() - userStartTime;
       console.log(`[ASSIGNED-TO-ME] ⏱️  User cache fetch: ${userFetchTime}ms`);
       
@@ -1214,13 +1214,13 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         // Use cached IDs - much faster than querying by users array
         // Cache already contains only active projects, so no need for status filter
         cachedProjectIds = user.allocatedProjectIds;
-        query._id = { $in: cachedProjectIds };
+        query = { _id: { $in: cachedProjectIds } }; // Build query directly
         usingCachedIds = true;
         console.log(`[ASSIGNED-TO-ME] ✅ Using cached project IDs (${cachedProjectIds.length} active projects)`);
       } else {
         // Cache is empty - return empty results
         // This is intentional: cache may be correctly empty (no active projects) or not yet populated
-        query._id = { $in: [] }; // Empty array ensures no results
+        query = { _id: { $in: [] } }; // Empty array ensures no results
         usingCachedIds = true; // Still mark as using cache (empty cache)
         console.log(`[ASSIGNED-TO-ME] ℹ️  Cache empty - returning no projects (cache may be correctly empty or not yet populated)`);
       }
@@ -1230,7 +1230,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
       statusFetchTime = Date.now() - statusFetchStart;
       console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
-      query.users = new mongoose.Types.ObjectId(userId);
+      query = { users: new mongoose.Types.ObjectId(userId) }; // Build query directly
     }
 
     // Handle status filtering (only needed if not using cached IDs)

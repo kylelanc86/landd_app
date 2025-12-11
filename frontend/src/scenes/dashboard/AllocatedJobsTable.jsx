@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Box, Typography, useTheme, CircularProgress } from "@mui/material";
+import {
+  Box,
+  Typography,
+  useTheme,
+  CircularProgress,
+  IconButton,
+  Tooltip,
+} from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import { projectService } from "../../services/api";
@@ -25,7 +33,65 @@ const AllocatedJobsTable = () => {
     page: 0,
   });
   const [rowCount, setRowCount] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dataFromCache, setDataFromCache] = useState(false);
   const theme = useTheme();
+  // Prevent multiple simultaneous fetches
+  const fetchInProgressRef = React.useRef(false);
+
+  // Cache key based on user ID
+  const getCacheKey = useCallback(() => {
+    const userId = currentUser?._id || currentUser?.id;
+    return userId ? `allocatedJobs_${userId}` : null;
+  }, [currentUser]);
+
+  // Load from cache
+  const loadFromCache = useCallback(() => {
+    const cacheKey = getCacheKey();
+    if (!cacheKey) return null;
+
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const {
+          data,
+          rowCount: cachedRowCount,
+          timestamp,
+          pagination,
+        } = JSON.parse(cached);
+        // Check if cache is less than 5 minutes old (optional: you can adjust this)
+        const cacheAge = Date.now() - timestamp;
+        const maxAge = 5 * 60 * 1000; // 5 minutes
+        if (cacheAge < maxAge) {
+          return { data, rowCount: cachedRowCount, pagination };
+        }
+      }
+    } catch (error) {
+      console.error("Error loading allocated jobs from cache:", error);
+    }
+    return null;
+  }, [getCacheKey]);
+
+  // Save to cache
+  const saveToCache = useCallback(
+    (data, rowCount, pagination) => {
+      const cacheKey = getCacheKey();
+      if (!cacheKey) return;
+
+      try {
+        const cacheData = {
+          data,
+          rowCount,
+          pagination,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      } catch (error) {
+        console.error("Error saving allocated jobs to cache:", error);
+      }
+    },
+    [getCacheKey]
+  );
 
   // Performance tracking - component lifecycle
   const [mountTime] = useState(performance.now());
@@ -37,6 +103,11 @@ const AllocatedJobsTable = () => {
     dataFetchComplete: 0,
     firstRenderComplete: 0,
   });
+  // Use ref to access timingMetrics without causing dependency changes
+  const timingMetricsRef = React.useRef(timingMetrics);
+  React.useEffect(() => {
+    timingMetricsRef.current = timingMetrics;
+  }, [timingMetrics]);
 
   // Track when auth is ready
   React.useEffect(() => {
@@ -66,7 +137,13 @@ const AllocatedJobsTable = () => {
   }, [statusesLoading, activeStatuses, mountTime]);
 
   const fetchAllocatedJobs = useCallback(
-    async (page = 0, pageSize = 25) => {
+    async (page = 0, pageSize = 25, forceRefresh = false) => {
+      // Prevent concurrent fetches
+      if (fetchInProgressRef.current && !forceRefresh) {
+        console.log("⏱️  [LIFECYCLE] Fetch already in progress, skipping");
+        return;
+      }
+
       // OPTIMIZATION: With cached project IDs, we don't need to wait for statuses
       // The backend uses cached IDs and doesn't need status filtering when using cache
       if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
@@ -78,13 +155,41 @@ const AllocatedJobsTable = () => {
         return;
       }
 
+      // Try to load from cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = loadFromCache();
+        if (
+          cached &&
+          cached.pagination?.page === page &&
+          cached.pagination?.pageSize === pageSize
+        ) {
+          console.log("📦 Loading allocated jobs from cache");
+          setJobs(cached.data);
+          setRowCount(cached.rowCount);
+          setLoading(false);
+          setDataFromCache(true);
+          return;
+        }
+      }
+
+      // Mark fetch as in progress
+      fetchInProgressRef.current = true;
+
       const fetchStartTime = performance.now();
       const timeSinceMount = fetchStartTime - mountTime;
 
       setTimingMetrics((prev) => ({ ...prev, dataFetchStart: timeSinceMount }));
+      setDataFromCache(false);
+
+      if (forceRefresh) {
+        setIsRefreshing(true);
+      }
 
       console.log("\n" + "=".repeat(80));
-      console.log("📋 ALLOCATED JOBS TABLE - FETCH START");
+      console.log(
+        "📋 ALLOCATED JOBS TABLE - FETCH START",
+        forceRefresh ? "(FORCED REFRESH)" : ""
+      );
       console.log(
         "⏱️  Time since component mount:",
         `${timeSinceMount.toFixed(2)}ms`
@@ -95,7 +200,7 @@ const AllocatedJobsTable = () => {
         pageSize,
         userId: currentUser._id || currentUser.id,
         statusFilter: "all_active",
-        activeStatusCount: activeStatuses.length,
+        activeStatusCount: activeStatuses?.length || 0,
       });
 
       setLoading(true);
@@ -124,6 +229,9 @@ const AllocatedJobsTable = () => {
         setJobs(projectsData);
         setRowCount(totalCount);
         const stateUpdateTime = performance.now() - stateUpdateStart;
+
+        // Save to cache
+        saveToCache(projectsData, totalCount, { page, pageSize });
 
         const totalFetchTime = performance.now() - fetchStartTime;
         const timeSinceMount = performance.now() - mountTime;
@@ -175,9 +283,17 @@ const AllocatedJobsTable = () => {
         console.log(`   • Total fetch time: ${totalFetchTime.toFixed(2)}ms`);
         console.log("⏱️  Lifecycle timing:");
         console.log(`   • Time since mount: ${timeSinceMount.toFixed(2)}ms`);
-        console.log(`   • Auth ready: ${timingMetrics.authReady.toFixed(2)}ms`);
+        // Use ref to access timingMetrics without causing dependency changes
+        const currentTimingMetrics = timingMetricsRef.current;
         console.log(
-          `   • Statuses ready: ${timingMetrics.statusesReady.toFixed(2)}ms`
+          `   • Auth ready: ${(currentTimingMetrics.authReady || 0).toFixed(
+            2
+          )}ms`
+        );
+        console.log(
+          `   • Statuses ready: ${(
+            currentTimingMetrics.statusesReady || 0
+          ).toFixed(2)}ms`
         );
         console.log("📦 Payload sizes:");
         console.log(
@@ -211,19 +327,40 @@ const AllocatedJobsTable = () => {
         setError(err.message);
       } finally {
         setLoading(false);
+        setIsRefreshing(false);
+        fetchInProgressRef.current = false;
       }
     },
-    [authLoading, currentUser, activeStatuses, mountTime]
+    [
+      authLoading,
+      currentUser,
+      mountTime,
+      loadFromCache,
+      saveToCache,
+      activeStatuses,
+    ]
   );
 
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize, true);
+  }, [fetchAllocatedJobs, paginationModel]);
+
+  // Load data on mount - will use cache if available
   useEffect(() => {
-    fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
+    // Only fetch if we have auth and user (fetchAllocatedJobs will check cache first)
+    // Skip if fetch is already in progress
+    if (!authLoading && currentUser && !fetchInProgressRef.current) {
+      fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     authLoading,
-    // Removed activeStatuses dependency - not needed with cached IDs
     currentUser,
-    paginationModel,
-    fetchAllocatedJobs,
+    paginationModel.page,
+    paginationModel.pageSize,
+    // Note: We intentionally omit fetchAllocatedJobs to prevent infinite loops
+    // The function handles its own caching and duplicate prevention
   ]);
 
   const handlePaginationModelChange = useCallback((newModel) => {
@@ -487,9 +624,56 @@ const AllocatedJobsTable = () => {
         },
       }}
     >
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        MY ACTIVE PROJECTS{" "}
-      </Typography>
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h5">
+          MY ACTIVE PROJECTS
+          {dataFromCache && (
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{
+                ml: 1,
+                color: "text.secondary",
+                fontSize: "0.75rem",
+                fontStyle: "italic",
+              }}
+            >
+              (cached)
+            </Typography>
+          )}
+        </Typography>
+        <Tooltip title="Refresh data">
+          <IconButton
+            onClick={handleRefresh}
+            disabled={isRefreshing || loading}
+            size="small"
+            sx={{
+              color: theme.palette.primary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.light + "20",
+              },
+              "&.Mui-disabled": {
+                color: theme.palette.action.disabled,
+              },
+            }}
+          >
+            <RefreshIcon
+              sx={{
+                animation: isRefreshing ? "spin 1s linear infinite" : "none",
+                "@keyframes spin": {
+                  from: { transform: "rotate(0deg)" },
+                  to: { transform: "rotate(360deg)" },
+                },
+              }}
+            />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       {/* Virtual Scrolling Optimized DataGrid with Proper Footer Positioning */}
       <DataGrid
