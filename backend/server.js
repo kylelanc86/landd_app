@@ -142,13 +142,13 @@ connectDB()
     
     // Debug logging for route matching (temporary - remove after fixing)
     app.use((req, res, next) => {
-      if (req.path.includes('auth') || req.path.includes('login')) {
+      // Log all API requests to diagnose routing issues
+      if (req.method !== 'GET' || req.path.includes('api') || req.path.includes('auth') || req.path.includes('login') || req.path.includes('projects') || req.path.includes('users') || req.path.includes('timesheets') || req.path.includes('custom-data')) {
         console.log('🔍 Route Debug:', {
           method: req.method,
           path: req.path,
           url: req.url,
-          originalUrl: req.originalUrl,
-          baseUrl: req.baseUrl
+          originalUrl: req.originalUrl
         });
       }
       next();
@@ -160,41 +160,98 @@ connectDB()
     app.use('/auth', authRoutes);  // Also handle if prefix is stripped
     
     // Protected routes with authentication and token blacklist checking
+    // Mount each route at both /api/* and /* paths in case DigitalOcean strips /api prefix
     app.use('/api/projects', requireAuth, checkTokenBlacklist, projectRoutes);
+    app.use('/projects', requireAuth, checkTokenBlacklist, projectRoutes);
+    
     app.use('/api/clients', requireAuth, checkTokenBlacklist, clientRoutes);
+    app.use('/clients', requireAuth, checkTokenBlacklist, clientRoutes);
+    
     app.use('/api/air-monitoring-jobs', requireAuth, checkTokenBlacklist, jobRoutes);
+    app.use('/air-monitoring-jobs', requireAuth, checkTokenBlacklist, jobRoutes);
+    
     app.use('/api/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
+    app.use('/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
+    
     app.use('/api/invoices', requireAuth, checkTokenBlacklist, invoiceRoutes);
+    app.use('/invoices', requireAuth, checkTokenBlacklist, invoiceRoutes);
+    
     app.use('/api/users', requireAuth, checkTokenBlacklist, usersRouter);
+    app.use('/users', requireAuth, checkTokenBlacklist, usersRouter);
+    
     // Mount Xero routes with auth for most endpoints, but allow callback without auth
-app.use('/api/xero', xeroRoutes);
+    app.use('/api/xero', xeroRoutes);
+    app.use('/xero', xeroRoutes);
+    
     app.use('/api/air-monitoring-shifts', requireAuth, checkTokenBlacklist, shiftRoutes);
+    app.use('/air-monitoring-shifts', requireAuth, checkTokenBlacklist, shiftRoutes);
+    
     app.use('/api/timesheets', requireAuth, checkTokenBlacklist, timesheetRoutes);
+    app.use('/timesheets', requireAuth, checkTokenBlacklist, timesheetRoutes);
 
     app.use('/api/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
+    app.use('/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
+    
     app.use('/api/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
+    app.use('/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
+    
     app.use('/api/graticule-calibrations', requireAuth, checkTokenBlacklist, graticuleCalibrationRoutes);
+    app.use('/graticule-calibrations', requireAuth, checkTokenBlacklist, graticuleCalibrationRoutes);
+    
     app.use('/api/efa-calibrations', requireAuth, checkTokenBlacklist, efaCalibrationRoutes);
+    app.use('/efa-calibrations', requireAuth, checkTokenBlacklist, efaCalibrationRoutes);
+    
     app.use('/api/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
+    app.use('/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
+    
     app.use('/api/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
+    app.use('/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
+    
     app.use('/api/equipment', requireAuth, checkTokenBlacklist, equipmentRoutes);
+    app.use('/equipment', requireAuth, checkTokenBlacklist, equipmentRoutes);
+    
     app.use('/api/asbestos-clearances', requireAuth, checkTokenBlacklist, asbestosClearanceRoutes);
+    app.use('/asbestos-clearances', requireAuth, checkTokenBlacklist, asbestosClearanceRoutes);
+    
     app.use('/api/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);
+    app.use('/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);
+    
     app.use('/api/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
+    app.use('/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
+    
     app.use('/api/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
+    app.use('/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
+    
     app.use('/api/uploaded-reports', requireAuth, checkTokenBlacklist, require('./routes/uploadedReports'));
+    app.use('/uploaded-reports', requireAuth, checkTokenBlacklist, require('./routes/uploadedReports'));
 
     app.use('/api/report-templates', requireAuth, checkTokenBlacklist, reportTemplateRoutes);
+    app.use('/report-templates', requireAuth, checkTokenBlacklist, reportTemplateRoutes);
+    
     app.use('/api/pdf-docraptor-v2', requireAuth, checkTokenBlacklist, pdfDocRaptorV2Routes);
+    app.use('/pdf-docraptor-v2', requireAuth, checkTokenBlacklist, pdfDocRaptorV2Routes);
     
     // Additional protected routes with token blacklist checking
     app.use('/api/assessments', requireAuth, checkTokenBlacklist, asbestosAssessmentsRoutes);
+    app.use('/assessments', requireAuth, checkTokenBlacklist, asbestosAssessmentsRoutes);
+    
     app.use('/api/sample-items', requireAuth, checkTokenBlacklist, sampleItemsRoutes);
+    app.use('/sample-items', requireAuth, checkTokenBlacklist, sampleItemsRoutes);
+    
     app.use('/api/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
+    app.use('/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
+    
     app.use('/api/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
+    app.use('/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
+    
     app.use('/api/custom-data-fields', requireAuth, checkTokenBlacklist, require('./routes/customDataFields'));
-app.use('/api/custom-data-field-groups', requireAuth, checkTokenBlacklist, require('./routes/customDataFieldGroups'));
-app.use('/api/project-audits', requireAuth, checkTokenBlacklist, require('./routes/projectAudits'));
+    app.use('/custom-data-fields', requireAuth, checkTokenBlacklist, require('./routes/customDataFields'));
+    
+    app.use('/api/custom-data-field-groups', requireAuth, checkTokenBlacklist, require('./routes/customDataFieldGroups'));
+    app.use('/custom-data-field-groups', requireAuth, checkTokenBlacklist, require('./routes/customDataFieldGroups'));
+    
+    app.use('/api/project-audits', requireAuth, checkTokenBlacklist, require('./routes/projectAudits'));
+    app.use('/project-audits', requireAuth, checkTokenBlacklist, require('./routes/projectAudits'));
 
 
     
