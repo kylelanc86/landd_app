@@ -98,8 +98,18 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint
+// Health check endpoints (multiple paths for different routing configurations)
 app.get('/api/health', (req, res) => {
+  const healthData = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  };
+  res.status(200).json(healthData);
+});
+
+// Also add health at root in case DigitalOcean strips /api prefix
+app.get('/health', (req, res) => {
   const healthData = {
     status: 'ok',
     timestamp: new Date().toISOString(),
