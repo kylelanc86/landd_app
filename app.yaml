@@ -1,6 +1,16 @@
 name: landd-app
 region: sgp  # Change to your preferred region (nyc, sfo, sgp, lon, fra, tor, blr, ams)
 
+# App-level environment variables (shared across all components)
+# These are available to all services/components in the app
+# Component-level variables override app-level variables with the same name
+envs:
+  - key: NODE_ENV
+    value: production
+    scope: RUN_TIME
+  # Add shared secrets here if needed (e.g., database URLs, shared API keys)
+  # Note: Secrets should typically be set at component level for security
+
 services:
   # Backend service with Docker (has Chrome/Puppeteer)
   - name: backend
@@ -16,8 +26,8 @@ services:
     routes:
       - path: /
     envs:
-      - key: NODE_ENV
-        value: production
+      # Component-level variables (specific to backend service)
+      # These override app-level variables with the same name
       - key: MONGODB_URI
         scope: RUN_TIME
         type: SECRET
@@ -46,10 +56,10 @@ services:
     routes:
       - path: /
     envs:
+      # Component-level variables (specific to frontend service)
+      # These override app-level variables with the same name
       - key: REACT_APP_API_URL
-        value: https://backend-xxxxx.ondigitalocean.app/api  # Update with your backend URL after first deploy
-      - key: NODE_ENV
-        value: production
+        value: https://landd-app-dev.digitalocean.com/api
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
         scope: RUN_TIME
         type: SECRET

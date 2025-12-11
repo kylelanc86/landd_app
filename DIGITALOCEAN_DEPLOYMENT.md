@@ -34,7 +34,7 @@ This is the main configuration file for DigitalOcean App Platform. It defines bo
 - `region`: Change to your preferred region (e.g., `syd` for Sydney, `sgp` for Singapore)
 - `github.repo`: Update with your actual GitHub repository path
 - `FRONTEND_URL` in backend envs: Update with your actual frontend URL
-- `REACT_APP_API_URL` in frontend envs: Update with your backend URL (you'll get this after first deploy)
+- `REACT_APP_API_URL` in frontend envs: Set to `https://landd-app-dev.digitalocean.com/api`
 
 ### 2. `package.json` (Root directory) ✅ Already Updated
 The build script has been updated to install frontend dependencies:
@@ -59,7 +59,12 @@ DigitalOcean App Platform works best when configured through the dashboard. The 
    - Select "GitHub" as source
    - Choose your repository and branch (development)
 
-2. **Configure Backend Service**
+2. **Configure App-Level Environment Variables** (Optional but recommended)
+   - Go to Settings → Environment Variables
+   - Add: `NODE_ENV` = `production` (shared across all services)
+   - This can be overridden at component level if needed
+
+3. **Configure Backend Service**
    - Click "Edit" or "Add Service" → "Web Service"
    - **Name**: `backend`
    - **Source Directory**: `/backend` (leave empty if using Dockerfile context)
@@ -68,15 +73,15 @@ DigitalOcean App Platform works best when configured through the dashboard. The 
    - **Dockerfile Context**: `./backend`
    - **HTTP Port**: `5000`
    - **Instance Size**: Professional (required for Docker) - start with smallest
-   - **Environment Variables**:
-     - `NODE_ENV` = `production`
+   - **Component-Level Environment Variables**:
      - `MONGODB_URI` = (set as secret)
      - `JWT_SECRET` = (set as secret)
      - `JWT_EXPIRE` = `7d`
      - `PORT` = `5000`
      - `FRONTEND_URL` = (your frontend URL after deployment)
+     - Note: `NODE_ENV` can be inherited from app-level or set here
 
-3. **Configure Frontend Service**
+4. **Configure Frontend Service**
    - Click "Add Service" → "Web Service"
    - **Name**: `frontend`
    - **Source Directory**: `/` (root of repo)
@@ -85,24 +90,24 @@ DigitalOcean App Platform works best when configured through the dashboard. The 
    - **Run Command**: `cd frontend && node server.js`
    - **HTTP Port**: `3000`
    - **Instance Size**: Basic - start with smallest
-   - **Environment Variables**:
-     - `REACT_APP_API_URL` = (your backend URL - update after backend deploys)
-     - `NODE_ENV` = `production`
+   - **Component-Level Environment Variables**:
+     - `REACT_APP_API_URL` = `https://landd-app-dev.digitalocean.com/api`
      - `REACT_APP_GOOGLE_MAPS_API_KEY` = (set as secret)
      - `PORT` = `3000`
+     - Note: `NODE_ENV` can be inherited from app-level or set here
 
-4. **Configure Secrets**
-   - In the Environment Variables section, mark these as "Encrypted" (secrets):
-     - `MONGODB_URI`
-     - `JWT_SECRET`
-     - `REACT_APP_GOOGLE_MAPS_API_KEY`
+5. **Configure Secrets**
+   - In each component's Environment Variables section, mark these as "Encrypted" (secrets):
+     - Backend: `MONGODB_URI`, `JWT_SECRET`
+     - Frontend: `REACT_APP_GOOGLE_MAPS_API_KEY`
+   - Secrets are typically set at component-level for better security isolation
 
-5. **Deploy**
+6. **Deploy**
    - Review configuration
    - Click "Create Resources" or "Deploy"
    - Wait for backend to deploy first
-   - Copy backend URL and update `REACT_APP_API_URL` in frontend service
-   - Redeploy frontend
+   - Ensure `REACT_APP_API_URL` is set to `https://landd-app-dev.digitalocean.com/api` in frontend service
+   - Redeploy frontend if needed
 
 ### Option 2: Using app.yaml (Alternative)
 
@@ -125,19 +130,46 @@ If DigitalOcean supports importing `app.yaml`:
 
 ## Environment Variables Setup
 
-### Backend Service
-- `NODE_ENV=production`
-- `MONGODB_URI` (SECRET)
-- `JWT_SECRET` (SECRET)
+### App-Level vs Component-Level Variables
+
+DigitalOcean App Platform supports two levels of environment variables:
+
+**App-Level Variables:**
+- **Scope**: Available to ALL components/services in the app
+- **Use Case**: Shared configuration (e.g., `NODE_ENV`, common API keys)
+- **Precedence**: Lower - can be overridden by component-level variables
+- **Configuration**: Set in the app's Settings → Environment Variables section
+
+**Component-Level Variables:**
+- **Scope**: Specific to a single component/service
+- **Use Case**: Component-specific configuration (e.g., `PORT`, service-specific URLs)
+- **Precedence**: Higher - overrides app-level variables with the same name
+- **Configuration**: Set in each component's settings
+
+**Best Practices:**
+- Use **app-level** for: `NODE_ENV`, shared database URLs, common API keys
+- Use **component-level** for: `PORT`, service-specific URLs (e.g., `REACT_APP_API_URL`), component-specific secrets
+- **Secrets**: Generally set at component-level for better security isolation
+
+### App-Level Variables (Shared)
+
+These can be set once and shared across all services:
+- `NODE_ENV=production` (can be set at app level)
+
+### Backend Service (Component-Level)
+- `MONGODB_URI` (SECRET) - **Required** - Component-specific
+- `JWT_SECRET` (SECRET) - **Required**
 - `JWT_EXPIRE=7d`
 - `PORT=5000`
 - `FRONTEND_URL` (your frontend URL)
+- `XERO_CLIENT_ID` (SECRET) - **Optional** - Only needed if using Xero integration
+- `XERO_CLIENT_SECRET` (SECRET) - **Optional** - Only needed if using Xero integration
+- `XERO_REDIRECT_URI` - **Optional** - Only needed if using Xero integration
 
-### Frontend Service
-- `REACT_APP_API_URL` (your backend URL)
-- `NODE_ENV=production`
-- `REACT_APP_GOOGLE_MAPS_API_KEY` (SECRET)
-- `PORT=3000`
+### Frontend Service (Component-Level)
+- `REACT_APP_API_URL` = `https://landd-app-dev.digitalocean.com/api` - Component-specific
+- `REACT_APP_GOOGLE_MAPS_API_KEY` (SECRET) - Component-specific
+- `PORT=3000` - Component-specific
 
 ## Troubleshooting
 
@@ -145,7 +177,7 @@ If DigitalOcean supports importing `app.yaml`:
 ✅ **Fixed**: The root `package.json` build script now installs frontend dependencies first.
 
 ### Frontend can't connect to backend
-- Ensure `REACT_APP_API_URL` points to your backend service URL
+- Ensure `REACT_APP_API_URL` is set to `https://landd-app-dev.digitalocean.com/api`
 - Check that backend service is running and accessible
 - Verify CORS settings in backend if needed
 
