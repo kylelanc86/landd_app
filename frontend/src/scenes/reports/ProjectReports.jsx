@@ -19,6 +19,13 @@ import {
   TextField,
   InputLabel,
   Grid,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -67,6 +74,10 @@ const ProjectReports = () => {
   const [isEditingStatus, setIsEditingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState("");
   const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
+
+  // Active jobs state
+  const [activeJobs, setActiveJobs] = useState([]);
+  const [loadingActiveJobs, setLoadingActiveJobs] = useState(false);
 
   const { showSnackbar } = useSnackbar();
 
@@ -141,6 +152,88 @@ const ProjectReports = () => {
     }
   }, []);
 
+  // Load active jobs for this project
+  const loadActiveJobs = useCallback(async () => {
+    if (!projectId) return;
+
+    setLoadingActiveJobs(true);
+    try {
+      const activeJobsList = [];
+
+      // Fetch active asbestos removal jobs
+      try {
+        const { default: asbestosRemovalJobService } = await import(
+          "../../services/asbestosRemovalJobService"
+        );
+        const jobsResponse = await asbestosRemovalJobService.getAll({
+          projectId: projectId,
+        });
+        const jobs = jobsResponse.jobs || jobsResponse.data || [];
+        const activeAsbestosJobs = jobs.filter(
+          (job) =>
+            (job.projectId === projectId || job.projectId?._id === projectId) &&
+            job.status === "in_progress"
+        );
+
+        activeAsbestosJobs.forEach((job) => {
+          activeJobsList.push({
+            id: job._id,
+            type: "asbestos-removal",
+            name: job.name || "Asbestos Removal Job",
+            status: job.status,
+            asbestosRemovalist: job.asbestosRemovalist,
+            jobType: job.jobType || "none",
+            url: `/asbestos-removal/jobs/${job._id}/details`,
+          });
+        });
+      } catch (error) {
+        console.error("Error fetching active asbestos removal jobs:", error);
+      }
+
+      // Fetch active client supplied jobs (fibre ID)
+      try {
+        const { clientSuppliedJobsService } = await import(
+          "../../services/api"
+        );
+        const clientJobsResponse = await clientSuppliedJobsService.getAll({
+          projectId: projectId,
+        });
+        const clientJobs = clientJobsResponse.data || [];
+        const activeClientJobs = clientJobs.filter(
+          (job) =>
+            (job.projectId === projectId || job.projectId?._id === projectId) &&
+            (job.status === "In Progress" || job.status === "Analysis Complete")
+        );
+
+        activeClientJobs.forEach((job) => {
+          activeJobsList.push({
+            id: job._id,
+            type: "fibre-id",
+            name:
+              job.jobNumber || `Fibre ID Job - ${job.jobType || "Fibre ID"}`,
+            status: job.status,
+            jobType: job.jobType || "Fibre ID",
+            url: `/fibre-id/client-supplied/${job._id}/samples`,
+          });
+        });
+      } catch (error) {
+        console.error("Error fetching active client supplied jobs:", error);
+      }
+
+      setActiveJobs(activeJobsList);
+    } catch (error) {
+      console.error("Error loading active jobs:", error);
+      setActiveJobs([]);
+    } finally {
+      setLoadingActiveJobs(false);
+    }
+  }, [projectId]);
+
+  // Load active jobs when projectId changes
+  useEffect(() => {
+    loadActiveJobs();
+  }, [loadActiveJobs]);
+
   // Load project details
   useEffect(() => {
     const loadProject = async () => {
@@ -183,63 +276,80 @@ const ProjectReports = () => {
         console.log("No asbestos assessment reports found");
       }
 
-      // Check asbestos removal jobs (air monitoring + clearances)
+      // Check asbestos removal jobs (air monitoring + clearances) - only from completed jobs
       try {
-        // Check air monitoring reports
-        const airMonitoringResponse = await fetch(
-          `${
-            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-          }/asbestos-clearances/air-monitoring-reports/${projectId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          }
+        const { default: asbestosRemovalJobService } = await import(
+          "../../services/asbestosRemovalJobService"
         );
 
-        let hasAirMonitoring = false;
-        if (airMonitoringResponse.ok) {
-          const airMonitoringReports = await airMonitoringResponse.json();
-          hasAirMonitoring =
-            Array.isArray(airMonitoringReports) &&
-            airMonitoringReports.length > 0;
-        }
-
-        // Check clearances
-        const { default: asbestosClearanceService } = await import(
-          "../../services/asbestosClearanceService"
+        // First check if there are any completed asbestos removal jobs for this project
+        const completedJobsResponse = await asbestosRemovalJobService.getAll();
+        const completedJobs =
+          completedJobsResponse.jobs || completedJobsResponse.data || [];
+        const hasCompletedJobs = completedJobs.some(
+          (job) =>
+            (job.projectId === projectId || job.projectId?._id === projectId) &&
+            job.status === "completed"
         );
 
-        let hasClearances = false;
-        try {
-          const clearancesResponse = await asbestosClearanceService.getAll();
-          let projectClearances = [];
+        // Only check for reports if there are completed jobs
+        if (hasCompletedJobs) {
+          // Check air monitoring reports (only from completed jobs)
+          const airMonitoringResponse = await fetch(
+            `${
+              process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+            }/asbestos-clearances/air-monitoring-reports/${projectId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+              },
+            }
+          );
 
-          if (clearancesResponse && Array.isArray(clearancesResponse)) {
-            projectClearances = clearancesResponse.filter(
-              (clearance) =>
-                clearance.projectId === projectId ||
-                clearance.projectId?._id === projectId
-            );
-          } else if (
-            clearancesResponse.clearances &&
-            Array.isArray(clearancesResponse.clearances)
-          ) {
-            projectClearances = clearancesResponse.clearances.filter(
-              (clearance) =>
-                clearance.projectId === projectId ||
-                clearance.projectId?._id === projectId
-            );
+          let hasAirMonitoring = false;
+          if (airMonitoringResponse.ok) {
+            const airMonitoringReports = await airMonitoringResponse.json();
+            hasAirMonitoring =
+              Array.isArray(airMonitoringReports) &&
+              airMonitoringReports.length > 0;
           }
 
-          hasClearances = projectClearances.length > 0;
-        } catch (clearanceError) {
-          console.log("No asbestos clearance reports found");
-        }
+          // Check clearances (only from completed jobs)
+          const { default: asbestosClearanceService } = await import(
+            "../../services/asbestosClearanceService"
+          );
 
-        // Only show the category when there are actual reports to display
-        if (hasAirMonitoring || hasClearances) {
-          available.push("asbestos-removal-jobs");
+          let hasClearances = false;
+          try {
+            const clearancesResponse = await asbestosClearanceService.getAll();
+            let projectClearances = [];
+
+            if (clearancesResponse && Array.isArray(clearancesResponse)) {
+              projectClearances = clearancesResponse.filter(
+                (clearance) =>
+                  clearance.projectId === projectId ||
+                  clearance.projectId?._id === projectId
+              );
+            } else if (
+              clearancesResponse.clearances &&
+              Array.isArray(clearancesResponse.clearances)
+            ) {
+              projectClearances = clearancesResponse.clearances.filter(
+                (clearance) =>
+                  clearance.projectId === projectId ||
+                  clearance.projectId?._id === projectId
+              );
+            }
+
+            hasClearances = projectClearances.length > 0;
+          } catch (clearanceError) {
+            console.log("No asbestos clearance reports found");
+          }
+
+          // Only show the category when there are actual reports to display
+          if (hasAirMonitoring || hasClearances) {
+            available.push("asbestos-removal-jobs");
+          }
         }
       } catch (error) {
         console.log("No asbestos removal job reports found");
@@ -1340,6 +1450,75 @@ const ProjectReports = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
+      )}
+
+      {/* Active Jobs Table */}
+      {activeJobs.length > 0 && !selectedCategory && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Active Jobs
+          </Typography>
+          {loadingActiveJobs ? (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Job Type</TableCell>
+                    <TableCell>Job Name</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Asbestos Removalist</TableCell>
+                    <TableCell align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {activeJobs.map((job) => (
+                    <TableRow key={job.id}>
+                      <TableCell>
+                        {job.type === "asbestos-removal"
+                          ? "Asbestos Removal"
+                          : job.jobType || "Fibre ID"}
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="body2"
+                          sx={{ color: "black", fontWeight: 500 }}
+                        >
+                          {job.name}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={job.status}
+                          color={
+                            job.status === "in_progress" ||
+                            job.status === "In Progress"
+                              ? "warning"
+                              : "info"
+                          }
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{job.asbestosRemovalist || "N/A"}</TableCell>
+                      <TableCell align="center">
+                        <Button
+                          variant="contained"
+                          size="small"
+                          onClick={() => navigate(job.url)}
+                        >
+                          View Job
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
       )}
 
       {/* Categories or Reports List */}

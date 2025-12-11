@@ -17,7 +17,7 @@ export const FEATURE_FLAGS = {
 
   // Advanced functionality (can be disabled for initial deployment)
   ADVANCED: {
-    RECORDS: true,           // Asset register, audits, calibrations, etc.
+    RECORDS: false,           // Asset register, audits, calibrations, etc.
     SURVEYS: false,           // Asbestos, lead, mould assessments
     ASBESTOS_REMOVAL: true,  // Asbestos removal job management
     FIBRE_ID: false,          // Fibre identification and client supplied jobs

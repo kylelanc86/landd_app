@@ -82,6 +82,8 @@ const Timesheets = () => {
   const [show24HourView, setShow24HourView] = useState(false);
   const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState(null);
+  const [crossDayDialogOpen, setCrossDayDialogOpen] = useState(false);
+  const [pendingCrossDayEntry, setPendingCrossDayEntry] = useState(null);
   const calendarRef = useRef(null);
   const navigate = useNavigate();
 
@@ -191,6 +193,48 @@ const Timesheets = () => {
       setIsLoading(false);
     }
   };
+
+  // Automatically enable 24-hour view if any entries are outside 6am-6pm
+  useEffect(() => {
+    if (timeEntries.length === 0) {
+      // Reset to default view when no entries
+      setShow24HourView(false);
+      return;
+    }
+
+    // Check if any entry has start or end time outside 6am-6pm (06:00-18:00)
+    const hasEntryOutsideRange = timeEntries.some((entry) => {
+      const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
+      const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+
+      // Check if start or end time is before 6am (360 minutes) or after 6pm (1080 minutes)
+      const isStartOutside =
+        startTotalMinutes < 360 || startTotalMinutes >= 1080;
+      const isEndOutside = endTotalMinutes < 360 || endTotalMinutes >= 1080;
+
+      // Also check for cross-day entries (end before start)
+      const crossesMidnight = endTotalMinutes < startTotalMinutes;
+      if (crossesMidnight) {
+        // For cross-day entries, check if either part is outside range
+        // First part: startTime to 23:59 (1440 minutes)
+        // Second part: 00:00 (0 minutes) to endTime
+        const isFirstPartOutside =
+          startTotalMinutes < 360 || startTotalMinutes >= 1080;
+        const isSecondPartOutside =
+          endTotalMinutes < 360 || endTotalMinutes >= 1080;
+        return isFirstPartOutside || isSecondPartOutside;
+      }
+
+      return isStartOutside || isEndOutside;
+    });
+
+    if (hasEntryOutsideRange) {
+      setShow24HourView(true);
+    }
+  }, [timeEntries]);
 
   const fetchTimesheetStatus = async () => {
     if (!targetUserId) {
@@ -318,6 +362,34 @@ const Timesheets = () => {
 
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
+      // Check if entry crosses midnight (end time is before start time)
+      const [startHours, startMinutes] = formData.startTime
+        .split(":")
+        .map(Number);
+      const [endHours, endMinutes] = formData.endTime.split(":").map(Number);
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+      const crossesMidnight = endTotalMinutes < startTotalMinutes;
+
+      if (crossesMidnight) {
+        // Store the entry data and show dialog
+        setPendingCrossDayEntry({
+          date: formattedDate,
+          userId: targetUserId,
+          startTime: formData.startTime,
+          endTime: formData.endTime,
+          description: formData.description || "",
+          isAdminWork: formData.isAdminWork,
+          isBreak: formData.isBreak,
+          projectId: formData.projectId,
+          projectInputType: formData.projectInputType,
+          isEditing,
+          editingEntryId,
+        });
+        setCrossDayDialogOpen(true);
+        return;
+      }
+
       const timesheetData = {
         date: formattedDate,
         userId: targetUserId,
@@ -437,6 +509,96 @@ const Timesheets = () => {
       setErrorMessage(
         error.response?.data?.message || "Error saving time entry"
       );
+      setErrorDialogOpen(true);
+    }
+  };
+
+  const handleSplitCrossDayEntry = async () => {
+    if (!pendingCrossDayEntry) return;
+
+    try {
+      const {
+        date,
+        userId,
+        startTime,
+        endTime,
+        description,
+        isAdminWork,
+        isBreak,
+        projectId,
+        projectInputType,
+        isEditing,
+        editingEntryId,
+      } = pendingCrossDayEntry;
+
+      // Create first entry: from startTime to 23:59 on the first day
+      const firstEntryData = {
+        date,
+        userId,
+        startTime,
+        endTime: "23:59",
+        description: description || "",
+        isAdminWork,
+        isBreak,
+      };
+
+      if (!isAdminWork && !isBreak) {
+        firstEntryData.projectId = projectId;
+        firstEntryData.projectInputType = projectInputType;
+      }
+
+      // Create second entry: from 00:00 to endTime on the next day
+      const nextDate = addDays(parseISO(date), 1);
+      const secondEntryData = {
+        date: format(nextDate, "yyyy-MM-dd"),
+        userId,
+        startTime: "00:00",
+        endTime,
+        description: description || "",
+        isAdminWork,
+        isBreak,
+      };
+
+      if (!isAdminWork && !isBreak) {
+        secondEntryData.projectId = projectId;
+        secondEntryData.projectInputType = projectInputType;
+      }
+
+      // If editing, delete the old entry first
+      if (isEditing && editingEntryId) {
+        await api.delete(`/timesheets/${editingEntryId}`);
+      }
+
+      // Create both entries
+      await api.post("/timesheets", firstEntryData);
+      await api.post("/timesheets", secondEntryData);
+
+      // Close dialog and refresh entries
+      setCrossDayDialogOpen(false);
+      setPendingCrossDayEntry(null);
+      fetchTimeEntries();
+      fetchTimesheetStatus();
+
+      // Reset form
+      setFormData({
+        startTime: "",
+        endTime: "",
+        projectId: "",
+        description: "",
+        isAdminWork: false,
+        isBreak: false,
+        projectInputType: "",
+      });
+      setIsEditing(false);
+      setEditingEntryId(null);
+      setOpenDialog(false);
+    } catch (error) {
+      console.error("Error splitting cross-day entry:", error);
+      setErrorMessage(
+        error.response?.data?.message || "Error splitting time entry"
+      );
+      setCrossDayDialogOpen(false);
+      setPendingCrossDayEntry(null);
       setErrorDialogOpen(true);
     }
   };
@@ -616,6 +778,11 @@ const Timesheets = () => {
       const endDateTime = new Date(entry.date);
       const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
       endDateTime.setHours(endHours, endMinutes, 0);
+
+      // Handle cross-day entries: if end time is before start time, add a day
+      if (endDateTime < startDateTime) {
+        endDateTime.setDate(endDateTime.getDate() + 1);
+      }
 
       const projectId = entry.projectId?._id || entry.projectId;
       const project = projects.find((p) => p._id === projectId);
@@ -1075,6 +1242,44 @@ const Timesheets = () => {
               >
                 <ArrowForwardIosIcon fontSize="small" />
               </IconButton>
+            </Box>
+
+            {/* 24 Hour View Toggle */}
+            <Box
+              sx={{
+                background: theme.palette.background.paper,
+                p: 1.5,
+                borderRadius: 3,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+                border: `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={show24HourView}
+                    onChange={(e) => setShow24HourView(e.target.checked)}
+                    sx={{
+                      color: theme.palette.primary.main,
+                      "&.Mui-checked": {
+                        color: theme.palette.primary.main,
+                      },
+                    }}
+                  />
+                }
+                label={
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: theme.palette.text.primary,
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Show 24 Hour View
+                  </Typography>
+                }
+              />
             </Box>
 
             {/* Status Controls - Inline */}
@@ -2175,6 +2380,127 @@ const Timesheets = () => {
             }}
           >
             Finalize Anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cross-Day Entry Dialog */}
+      <Dialog
+        open={crossDayDialogOpen}
+        onClose={() => {
+          setCrossDayDialogOpen(false);
+          setPendingCrossDayEntry(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <EventBusyIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Cross-Day Entry Detected
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
+            Your time entry crosses midnight ({pendingCrossDayEntry?.startTime}{" "}
+            to {pendingCrossDayEntry?.endTime}).
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+            Would you like to automatically split this entry into two separate
+            entries?
+          </Typography>
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: "info.light",
+              borderRadius: 2,
+              mb: 2,
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              Option 1: Automatic Split (Recommended)
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              • First entry: {pendingCrossDayEntry?.startTime} to 23:59 on{" "}
+              {format(selectedDate, "dd/MM/yyyy")}
+            </Typography>
+            <Typography variant="body2">
+              • Second entry: 00:00 to {pendingCrossDayEntry?.endTime} on{" "}
+              {format(addDays(selectedDate, 1), "dd/MM/yyyy")}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: "grey.100",
+              borderRadius: 2,
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              Option 2: Manual Entry
+            </Typography>
+            <Typography variant="body2">
+              Cancel and manually enter two separate entries yourself.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => {
+              setCrossDayDialogOpen(false);
+              setPendingCrossDayEntry(null);
+            }}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSplitCrossDayEntry}
+            variant="contained"
+            color="primary"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Split Automatically
           </Button>
         </DialogActions>
       </Dialog>

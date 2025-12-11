@@ -27,7 +27,6 @@ import { DataGrid } from "@mui/x-data-grid";
 import {
   Search as SearchIcon,
   Clear as ClearIcon,
-  Assessment as AssessmentIcon,
   Close as CloseIcon,
   Description as DescriptionIcon,
 } from "@mui/icons-material";
@@ -63,6 +62,7 @@ const Reports = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
+  const [recentSearchesWithStatus, setRecentSearchesWithStatus] = useState([]);
   const [searchCache, setSearchCache] = useState(new Map());
   const [paginationModel, setPaginationModel] = useState({
     pageSize: 50,
@@ -76,7 +76,61 @@ const Reports = () => {
   // Debounce search term to reduce API calls
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  // Function to check if a project has any reports
+  // Function to check if a project has active jobs (not completed)
+  const checkProjectHasActiveJobs = useCallback(async (project) => {
+    try {
+      // Check for active asbestos removal jobs
+      try {
+        const { default: asbestosRemovalJobService } = await import(
+          "../../services/asbestosRemovalJobService"
+        );
+        const jobsResponse = await asbestosRemovalJobService.getAll({
+          projectId: project._id,
+        });
+        const jobs = jobsResponse.jobs || jobsResponse.data || [];
+        const hasActiveJobs = jobs.some(
+          (job) =>
+            (job.projectId === project._id ||
+              job.projectId?._id === project._id) &&
+            job.status === "in_progress"
+        );
+        if (hasActiveJobs) {
+          return true;
+        }
+      } catch (error) {
+        // No active asbestos removal jobs
+      }
+
+      // Check for active client supplied jobs (fibre ID)
+      try {
+        const { clientSuppliedJobsService } = await import(
+          "../../services/api"
+        );
+        const clientJobsResponse = await clientSuppliedJobsService.getAll({
+          projectId: project._id,
+        });
+        const clientJobs = clientJobsResponse.data || [];
+        const hasActiveClientJobs = clientJobs.some(
+          (job) =>
+            (job.projectId === project._id ||
+              job.projectId?._id === project._id) &&
+            (job.status === "In Progress" || job.status === "Analysis Complete")
+        );
+        if (hasActiveClientJobs) {
+          return true;
+        }
+      } catch (error) {
+        // No active client supplied jobs
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error checking active jobs:", error);
+      return false;
+    }
+  }, []);
+
+  // Function to check if a project has any completed reports
   const checkProjectHasReports = useCallback(async (project) => {
     try {
       const { default: reportService } = await import(
@@ -98,7 +152,7 @@ const Reports = () => {
         // No assessment reports
       }
 
-      // Check air monitoring reports
+      // Check air monitoring reports (only from completed jobs)
       try {
         const airMonitoringResponse = await fetch(
           `${
@@ -121,7 +175,7 @@ const Reports = () => {
         // No air monitoring reports
       }
 
-      // Check clearances
+      // Check clearances (only from completed jobs)
       try {
         const { default: asbestosClearanceService } = await import(
           "../../services/asbestosClearanceService"
@@ -169,7 +223,7 @@ const Reports = () => {
         // No clearances
       }
 
-      // Check fibre ID reports
+      // Check fibre ID reports (only completed ones)
       try {
         const fibreIdReports = await reportService.getFibreIdReports(
           project._id
@@ -273,10 +327,25 @@ const Reports = () => {
           return bNum - aNum; // Descending order
         });
 
-        setSearchResults(sortedProjects);
+        // Check for active jobs and reports for each project
+        const projectsWithStatus = await Promise.all(
+          sortedProjects.map(async (project) => {
+            const hasReports = await checkProjectHasReports(project);
+            const hasActiveJobs = await checkProjectHasActiveJobs(project);
+            return {
+              ...project,
+              reports_present: hasReports,
+              has_active_jobs: hasActiveJobs,
+            };
+          })
+        );
+
+        setSearchResults(projectsWithStatus);
 
         // Cache the results
-        setSearchCache((prev) => new Map(prev).set(cacheKey, sortedProjects));
+        setSearchCache((prev) =>
+          new Map(prev).set(cacheKey, projectsWithStatus)
+        );
 
         if (projectsData.length === 0) {
           setError("No projects found matching your search term");
@@ -291,7 +360,7 @@ const Reports = () => {
         setSearching(false);
       }
     },
-    [searchCache]
+    [searchCache, checkProjectHasReports, checkProjectHasActiveJobs]
   );
 
   // Function to load recent searches from localStorage
@@ -311,6 +380,30 @@ const Reports = () => {
       setRecentSearches([]);
     }
   }, []);
+
+  // Check active jobs status for recent searches
+  useEffect(() => {
+    const updateRecentSearchesStatus = async () => {
+      if (recentSearches.length === 0) {
+        setRecentSearchesWithStatus([]);
+        return;
+      }
+
+      const updated = await Promise.all(
+        recentSearches.map(async (project) => {
+          const hasActiveJobs = await checkProjectHasActiveJobs(project);
+          return {
+            ...project,
+            has_active_jobs: hasActiveJobs,
+          };
+        })
+      );
+
+      setRecentSearchesWithStatus(updated);
+    };
+
+    updateRecentSearchesStatus();
+  }, [recentSearches, checkProjectHasActiveJobs]);
 
   // Load recent searches on mount and listen for updates
   useEffect(() => {
@@ -454,6 +547,7 @@ const Reports = () => {
       renderCell: (params) => {
         const project = params.row;
         const hasReports = project.reports_present === true;
+        const hasActiveJobs = project.has_active_jobs === true;
 
         return (
           <Stack direction="row" spacing={1}>
@@ -477,7 +571,7 @@ const Reports = () => {
                   navigate(`/reports/project/${project._id}`);
                 }}
               >
-                Reports
+                {hasActiveJobs ? "Active Jobs & Reports" : "Reports"}
               </Button>
             )}
           </Stack>
@@ -568,7 +662,10 @@ const Reports = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {recentSearches.map((project) => (
+                  {(recentSearchesWithStatus.length > 0
+                    ? recentSearchesWithStatus
+                    : recentSearches
+                  ).map((project) => (
                     <TableRow
                       key={project._id}
                       hover
@@ -626,7 +723,9 @@ const Reports = () => {
                                 });
                               }}
                             >
-                              Reports
+                              {project.has_active_jobs
+                                ? "Active Jobs & Reports"
+                                : "Reports"}
                             </Button>
                           )}
                           <IconButton
