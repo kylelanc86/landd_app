@@ -71,6 +71,35 @@ router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
   }
 });
 
+// Get asbestos assessors only (optimized endpoint)
+router.get('/asbestos-assessors', auth, checkPermission(['users.view']), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    
+    // Filter for active users with asbestos assessor licenses
+    // Using MongoDB query to filter on the backend for better performance
+    const assessors = await User.find({
+      isActive: true,
+      licences: {
+        $elemMatch: {
+          licenceType: { $regex: /asbestos assessor/i }
+        }
+      }
+    })
+      .select('firstName lastName _id') // Only select fields needed
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${assessors.length} asbestos assessors in ${queryTime}ms`);
+    
+    res.json(assessors);
+  } catch (err) {
+    console.error('Error fetching asbestos assessors:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get user by ID
 router.get('/:id', auth, async (req, res) => {
   try {

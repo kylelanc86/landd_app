@@ -60,7 +60,6 @@ import {
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
-import userService from "../../services/userService";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
@@ -128,9 +127,6 @@ const AsbestosRemovalJobDetails = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
-  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
-  const [assessorsLoaded, setAssessorsLoaded] = useState(false);
-  const [assessorsLoading, setAssessorsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Clearance modal state
@@ -160,7 +156,6 @@ const AsbestosRemovalJobDetails = () => {
     clearanceDate: "",
     inspectionTime: "09:00 AM",
     clearanceType: "Non-friable",
-    LAA: "",
     asbestosRemovalist: "",
     jurisdiction: "ACT",
     secondaryHeader: "",
@@ -172,85 +167,6 @@ const AsbestosRemovalJobDetails = () => {
     useComplexTemplate: false,
     jobSpecificExclusions: "",
   });
-
-  const fetchAsbestosAssessors = useCallback(async () => {
-    if (assessorsLoading || assessorsLoaded) {
-      logDebug("fetchAsbestosAssessors skipped", {
-        assessorsLoaded,
-        assessorsLoading,
-      });
-      return;
-    }
-
-    const startTs = getTimestamp();
-    logDebug("fetchAsbestosAssessors start");
-    setAssessorsLoading(true);
-
-    try {
-      const requestStart = getTimestamp();
-      const response = await userService.getAll();
-      const requestDuration = Math.round(getTimestamp() - requestStart);
-      const users = response.data;
-
-      const usersDataSize = JSON.stringify(users).length;
-      logDebug("fetchAsbestosAssessors - users response received", {
-        userCount: Array.isArray(users) ? users.length : 0,
-        dataSizeBytes: usersDataSize,
-        dataSizeKB: Math.round((usersDataSize / 1024) * 100) / 100,
-        requestDurationMs: requestDuration,
-      });
-
-      // Filter users who have Asbestos Assessor licenses
-      const filterStart = getTimestamp();
-      const assessors = users.filter(
-        (user) =>
-          user.isActive &&
-          user.licences &&
-          user.licences.some(
-            (licence) =>
-              licence.licenceType &&
-              licence.licenceType.toLowerCase().includes("asbestos assessor")
-          )
-      );
-      const filterDuration = Math.round(getTimestamp() - filterStart);
-      logDebug("fetchAsbestosAssessors - filtering complete", {
-        assessorCount: assessors.length,
-        filterDurationMs: filterDuration,
-      });
-
-      // Sort alphabetically by name
-      const sortStart = getTimestamp();
-      const sortedAssessors = assessors.sort((a, b) => {
-        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-      const sortDuration = Math.round(getTimestamp() - sortStart);
-      logDebug("fetchAsbestosAssessors - sorting complete", {
-        sortDurationMs: sortDuration,
-      });
-
-      setAsbestosAssessors(sortedAssessors);
-      setAssessorsLoaded(true);
-      logDebug("fetchAsbestosAssessors success", {
-        assessorCount: sortedAssessors.length,
-        durationMs: Math.round(getTimestamp() - startTs),
-        breakdown: {
-          requestMs: requestDuration,
-          filterMs: filterDuration,
-          sortMs: sortDuration,
-        },
-      });
-    } catch (error) {
-      console.error("Error fetching asbestos assessors:", error);
-      logDebug("fetchAsbestosAssessors error", {
-        durationMs: Math.round(getTimestamp() - startTs),
-        message: error?.message,
-      });
-    } finally {
-      setAssessorsLoading(false);
-    }
-  }, [assessorsLoaded, assessorsLoading, logDebug]);
 
   const latestFetchIdRef = useRef(0);
 
@@ -565,6 +481,14 @@ const AsbestosRemovalJobDetails = () => {
   );
 
   const fetchAsbestosRemovalists = useCallback(async () => {
+    // Only fetch if not already loaded (lazy loading)
+    if (asbestosRemovalists.length > 0) {
+      logDebug("fetchAsbestosRemovalists skipped - already loaded", {
+        removalistCount: asbestosRemovalists.length,
+      });
+      return;
+    }
+
     const startTs = getTimestamp();
     logDebug("fetchAsbestosRemovalists start");
 
@@ -611,7 +535,7 @@ const AsbestosRemovalJobDetails = () => {
       });
       setAsbestosRemovalists([]);
     }
-  }, [logDebug]);
+  }, [asbestosRemovalists.length, logDebug]);
 
   useEffect(() => {
     if (jobId) {
@@ -631,72 +555,15 @@ const AsbestosRemovalJobDetails = () => {
         callDurationMs: fetchJobDetailsCallDuration,
       });
 
-      const removalistsStart = getTimestamp();
-      fetchAsbestosRemovalists();
-      const fetchRemovalistsCallDuration = Math.round(
-        getTimestamp() - removalistsStart
-      );
-      logDebug("jobId effect - fetchAsbestosRemovalists called", {
-        callDurationMs: fetchRemovalistsCallDuration,
-      });
-
       const totalEffectDuration = Math.round(getTimestamp() - effectStart);
       logDebug("jobId effect complete", {
         totalEffectDurationMs: totalEffectDuration,
         breakdown: {
           fetchJobDetailsCallMs: fetchJobDetailsCallDuration,
-          fetchRemovalistsCallMs: fetchRemovalistsCallDuration,
         },
       });
     }
-  }, [jobId, fetchJobDetails, fetchAsbestosRemovalists, logDebug]);
-
-  useEffect(() => {
-    const effectStart = getTimestamp();
-    const checkStart = getTimestamp();
-    const requiresAssessorLookup = clearances.some(
-      (clearance) =>
-        clearance &&
-        typeof clearance.LAA === "string" &&
-        /^[0-9a-fA-F]{24}$/.test(clearance.LAA)
-    );
-    const checkDuration = Math.round(getTimestamp() - checkStart);
-
-    logDebug("assessor lookup effect - check complete", {
-      clearanceCount: clearances.length,
-      requiresAssessorLookup,
-      assessorsLoaded,
-      assessorsLoading,
-      checkDurationMs: checkDuration,
-    });
-
-    if (requiresAssessorLookup && !assessorsLoaded && !assessorsLoading) {
-      logDebug("assessor lookup triggered by clearances", {
-        clearanceCount: clearances.length,
-        timestamp: new Date().toISOString(),
-      });
-      const fetchStart = getTimestamp();
-      fetchAsbestosAssessors();
-      const fetchCallDuration = Math.round(getTimestamp() - fetchStart);
-      logDebug("assessor lookup effect - fetchAsbestosAssessors called", {
-        callDurationMs: fetchCallDuration,
-      });
-    }
-
-    const totalEffectDuration = Math.round(getTimestamp() - effectStart);
-    if (totalEffectDuration > 1) {
-      logDebug("assessor lookup effect complete", {
-        totalEffectDurationMs: totalEffectDuration,
-        checkDurationMs: checkDuration,
-      });
-    }
-  }, [
-    clearances,
-    assessorsLoaded,
-    assessorsLoading,
-    fetchAsbestosAssessors,
-    logDebug,
-  ]);
+  }, [jobId, fetchJobDetails, logDebug]);
 
   useEffect(() => {
     const shiftsSize = JSON.stringify(airMonitoringShifts).length;
@@ -781,19 +648,6 @@ const AsbestosRemovalJobDetails = () => {
         )
         .join(" ")
     );
-  };
-
-  const getLaaName = (laaId) => {
-    if (!laaId) return "N/A";
-
-    // If it's already a name (backward compatibility), return as is
-    if (typeof laaId === "string" && !laaId.match(/^[0-9a-fA-F]{24}$/)) {
-      return laaId;
-    }
-
-    // If it's a user ID, look up the user's name
-    const user = asbestosAssessors.find((assessor) => assessor._id === laaId);
-    return user ? `${user.firstName} ${user.lastName}` : "Unknown User";
   };
 
   const formatTimeForDisplay = (timeString) => {
@@ -1082,9 +936,8 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleCreateClearance = () => {
-    if (!assessorsLoaded && !assessorsLoading) {
-      fetchAsbestosAssessors();
-    }
+    // Lazy load removalists only when needed
+    fetchAsbestosRemovalists();
     setEditingClearance(null);
     resetClearanceForm();
     setClearanceDialogOpen(true);
@@ -1321,9 +1174,8 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleEditClearance = (clearance, event) => {
     event.stopPropagation();
-    if (!assessorsLoaded && !assessorsLoading) {
-      fetchAsbestosAssessors();
-    }
+    // Lazy load removalists only when needed
+    fetchAsbestosRemovalists();
     setEditingClearance(clearance);
     const clearanceType = clearance.clearanceType || "Non-friable";
     setClearanceForm({
@@ -1333,7 +1185,6 @@ const AsbestosRemovalJobDetails = () => {
         : "",
       inspectionTime: formatTimeForDisplay(clearance.inspectionTime),
       clearanceType: clearanceType,
-      LAA: clearance.LAA || "",
       asbestosRemovalist: clearance.asbestosRemovalist || "",
       jurisdiction: clearance.jurisdiction || "ACT",
       secondaryHeader: clearance.secondaryHeader || "",
@@ -1413,7 +1264,6 @@ const AsbestosRemovalJobDetails = () => {
       clearanceDate: new Date().toISOString().split("T")[0],
       inspectionTime: "09:00 AM",
       clearanceType: "Non-friable",
-      LAA: "",
       asbestosRemovalist: job?.asbestosRemovalist || "",
       jurisdiction: "ACT",
       secondaryHeader: "",
@@ -1429,10 +1279,6 @@ const AsbestosRemovalJobDetails = () => {
 
     if (!clearanceForm.inspectionTime.trim()) {
       setError("Inspection time is required");
-      return;
-    }
-    if (!clearanceForm.LAA.trim()) {
-      setError("LAA is required");
       return;
     }
 
@@ -1454,7 +1300,6 @@ const AsbestosRemovalJobDetails = () => {
         clearanceDate: clearanceForm.clearanceDate,
         inspectionTime: clearanceForm.inspectionTime,
         clearanceType: clearanceForm.clearanceType,
-        LAA: clearanceForm.LAA,
         asbestosRemovalist: clearanceForm.asbestosRemovalist,
         jurisdiction: clearanceForm.jurisdiction,
         secondaryHeader: clearanceForm.secondaryHeader,
@@ -1560,7 +1405,6 @@ const AsbestosRemovalJobDetails = () => {
         job: JSON.stringify(job).length,
         shifts: JSON.stringify(airMonitoringShifts).length,
         clearances: JSON.stringify(clearances).length,
-        assessors: JSON.stringify(asbestosAssessors).length,
         removalists: JSON.stringify(asbestosRemovalists).length,
       },
     });
@@ -2039,9 +1883,6 @@ const AsbestosRemovalJobDetails = () => {
                         Status
                       </TableCell>
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                        LAA
-                      </TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                         Actions
                       </TableCell>
                     </TableRow>
@@ -2072,7 +1913,6 @@ const AsbestosRemovalJobDetails = () => {
                             }}
                           />
                         </TableCell>
-                        <TableCell>{getLaaName(clearance.LAA)}</TableCell>
                         <TableCell>
                           <IconButton
                             size="small"
@@ -2290,30 +2130,6 @@ const AsbestosRemovalJobDetails = () => {
                     <MenuItem value="Vehicle/Equipment">
                       Vehicle/Equipment
                     </MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
-                  <Select
-                    value={clearanceForm.LAA}
-                    onChange={(e) =>
-                      setClearanceForm({
-                        ...clearanceForm,
-                        LAA: e.target.value,
-                      })
-                    }
-                    label="LAA (Licensed Asbestos Assessor)"
-                  >
-                    <MenuItem value="">
-                      <em>Select an Asbestos Assessor</em>
-                    </MenuItem>
-                    {asbestosAssessors.map((assessor) => (
-                      <MenuItem key={assessor._id} value={assessor._id}>
-                        {assessor.firstName} {assessor.lastName}
-                      </MenuItem>
-                    ))}
                   </Select>
                 </FormControl>
               </Grid>
