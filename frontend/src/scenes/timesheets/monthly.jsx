@@ -277,13 +277,19 @@ const MonthlyTimesheet = () => {
             <Grid item xs={12 / 7} key={day}>
               <Box
                 sx={{
-                  p: 0.75,
+                  p: {
+                    xs: 0.75,
+                    lg: 1,
+                  },
                   textAlign: "center",
                   fontWeight: 700,
                   backgroundColor: theme.palette.primary.main,
                   color: theme.palette.primary.contrastText,
                   borderRadius: "8px 8px 0 0",
-                  fontSize: "0.75rem",
+                  fontSize: {
+                    xs: "0.75rem",
+                    lg: "0.875rem",
+                  },
                   textShadow: "0 1px 2px rgba(0,0,0,0.2)",
                   borderBottom: `2px solid ${theme.palette.primary.dark}`,
                   boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
@@ -327,14 +333,35 @@ const MonthlyTimesheet = () => {
                 <Box
                   onClick={() => day && handleDayClick(day)}
                   sx={{
-                    p: 0.75,
-                    height: "75px",
-                    border: "1px solid",
-                    borderColor: day ? theme.palette.divider : "transparent",
+                    p: {
+                      xs: 0.75,
+                      lg: 1.25,
+                    },
+                    height: {
+                      xs: "75px",
+                      lg: "120px",
+                    },
+                    border:
+                      day && isToday(day)
+                        ? `2px solid ${theme.palette.error.main}`
+                        : "1px solid",
+                    borderColor: day
+                      ? isToday(day)
+                        ? theme.palette.error.main
+                        : theme.palette.divider
+                      : "transparent",
                     borderRadius: "0 0 8px 8px",
                     cursor: day ? "pointer" : "default",
                     backgroundColor: day
-                      ? isCompleted
+                      ? isToday(day)
+                        ? isCompleted
+                          ? theme.palette.success.light
+                          : isIncomplete
+                          ? "rgba(25, 118, 210, 0.2)"
+                          : isWeekend
+                          ? theme.palette.grey[300]
+                          : "rgba(211, 47, 47, 0.08)" // Light red background for today
+                        : isCompleted
                         ? theme.palette.success.light // Green for completed
                         : isIncomplete
                         ? "rgba(25, 118, 210, 0.2)" // Semi-transparent blue for incomplete
@@ -349,12 +376,20 @@ const MonthlyTimesheet = () => {
                     flexDirection: "column",
                     justifyContent: "center",
                     alignItems: "center",
+                    boxShadow:
+                      day && isToday(day)
+                        ? `0 0 0 2px ${theme.palette.error.main}40, 0 4px 12px rgba(211, 47, 47, 0.3)`
+                        : "none",
                     "&:hover": {
                       backgroundColor: day
                         ? theme.palette.action.hover
                         : "transparent",
                       transform: day ? "translateY(-1px)" : "none",
-                      boxShadow: day ? "0 2px 8px rgba(0,0,0,0.15)" : "none",
+                      boxShadow: day
+                        ? isToday(day)
+                          ? `0 0 0 2px ${theme.palette.error.main}40, 0 6px 16px rgba(211, 47, 47, 0.4)`
+                          : "0 2px 8px rgba(0,0,0,0.15)"
+                        : "none",
                     },
                     "&::before":
                       day && isToday(day)
@@ -364,9 +399,13 @@ const MonthlyTimesheet = () => {
                             top: 0,
                             left: 0,
                             right: 0,
-                            height: "3px",
+                            height: {
+                              xs: "4px",
+                              lg: "5px",
+                            },
                             backgroundColor: theme.palette.error.main,
                             borderRadius: "8px 8px 0 0",
+                            boxShadow: `0 2px 4px ${theme.palette.error.main}80`,
                           }
                         : {},
                   }}
@@ -376,19 +415,27 @@ const MonthlyTimesheet = () => {
                       <Typography
                         variant="body2"
                         sx={{
-                          fontWeight: isToday(day) ? 800 : 600,
+                          fontWeight: isToday(day) ? 900 : 600,
                           color: isToday(day)
                             ? theme.palette.error.main
                             : isWeekend
                             ? theme.palette.text.secondary
                             : theme.palette.text.primary,
-                          fontSize: "0.85rem",
+                          fontSize: {
+                            xs: isToday(day) ? "1rem" : "0.85rem",
+                            lg: isToday(day) ? "1.25rem" : "1rem",
+                          },
                           textAlign: "center",
-                          mb: 0.25,
+                          mb: {
+                            xs: 0.25,
+                            lg: 0.5,
+                          },
                           lineHeight: 1.2,
                           textShadow: isToday(day)
-                            ? "0 1px 2px rgba(0,0,0,0.2)"
+                            ? `0 2px 4px ${theme.palette.error.main}60, 0 1px 2px rgba(0,0,0,0.3)`
                             : "none",
+                          transform: isToday(day) ? "scale(1.1)" : "scale(1)",
+                          transition: "transform 0.2s ease-in-out",
                         }}
                       >
                         {format(day, "d")}
@@ -398,7 +445,10 @@ const MonthlyTimesheet = () => {
                           sx={{
                             display: "flex",
                             justifyContent: "center",
-                            mb: 0.25,
+                            mb: {
+                              xs: 0.25,
+                              lg: 0.5,
+                            },
                           }}
                         >
                           <Chip
@@ -412,9 +462,15 @@ const MonthlyTimesheet = () => {
                                 : "warning"
                             }
                             sx={{
-                              fontSize: "0.6rem",
+                              fontSize: {
+                                xs: "0.6rem",
+                                lg: "0.7rem",
+                              },
                               fontWeight: 600,
-                              height: "16px",
+                              height: {
+                                xs: "16px",
+                                lg: "20px",
+                              },
                               backgroundColor: isWeekend
                                 ? theme.palette.common.white
                                 : undefined,
@@ -423,7 +479,10 @@ const MonthlyTimesheet = () => {
                                 : undefined,
                               boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
                               "& .MuiChip-label": {
-                                px: 0.5,
+                                px: {
+                                  xs: 0.5,
+                                  lg: 0.75,
+                                },
                                 py: 0,
                                 lineHeight: 1.2,
                               },
@@ -437,12 +496,19 @@ const MonthlyTimesheet = () => {
                           sx={{
                             display: "block",
                             textAlign: "center",
-                            fontSize: "0.55rem",
+                            fontSize: {
+                              xs: "0.55rem",
+                              lg: "0.7rem",
+                            },
                             color: isWeekend
                               ? theme.palette.text.secondary
                               : theme.palette.text.secondary,
                             fontWeight: 500,
                             lineHeight: 1,
+                            mt: {
+                              xs: 0,
+                              lg: 0.25,
+                            },
                           }}
                         >
                           {formatTime(totalTime)}

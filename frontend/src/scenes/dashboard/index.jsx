@@ -139,6 +139,18 @@ const Dashboard = () => {
     const DEBUG_PREFS = false; // Set to true to enable preference loading logs
     const loadUserPreferences = async () => {
       try {
+        // Check if cache is empty - if so, load from database
+        const cachedOrder = localStorage.getItem("dashboardWidgetOrder");
+        const cachedWidgets = localStorage.getItem("dashboardWidgets");
+        const cacheIsEmpty = !cachedOrder || !cachedWidgets;
+
+        if (cacheIsEmpty) {
+          if (DEBUG_PREFS) console.log("Cache is empty, loading from database");
+        } else {
+          if (DEBUG_PREFS)
+            console.log("Cache exists, loading from cache first");
+        }
+
         const response = await userPreferencesService.getPreferences();
         if (DEBUG_PREFS) console.log("Loaded user preferences:", response.data);
 
@@ -181,6 +193,13 @@ const Dashboard = () => {
               console.log("Unique widget order:", uniqueOrder);
             }
             setWidgetOrder(uniqueOrder);
+
+            // Cache the widget order
+            localStorage.setItem(
+              "dashboardWidgetOrder",
+              JSON.stringify(uniqueOrder)
+            );
+            if (DEBUG_PREFS) console.log("Cached widget order:", uniqueOrder);
           } else {
             if (DEBUG_PREFS) {
               console.log(
@@ -240,11 +259,15 @@ const Dashboard = () => {
               });
             }
             setVisibleWidgets(merged);
+
+            // Cache the visible widgets
+            localStorage.setItem("dashboardWidgets", JSON.stringify(merged));
+            if (DEBUG_PREFS) console.log("Cached visible widgets:", merged);
           } else {
             // No preferences found - use default state (only dailyTimesheet enabled)
             if (DEBUG_PREFS)
               console.log("No widget preferences found, using defaults");
-            setVisibleWidgets({
+            const defaultWidgets = {
               dailyTimesheet: true,
               inProgress: false,
               samplesSubmitted: false,
@@ -254,13 +277,22 @@ const Dashboard = () => {
               invoiceSent: false,
               awaitingPayment: false,
               allActive: false,
-            });
+            };
+            setVisibleWidgets(defaultWidgets);
+
+            // Cache the default widgets
+            localStorage.setItem(
+              "dashboardWidgets",
+              JSON.stringify(defaultWidgets)
+            );
+            if (DEBUG_PREFS)
+              console.log("Cached default widgets:", defaultWidgets);
           }
         } else {
           // No dashboard preferences found - use default state
           if (DEBUG_PREFS)
             console.log("No dashboard preferences found, using defaults");
-          setVisibleWidgets({
+          const defaultWidgets = {
             dailyTimesheet: true,
             inProgress: false,
             samplesSubmitted: false,
@@ -269,7 +301,17 @@ const Dashboard = () => {
             readyForInvoicing: false,
             invoiceSent: false,
             awaitingPayment: false,
-          });
+            allActive: false,
+          };
+          setVisibleWidgets(defaultWidgets);
+
+          // Cache the default widgets
+          localStorage.setItem(
+            "dashboardWidgets",
+            JSON.stringify(defaultWidgets)
+          );
+          if (DEBUG_PREFS)
+            console.log("Cached default widgets:", defaultWidgets);
         }
       } catch (error) {
         console.error("Error loading user preferences:", error);
@@ -337,6 +379,7 @@ const Dashboard = () => {
             readyForInvoicing: false,
             invoiceSent: false,
             awaitingPayment: false,
+            allActive: false,
           });
         }
       }
@@ -395,10 +438,15 @@ const Dashboard = () => {
           visibleWidgets: visibleWidgets,
         },
       });
+
+      // Update cache after successful database save
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(newOrder));
+      localStorage.setItem("dashboardWidgets", JSON.stringify(visibleWidgets));
     } catch (error) {
       console.error("Error saving widget order preferences:", error);
       // Fallback to localStorage if API fails
       localStorage.setItem("dashboardWidgetOrder", JSON.stringify(newOrder));
+      localStorage.setItem("dashboardWidgets", JSON.stringify(visibleWidgets));
     }
 
     // Force a re-render by updating visibleWidgets
@@ -686,10 +734,16 @@ const Dashboard = () => {
         },
       });
       console.log("Saved to database:", JSON.stringify(newState));
+
+      // Update cache after successful database save
+      localStorage.setItem("dashboardWidgets", JSON.stringify(newState));
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(widgetOrder));
+      console.log("Updated cache with new widget selections");
     } catch (error) {
       console.error("Error saving widget preferences:", error);
       // Fallback to localStorage if API fails
       localStorage.setItem("dashboardWidgets", JSON.stringify(newState));
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(widgetOrder));
       console.log("Saved to localStorage:", JSON.stringify(newState));
     }
   };

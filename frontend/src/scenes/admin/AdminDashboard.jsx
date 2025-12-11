@@ -6,7 +6,6 @@ import {
   Card,
   CardContent,
   CardActionArea,
-  CardMedia,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
@@ -19,15 +18,10 @@ import {
   Archive as ArchiveIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import { tokens } from "../../theme/tokens";
-import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
-import Header from "../../components/Header";
 
 const AdminDashboard = () => {
   const theme = useTheme();
-  const colors = tokens;
-  const { user } = useAuth();
   const navigate = useNavigate();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -87,65 +81,94 @@ const AdminDashboard = () => {
   return (
     <PermissionGate requiredPermissions={["admin.view"]}>
       <Box m="20px">
-        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
+        <Typography
+          variant="h3"
+          component="h1"
+          gutterBottom
+          sx={{ mt: 3, mb: 4, fontWeight: 600 }}
+        >
           Admin Dashboard
         </Typography>
         <Box sx={{ mt: 4 }}>
           <Grid container spacing={isTablet ? 3 : 4}>
             {adminModules.map((module) => (
-              <Grid item xs={12} md={4} lg={4} key={module.id}>
+              <Grid item xs={12} sm={6} md={4} lg={4} key={module.id}>
                 <Card
                   sx={{
-                    height: isTablet ? "auto" : "100%",
-                    maxHeight: isTablet ? "320px" : "none",
-                    transition: "all 0.3s ease-in-out",
+                    height: "100%",
+                    minHeight: isTablet ? "280px" : "320px",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     overflow: "hidden",
+                    borderRadius: "16px",
+                    boxShadow:
+                      "0 4px 20px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06)",
+                    border: "1px solid rgba(0,0,0,0.05)",
                     "&:hover": {
                       transform: "translateY(-4px)",
-                      boxShadow: 4,
+                      boxShadow:
+                        "0 8px 25px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08)",
                     },
                   }}
                 >
                   <CardActionArea
                     onClick={() => handleModuleClick(module)}
                     sx={{
-                      height: isTablet ? "auto" : "100%",
+                      height: "100%",
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "stretch",
                     }}
                   >
-                    <CardMedia
+                    <Box
                       component="div"
                       sx={{
-                        height: 160,
-                        backgroundColor: module.color,
+                        height: isTablet ? 140 : 180,
+                        background: `linear-gradient(135deg, ${module.color}15 0%, ${module.color}08 100%)`,
+                        borderBottom: `2px solid ${module.color}30`,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         position: "relative",
-                        "@media (max-width: 1181px)": {
-                          height: "120px !important",
+                        padding: isTablet ? "20px" : "24px",
+                        transition: "all 0.3s ease-in-out",
+                        "&:hover": {
+                          background: `linear-gradient(135deg, ${module.color}20 0%, ${module.color}12 100%)`,
+                          borderBottom: `2px solid ${module.color}40`,
                         },
                       }}
                     >
-                      {React.cloneElement(module.icon, {
-                        sx: {
-                          fontSize: isTablet ? 64 : 80,
-                          color: "white",
-                        },
-                      })}
-                    </CardMedia>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: isTablet ? 80 : 100,
+                          height: isTablet ? 80 : 100,
+                          borderRadius: "50%",
+                          background: `linear-gradient(135deg, ${module.color}20 0%, ${module.color}10 100%)`,
+                          border: `2px solid ${module.color}30`,
+                          boxShadow: `0 4px 20px ${module.color}20, 0 2px 8px ${module.color}15`,
+                          transition: "all 0.3s ease-in-out",
+                        }}
+                      >
+                        {React.cloneElement(module.icon, {
+                          sx: {
+                            fontSize: isTablet ? 48 : 60,
+                            color: module.color,
+                            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))",
+                          },
+                        })}
+                      </Box>
+                    </Box>
                     <CardContent
                       sx={{
-                        flexGrow: isTablet ? 0 : 1,
+                        flexGrow: 1,
                         display: "flex",
                         flexDirection: "column",
-                        padding: isTablet ? "12px" : "16px",
+                        padding: isTablet ? "16px" : "20px",
                         "&:last-child": {
-                          paddingBottom: isTablet ? "12px" : "16px",
+                          paddingBottom: isTablet ? "16px" : "20px",
                         },
-                        overflow: isTablet ? "hidden" : "visible",
                       }}
                     >
                       <Typography
@@ -153,8 +176,11 @@ const AdminDashboard = () => {
                         component="h2"
                         gutterBottom
                         sx={{
-                          fontSize: isTablet ? "1.15rem" : "1.5rem",
-                          marginBottom: isTablet ? "8px" : "12px",
+                          fontSize: isTablet ? "1.25rem" : "1.5rem",
+                          marginBottom: isTablet ? "10px" : "12px",
+                          fontWeight: 600,
+                          color: "#1a1a1a",
+                          lineHeight: 1.3,
                         }}
                       >
                         {module.title}
@@ -163,8 +189,10 @@ const AdminDashboard = () => {
                         variant="body2"
                         color="text.secondary"
                         sx={{
-                          mb: isTablet ? 1.5 : 2,
-                          fontSize: isTablet ? "0.8rem" : "0.875rem",
+                          mb: isTablet ? 2 : 2.5,
+                          fontSize: isTablet ? "0.875rem" : "0.9375rem",
+                          lineHeight: 1.6,
+                          flexGrow: 1,
                         }}
                       >
                         {module.description}
@@ -175,21 +203,27 @@ const AdminDashboard = () => {
                           alignItems: "center",
                           justifyContent: "space-between",
                           marginTop: "auto",
+                          paddingTop: isTablet ? "8px" : "12px",
+                          borderTop: "1px solid rgba(0,0,0,0.08)",
                         }}
                       >
                         <Typography
                           variant="body2"
-                          color="primary"
                           sx={{
-                            fontWeight: "bold",
-                            fontSize: isTablet ? "0.75rem" : "0.875rem",
+                            fontWeight: 600,
+                            fontSize: isTablet ? "0.8125rem" : "0.875rem",
+                            color: module.color,
+                            transition: "all 0.2s ease-in-out",
                           }}
                         >
                           View {module.title}
                         </Typography>
                         <ArrowForwardIcon
-                          color="primary"
-                          sx={{ fontSize: isTablet ? "18px" : "24px" }}
+                          sx={{
+                            fontSize: isTablet ? "18px" : "20px",
+                            color: module.color,
+                            transition: "transform 0.2s ease-in-out",
+                          }}
                         />
                       </Box>
                     </CardContent>
@@ -199,29 +233,6 @@ const AdminDashboard = () => {
             ))}
           </Grid>
         </Box>
-
-        {/* Additional Admin Info */}
-        {/* <Box
-          sx={{
-            mt: 6,
-            p: 3,
-            backgroundColor: colors.grey[800],
-            borderRadius: 2,
-          }}
-        >
-          <Typography variant="h6" color={colors.grey[100]} sx={{ mb: 2 }}>
-            Admin Information
-          </Typography>
-          <Typography variant="body2" color={colors.grey[300]} sx={{ mb: 1 }}>
-            <strong>Current User:</strong> {user?.firstName} {user?.lastName}
-          </Typography>
-          <Typography variant="body2" color={colors.grey[300]} sx={{ mb: 1 }}>
-            <strong>Role:</strong> {user?.role || "User"}
-          </Typography>
-          <Typography variant="body2" color={colors.grey[300]}>
-            <strong>Permissions:</strong> Admin access granted
-          </Typography>
-        </Box> */}
       </Box>
     </PermissionGate>
   );

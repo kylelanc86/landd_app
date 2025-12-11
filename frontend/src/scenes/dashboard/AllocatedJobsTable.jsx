@@ -4,8 +4,7 @@ import {
   Typography,
   useTheme,
   CircularProgress,
-  IconButton,
-  Tooltip,
+  Button,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useNavigate } from "react-router-dom";
@@ -647,21 +646,11 @@ const AllocatedJobsTable = () => {
             </Typography>
           )}
         </Typography>
-        <Tooltip title="Refresh data">
-          <IconButton
-            onClick={handleRefresh}
-            disabled={isRefreshing || loading}
-            size="small"
-            sx={{
-              color: theme.palette.primary.main,
-              "&:hover": {
-                backgroundColor: theme.palette.primary.light + "20",
-              },
-              "&.Mui-disabled": {
-                color: theme.palette.action.disabled,
-              },
-            }}
-          >
+        <Button
+          onClick={handleRefresh}
+          disabled={isRefreshing || loading}
+          variant="outlined"
+          startIcon={
             <RefreshIcon
               sx={{
                 animation: isRefreshing ? "spin 1s linear infinite" : "none",
@@ -671,8 +660,22 @@ const AllocatedJobsTable = () => {
                 },
               }}
             />
-          </IconButton>
-        </Tooltip>
+          }
+          sx={{
+            color: theme.palette.primary.main,
+            borderColor: theme.palette.primary.main,
+            "&:hover": {
+              backgroundColor: theme.palette.primary.light + "20",
+              borderColor: theme.palette.primary.dark,
+            },
+            "&:disabled": {
+              color: theme.palette.action.disabled,
+              borderColor: theme.palette.action.disabled,
+            },
+          }}
+        >
+          Refresh My Active Projects
+        </Button>
       </Box>
 
       {/* Virtual Scrolling Optimized DataGrid with Proper Footer Positioning */}
