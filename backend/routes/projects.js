@@ -1401,6 +1401,14 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       console.log(`[ASSIGNED-TO-ME] ✅ Request completed successfully`);
       console.log(`${'='.repeat(80)}\n`);
 
+      // Include backend timing in response for frontend debugging
+      response._timing = {
+        backend: {
+          total: totalTime,
+          breakdown: breakdown
+        }
+      };
+
       res.json(response);
     } catch (error) {
       const errorTime = Date.now() - startTime;

@@ -42,8 +42,10 @@ const AllocatedJobsTable = () => {
   React.useEffect(() => {
     if (!authLoading && currentUser) {
       const authReadyTime = performance.now() - mountTime;
-      setTimingMetrics(prev => ({ ...prev, authReady: authReadyTime }));
-      console.log(`⏱️  [LIFECYCLE] Auth ready: ${authReadyTime.toFixed(2)}ms after mount`);
+      setTimingMetrics((prev) => ({ ...prev, authReady: authReadyTime }));
+      console.log(
+        `⏱️  [LIFECYCLE] Auth ready: ${authReadyTime.toFixed(2)}ms after mount`
+      );
     }
   }, [authLoading, currentUser, mountTime]);
 
@@ -51,8 +53,15 @@ const AllocatedJobsTable = () => {
   React.useEffect(() => {
     if (!statusesLoading && activeStatuses.length > 0) {
       const statusesReadyTime = performance.now() - mountTime;
-      setTimingMetrics(prev => ({ ...prev, statusesReady: statusesReadyTime }));
-      console.log(`⏱️  [LIFECYCLE] Statuses ready: ${statusesReadyTime.toFixed(2)}ms after mount`);
+      setTimingMetrics((prev) => ({
+        ...prev,
+        statusesReady: statusesReadyTime,
+      }));
+      console.log(
+        `⏱️  [LIFECYCLE] Statuses ready: ${statusesReadyTime.toFixed(
+          2
+        )}ms after mount`
+      );
     }
   }, [statusesLoading, activeStatuses, mountTime]);
 
@@ -60,27 +69,26 @@ const AllocatedJobsTable = () => {
     async (page = 0, pageSize = 25) => {
       // OPTIMIZATION: With cached project IDs, we don't need to wait for statuses
       // The backend uses cached IDs and doesn't need status filtering when using cache
-      if (
-        authLoading ||
-        !currentUser ||
-        !(currentUser._id || currentUser.id)
-      ) {
+      if (authLoading || !currentUser || !(currentUser._id || currentUser.id)) {
         console.log("⏱️  [LIFECYCLE] Fetch blocked - waiting for:", {
           authLoading,
           hasCurrentUser: !!currentUser,
-          timeSinceMount: `${(performance.now() - mountTime).toFixed(2)}ms`
+          timeSinceMount: `${(performance.now() - mountTime).toFixed(2)}ms`,
         });
         return;
       }
 
       const fetchStartTime = performance.now();
       const timeSinceMount = fetchStartTime - mountTime;
-      
-      setTimingMetrics(prev => ({ ...prev, dataFetchStart: timeSinceMount }));
-      
+
+      setTimingMetrics((prev) => ({ ...prev, dataFetchStart: timeSinceMount }));
+
       console.log("\n" + "=".repeat(80));
       console.log("📋 ALLOCATED JOBS TABLE - FETCH START");
-      console.log("⏱️  Time since component mount:", `${timeSinceMount.toFixed(2)}ms`);
+      console.log(
+        "⏱️  Time since component mount:",
+        `${timeSinceMount.toFixed(2)}ms`
+      );
       console.log("⏱️  Frontend fetch initiated at:", new Date().toISOString());
       console.log("📄 Request params:", {
         page: page + 1,
@@ -119,8 +127,11 @@ const AllocatedJobsTable = () => {
 
         const totalFetchTime = performance.now() - fetchStartTime;
         const timeSinceMount = performance.now() - mountTime;
-        
-        setTimingMetrics(prev => ({ ...prev, dataFetchComplete: timeSinceMount }));
+
+        setTimingMetrics((prev) => ({
+          ...prev,
+          dataFetchComplete: timeSinceMount,
+        }));
 
         // Calculate payload sizes
         const responseSize = JSON.stringify(response).length;
@@ -132,20 +143,57 @@ const AllocatedJobsTable = () => {
           totalCount: totalCount,
           pageSize: pageSize,
         });
+        // Log backend timing if available in response
+        const backendTiming = response.data._timing;
+        const networkLatency = backendTiming
+          ? apiTime - backendTiming.backend.total
+          : null;
+
         console.log("⏱️  Fetch timing breakdown:");
         console.log(`   • API request/response: ${apiTime.toFixed(2)}ms`);
+        if (backendTiming) {
+          console.log(
+            `   • Backend processing: ${backendTiming.backend.total.toFixed(
+              2
+            )}ms`
+          );
+          console.log(
+            `   • Network latency: ${networkLatency?.toFixed(2)}ms (${(
+              (networkLatency / apiTime) *
+              100
+            ).toFixed(1)}%)`
+          );
+          if (backendTiming.backend.breakdown) {
+            console.log(
+              `   • Backend breakdown:`,
+              backendTiming.backend.breakdown
+            );
+          }
+        }
         console.log(`   • Data extraction: ${extractTime.toFixed(2)}ms`);
         console.log(`   • State update: ${stateUpdateTime.toFixed(2)}ms`);
         console.log(`   • Total fetch time: ${totalFetchTime.toFixed(2)}ms`);
         console.log("⏱️  Lifecycle timing:");
         console.log(`   • Time since mount: ${timeSinceMount.toFixed(2)}ms`);
         console.log(`   • Auth ready: ${timingMetrics.authReady.toFixed(2)}ms`);
-        console.log(`   • Statuses ready: ${timingMetrics.statusesReady.toFixed(2)}ms`);
+        console.log(
+          `   • Statuses ready: ${timingMetrics.statusesReady.toFixed(2)}ms`
+        );
         console.log("📦 Payload sizes:");
-        console.log(`   • Full response: ${(responseSize / 1024).toFixed(2)} KB`);
+        console.log(
+          `   • Full response: ${(responseSize / 1024).toFixed(2)} KB`
+        );
         console.log(`   • Data only: ${(dataSize / 1024).toFixed(2)} KB`);
-        console.log(`   • Avg per project: ${(dataSize / projectsData.length / 1024).toFixed(2)} KB`);
-        console.log("⚠️  Note: DataGrid render time not yet measured - waiting for first render");
+        console.log(
+          `   • Avg per project: ${(
+            dataSize /
+            projectsData.length /
+            1024
+          ).toFixed(2)} KB`
+        );
+        console.log(
+          "⚠️  Note: DataGrid render time not yet measured - waiting for first render"
+        );
         console.log("=".repeat(80) + "\n");
 
         // Store paginated data (already filtered by backend)
@@ -194,35 +242,91 @@ const AllocatedJobsTable = () => {
     }));
     const formatTime = performance.now() - formatStart;
     if (jobs.length > 0) {
-      console.log(`⏱️  [RENDER] Job formatting: ${formatTime.toFixed(2)}ms for ${jobs.length} jobs`);
+      console.log(
+        `⏱️  [RENDER] Job formatting: ${formatTime.toFixed(2)}ms for ${
+          jobs.length
+        } jobs`
+      );
     }
     return formatted;
   }, [jobs]);
 
   // Track first render completion
   React.useEffect(() => {
-    if (formattedJobs.length > 0 && !loading && timingMetrics.firstRenderComplete === 0) {
+    if (
+      formattedJobs.length > 0 &&
+      !loading &&
+      timingMetrics.firstRenderComplete === 0
+    ) {
       const firstRenderTime = performance.now() - mountTime;
-      setTimingMetrics(prev => ({ ...prev, firstRenderComplete: firstRenderTime }));
-      
+      setTimingMetrics((prev) => ({
+        ...prev,
+        firstRenderComplete: firstRenderTime,
+      }));
+
       console.log("\n" + "🎉".repeat(40));
       console.log("🎉 ALLOCATED JOBS TABLE - FULLY RENDERED");
       console.log("⏱️  COMPLETE LIFECYCLE TIMING:");
-      console.log(`   • Component mount → Auth ready: ${timingMetrics.authReady.toFixed(2)}ms`);
-      console.log(`   • Component mount → Statuses ready: ${timingMetrics.statusesReady.toFixed(2)}ms`);
-      console.log(`   • Component mount → Fetch started: ${timingMetrics.dataFetchStart.toFixed(2)}ms`);
-      console.log(`   • Component mount → Data received: ${timingMetrics.dataFetchComplete.toFixed(2)}ms`);
-      console.log(`   • Component mount → First render complete: ${firstRenderTime.toFixed(2)}ms`);
-      console.log(`   • ⭐ TOTAL USER-PERCEIVED LOAD TIME: ${firstRenderTime.toFixed(2)}ms`);
+      console.log(
+        `   • Component mount → Auth ready: ${timingMetrics.authReady.toFixed(
+          2
+        )}ms`
+      );
+      console.log(
+        `   • Component mount → Statuses ready: ${timingMetrics.statusesReady.toFixed(
+          2
+        )}ms`
+      );
+      console.log(
+        `   • Component mount → Fetch started: ${timingMetrics.dataFetchStart.toFixed(
+          2
+        )}ms`
+      );
+      console.log(
+        `   • Component mount → Data received: ${timingMetrics.dataFetchComplete.toFixed(
+          2
+        )}ms`
+      );
+      console.log(
+        `   • Component mount → First render complete: ${firstRenderTime.toFixed(
+          2
+        )}ms`
+      );
+      console.log(
+        `   • ⭐ TOTAL USER-PERCEIVED LOAD TIME: ${firstRenderTime.toFixed(
+          2
+        )}ms`
+      );
       console.log("📊 Bottleneck analysis:");
       const authDelay = timingMetrics.authReady;
       const statusDelay = timingMetrics.statusesReady;
-      const fetchDelay = timingMetrics.dataFetchComplete - timingMetrics.dataFetchStart;
+      const fetchDelay =
+        timingMetrics.dataFetchComplete - timingMetrics.dataFetchStart;
       const renderDelay = firstRenderTime - timingMetrics.dataFetchComplete;
-      console.log(`   • Auth loading: ${authDelay.toFixed(2)}ms (${((authDelay/firstRenderTime)*100).toFixed(1)}%)`);
-      console.log(`   • Status loading: ${statusDelay.toFixed(2)}ms (${((statusDelay/firstRenderTime)*100).toFixed(1)}%)`);
-      console.log(`   • Data fetching: ${fetchDelay.toFixed(2)}ms (${((fetchDelay/firstRenderTime)*100).toFixed(1)}%)`);
-      console.log(`   • React rendering: ${renderDelay.toFixed(2)}ms (${((renderDelay/firstRenderTime)*100).toFixed(1)}%)`);
+      console.log(
+        `   • Auth loading: ${authDelay.toFixed(2)}ms (${(
+          (authDelay / firstRenderTime) *
+          100
+        ).toFixed(1)}%)`
+      );
+      console.log(
+        `   • Status loading: ${statusDelay.toFixed(2)}ms (${(
+          (statusDelay / firstRenderTime) *
+          100
+        ).toFixed(1)}%)`
+      );
+      console.log(
+        `   • Data fetching: ${fetchDelay.toFixed(2)}ms (${(
+          (fetchDelay / firstRenderTime) *
+          100
+        ).toFixed(1)}%)`
+      );
+      console.log(
+        `   • React rendering: ${renderDelay.toFixed(2)}ms (${(
+          (renderDelay / firstRenderTime) *
+          100
+        ).toFixed(1)}%)`
+      );
       console.log("🎉".repeat(40) + "\n");
     }
   }, [formattedJobs, loading, mountTime, timingMetrics]);
@@ -391,7 +495,7 @@ const AllocatedJobsTable = () => {
       <DataGrid
         rows={formattedJobs}
         columns={columns}
-        loading={loading}  // Removed statusesLoading - we fetch in parallel now
+        loading={loading} // Removed statusesLoading - we fetch in parallel now
         paginationMode="server"
         rowCount={rowCount}
         paginationModel={paginationModel}
