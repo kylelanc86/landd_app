@@ -590,6 +590,20 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       // Don't fail the project creation if stats update fails
     }
 
+    // Update allocated projects cache if project is active and has users
+    try {
+      const allocatedProjectsService = require('../services/allocatedProjectsService');
+      if (newProject.users && newProject.users.length > 0) {
+        const isActive = await allocatedProjectsService.isActiveStatus(newProject.status);
+        if (isActive) {
+          await allocatedProjectsService.addProjectToUsers(newProject.users, newProject._id);
+        }
+      }
+    } catch (cacheError) {
+      console.error('Error updating allocated projects cache on project creation:', cacheError);
+      // Don't fail the project creation if cache update fails
+    }
+
     // Log project creation to audit trail
     try {
       const ProjectAuditService = require('../services/projectAuditService');
@@ -680,8 +694,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       allFields: Object.keys(project.toObject())
     });
 
-    // Store old status before updating
+    // Store old status and users before updating
     const oldStatus = project.status;
+    const oldUserIds = (project.users || []).map(u => u.toString());
     
     // Check if user is trying to set status to "Job complete" and if they have permission
     if (req.body.status === "Job complete") {
@@ -894,6 +909,42 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
         console.error('Error logging status change to audit trail:', auditError);
         // Don't fail the project update if audit logging fails
       }
+
+      // Update allocated projects cache on status change
+      try {
+        const allocatedProjectsService = require('../services/allocatedProjectsService');
+        const currentUserIds = updatedProject.users || [];
+        await allocatedProjectsService.updateUsersOnStatusChange(
+          updatedProject._id,
+          oldStatus,
+          req.body.status,
+          currentUserIds
+        );
+      } catch (cacheError) {
+        console.error('Error updating allocated projects cache on status change:', cacheError);
+        // Don't fail the project update if cache update fails
+      }
+    }
+
+    // Update allocated projects cache on user changes (if status didn't change or wasn't updated)
+    const usersChanged = req.body.users !== undefined && 
+      JSON.stringify((req.body.users || []).map(u => (typeof u === 'object' ? u._id || u : u).toString())) !== 
+      JSON.stringify(oldUserIds);
+    
+    if (usersChanged && (!req.body.status || req.body.status === oldStatus)) {
+      try {
+        const allocatedProjectsService = require('../services/allocatedProjectsService');
+        const newUserIds = (updatedProject.users || []).map(u => u.toString());
+        await allocatedProjectsService.updateUsersOnProjectUserChange(
+          updatedProject._id,
+          oldUserIds,
+          newUserIds,
+          updatedProject.status
+        );
+      } catch (cacheError) {
+        console.error('Error updating allocated projects cache on user change:', cacheError);
+        // Don't fail the project update if cache update fails
+      }
     }
     
     // Populate the users before sending response
@@ -1077,8 +1128,9 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
       });
     }
 
-    // Store project status for dashboard stats update
+    // Store project status and users for dashboard stats and cache updates
     const projectStatus = project.status;
+    const projectUsers = project.users || [];
     
     await project.deleteOne();
     
@@ -1089,6 +1141,15 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
     } catch (statsError) {
       console.error('Error updating dashboard stats on project deletion:', statsError);
       // Don't fail the project deletion if stats update fails
+    }
+
+    // Remove project from all users' allocatedProjectIds cache
+    try {
+      const allocatedProjectsService = require('../services/allocatedProjectsService');
+      await allocatedProjectsService.removeProjectFromUsers(projectUsers, project._id);
+    } catch (cacheError) {
+      console.error('Error updating allocated projects cache on project deletion:', cacheError);
+      // Don't fail the project deletion if cache update fails
     }
     
     res.json({ message: 'Project deleted successfully' });
@@ -1139,49 +1200,82 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
     const mongoose = require('mongoose');
-    const query = {
-      users: new mongoose.Types.ObjectId(userId)  // Convert string to ObjectId for aggregation
-    };
+    const query = {};
+    
+    // OPTIMIZATION: Use cached allocatedProjectIds for faster queries when filtering active projects
+    const useCachedIds = !status || status === 'all_active';
+    
+    let usingCachedIds = false;
 
-    // Handle status filtering
-    // DEFAULT: Only show active projects unless explicitly requested otherwise
-    if (status && status !== 'all') {
-      try {
-        if (status === 'all_active') {
-          // Filter for all active statuses
-          if (activeStatuses.length > 0) {
-            query.status = { $in: activeStatuses };
-            console.log(`[ASSIGNED-TO-ME] Applied active status filter (${activeStatuses.length} statuses)`);
-          } else {
-            query.status = { $in: [] }; // Return no results if no active statuses defined
-          }
-        } else if (status === 'all_inactive') {
-          // Filter for all inactive statuses
-          if (inactiveStatuses.length > 0) {
-            query.status = { $in: inactiveStatuses };
-            console.log(`[ASSIGNED-TO-ME] Applied inactive status filter (${inactiveStatuses.length} statuses)`);
-          } else {
-            query.status = { $in: [] }; // Return no results if no inactive statuses defined
-          }
-        } else {
-          // Handle specific status or comma-separated list
-          const statusArray = status.includes(',') ? status.split(',') : [status];
-          query.status = { $in: statusArray };
-          console.log(`[ASSIGNED-TO-ME] Applied specific status filter:`, query.status);
-        }
-      } catch (error) {
-        throw new Error(`Invalid status filter: ${error.message}`);
+    if (useCachedIds) {
+      // Get user's cached allocated project IDs
+      const userStartTime = Date.now();
+      const user = await User.findById(userId).select('allocatedProjectIds');
+      const userFetchTime = Date.now() - userStartTime;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  User cache fetch: ${userFetchTime}ms`);
+      
+      if (user && user.allocatedProjectIds && user.allocatedProjectIds.length > 0) {
+        // Use cached IDs - much faster than querying by users array
+        // Cache already contains only active projects, so no need for status filter
+        query._id = { $in: user.allocatedProjectIds };
+        usingCachedIds = true;
+        console.log(`[ASSIGNED-TO-ME] ✅ Using cached project IDs (${user.allocatedProjectIds.length} active projects)`);
+      } else {
+        // Cache is empty - return empty results
+        // This is intentional: cache may be correctly empty (no active projects) or not yet populated
+        query._id = { $in: [] }; // Empty array ensures no results
+        usingCachedIds = true; // Still mark as using cache (empty cache)
+        console.log(`[ASSIGNED-TO-ME] ℹ️  Cache empty - returning no projects (cache may be correctly empty or not yet populated)`);
       }
     } else {
-      // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
-      // This matches the projects page behavior
-      if (activeStatuses.length > 0) {
-        query.status = { $in: activeStatuses };
-        console.log(`[ASSIGNED-TO-ME] No status filter provided, defaulting to active projects (${activeStatuses.length} statuses)`);
+      // For inactive or specific status queries, use users array
+      query.users = new mongoose.Types.ObjectId(userId);
+    }
+
+    // Handle status filtering (only needed if not using cached IDs)
+    // DEFAULT: Only show active projects unless explicitly requested otherwise
+    if (!usingCachedIds) {
+      if (status && status !== 'all') {
+        try {
+          if (status === 'all_active') {
+            // Filter for all active statuses
+            if (activeStatuses.length > 0) {
+              query.status = { $in: activeStatuses };
+              console.log(`[ASSIGNED-TO-ME] Applied active status filter (${activeStatuses.length} statuses)`);
+            } else {
+              query.status = { $in: [] }; // Return no results if no active statuses defined
+            }
+          } else if (status === 'all_inactive') {
+            // Filter for all inactive statuses
+            if (inactiveStatuses.length > 0) {
+              query.status = { $in: inactiveStatuses };
+              console.log(`[ASSIGNED-TO-ME] Applied inactive status filter (${inactiveStatuses.length} statuses)`);
+            } else {
+              query.status = { $in: [] }; // Return no results if no inactive statuses defined
+            }
+          } else {
+            // Handle specific status or comma-separated list
+            const statusArray = status.includes(',') ? status.split(',') : [status];
+            query.status = { $in: statusArray };
+            console.log(`[ASSIGNED-TO-ME] Applied specific status filter:`, query.status);
+          }
+        } catch (error) {
+          throw new Error(`Invalid status filter: ${error.message}`);
+        }
       } else {
-        console.log(`[ASSIGNED-TO-ME] No active statuses available and no filter provided, returning empty result`);
-        query.status = { $in: [] }; // Return no results if no active statuses defined
+        // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
+        if (activeStatuses.length > 0) {
+          query.status = { $in: activeStatuses };
+          console.log(`[ASSIGNED-TO-ME] No status filter provided, defaulting to active projects (${activeStatuses.length} statuses)`);
+        } else {
+          console.log(`[ASSIGNED-TO-ME] No active statuses available and no filter provided, returning empty result`);
+          query.status = { $in: [] }; // Return no results if no active statuses defined
+        }
       }
+    } else {
+      // Using cached IDs - cache already contains only active projects
+      // No status filter needed, but log for clarity
+      console.log(`[ASSIGNED-TO-ME] Using cached IDs (already filtered to active projects)`);
     }
 
     // Calculate pagination

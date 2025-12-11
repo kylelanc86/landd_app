@@ -231,6 +231,11 @@ const userSchema = new mongoose.Schema({
     required: false,
     default: 0,
     min: 0
+  },
+  allocatedProjectIds: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'Project',
+    default: []
   }
 }, {
   timestamps: true

@@ -33,12 +33,11 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useNavigate } from "react-router-dom";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, lazy, Suspense } from "react";
 import { invoiceService } from "../../services/api";
 
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
-import AllocatedJobsTable from "./AllocatedJobsTable";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import ScienceIcon from "@mui/icons-material/Science";
 import SendIcon from "@mui/icons-material/Send";
@@ -57,6 +56,9 @@ import {
   navigateToDatabase,
 } from "../../utils/navigationHelpers";
 
+// Lazy load the table component to prioritize widget rendering
+const AllocatedJobsTable = lazy(() => import("./AllocatedJobsTable"));
+
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -65,7 +67,8 @@ const Dashboard = () => {
   const [dataLoading, setDataLoading] = useState(false);
 
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
-  const [dailyTimesheetStatus, setDailyTimesheetStatus] = useState("incomplete");
+  const [dailyTimesheetStatus, setDailyTimesheetStatus] =
+    useState("incomplete");
 
   // Add responsive breakpoints - allow single row when possible
   const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // Back to "sm" for mobile
@@ -191,7 +194,8 @@ const Dashboard = () => {
             const prefs = { ...dashboardPrefs.visibleWidgets };
             // Ensure daily timesheet is always enabled (required widget)
             prefs.dailyTimesheet = true;
-            if (DEBUG_PREFS) console.log("Setting visible widgets from preferences:", prefs);
+            if (DEBUG_PREFS)
+              console.log("Setting visible widgets from preferences:", prefs);
 
             // Get current state (may have localStorage values or initial state)
             const currentWidgets = visibleWidgets;
@@ -238,7 +242,8 @@ const Dashboard = () => {
             setVisibleWidgets(merged);
           } else {
             // No preferences found - use default state (only dailyTimesheet enabled)
-            if (DEBUG_PREFS) console.log("No widget preferences found, using defaults");
+            if (DEBUG_PREFS)
+              console.log("No widget preferences found, using defaults");
             setVisibleWidgets({
               dailyTimesheet: true,
               inProgress: false,
@@ -253,7 +258,8 @@ const Dashboard = () => {
           }
         } else {
           // No dashboard preferences found - use default state
-          if (DEBUG_PREFS) console.log("No dashboard preferences found, using defaults");
+          if (DEBUG_PREFS)
+            console.log("No dashboard preferences found, using defaults");
           setVisibleWidgets({
             dailyTimesheet: true,
             inProgress: false,
@@ -298,7 +304,8 @@ const Dashboard = () => {
               dailyTimesheet: true, // Force daily timesheet to always be true
             };
 
-            if (DEBUG_PREFS) console.log("Using localStorage fallback:", merged);
+            if (DEBUG_PREFS)
+              console.log("Using localStorage fallback:", merged);
             setVisibleWidgets(merged);
           } catch (parseError) {
             console.error(
@@ -353,7 +360,11 @@ const Dashboard = () => {
         );
 
         const fetchTime = performance.now() - startTime;
-        console.log(`⚡ Dashboard timesheet status loaded in ${fetchTime.toFixed(2)}ms (was 2 API calls)`);
+        console.log(
+          `⚡ Dashboard timesheet status loaded in ${fetchTime.toFixed(
+            2
+          )}ms (was 2 API calls)`
+        );
 
         const dailyStatus = statusResponse.data[0]?.status || "incomplete";
         setDailyTimesheetStatus(dailyStatus);
@@ -570,7 +581,10 @@ const Dashboard = () => {
         orderToUse,
         widgetOrder,
         visibleWidgets,
-        gridItems: gridItems.map((item) => ({ id: item.id, title: item.title })),
+        gridItems: gridItems.map((item) => ({
+          id: item.id,
+          title: item.title,
+        })),
         allActiveInValidIds: validWidgetIds.includes("allActive"),
         allActiveInOrder: widgetOrder.includes("allActive"),
         allActiveVisible: visibleWidgets.allActive,
@@ -583,7 +597,10 @@ const Dashboard = () => {
       .map((id) => {
         const item = gridItems.find((item) => item.id === id);
         if (DEBUG) {
-          console.log(`Mapping ${id}:`, { item, isVisible: visibleWidgets[id] });
+          console.log(`Mapping ${id}:`, {
+            item,
+            isVisible: visibleWidgets[id],
+          });
         }
         return item;
       })
@@ -1086,9 +1103,22 @@ const Dashboard = () => {
         </DragDropContext>
       </Box>
 
-      {/* Allocated Jobs Table */}
+      {/* Allocated Jobs Table - Lazy loaded to prioritize widget rendering */}
       <Box mt="40px">
-        <AllocatedJobsTable />
+        <Suspense
+          fallback={
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              height="200px"
+            >
+              <CircularProgress />
+            </Box>
+          }
+        >
+          <AllocatedJobsTable />
+        </Suspense>
       </Box>
 
       {/* Widget Configuration Dialog */}
