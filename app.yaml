@@ -74,6 +74,7 @@ services:
       # These override app-level variables with the same name
       - key: REACT_APP_API_URL
         value: https://landd-app-dev-8h6ah.ondigitalocean.app/api
+        scope: BUILD_TIME  # Required for React - env vars are embedded at build time
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
         scope: RUN_TIME
         type: SECRET

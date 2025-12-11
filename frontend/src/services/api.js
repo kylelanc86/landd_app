@@ -5,8 +5,8 @@ const config = {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
   // Use 127.0.0.1 instead of localhost to avoid DNS resolution delays on Windows
-  defaultUrl: process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-backend-docker.onrender.com/api",
-  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-backend-docker.onrender.com/api")
+  defaultUrl: process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-dev-8h6ah.ondigitalocean.app/api",
+  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-dev-8h6ah.ondigitalocean.app/api")
 };
 // Create axios instance
 const api = axios.create({
