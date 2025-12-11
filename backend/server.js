@@ -140,8 +140,24 @@ connectDB()
       // Don't fail server startup if stats initialization fails
     }
     
+    // Debug logging for route matching (temporary - remove after fixing)
+    app.use((req, res, next) => {
+      if (req.path.includes('auth') || req.path.includes('login')) {
+        console.log('🔍 Route Debug:', {
+          method: req.method,
+          path: req.path,
+          url: req.url,
+          originalUrl: req.originalUrl,
+          baseUrl: req.baseUrl
+        });
+      }
+      next();
+    });
+    
     // Routes
+    // Mount auth routes at both paths in case DigitalOcean strips /api prefix
     app.use('/api/auth', authRoutes);
+    app.use('/auth', authRoutes);  // Also handle if prefix is stripped
     
     // Protected routes with authentication and token blacklist checking
     app.use('/api/projects', requireAuth, checkTokenBlacklist, projectRoutes);
