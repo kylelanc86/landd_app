@@ -58,19 +58,16 @@ const AllocatedJobsTable = () => {
 
   const fetchAllocatedJobs = useCallback(
     async (page = 0, pageSize = 25) => {
-      // OPTIMIZATION: Don't wait for statusesLoading, just need activeStatuses to have data
-      // This allows parallel loading of statuses and projects
+      // OPTIMIZATION: With cached project IDs, we don't need to wait for statuses
+      // The backend uses cached IDs and doesn't need status filtering when using cache
       if (
         authLoading ||
         !currentUser ||
-        !(currentUser._id || currentUser.id) ||
-        activeStatuses.length === 0  // Only need activeStatuses data, not full loading complete
+        !(currentUser._id || currentUser.id)
       ) {
         console.log("⏱️  [LIFECYCLE] Fetch blocked - waiting for:", {
           authLoading,
-          statusesLoading,
           hasCurrentUser: !!currentUser,
-          hasActiveStatuses: activeStatuses.length > 0,
           timeSinceMount: `${(performance.now() - mountTime).toFixed(2)}ms`
         });
         return;
@@ -175,7 +172,7 @@ const AllocatedJobsTable = () => {
     fetchAllocatedJobs(paginationModel.page, paginationModel.pageSize);
   }, [
     authLoading,
-    activeStatuses,  // Changed from statusesLoading to activeStatuses
+    // Removed activeStatuses dependency - not needed with cached IDs
     currentUser,
     paginationModel,
     fetchAllocatedJobs,
