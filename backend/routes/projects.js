@@ -1201,6 +1201,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     
     let usingCachedIds = false;
     let cachedProjectIds = [];
+    let statusFetchTime = 0; // Initialize for logging
 
     if (useCachedIds) {
       // Get user's cached allocated project IDs (skip status fetch since cache only has active projects)
@@ -1227,7 +1228,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       // For inactive or specific status queries, use users array (need status fetch)
       const statusFetchStart = Date.now();
       const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
-      const statusFetchTime = Date.now() - statusFetchStart;
+      statusFetchTime = Date.now() - statusFetchStart;
       console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
       query.users = new mongoose.Types.ObjectId(userId);
     }
@@ -1384,12 +1385,16 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
       const totalTime = Date.now() - startTime;
       const breakdown = {
-        statusFetch: statusFetchTime,
         queryBuild: queryBuildTime,
         database: dbTime,
         transform: transformTime,
         total: totalTime
       };
+      
+      // Only include statusFetch if we actually fetched statuses
+      if (statusFetchTime > 0) {
+        breakdown.statusFetch = statusFetchTime;
+      }
       
       console.log(`[ASSIGNED-TO-ME] ⏱️  TOTAL REQUEST TIME: ${totalTime}ms`);
       console.log(`[ASSIGNED-TO-ME] 📈 Performance breakdown:`, breakdown);
