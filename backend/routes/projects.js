@@ -1191,12 +1191,6 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
     const userId = req.user.id;
 
-    // Get active/inactive statuses for filtering (with caching)
-    const statusFetchStart = Date.now();
-    const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
-    const statusFetchTime = Date.now() - statusFetchStart;
-    console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
-
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
     const mongoose = require('mongoose');
@@ -1206,9 +1200,10 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     const useCachedIds = !status || status === 'all_active';
     
     let usingCachedIds = false;
+    let cachedProjectIds = [];
 
     if (useCachedIds) {
-      // Get user's cached allocated project IDs
+      // Get user's cached allocated project IDs (skip status fetch since cache only has active projects)
       const userStartTime = Date.now();
       const user = await User.findById(userId).select('allocatedProjectIds');
       const userFetchTime = Date.now() - userStartTime;
@@ -1217,9 +1212,10 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       if (user && user.allocatedProjectIds && user.allocatedProjectIds.length > 0) {
         // Use cached IDs - much faster than querying by users array
         // Cache already contains only active projects, so no need for status filter
-        query._id = { $in: user.allocatedProjectIds };
+        cachedProjectIds = user.allocatedProjectIds;
+        query._id = { $in: cachedProjectIds };
         usingCachedIds = true;
-        console.log(`[ASSIGNED-TO-ME] ✅ Using cached project IDs (${user.allocatedProjectIds.length} active projects)`);
+        console.log(`[ASSIGNED-TO-ME] ✅ Using cached project IDs (${cachedProjectIds.length} active projects)`);
       } else {
         // Cache is empty - return empty results
         // This is intentional: cache may be correctly empty (no active projects) or not yet populated
@@ -1228,7 +1224,11 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         console.log(`[ASSIGNED-TO-ME] ℹ️  Cache empty - returning no projects (cache may be correctly empty or not yet populated)`);
       }
     } else {
-      // For inactive or specific status queries, use users array
+      // For inactive or specific status queries, use users array (need status fetch)
+      const statusFetchStart = Date.now();
+      const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+      const statusFetchTime = Date.now() - statusFetchStart;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
       query.users = new mongoose.Types.ObjectId(userId);
     }
 
@@ -1286,52 +1286,72 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
     
     try {
       const dbStartTime = Date.now();
-      
-      // OPTIMIZATION 1: Use aggregation to combine count and data queries into one
-      // This reduces database roundtrips from 2 to 1
-      const aggregateStartTime = Date.now();
-      
       const sortField = sortBy;
       const sortDirection = sortOrder === 'desc' ? -1 : 1;
       
-      const results = await Project.aggregate([
-        // Match stage - filter documents
-        { $match: query },
+      let total;
+      let projects;
+      
+      // OPTIMIZATION: When using cached IDs, use simpler find() query instead of aggregation
+      // This is faster because MongoDB can use indexes more efficiently
+      if (usingCachedIds) {
+        // For cached IDs, we already know the total (cache length)
+        total = cachedProjectIds.length;
         
-        // Facet stage - run count and data queries in parallel
-        {
-          $facet: {
-            // Count total matching documents
-            metadata: [
-              { $count: 'total' }
-            ],
-            // Get paginated data
-            data: [
-              { $sort: { [sortField]: sortDirection } },
-              { $skip: skip },
-              { $limit: parseInt(limit) },
-              // OPTIMIZATION 4: Only select fields needed for the table display
-              {
-                $project: {
-                  _id: 1,
-                  projectID: 1,
-                  name: 1,
-                  status: 1,
-                  d_Date: 1
-                  // Removed: department, client, users, createdAt (not displayed in dashboard table)
+        const findStartTime = Date.now();
+        projects = await Project.find(query)
+          .select('_id projectID name status d_Date')
+          .sort({ [sortField]: sortDirection })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .lean(); // Use lean() for plain JS objects (faster, no Mongoose overhead)
+        
+        const findTime = Date.now() - findStartTime;
+        console.log(`[ASSIGNED-TO-ME] ⏱️  Find query (cached IDs): ${findTime}ms`);
+        console.log(`[ASSIGNED-TO-ME] Using cached total: ${total} (skipped count query)`);
+      } else {
+        // For non-cached queries, use aggregation (needs status filtering)
+        const aggregateStartTime = Date.now();
+        
+        const results = await Project.aggregate([
+          // Match stage - filter documents
+          { $match: query },
+          
+          // Facet stage - run count and data queries in parallel
+          {
+            $facet: {
+              // Count total matching documents
+              metadata: [
+                { $count: 'total' }
+              ],
+              // Get paginated data
+              data: [
+                { $sort: { [sortField]: sortDirection } },
+                { $skip: skip },
+                { $limit: parseInt(limit) },
+                // Only select fields needed for the table display
+                {
+                  $project: {
+                    _id: 1,
+                    projectID: 1,
+                    name: 1,
+                    status: 1,
+                    d_Date: 1
+                  }
                 }
-              }
-            ]
+              ]
+            }
           }
-        }
-      ]);
+        ]);
+        
+        const aggregateTime = Date.now() - aggregateStartTime;
+        console.log(`[ASSIGNED-TO-ME] ⏱️  Combined aggregate query (count + data): ${aggregateTime}ms`);
+        
+        // Extract results
+        total = results[0].metadata[0]?.total || 0;
+        projects = results[0].data || [];
+      }
       
-      const aggregateTime = Date.now() - aggregateStartTime;
-      console.log(`[ASSIGNED-TO-ME] ⏱️  Combined aggregate query (count + data): ${aggregateTime}ms`);
-      
-      // Extract results
-      const total = results[0].metadata[0]?.total || 0;
-      const projects = results[0].data || [];
       const pages = Math.ceil(total / parseInt(limit));
       
       console.log(`[ASSIGNED-TO-ME] 📊 Results: ${projects.length} projects (${total} total)`);
