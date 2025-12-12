@@ -516,7 +516,7 @@ const Dashboard = () => {
         id: "awaitingPayment",
         title: "Invoiced - Awaiting Payment",
         icon: <PaymentIcon />,
-        bgcolor: "#d32f2f",
+        bgcolor: "#000000",
         onClick: () =>
           navigateToProjects(navigate, {
             status: "Invoiced - Awaiting Payment",
@@ -524,10 +524,10 @@ const Dashboard = () => {
       },
       {
         id: "allActive",
-        title: "All Active Projects",
+        title: "Active Projects",
         icon: <PlayArrowIcon />,
-        bgcolor: "#2e7d32",
-        onClick: () => navigate("/projects?status=active"),
+        bgcolor: "#ebba34",
+        onClick: () => navigate("/projects"),
       },
     ],
     [dailyTimesheetStatus, currentUser, navigate]

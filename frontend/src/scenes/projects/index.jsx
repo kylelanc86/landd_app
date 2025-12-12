@@ -263,6 +263,9 @@ const Projects = ({ initialFilters = {} }) => {
     updatedAt: false,
   });
 
+  // Column width model for resizing
+  const [columnWidthModel, setColumnWidthModel] = useState({});
+
   // Memoize column visibility model to prevent unnecessary re-renders
   const memoizedColumnVisibilityModel = useMemo(
     () => columnVisibilityModel,
@@ -298,7 +301,7 @@ const Projects = ({ initialFilters = {} }) => {
     const defaultFilters = {
       searchTerm: "",
       departmentFilter: "all",
-      statusFilter: "all",
+      statusFilter: "all_active", // Default to active projects
       sortModel: [{ field: "projectID", sort: "desc" }],
     };
 
@@ -336,7 +339,7 @@ const Projects = ({ initialFilters = {} }) => {
             urlParams.get("status") ||
             initialFilters.status ||
             parsedFilters.statusFilter ||
-            "all",
+            "all_active",
         };
       } catch (error) {
         return {
@@ -402,7 +405,8 @@ const Projects = ({ initialFilters = {} }) => {
     } else {
       urlParams.delete("department");
     }
-    if (newFilters.statusFilter !== "all") {
+    if (newFilters.statusFilter !== "all_active") {
+      // Only set status in URL if it's not the default (all_active)
       urlParams.set("status", newFilters.statusFilter);
     } else {
       urlParams.delete("status");
@@ -469,10 +473,25 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = filtersToUse.departmentFilter;
         }
 
-        // ALWAYS load only active projects for better performance
-        // Inactive projects can be accessed via the reports page if needed
-        // Always send status filter to prevent loading all projects (including inactive)
-        params.status = "all_active";
+        // Load projects based on status filter
+        if (filtersToUse.statusFilter === "all") {
+          // Show all projects (both active and inactive)
+          params.status = "all";
+        } else if (filtersToUse.statusFilter === "all_active") {
+          params.status = "all_active";
+        } else if (
+          filtersToUse.statusFilter === "Cancelled" ||
+          filtersToUse.statusFilter === "Job Complete" ||
+          filtersToUse.statusFilter === "Job complete" ||
+          inactiveStatuses.includes(filtersToUse.statusFilter)
+        ) {
+          // If filtering by a specific inactive status (Cancelled, Job Complete, or others), load all inactive projects
+          // Client-side filtering will handle the specific status
+          params.status = "all_inactive";
+        } else {
+          // Default to active projects for specific active statuses or any other case
+          params.status = "all_active";
+        }
 
         const response = await projectService.getAll(params);
 
@@ -497,7 +516,7 @@ const Projects = ({ initialFilters = {} }) => {
         setSearchLoading(false);
       }
     },
-    [activeStatuses] // Only depend on activeStatuses - paginationModel.pageSize is used functionally
+    [activeStatuses, inactiveStatuses] // Depend on both active and inactive statuses
   );
 
   // Move fetchProjects here so it is defined after fetchAllProjects
@@ -565,9 +584,25 @@ const Projects = ({ initialFilters = {} }) => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // ALWAYS load only active projects for better performance
-          // Always send status filter to prevent loading all projects (including inactive)
-          params.status = "all_active";
+          // Load projects based on status filter
+          if (updatedFilters.statusFilter === "all") {
+            // Show all projects (both active and inactive)
+            params.status = "all";
+          } else if (updatedFilters.statusFilter === "all_active") {
+            params.status = "all_active";
+          } else if (
+            updatedFilters.statusFilter === "Cancelled" ||
+            updatedFilters.statusFilter === "Job Complete" ||
+            updatedFilters.statusFilter === "Job complete" ||
+            inactiveStatuses.includes(updatedFilters.statusFilter)
+          ) {
+            // If filtering by a specific inactive status (Cancelled, Job Complete, or others), load all inactive projects
+            // Client-side filtering will handle the specific status
+            params.status = "all_inactive";
+          } else {
+            // Default to active projects for specific active statuses or any other case
+            params.status = "all_active";
+          }
 
           const response = await projectService.getAll(params);
 
@@ -608,7 +643,7 @@ const Projects = ({ initialFilters = {} }) => {
       // Use the new function with updated filters
       fetchWithUpdatedFilters();
     },
-    [updateFilter, memoizedFilters, paginationModel.pageSize]
+    [updateFilter, memoizedFilters, paginationModel.pageSize, inactiveStatuses]
   );
 
   // Function to fetch status counts for ALL projects (not just current page)
@@ -1108,6 +1143,33 @@ const Projects = ({ initialFilters = {} }) => {
     }
   };
 
+  // Handle column width changes with debouncing for performance
+  const debouncedSaveWidths = useCallback(
+    debounce((widthModel) => {
+      // Save to localStorage
+      localStorage.setItem("projects-column-width", JSON.stringify(widthModel));
+      // Optionally save to database
+      userPreferencesService
+        .updatePreferences({
+          columnWidth: {
+            projects: widthModel,
+          },
+        })
+        .catch(() => {
+          // Silently fail if API call fails
+        });
+    }, 300),
+    []
+  );
+
+  const handleColumnWidthChange = useCallback(
+    (newModel) => {
+      setColumnWidthModel(newModel);
+      debouncedSaveWidths(newModel);
+    },
+    [debouncedSaveWidths]
+  );
+
   const handleDepartmentClick = (department) => {
     setSelectedDepartment(department);
 
@@ -1147,9 +1209,25 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = departmentValue;
         }
 
-        // ALWAYS load only active projects for better performance
-        // Always send status filter to prevent loading all projects (including inactive)
-        params.status = "all_active";
+        // Load projects based on status filter
+        if (tempFilters.statusFilter === "all") {
+          // Show all projects (both active and inactive)
+          params.status = "all";
+        } else if (tempFilters.statusFilter === "all_active") {
+          params.status = "all_active";
+        } else if (
+          tempFilters.statusFilter === "Cancelled" ||
+          tempFilters.statusFilter === "Job Complete" ||
+          tempFilters.statusFilter === "Job complete" ||
+          inactiveStatuses.includes(tempFilters.statusFilter)
+        ) {
+          // If filtering by a specific inactive status (Cancelled, Job Complete, or others), load all inactive projects
+          // Client-side filtering will handle the specific status
+          params.status = "all_inactive";
+        } else {
+          // Default to active projects for specific active statuses or any other case
+          params.status = "all_active";
+        }
 
         const response = await projectService.getAll(params);
 
@@ -1332,6 +1410,9 @@ const Projects = ({ initialFilters = {} }) => {
         if (response.data?.columnVisibility?.projects) {
           setColumnVisibilityModel(response.data.columnVisibility.projects);
         }
+        if (response.data?.columnWidth?.projects) {
+          setColumnWidthModel(response.data.columnWidth.projects);
+        }
       } catch (error) {
         // Fallback to localStorage if API fails
         const savedColumnVisibility = localStorage.getItem(
@@ -1341,6 +1422,13 @@ const Projects = ({ initialFilters = {} }) => {
           try {
             const parsed = JSON.parse(savedColumnVisibility);
             setColumnVisibilityModel(parsed);
+          } catch (parseError) {}
+        }
+        const savedColumnWidth = localStorage.getItem("projects-column-width");
+        if (savedColumnWidth) {
+          try {
+            const parsed = JSON.parse(savedColumnWidth);
+            setColumnWidthModel(parsed);
           } catch (parseError) {}
         }
       }
@@ -1355,20 +1443,19 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "projectID",
         headerName: "Project ID",
-        flex: 0,
         width: isTablet ? 90 : 105,
-        minWidth: isTablet ? 80 : 105,
-        maxWidth: isTablet ? 100 : 105,
-        sortable: false,
+        minWidth: isTablet ? 80 : 80,
+        maxWidth: 300,
+        sortable: true,
         renderCell: (params) => <Box>{params.value}</Box>,
       },
       {
         field: "name",
         headerName: "Project",
-        flex: isTablet ? 2.2 : 2.5,
+        width: isTablet ? 280 : 350,
         minWidth: isTablet ? 160 : 220,
-        maxWidth: isTablet ? 320 : 450,
-        sortable: false,
+        maxWidth: 800,
+        sortable: true,
         renderCell: ({ row }) => {
           const clientName = row.client?.name || row.client || "";
           const projectName = row.name || "";
@@ -1447,11 +1534,10 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "d_Date",
         headerName: "Due Date",
-        flex: 0,
-        width: isTablet ? 90 : undefined,
-        minWidth: isTablet ? 80 : 100,
-        maxWidth: isTablet ? 100 : 120,
-        sortable: false,
+        width: isTablet ? 90 : 110,
+        minWidth: isTablet ? 80 : 80,
+        maxWidth: 200,
+        sortable: true,
         renderCell: ({ row }) => {
           const daysDiff = calculateDaysDifference(row.d_Date);
 
@@ -1551,20 +1637,18 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "workOrder",
         headerName: "Work Order/Job Reference",
-        flex: 0,
-        width: isTablet ? 120 : undefined,
+        width: isTablet ? 120 : 150,
         minWidth: isTablet ? 100 : 100,
-        maxWidth: isTablet ? 140 : undefined,
-        sortable: false,
+        maxWidth: 400,
+        sortable: true,
       },
       {
         field: "status",
         headerName: "Status",
-        flex: 0,
-        width: isTablet ? 110 : undefined,
-        minWidth: isTablet ? 100 : 160,
-        maxWidth: isTablet ? 130 : 200,
-        sortable: false,
+        width: isTablet ? 110 : 180,
+        minWidth: isTablet ? 100 : 100,
+        maxWidth: 300,
+        sortable: true,
         renderCell: (params) => (
           <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
             {/* Status display - no click functionality */}
@@ -1597,10 +1681,9 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "users",
         headerName: "Users",
-        flex: 0,
-        width: isTablet ? 70 : undefined,
+        width: isTablet ? 70 : 100,
         minWidth: isTablet ? 60 : 60,
-        maxWidth: isTablet ? 90 : 120,
+        maxWidth: 200,
         sortable: false,
         renderCell: (params) => {
           // Debug logging to see what data we're getting
@@ -1615,10 +1698,9 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "actions",
         headerName: "Actions",
-        flex: 0,
-        width: isTablet ? 140 : undefined,
-        minWidth: isTablet ? 130 : 180,
-        maxWidth: isTablet ? 160 : 200,
+        width: isTablet ? 140 : 200,
+        minWidth: isTablet ? 130 : 130,
+        maxWidth: 300,
         sortable: false,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
@@ -1708,21 +1790,25 @@ const Projects = ({ initialFilters = {} }) => {
   );
 
   // Client-side filtering for live status updates
-  // Note: Since we now only load active projects from backend, inactive status filtering is not available
   const filteredProjects = useMemo(() => {
-    // Since we only load active projects from backend, "all" shows all active projects
+    // "all" shows all projects (both active and inactive)
     if (filters.statusFilter === "all") {
       return projects;
     }
 
-    // Handle specific status filters (only for active statuses that are loaded)
+    // "all_active" shows all active projects
+    if (filters.statusFilter === "all_active") {
+      return projects;
+    }
+
+    // Handle specific status filters (including Cancelled and Job Complete)
     const filtered = projects.filter((project) => {
       const projectStatus = project.status;
       return projectStatus === filters.statusFilter;
     });
 
     return filtered;
-  }, [projects, filters.statusFilter]); // Removed activeStatuses and inactiveStatuses - not needed for filtering
+  }, [projects, filters.statusFilter]);
 
   // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
@@ -1740,7 +1826,7 @@ const Projects = ({ initialFilters = {} }) => {
         marginTop="20px"
         marginBottom="20px"
       >
-        Active Projects
+        Projects
       </Typography>
       {/* Search Loading Animation - Only shows during searches */}
       {searchLoading && (
@@ -1868,7 +1954,45 @@ const Projects = ({ initialFilters = {} }) => {
                         marginRight: "8px",
                       }}
                     >
-                      All Active Projects
+                      All Reports
+                    </span>
+                    <Box
+                      sx={{
+                        backgroundColor: "#1976d2",
+                        color: "white",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "0.77rem",
+                        fontWeight: "bold",
+                        minWidth: "20px",
+                        textAlign: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {(statusCounts.all_active || 0) +
+                        (statusCounts.all_inactive || 0)}
+                    </Box>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="all_active" sx={{ fontSize: "0.88rem" }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      width: "100%",
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
+                        marginRight: "8px",
+                      }}
+                    >
+                      Active Projects
                     </span>
                     <Box
                       sx={{
@@ -1935,6 +2059,63 @@ const Projects = ({ initialFilters = {} }) => {
                     </MenuItem>
                   );
                 })}
+                <Divider />
+                <MenuItem disabled></MenuItem>
+                {/* Add Cancelled and Job Complete filters - check both active and inactive statuses */}
+                {[...activeStatuses, ...inactiveStatuses]
+                  .filter(
+                    (status) =>
+                      status === "Cancelled" ||
+                      status === "Job Complete" ||
+                      status === "Job complete"
+                  )
+                  .map((status) => {
+                    const count = statusCounts[status] || 0;
+                    return (
+                      <MenuItem
+                        key={status}
+                        value={status}
+                        sx={{ fontSize: "0.88rem" }}
+                      >
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            width: "100%",
+                          }}
+                        >
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                              marginRight: "8px",
+                            }}
+                          >
+                            {status}
+                          </span>
+                          <Box
+                            sx={{
+                              backgroundColor:
+                                statusColors[status] || "#757575",
+                              color: "white",
+                              padding: "2px 8px",
+                              borderRadius: "12px",
+                              fontSize: "0.77rem",
+                              fontWeight: "bold",
+                              minWidth: "20px",
+                              textAlign: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {count}
+                          </Box>
+                        </Box>
+                      </MenuItem>
+                    );
+                  })}
               </Select>
             </FormControl>
 
@@ -2112,15 +2293,18 @@ const Projects = ({ initialFilters = {} }) => {
         m="40px 0 0 0"
         sx={{
           width: "100%",
-          overflowX: "hidden",
+          minWidth: 0,
+          overflowX: "auto",
           maxWidth: "100%",
           "& .MuiDataGrid-root": {
             border: "none",
             width: "100%",
+            minWidth: 0,
             maxWidth: "100%",
           },
           "& .MuiDataGrid-main": {
             width: "100%",
+            minWidth: 0,
             maxWidth: "100%",
           },
           "& .MuiDataGrid-cell": {
@@ -2135,19 +2319,21 @@ const Projects = ({ initialFilters = {} }) => {
           "& .MuiDataGrid-columnHeader": {
             color: "#FFFFFF",
             fontWeight: 600,
-            "& .MuiDataGrid-iconButtonContainer": {
+            "& .MuiDataGrid-menuIcon": {
               display: "none !important",
             },
             "& .MuiDataGrid-sortIcon": {
-              display: "none !important",
+              color: "#FFFFFF",
             },
-            "& .MuiDataGrid-menuIcon": {
-              display: "none !important",
+            "& .MuiDataGrid-iconButtonContainer": {
+              "& .MuiIconButton-root": {
+                color: "#FFFFFF",
+              },
             },
           },
           "& .MuiDataGrid-virtualScroller": {
             backgroundColor: "#FFFFFF",
-            overflowX: "hidden !important",
+            overflowX: "auto",
             width: "100%",
             maxWidth: "100%",
           },
@@ -2193,6 +2379,8 @@ const Projects = ({ initialFilters = {} }) => {
           }
           columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
+          columnWidthModel={columnWidthModel}
+          onColumnWidthChange={handleColumnWidthChange}
           paginationMode="client"
           paginationModel={paginationModel}
           onPaginationModelChange={(newModel) => {
@@ -2203,7 +2391,14 @@ const Projects = ({ initialFilters = {} }) => {
           disableColumnMenu={true}
           disableSelectionOnClick
           disableColumnFilter={true}
-          disableSorting={true}
+          disableSorting={false}
+          disableColumnResize={false}
+          columnResizeMode="onChange"
+          slotProps={{
+            columnResize: {
+              minWidth: 50,
+            },
+          }}
           disableColumnSelector={false}
           disableDensitySelector={false}
           // disableColumnReorder={false}
@@ -2216,8 +2411,9 @@ const Projects = ({ initialFilters = {} }) => {
           sx={{
             cursor: "pointer",
             width: "100%",
+            minWidth: 0,
             maxWidth: "100%",
-            overflowX: "hidden",
+            overflowX: "auto",
             "& .MuiDataGrid-row:nth-of-type(even)": {
               backgroundColor: "#f8f9fa",
             },
@@ -2237,21 +2433,18 @@ const Projects = ({ initialFilters = {} }) => {
             },
             "& .MuiDataGrid-columnHeader": {
               padding: isTablet ? "8px" : "16px",
-              "& .MuiDataGrid-iconButtonContainer": {
-                display: "none !important",
-              },
               "& .MuiDataGrid-sortIcon": {
-                display: "none !important",
+                color: "#FFFFFF",
               },
             },
             "& .MuiDataGrid-virtualScroller": {
-              overflowX: "hidden !important",
+              overflowX: "auto",
             },
             "& .MuiDataGrid-container--top": {
-              overflowX: "hidden !important",
+              overflowX: "auto",
             },
             "& .MuiDataGrid-container--bottom": {
-              overflowX: "hidden !important",
+              overflowX: "auto",
             },
           }}
         />

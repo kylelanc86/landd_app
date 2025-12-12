@@ -96,9 +96,11 @@ export const generateAssessmentPDF = async (assessmentData) => {
  * Generate PDF from HTML templates using server-side Puppeteer
  * @param {string} templateType - Type of template (e.g., 'asbestos-clearance')
  * @param {Object} data - Clearance data
+ * @param {Object} options - Options including openInNewTab (default: false)
  * @returns {Promise<string>} - Generated PDF filename
  */
 export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
+  const { openInNewTab = false } = options;
   try {
     // Determine which endpoint to use
     const useDocRaptor = true; // Use DocRaptor for better complex document support
@@ -165,27 +167,40 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       }
     }
 
-    // Create download link and trigger download
+    // Create blob URL
     const url2 = window.URL.createObjectURL(pdfBlob);
     
     try {
-      // Create and click download link
-      const link = document.createElement('a');
-      link.href = url2;
-      link.download = filename;
-      link.style.display = 'none';
+      if (openInNewTab) {
+        // Open PDF in a new tab by creating a link without download attribute
+        const link = document.createElement('a');
+        link.href = url2;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        // Do NOT set download attribute - this allows browser to open in new tab
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // Create and click download link
+        const link = document.createElement('a');
+        link.href = url2;
+        link.download = filename;
+        link.style.display = 'none';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
       
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      // Clean up the blob URL
+      // Clean up the blob URL after a delay to ensure it's loaded
       setTimeout(() => {
         window.URL.revokeObjectURL(url2);
       }, 1000);
       
     } catch (error) {
-      console.error('Error downloading PDF:', error);
+      console.error('Error handling PDF:', error);
       
       // Fallback: open in new window
       try {

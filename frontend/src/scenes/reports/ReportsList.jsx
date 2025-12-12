@@ -32,6 +32,7 @@ const ReportsList = ({
   onDownload,
   onPrint,
   onRevise,
+  processingReport = { reportId: null, action: null },
 }) => {
   const getCategoryTitle = () => {
     switch (category) {
@@ -213,8 +214,21 @@ const ReportsList = ({
                         size="small"
                         onClick={() => onView(report)}
                         color="primary"
+                        disabled={
+                          (processingReport.reportId === report.id ||
+                            processingReport.reportId === report.data?._id ||
+                            processingReport.reportId === report.data?.id) &&
+                          processingReport.action === "view"
+                        }
                       >
-                        <VisibilityIcon />
+                        {(processingReport.reportId === report.id ||
+                          processingReport.reportId === report.data?._id ||
+                          processingReport.reportId === report.data?.id) &&
+                        processingReport.action === "view" ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <VisibilityIcon />
+                        )}
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Download Report">
@@ -222,8 +236,21 @@ const ReportsList = ({
                         size="small"
                         onClick={() => onDownload(report)}
                         color="secondary"
+                        disabled={
+                          (processingReport.reportId === report.id ||
+                            processingReport.reportId === report.data?._id ||
+                            processingReport.reportId === report.data?.id) &&
+                          processingReport.action === "download"
+                        }
                       >
-                        <DownloadIcon />
+                        {(processingReport.reportId === report.id ||
+                          processingReport.reportId === report.data?._id ||
+                          processingReport.reportId === report.data?.id) &&
+                        processingReport.action === "download" ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <DownloadIcon />
+                        )}
                       </IconButton>
                     </Tooltip>
                     {/* Only show revise button for completed reports */}

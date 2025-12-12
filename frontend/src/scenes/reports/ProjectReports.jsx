@@ -40,9 +40,11 @@ import {
   projectService,
   sampleService,
   clientService,
+  clientSuppliedJobsService,
 } from "../../services/api";
 import reportService from "../../services/reportService";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 import ProjectLogModalWrapper from "./ProjectLogModalWrapper";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useAuth } from "../../context/AuthContext";
@@ -78,6 +80,12 @@ const ProjectReports = () => {
   // Active jobs state
   const [activeJobs, setActiveJobs] = useState([]);
   const [loadingActiveJobs, setLoadingActiveJobs] = useState(false);
+
+  // Report processing state
+  const [processingReport, setProcessingReport] = useState({
+    reportId: null,
+    action: null, // 'view' or 'download'
+  });
 
   const { showSnackbar } = useSnackbar();
 
@@ -694,6 +702,21 @@ const ProjectReports = () => {
 
   const handleViewReport = async (report) => {
     try {
+      // Use report.id, or fallback to report.data._id or report.data.id
+      const reportId = report.id || report.data?._id || report.data?.id;
+      setProcessingReport({ reportId: reportId, action: "view" });
+      const reportTypeName =
+        report.type === "shift"
+          ? "Air Monitoring"
+          : report.type === "clearance"
+          ? "Clearance"
+          : report.type === "fibre_id"
+          ? "Fibre ID"
+          : report.type === "asbestos_assessment"
+          ? "Asbestos Assessment"
+          : "Report";
+      showSnackbar(`Opening ${reportTypeName} report...`, "info");
+
       if (report.type === "shift") {
         const { shift, job } = report.data;
         const samplesResponse = await sampleService.getByShift(shift._id);
@@ -856,15 +879,82 @@ const ProjectReports = () => {
 
         console.log("Enhanced clearance LAA field:", enhancedClearance.LAA);
 
-        // Generate the PDF
-        await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance);
+        // Generate and open the PDF in a new tab
+        await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
+          openInNewTab: true,
+        });
       } else if (report.type === "asbestos_assessment") {
         // For asbestos assessment reports, we'll navigate to the assessment details page
         // This assumes there's a route like /asbestos-assessment/:id
         navigate(`/asbestos-assessment/${report.data.id || report.data._id}`);
       } else if (report.type === "fibre_id") {
-        // Navigate to the fibre ID job details page
-        navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
+        // Generate and open the fibre ID report PDF
+        const jobId = report.data.id || report.data._id;
+
+        // Fetch the full job data with samples
+        const jobResponse = await clientSuppliedJobsService.getById(jobId);
+        const fullJob = jobResponse.data;
+
+        // Get samples from the job
+        const sampleItems = fullJob.samples || [];
+
+        // Get analyst from first analyzed sample or job analyst
+        let analyst = null;
+        const analyzedSample = sampleItems.find((s) => s.analyzedBy);
+        if (analyzedSample?.analyzedBy) {
+          if (
+            typeof analyzedSample.analyzedBy === "object" &&
+            analyzedSample.analyzedBy.firstName
+          ) {
+            analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
+          } else if (typeof analyzedSample.analyzedBy === "string") {
+            analyst = analyzedSample.analyzedBy;
+          }
+        } else if (fullJob.analyst) {
+          analyst = fullJob.analyst;
+        }
+
+        // If no analyst found, default to "Unknown Analyst"
+        if (!analyst) {
+          analyst = "Unknown Analyst";
+        }
+
+        // Prepare sample items for the report
+        const sampleItemsForReport = sampleItems
+          .filter(
+            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+          )
+          .map((item, index) => ({
+            itemNumber: index + 1,
+            sampleReference: item.labReference || `Sample ${index + 1}`,
+            labReference: item.labReference || `Sample ${index + 1}`,
+            locationDescription:
+              item.clientReference || item.sampleDescription || "N/A",
+            clientReference: item.clientReference,
+            analysisData: item.analysisData,
+          }));
+
+        // Create an assessment-like object for the report generator
+        const assessmentForReport = {
+          _id: fullJob._id,
+          projectId: fullJob.projectId,
+          jobType: fullJob.jobType,
+          status: fullJob.status,
+          analysisDate: fullJob.analysisDate,
+          sampleReceiptDate: fullJob.sampleReceiptDate,
+          revision: fullJob.revision || 0,
+        };
+
+        // Generate and open the PDF in a new tab
+        await generateFibreIDReport({
+          assessment: assessmentForReport,
+          sampleItems: sampleItemsForReport,
+          analyst: analyst,
+          openInNewTab: true,
+          returnPdfData: false,
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        });
       } else if (report.type === "uploaded") {
         // Download the uploaded report file
         const downloadUrl = `${
@@ -872,14 +962,33 @@ const ProjectReports = () => {
         }/uploaded-reports/download/${report.data._id}`;
         window.open(downloadUrl, "_blank");
       }
+
+      showSnackbar(`${reportTypeName} report opened`, "success");
     } catch (err) {
       console.error("Error viewing report:", err);
       setError("Failed to view report");
+      showSnackbar("Failed to open report. Please try again.", "error");
+    } finally {
+      setProcessingReport({ reportId: null, action: null });
     }
   };
 
   const handleDownloadReport = async (report) => {
     try {
+      // Use report.id, or fallback to report.data._id or report.data.id
+      const reportId = report.id || report.data?._id || report.data?.id;
+      setProcessingReport({ reportId: reportId, action: "download" });
+      const reportTypeName =
+        report.type === "shift"
+          ? "Air Monitoring"
+          : report.type === "clearance"
+          ? "Clearance"
+          : report.type === "fibre_id"
+          ? "Fibre ID"
+          : report.type === "asbestos_assessment"
+          ? "Asbestos Assessment"
+          : "Report";
+      showSnackbar(`Downloading ${reportTypeName} report...`, "info");
       if (report.type === "shift") {
         const { shift, job } = report.data;
         const samplesResponse = await sampleService.getByShift(shift._id);
@@ -1024,14 +1133,81 @@ const ProjectReports = () => {
 
         console.log("Enhanced clearance LAA field:", enhancedClearance.LAA);
 
-        // Generate the PDF
-        await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance);
+        // Generate and download the PDF
+        await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
+          openInNewTab: false,
+        });
       } else if (report.type === "asbestos_assessment") {
         // For asbestos assessment reports, we'll navigate to the assessment details page where download is available
         navigate(`/asbestos-assessment/${report.data.id || report.data._id}`);
       } else if (report.type === "fibre_id") {
-        // For fibre ID reports, we'll navigate to the fibre ID job details page where download is available
-        navigate(`/fibre-id/client-supplied/${report.data.id}/samples`);
+        // Generate and download the fibre ID report PDF
+        const jobId = report.data.id || report.data._id;
+
+        // Fetch the full job data with samples
+        const jobResponse = await clientSuppliedJobsService.getById(jobId);
+        const fullJob = jobResponse.data;
+
+        // Get samples from the job
+        const sampleItems = fullJob.samples || [];
+
+        // Get analyst from first analyzed sample or job analyst
+        let analyst = null;
+        const analyzedSample = sampleItems.find((s) => s.analyzedBy);
+        if (analyzedSample?.analyzedBy) {
+          if (
+            typeof analyzedSample.analyzedBy === "object" &&
+            analyzedSample.analyzedBy.firstName
+          ) {
+            analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
+          } else if (typeof analyzedSample.analyzedBy === "string") {
+            analyst = analyzedSample.analyzedBy;
+          }
+        } else if (fullJob.analyst) {
+          analyst = fullJob.analyst;
+        }
+
+        // If no analyst found, default to "Unknown Analyst"
+        if (!analyst) {
+          analyst = "Unknown Analyst";
+        }
+
+        // Prepare sample items for the report
+        const sampleItemsForReport = sampleItems
+          .filter(
+            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+          )
+          .map((item, index) => ({
+            itemNumber: index + 1,
+            sampleReference: item.labReference || `Sample ${index + 1}`,
+            labReference: item.labReference || `Sample ${index + 1}`,
+            locationDescription:
+              item.clientReference || item.sampleDescription || "N/A",
+            clientReference: item.clientReference,
+            analysisData: item.analysisData,
+          }));
+
+        // Create an assessment-like object for the report generator
+        const assessmentForReport = {
+          _id: fullJob._id,
+          projectId: fullJob.projectId,
+          jobType: fullJob.jobType,
+          status: fullJob.status,
+          analysisDate: fullJob.analysisDate,
+          sampleReceiptDate: fullJob.sampleReceiptDate,
+          revision: fullJob.revision || 0,
+        };
+
+        // Generate and download the PDF
+        await generateFibreIDReport({
+          assessment: assessmentForReport,
+          sampleItems: sampleItemsForReport,
+          analyst: analyst,
+          openInNewTab: false,
+          returnPdfData: false,
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        });
       } else if (report.type === "uploaded") {
         // For uploaded reports, directly download the file
         const downloadUrl = `${
@@ -1050,6 +1226,9 @@ const ProjectReports = () => {
     } catch (err) {
       console.error("Error downloading report:", err);
       setError("Failed to download report");
+      showSnackbar("Failed to download report. Please try again.", "error");
+    } finally {
+      setProcessingReport({ reportId: null, action: null });
     }
   };
 
@@ -1566,6 +1745,7 @@ const ProjectReports = () => {
             onView={handleViewReport}
             onDownload={handleDownloadReport}
             onRevise={handleReviseReport}
+            processingReport={processingReport}
           />
         </>
       )}

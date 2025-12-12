@@ -481,7 +481,7 @@ const Sidebar = () => {
             />
 
             <Item
-              title="Active Projects"
+              title="Projects"
               to="/projects"
               icon={<StorageIcon />}
             />
@@ -513,7 +513,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.REPORTS") && (
             <CollapsibleSection
-              title="Project Reports"
+              title="Reports"
               to="/reports"
               icon={<DescriptionIcon />}
             />
