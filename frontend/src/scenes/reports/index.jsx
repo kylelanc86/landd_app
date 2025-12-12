@@ -26,6 +26,10 @@ import {
 } from "@mui/icons-material";
 
 import { projectService } from "../../services/api";
+import {
+  getCachedTopProjects,
+  cacheTopProjects,
+} from "../../utils/reportsCache";
 
 // Debounce hook for search optimization
 const useDebounce = (value, delay) => {
@@ -66,44 +70,111 @@ const Reports = () => {
   // Debounce search term to reduce filtering operations
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  // Load all projects sorted by projectID descending
-  const loadProjects = useCallback(async () => {
+  // Helper function to sort projects by projectID descending
+  const sortProjectsByID = useCallback((projects) => {
+    return [...projects].sort((a, b) => {
+      const aNum = parseInt(a.projectID?.replace(/\D/g, "") || "0");
+      const bNum = parseInt(b.projectID?.replace(/\D/g, "") || "0");
+      return bNum - aNum; // Descending order
+    });
+  }, []);
+
+  // Load initial 100 projects (highest projectIDs) - fast load using cache
+  const loadInitialProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      const params = {
-        page: 1,
-        limit: 10000, // Get all projects for client-side sorting and pagination
-        sortBy: "createdAt",
-        sortOrder: "desc",
-        status: "all", // Get ALL projects regardless of status
-      };
+      // Try to get cached top 100 projects - display immediately without API call
+      const cachedProjects = getCachedTopProjects();
+      let loadedFromCache = false;
 
-      const response = await projectService.getAll(params);
-      const projectsData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
+      if (cachedProjects && cachedProjects.length > 0) {
+        // Fast path: Display cached projects immediately (no API call!)
+        setAllProjects(cachedProjects);
+        setFilteredProjects(cachedProjects);
+        setTotalPages(Math.ceil(cachedProjects.length / itemsPerPage));
+        setLoading(false);
+        loadedFromCache = true;
 
-      // Sort by projectID descending (extract numeric part for proper sorting)
-      const sortedProjects = [...projectsData].sort((a, b) => {
-        const aNum = parseInt(a.projectID?.replace(/\D/g, "") || "0");
-        const bNum = parseInt(b.projectID?.replace(/\D/g, "") || "0");
-        return bNum - aNum; // Descending order
-      });
+        // Now load all projects in the background to refresh cache
+        // Start immediately - the UI is already showing cached data
+        (async () => {
+          try {
+            const params = {
+              page: 1,
+              limit: 10000,
+              sortBy: "createdAt",
+              sortOrder: "desc",
+              status: "all",
+            };
 
-      setAllProjects(sortedProjects);
-      setFilteredProjects(sortedProjects);
-      setTotalPages(Math.ceil(sortedProjects.length / itemsPerPage));
+            const response = await projectService.getAll(params);
+            const allProjectsData = Array.isArray(response.data)
+              ? response.data
+              : response.data?.data || [];
+
+            // Sort by projectID descending
+            const sortedAllProjects = sortProjectsByID(allProjectsData);
+
+            // Update cache with fresh data
+            cacheTopProjects(sortedAllProjects);
+
+            // Update state with all projects
+            setAllProjects(sortedAllProjects);
+            setFilteredProjects(sortedAllProjects);
+            setTotalPages(Math.ceil(sortedAllProjects.length / itemsPerPage));
+          } catch (err) {
+            console.error("Error loading all projects in background:", err);
+          }
+        })();
+      }
+
+      // If no cache, do full load
+      if (!loadedFromCache) {
+        const params = {
+          page: 1,
+          limit: 10000,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+          status: "all",
+        };
+
+        const response = await projectService.getAll(params);
+        const projectsData = Array.isArray(response.data)
+          ? response.data
+          : response.data?.data || [];
+
+        // Sort by projectID descending
+        const sortedProjects = sortProjectsByID(projectsData);
+
+        // Get the top 100 (highest projectIDs)
+        const top100Projects = sortedProjects.slice(0, 100);
+
+        // Cache the top 100 projects
+        cacheTopProjects(sortedProjects);
+
+        // Display the top 100 immediately
+        setAllProjects(top100Projects);
+        setFilteredProjects(top100Projects);
+        setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
+        setLoading(false);
+
+        // Update with all projects
+        if (sortedProjects.length > 100) {
+          setAllProjects(sortedProjects);
+          setFilteredProjects(sortedProjects);
+          setTotalPages(Math.ceil(sortedProjects.length / itemsPerPage));
+        }
+      }
     } catch (err) {
-      console.error("Error loading projects:", err);
+      console.error("Error loading initial projects:", err);
       setError("Failed to load projects");
       setAllProjects([]);
       setFilteredProjects([]);
-    } finally {
       setLoading(false);
     }
-  }, [itemsPerPage]);
+  }, [itemsPerPage, sortProjectsByID]);
 
   // Filter projects based on search term
   useEffect(() => {
@@ -154,10 +225,10 @@ const Reports = () => {
     }
   }, [searchParams]);
 
-  // Load projects on mount
+  // Load initial projects on mount
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    loadInitialProjects();
+  }, [loadInitialProjects]);
 
   // Get paginated projects
   const paginatedProjects = filteredProjects.slice(
@@ -182,18 +253,17 @@ const Reports = () => {
         marginTop="10px"
         marginBottom="20px"
       >
-        All Projects
+        Reports
       </Typography>
 
       {/* Search Section */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Search Projects
+          Search for a Project
         </Typography>
         <TextField
           fullWidth
-          label="Search for a project"
-          placeholder="Type project ID, name, or client"
+          placeholder="Type project ID, site name, or client"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
@@ -239,23 +309,23 @@ const Reports = () => {
       ) : (
         <>
           {/* Projects Grid - 10x10 (100 per page) */}
-          <Paper sx={{ p: 3, mb: 3 }}>
+          <Paper sx={{ p: 2, mb: 3 }}>
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: "repeat(10, 1fr)",
-                gap: 2,
-                "@media (max-width: 1600px)": {
-                  gridTemplateColumns: "repeat(8, 1fr)",
+                gridTemplateColumns: "repeat(10, minmax(90px, 1fr))",
+                gap: 1,
+                maxWidth: "100%",
+                // On smaller screens, reduce columns to fit
+                "@media (max-width: 1000px)": {
+                  gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))",
                 },
-                "@media (max-width: 1200px)": {
-                  gridTemplateColumns: "repeat(6, 1fr)",
-                },
-                "@media (max-width: 900px)": {
-                  gridTemplateColumns: "repeat(4, 1fr)",
+                "@media (max-width: 768px)": {
+                  gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))",
+                  gap: 0.5,
                 },
                 "@media (max-width: 600px)": {
-                  gridTemplateColumns: "repeat(2, 1fr)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
                 },
               }}
             >
@@ -268,9 +338,18 @@ const Reports = () => {
                     flexDirection: "column",
                     cursor: "pointer",
                     transition: "all 0.2s ease-in-out",
+                    boxShadow: "none",
+                    border: "none",
+                    outline: "none",
+                    minWidth: 0, // Allow shrinking
                     "&:hover": {
-                      transform: "translateY(-4px)",
-                      boxShadow: 4,
+                      transform: "translateY(-2px)",
+                    },
+                    "&:focus": {
+                      outline: "none",
+                    },
+                    "&:focus-visible": {
+                      outline: "none",
                     },
                   }}
                 >
@@ -282,13 +361,19 @@ const Reports = () => {
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
-                      p: 2,
-                      minHeight: "120px",
+                      p: 1.5,
+                      minHeight: "100px",
+                      "&:focus": {
+                        outline: "none",
+                      },
+                      "&:focus-visible": {
+                        outline: "none",
+                      },
                     }}
                   >
                     <FolderIcon
                       sx={{
-                        fontSize: 48,
+                        fontSize: 50,
                         color: "primary.main",
                         mb: 1,
                       }}
@@ -297,8 +382,12 @@ const Reports = () => {
                       variant="body2"
                       align="center"
                       sx={{
-                        fontWeight: 500,
-                        wordBreak: "break-word",
+                        fontWeight: 450,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        width: "100%",
+                        fontSize: "0.7875rem", // 10% smaller than body2 (0.875rem)
                       }}
                     >
                       {project.projectID || "N/A"}
@@ -323,26 +412,23 @@ const Reports = () => {
           )}
 
           {/* Project Count Info */}
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            align="center"
-            sx={{ mt: 2 }}
-          >
-            {searchTerm.trim() ? (
-              <>
-                Showing {paginatedProjects.length} of {filteredProjects.length}{" "}
-                matching projects
-                {totalPages > 1 && ` (Page ${page} of ${totalPages})`}
-              </>
-            ) : (
-              <>
-                Showing {paginatedProjects.length} of {filteredProjects.length}{" "}
-                projects
-                {totalPages > 1 && ` (Page ${page} of ${totalPages})`}
-              </>
-            )}
-          </Typography>
+          <Box sx={{ textAlign: "center", mt: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {searchTerm.trim() ? (
+                <>
+                  Showing {paginatedProjects.length} of{" "}
+                  {filteredProjects.length} matching projects
+                  {totalPages > 1 && ` (Page ${page} of ${totalPages})`}
+                </>
+              ) : (
+                <>
+                  Showing {paginatedProjects.length} of{" "}
+                  {filteredProjects.length} projects
+                  {totalPages > 1 && ` (Page ${page} of ${totalPages})`}
+                </>
+              )}
+            </Typography>
+          </Box>
         </>
       )}
 

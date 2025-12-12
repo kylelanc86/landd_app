@@ -65,6 +65,7 @@ import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import AddIcon from "@mui/icons-material/Add";
 
 import { debounce } from "lodash";
+import { removeProjectFromCache } from "../../utils/reportsCache";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -898,6 +899,15 @@ const Projects = ({ initialFilters = {} }) => {
         (p) => (p._id || p.id) !== projectId
       );
       setProjects(updatedProjects);
+
+      // Update reports cache - remove deleted project
+      if (deletedProject?.projectID) {
+        try {
+          removeProjectFromCache(deletedProject.projectID);
+        } catch (cacheError) {
+          console.error("Error updating cache after delete:", cacheError);
+        }
+      }
 
       // Update status counts locally instead of making API call
       if (deletedProject && deletedProject.status) {

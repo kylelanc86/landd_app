@@ -48,6 +48,10 @@ import { hasPermission } from "../../config/permissions";
 import { usePermissions } from "../../hooks/usePermissions";
 import ProjectLogModalWrapper from "../reports/ProjectLogModalWrapper";
 import { StatusChip } from "../../components/JobStatus";
+import {
+  addProjectToCache,
+  removeProjectFromCache,
+} from "../../utils/reportsCache";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 import {
@@ -1196,6 +1200,9 @@ const ProjectInformation = () => {
         // Update form with returned project ID so it's displayed immediately
         if (response.data?.projectID) {
           setForm((prev) => ({ ...prev, projectID: response.data.projectID }));
+
+          // Update reports cache with new project (pass full project object)
+          addProjectToCache(response.data);
         }
 
         // Navigate to projects page after successful creation if shouldNavigate is true
@@ -1346,6 +1353,17 @@ const ProjectInformation = () => {
       }
 
       console.log("✅ PROJECT DELETE SUCCESS", { projectId: id });
+
+      // Update reports cache - remove deleted project
+      try {
+        const project = await projectService.getById(id);
+        if (project.data?.projectID) {
+          removeProjectFromCache(project.data.projectID);
+        }
+      } catch (cacheError) {
+        console.error("Error updating cache after delete:", cacheError);
+      }
+
       // Success - navigate to projects list
       navigate("/projects");
     } catch (error) {
