@@ -56,6 +56,7 @@ import {
   sampleService,
   projectService,
   clientService,
+  userService,
 } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
@@ -129,6 +130,7 @@ const AsbestosRemovalJobDetails = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
+  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [creating, setCreating] = useState(false);
 
   // Clearance modal state
@@ -159,6 +161,7 @@ const AsbestosRemovalJobDetails = () => {
     inspectionTime: "09:00 AM",
     clearanceType: "Non-friable",
     asbestosRemovalist: "",
+    LAA: "",
     jurisdiction: "ACT",
     secondaryHeader: "",
     vehicleEquipmentDescription: "",
@@ -355,7 +358,13 @@ const AsbestosRemovalJobDetails = () => {
         }
 
         const shiftsSetStart = getTimestamp();
-        setAirMonitoringShifts(enrichedShifts);
+        // Sort shifts by date (newest to oldest)
+        const sortedShifts = [...enrichedShifts].sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          return dateB - dateA; // Newest first
+        });
+        setAirMonitoringShifts(sortedShifts);
         const shiftsSetDuration = Math.round(getTimestamp() - shiftsSetStart);
         const enrichedShiftsSize = JSON.stringify(enrichedShifts).length;
         logTiming(`shifts set (${enrichedShifts.length})`, {
@@ -410,7 +419,17 @@ const AsbestosRemovalJobDetails = () => {
             );
           }
 
-          setClearances(clearancesPayload);
+          // Sort clearances by clearanceDate (newest to oldest)
+          const sortedClearances = [...clearancesPayload].sort((a, b) => {
+            const dateA = a.clearanceDate
+              ? new Date(a.clearanceDate).getTime()
+              : 0;
+            const dateB = b.clearanceDate
+              ? new Date(b.clearanceDate).getTime()
+              : 0;
+            return dateB - dateA; // Newest first
+          });
+          setClearances(sortedClearances);
           setClearancesLoaded(true); // Mark as loaded when fetched via fetchJobDetails
           const clearancesSetDuration = Math.round(
             getTimestamp() - clearancesStart
@@ -538,7 +557,13 @@ const AsbestosRemovalJobDetails = () => {
         requestDurationMs: requestDuration,
       });
 
-      setClearances(clearancesData);
+      // Sort clearances by clearanceDate (newest to oldest)
+      const sortedClearances = [...clearancesData].sort((a, b) => {
+        const dateA = a.clearanceDate ? new Date(a.clearanceDate).getTime() : 0;
+        const dateB = b.clearanceDate ? new Date(b.clearanceDate).getTime() : 0;
+        return dateB - dateA; // Newest first
+      });
+      setClearances(sortedClearances);
       setClearancesLoaded(true);
       logDebug("fetchClearances success", {
         clearanceCount: clearancesData.length,
@@ -550,7 +575,7 @@ const AsbestosRemovalJobDetails = () => {
         durationMs: Math.round(getTimestamp() - startTs),
         message: error?.message,
       });
-      setClearances([]);
+      setClearances([]); // Already sorted (empty array)
       setClearancesLoaded(true); // Still mark as loaded even on error so tab appears
     } finally {
       clearancesLoadingRef.current = false;
@@ -614,6 +639,64 @@ const AsbestosRemovalJobDetails = () => {
       setAsbestosRemovalists([]);
     }
   }, [asbestosRemovalists.length, logDebug]);
+
+  const fetchAsbestosAssessors = useCallback(async () => {
+    // Only fetch if not already loaded (lazy loading)
+    if (asbestosAssessors.length > 0) {
+      logDebug("fetchAsbestosAssessors skipped - already loaded", {
+        assessorCount: asbestosAssessors.length,
+      });
+      return;
+    }
+
+    const startTs = getTimestamp();
+    logDebug("fetchAsbestosAssessors start");
+
+    try {
+      const requestStart = getTimestamp();
+      const response = await userService.getAsbestosAssessors();
+      const data = response.data || [];
+      const requestDuration = Math.round(getTimestamp() - requestStart);
+      const dataSize = JSON.stringify(data || []).length;
+      logDebug("fetchAsbestosAssessors - response received", {
+        assessorCount: Array.isArray(data) ? data.length : 0,
+        dataSizeBytes: dataSize,
+        dataSizeKB: Math.round((dataSize / 1024) * 100) / 100,
+        requestDurationMs: requestDuration,
+      });
+
+      const sortStart = getTimestamp();
+      const sortedData = (data || []).sort((a, b) => {
+        const nameA = `${a.lastName || ""} ${a.firstName || ""}`.trim();
+        const nameB = `${b.lastName || ""} ${b.firstName || ""}`.trim();
+        return nameA.localeCompare(nameB);
+      });
+      const sortDuration = Math.round(getTimestamp() - sortStart);
+      logDebug("fetchAsbestosAssessors - sorting complete", {
+        sortDurationMs: sortDuration,
+      });
+
+      const setStart = getTimestamp();
+      setAsbestosAssessors(sortedData);
+      const setDuration = Math.round(getTimestamp() - setStart);
+      logDebug("fetchAsbestosAssessors success", {
+        assessorCount: sortedData.length,
+        durationMs: Math.round(getTimestamp() - startTs),
+        breakdown: {
+          requestMs: requestDuration,
+          sortMs: sortDuration,
+          setStateMs: setDuration,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching asbestos assessors:", error);
+      logDebug("fetchAsbestosAssessors error", {
+        durationMs: Math.round(getTimestamp() - startTs),
+        message: error?.message,
+      });
+      setAsbestosAssessors([]);
+    }
+  }, [asbestosAssessors.length, logDebug]);
 
   useEffect(() => {
     if (jobId) {
@@ -1043,8 +1126,9 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleCreateClearance = () => {
-    // Lazy load removalists and clearances if not already loaded or loading
+    // Lazy load removalists, assessors and clearances if not already loaded or loading
     fetchAsbestosRemovalists();
+    fetchAsbestosAssessors();
     if (clearances.length === 0 && !clearancesLoadingRef.current) {
       fetchClearances();
     }
@@ -1092,7 +1176,15 @@ const AsbestosRemovalJobDetails = () => {
           jobName: job?.name || "Asbestos Removal Job",
           jobId: jobId,
         };
-        setAirMonitoringShifts((prev) => [...prev, newShift]);
+        setAirMonitoringShifts((prev) => {
+          const updated = [...prev, newShift];
+          // Sort shifts by date (newest to oldest)
+          return updated.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA; // Newest first
+          });
+        });
       }
 
       handleCloseShiftDialog();
@@ -1285,8 +1377,9 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleEditClearance = (clearance, event) => {
     event.stopPropagation();
-    // Lazy load removalists only when needed
+    // Lazy load removalists and assessors only when needed
     fetchAsbestosRemovalists();
+    fetchAsbestosAssessors();
     setEditingClearance(clearance);
     const clearanceType = clearance.clearanceType || "Non-friable";
     setClearanceForm({
@@ -1297,6 +1390,7 @@ const AsbestosRemovalJobDetails = () => {
       inspectionTime: formatTimeForDisplay(clearance.inspectionTime),
       clearanceType: clearanceType,
       asbestosRemovalist: clearance.asbestosRemovalist || "",
+      LAA: clearance.LAA || "",
       jurisdiction: clearance.jurisdiction || "ACT",
       secondaryHeader: clearance.secondaryHeader || "",
       vehicleEquipmentDescription: clearance.vehicleEquipmentDescription || "",
@@ -1376,6 +1470,7 @@ const AsbestosRemovalJobDetails = () => {
       inspectionTime: "09:00 AM",
       clearanceType: "Non-friable",
       asbestosRemovalist: job?.asbestosRemovalist || "",
+      LAA: "",
       jurisdiction: "ACT",
       secondaryHeader: "",
       vehicleEquipmentDescription: "",
@@ -1390,6 +1485,11 @@ const AsbestosRemovalJobDetails = () => {
 
     if (!clearanceForm.inspectionTime.trim()) {
       setError("Inspection time is required");
+      return;
+    }
+
+    if (!clearanceForm.LAA.trim()) {
+      setError("LAA (Licensed Asbestos Assessor) is required");
       return;
     }
 
@@ -1412,6 +1512,7 @@ const AsbestosRemovalJobDetails = () => {
         inspectionTime: clearanceForm.inspectionTime,
         clearanceType: clearanceForm.clearanceType,
         asbestosRemovalist: clearanceForm.asbestosRemovalist,
+        LAA: clearanceForm.LAA,
         jurisdiction: clearanceForm.jurisdiction,
         secondaryHeader: clearanceForm.secondaryHeader,
         vehicleEquipmentDescription: clearanceForm.vehicleEquipmentDescription,
@@ -2247,67 +2348,91 @@ const AsbestosRemovalJobDetails = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-                  <TextField
-                    fullWidth
-                    label="Asbestos Removalist"
-                    value={clearanceForm.asbestosRemovalist}
+                <TextField
+                  fullWidth
+                  label="Asbestos Removalist"
+                  value={clearanceForm.asbestosRemovalist}
+                  onChange={(e) =>
+                    setClearanceForm({
+                      ...clearanceForm,
+                      asbestosRemovalist: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
+                  <Select
+                    value={clearanceForm.LAA}
                     onChange={(e) =>
                       setClearanceForm({
                         ...clearanceForm,
-                        asbestosRemovalist: e.target.value,
+                        LAA: e.target.value,
                       })
                     }
-                    required
-                  />
-                  <Box sx={{ minWidth: 150 }}>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        fontSize: "0.75rem",
-                        color: "text.secondary",
-                        display: "block",
-                        mb: 1,
-                      }}
-                    >
-                      Jurisdiction
-                    </Typography>
-                    <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-                      <FormControlLabel
-                        value="ACT"
-                        control={
-                          <Radio
-                            size="small"
-                            checked={clearanceForm.jurisdiction === "ACT"}
-                            onChange={(e) =>
-                              setClearanceForm({
-                                ...clearanceForm,
-                                jurisdiction: e.target.value,
-                              })
-                            }
-                          />
-                        }
-                        label="ACT"
-                        sx={{ margin: 0 }}
-                      />
-                      <FormControlLabel
-                        value="NSW"
-                        control={
-                          <Radio
-                            size="small"
-                            checked={clearanceForm.jurisdiction === "NSW"}
-                            onChange={(e) =>
-                              setClearanceForm({
-                                ...clearanceForm,
-                                jurisdiction: e.target.value,
-                              })
-                            }
-                          />
-                        }
-                        label="NSW"
-                        sx={{ margin: 0 }}
-                      />
-                    </Box>
+                    label="LAA (Licensed Asbestos Assessor)"
+                  >
+                    {asbestosAssessors.map((assessor) => (
+                      <MenuItem
+                        key={assessor._id}
+                        value={`${assessor.firstName} ${assessor.lastName}`}
+                      >
+                        {assessor.firstName} {assessor.lastName}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ minWidth: 150 }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontSize: "0.75rem",
+                      color: "text.secondary",
+                      display: "block",
+                      mb: 1,
+                    }}
+                  >
+                    Jurisdiction
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                    <FormControlLabel
+                      value="ACT"
+                      control={
+                        <Radio
+                          size="small"
+                          checked={clearanceForm.jurisdiction === "ACT"}
+                          onChange={(e) =>
+                            setClearanceForm({
+                              ...clearanceForm,
+                              jurisdiction: e.target.value,
+                            })
+                          }
+                        />
+                      }
+                      label="ACT"
+                      sx={{ margin: 0 }}
+                    />
+                    <FormControlLabel
+                      value="NSW"
+                      control={
+                        <Radio
+                          size="small"
+                          checked={clearanceForm.jurisdiction === "NSW"}
+                          onChange={(e) =>
+                            setClearanceForm({
+                              ...clearanceForm,
+                              jurisdiction: e.target.value,
+                            })
+                          }
+                        />
+                      }
+                      label="NSW"
+                      sx={{ margin: 0 }}
+                    />
                   </Box>
                 </Box>
               </Grid>

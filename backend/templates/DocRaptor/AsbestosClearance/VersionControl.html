@@ -197,11 +197,20 @@
         margin-bottom: 32px;
       }
 
-      .revision-table th,
-      .revision-table td {
+      .revision-table th {
         border: 1px solid #888;
         padding: 8px 12px;
         font-size: 0.8rem;
+        text-align: left;
+        background: #f5f5f5;
+        font-weight: 700;
+        text-transform: none;
+      }
+
+      .revision-table td {
+        border: 1px solid #888;
+        padding: 8px 12px;
+        font-size: 0.65rem;
         text-align: left;
       }
 
@@ -209,21 +218,15 @@
       .document-details-table td {
         border: 1px solid #888;
         padding: 4px 8px;
-        font-size: 0.795rem;
+        font-size: 0.65rem;
         text-align: left;
-      }
-
-      .revision-table th {
-        background: #f5f5f5;
-        font-weight: 700;
-        text-transform: none;
       }
 
       .document-details-table {
         width: 100%;
         border-collapse: collapse;
         margin: 12px 0;
-        font-size: 0.7rem;
+        font-size: 0.65rem;
       }
 
       .document-details-table td {
@@ -239,6 +242,7 @@
         padding: 8px 12px;
         border: 1px solid #888;
         border-right: none;
+        font-size: 0.8rem;
       }
 
       .document-details-table td:last-child {
@@ -341,7 +345,7 @@
         <table class="revision-table">
           <tr>
             <th>Reason for Revision</th>
-            <th>Rev Number</th>
+            <th>Revision</th>
             <th>Approved By</th>
             <th>Date</th>
           </tr>

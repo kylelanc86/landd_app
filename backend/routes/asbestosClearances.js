@@ -106,6 +106,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       sitePlanSource,
       sitePlanLegend,
       sitePlanLegendTitle,
+      sitePlanFigureTitle,
       jobSpecificExclusions,
       notes,
       vehicleEquipmentDescription,
@@ -128,6 +129,8 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       ...(sitePlanSource && { sitePlanSource }),
       sitePlanLegend: sitePlanLegend || [],
       sitePlanLegendTitle: sitePlanLegendTitle || undefined,
+      sitePlanFigureTitle: sitePlanFigureTitle || undefined,
+      sitePlanFigureTitle: sitePlanFigureTitle || undefined,
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
       vehicleEquipmentDescription,
@@ -219,6 +222,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     }
     if (sitePlanLegendTitle !== undefined) {
       clearance.sitePlanLegendTitle = sitePlanLegendTitle;
+    }
+    if (sitePlanFigureTitle !== undefined) {
+      clearance.sitePlanFigureTitle = sitePlanFigureTitle;
     }
     if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
       clearance.sitePlanSource = sitePlanSource;

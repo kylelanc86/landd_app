@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -30,6 +30,7 @@ import {
   Link,
   Autocomplete,
   Alert,
+  InputAdornment,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -44,6 +45,7 @@ import {
   Map as MapIcon,
   ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
+import MicIcon from "@mui/icons-material/Mic";
 import { Checkbox, FormControlLabel } from "@mui/material";
 
 import { useNavigate, useParams } from "react-router-dom";
@@ -95,6 +97,9 @@ const ClearanceItems = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [savingExclusions, setSavingExclusions] = useState(false);
   const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
+  const [isDictating, setIsDictating] = useState(false);
+  const [dictationError, setDictationError] = useState("");
+  const recognitionRef = useRef(null);
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
   const [sitePlanFile, setSitePlanFile] = useState(null);
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
@@ -133,6 +138,15 @@ const ClearanceItems = () => {
     return "ontouchstart" in window || navigator.maxTouchPoints > 0;
   };
 
+  // Format status for display (remove underscores, capitalize)
+  const formatStatus = (status) => {
+    if (!status) return "";
+    return status
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
+
   const getProjectFolderName = () => {
     const project = clearance?.projectId;
 
@@ -141,6 +155,7 @@ const ClearanceItems = () => {
         return project;
       }
       return (
+        project.projectID ||
         project.projectId ||
         project.externalId ||
         project._id ||
@@ -152,6 +167,114 @@ const ClearanceItems = () => {
 
     return clearanceId || "clearance-photos";
   };
+
+  // Dictation functions
+  const startDictation = () => {
+    // If already dictating, stop it first
+    if (isDictating && recognitionRef.current) {
+      stopDictation();
+      return;
+    }
+
+    // Check if browser supports speech recognition
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      setDictationError(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+      );
+      return;
+    }
+
+    try {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-AU";
+
+      recognition.onstart = () => {
+        setIsDictating(true);
+        setDictationError("");
+      };
+
+      recognition.onresult = (event) => {
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          }
+        }
+
+        // Update the job specific exclusions field with the final transcript
+        if (finalTranscript) {
+          setClearance((prev) => {
+            const currentText = prev?.jobSpecificExclusions || "";
+            const isFirstWord = !currentText || currentText.trim().length === 0;
+            const newText = isFirstWord
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
+              : finalTranscript;
+            return {
+              ...prev,
+              jobSpecificExclusions:
+                currentText + (currentText ? " " : "") + newText,
+            };
+          });
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setDictationError(`Dictation error: ${event.error}`);
+        setIsDictating(false);
+        recognitionRef.current = null;
+      };
+
+      recognition.onend = () => {
+        setIsDictating(false);
+        recognitionRef.current = null;
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (error) {
+      console.error("Error starting dictation:", error);
+      setDictationError("Failed to start dictation. Please try again.");
+      recognitionRef.current = null;
+    }
+  };
+
+  const stopDictation = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error("Error stopping dictation:", error);
+      }
+      recognitionRef.current = null;
+    }
+    setIsDictating(false);
+  };
+
+  // Cleanup: stop dictation when component unmounts
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          // Ignore errors during cleanup
+        }
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   // Set up video stream when camera dialog opens
   useEffect(() => {
@@ -826,8 +949,11 @@ const ClearanceItems = () => {
 
             // Save full-size original to device
             try {
+              const projectFolderName = getProjectFolderName();
               await saveFileToDevice(fullQualityFile, filename, {
-                projectId: getProjectFolderName(),
+                projectId: projectFolderName
+                  ? `${projectFolderName} - Photos`
+                  : "clearance-photos",
               });
             } catch (error) {
               console.error("Error saving photo to device:", error);
@@ -901,6 +1027,10 @@ const ClearanceItems = () => {
         sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
           ? sitePlanData.legendTitle.trim()
           : "Key";
+      const figureTitle =
+        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
+          ? sitePlanData.figureTitle.trim()
+          : "Asbestos Removal Site Plan";
 
       if (!imageData) {
         showSnackbar("No site plan image data was provided", "error");
@@ -913,6 +1043,7 @@ const ClearanceItems = () => {
         sitePlanFile: imageData, // Base64 image data
         sitePlanLegend: legendEntries,
         sitePlanLegendTitle: legendTitle,
+        sitePlanFigureTitle: figureTitle,
         sitePlanSource: "drawn", // Mark it as a drawn site plan
       });
 
@@ -2629,7 +2760,7 @@ const ClearanceItems = () => {
                                 label={
                                   report.reportApprovedBy
                                     ? "Authorized"
-                                    : report.status
+                                    : formatStatus(report.status)
                                 }
                                 color={
                                   report.reportApprovedBy
@@ -2955,7 +3086,6 @@ const ClearanceItems = () => {
             <Box sx={{ mb: 3 }}>
               <TextField
                 fullWidth
-                label="Job Specific Exclusions"
                 value={clearance?.jobSpecificExclusions || ""}
                 onChange={(e) => {
                   // Update local state for the text field
@@ -2968,12 +3098,69 @@ const ClearanceItems = () => {
                 rows={6}
                 placeholder="Enter job-specific exclusions/caveats that should be included in the clearance report"
                 InputProps={{
-                  endAdornment: savingExclusions ? (
-                    <CircularProgress size={20} sx={{ mr: 1 }} />
-                  ) : null,
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      {savingExclusions ? (
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                      ) : (
+                        <IconButton
+                          onClick={isDictating ? stopDictation : startDictation}
+                          color={isDictating ? "error" : "primary"}
+                          title={
+                            isDictating ? "Stop Dictation" : "Start Dictation"
+                          }
+                          sx={{
+                            backgroundColor: isDictating
+                              ? "error.light"
+                              : "transparent",
+                            "&:hover": {
+                              backgroundColor: isDictating
+                                ? "error.main"
+                                : "action.hover",
+                            },
+                          }}
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      )}
+                    </InputAdornment>
+                  ),
                 }}
                 sx={{ mb: 2 }}
               />
+              {/* Dictation Status and Errors */}
+              {isDictating && (
+                <Box
+                  sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      backgroundColor: "error.main",
+                      animation: "pulse 1.5s ease-in-out infinite",
+                      "@keyframes pulse": {
+                        "0%": { opacity: 1 },
+                        "50%": { opacity: 0.5 },
+                        "100%": { opacity: 1 },
+                      },
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Dictating... Speak clearly into your microphone
+                  </Typography>
+                </Box>
+              )}
+              {dictationError && (
+                <Typography
+                  variant="caption"
+                  color="error.main"
+                  sx={{ mt: 1, display: "block" }}
+                >
+                  {dictationError}
+                </Typography>
+              )}
               {exclusionsLastSaved && (
                 <Typography variant="body2" color="text.secondary">
                   Last saved: {formatDate(exclusionsLastSaved)}
@@ -3865,6 +4052,7 @@ const ClearanceItems = () => {
               existingSitePlan={clearance?.sitePlanFile}
               existingLegend={clearance?.sitePlanLegend}
               existingLegendTitle={clearance?.sitePlanLegendTitle}
+              existingFigureTitle={clearance?.sitePlanFigureTitle}
             />
           </DialogContent>
         </Dialog>

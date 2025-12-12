@@ -16,6 +16,7 @@ import {
   Backdrop,
   CircularProgress,
   Paper,
+  InputAdornment,
 } from "@mui/material";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -54,6 +55,7 @@ const NewSample = () => {
     filterSize: "25mm",
     startTime: "",
     endTime: "",
+    nextDay: false,
     initialFlowrate: "",
     finalFlowrate: "",
     averageFlowrate: "",
@@ -73,6 +75,7 @@ const NewSample = () => {
   const [shift, setShift] = useState(null);
   const [projectSamples, setProjectSamples] = useState([]);
   const [shiftSamples, setShiftSamples] = useState([]);
+  const [insufficientSampleTime, setInsufficientSampleTime] = useState(false);
 
   const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
 
@@ -432,6 +435,27 @@ const NewSample = () => {
       return;
     }
 
+    // Handle nextDay checkbox
+    if (name === "nextDay") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+      return;
+    }
+
+    // Handle cowlNo to ensure "C" prefix is always present but not editable
+    // Store value without "C" in state (InputAdornment displays "C" visually)
+    if (name === "cowlNo") {
+      // Remove any "C" prefix if user types it (since InputAdornment shows it as non-editable prefix)
+      const cleanedValue = value.replace(/^C+/i, "");
+      setForm((prev) => ({
+        ...prev,
+        [name]: cleanedValue,
+      }));
+      return;
+    }
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -466,6 +490,67 @@ const NewSample = () => {
       }));
     }
   }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
+
+  // Calculate minutes from start and end times
+  const calculateMinutes = (startTime, endTime, nextDay = false) => {
+    if (!startTime || !endTime) return null;
+
+    const [startHours, startMinutes] = startTime.split(":").map(Number);
+    const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    // Handle case where end time is next day (either explicitly checked or inferred)
+    let diffMinutes = endTotalMinutes - startTotalMinutes;
+    if (nextDay || diffMinutes < 0) {
+      diffMinutes += 24 * 60; // Add 24 hours
+    }
+
+    return diffMinutes;
+  };
+
+  // Validate sample time based on filter size
+  useEffect(() => {
+    if (isSimplifiedSample) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    if (!form.startTime || !form.endTime || !form.finalFlowrate) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    const minutes = calculateMinutes(
+      form.startTime,
+      form.endTime,
+      form.nextDay
+    );
+    if (minutes === null) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    const filterSize = form.filterSize || "25mm";
+    let isInsufficient = false;
+
+    if (filterSize === "25mm") {
+      const totalVolume = minutes * parseFloat(form.finalFlowrate);
+      isInsufficient = totalVolume < 360;
+    } else if (filterSize === "13mm") {
+      isInsufficient = minutes < 90;
+    }
+
+    setInsufficientSampleTime(isInsufficient);
+  }, [
+    form.startTime,
+    form.endTime,
+    form.nextDay,
+    form.finalFlowrate,
+    form.filterSize,
+    isSimplifiedSample,
+  ]);
 
   const setCurrentTime = (field) => {
     const now = new Date();
@@ -515,7 +600,7 @@ const NewSample = () => {
       }
     }
 
-    if (!form.cowlNo) {
+    if (!form.cowlNo || form.cowlNo.trim() === "") {
       errors.cowlNo = "Cowl No. is required";
     }
 
@@ -608,6 +693,11 @@ const NewSample = () => {
 
       // Create the sample
       console.time(`${logLabel} create`);
+      // Ensure cowlNo has "C" prefix
+      const cowlNoWithPrefix =
+        form.cowlNo && !form.cowlNo.startsWith("C")
+          ? `C${form.cowlNo}`
+          : form.cowlNo || "";
       const sampleData = {
         ...form,
         shift: shiftId,
@@ -618,6 +708,8 @@ const NewSample = () => {
         collectedBy: form.sampler,
         type: form.isFieldBlank ? "-" : form.type, // Set type to "-" for field blanks
         flowmeter: form.flowmeter || null, // Explicitly include flowmeter
+        cowlNo: cowlNoWithPrefix, // Ensure "C" prefix is included
+        nextDay: form.nextDay || false, // Ensure boolean value
         initialFlowrate: form.initialFlowrate
           ? parseFloat(form.initialFlowrate)
           : null,
@@ -834,6 +926,7 @@ const NewSample = () => {
               <TextField
                 name="location"
                 label="Location"
+                autoComplete="off"
                 value={form.location}
                 onChange={handleChange}
                 required
@@ -847,6 +940,7 @@ const NewSample = () => {
             <TextField
               name="location"
               label="Location"
+              autoComplete="off"
               value={
                 form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
               }
@@ -895,12 +989,18 @@ const NewSample = () => {
           <TextField
             name="cowlNo"
             label="Cowl No."
-            value={form.cowlNo}
+            value={form.cowlNo || ""}
             onChange={handleChange}
             required
             fullWidth
             error={!!fieldErrors.cowlNo}
             helperText={fieldErrors.cowlNo}
+            autoComplete="off"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">C</InputAdornment>
+              ),
+            }}
           />
           {!isSimplifiedSample && (
             <FormControl
@@ -994,7 +1094,7 @@ const NewSample = () => {
               >
                 Air-monitor Collection
               </Typography>
-              <Box sx={{ display: "flex", gap: 1 }}>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <TextField
                   name="endTime"
                   label="End Time"
@@ -1004,6 +1104,10 @@ const NewSample = () => {
                   fullWidth
                   InputLabelProps={{ shrink: true }}
                   inputProps={{ step: 60 }}
+                  error={insufficientSampleTime}
+                  helperText={
+                    insufficientSampleTime ? "Insufficient sample time" : ""
+                  }
                 />
                 <IconButton
                   onClick={() => setCurrentTime("endTime")}
@@ -1012,6 +1116,17 @@ const NewSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="nextDay"
+                    checked={form.nextDay}
+                    onChange={handleChange}
+                  />
+                }
+                label="Next Day"
+                sx={{ mt: -1, mb: 1 }}
+              />
               <TextField
                 name="finalFlowrate"
                 label="Final Flowrate (L/min)"

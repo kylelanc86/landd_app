@@ -695,7 +695,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       
       if (isSitePlanImage) {
         console.log(`[${pdfId}] Generating site plan content page for image data`);
-        const sitePlanContentPage = generateSitePlanContentPage(clearanceData, 'B', logoBase64, footerText);
+        const figureTitle = clearanceData.sitePlanFigureTitle || 'Asbestos Removal Site Plan';
+        const sitePlanContentPage = generateSitePlanContentPage(clearanceData, 'B', logoBase64, footerText, 'sitePlanFile', 'SITE PLAN', figureTitle);
         console.log(`[${pdfId}] Site plan content page length: ${sitePlanContentPage.length} characters`);
         console.log(`[${pdfId}] Site plan content contains page-break-after: ${sitePlanContentPage.includes('page-break-after')}`);
         appendixContent += `
@@ -980,20 +981,28 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
 
           /* Site plan container styling */
           .site-plan-container {
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: none !important;
             padding: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box !important;
             margin: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
           }
 
           .site-plan-container img {
-            border-radius: 4px;
+            border-radius: 0 !important;
             max-height: calc((100vw - 200px) * 0.99) !important;
             object-fit: contain !important;
             width: 100% !important;
             margin: 0 !important;
+          }
+
+          .site-plan-legend-container {
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
           }
 
         </style>
@@ -1063,7 +1072,7 @@ const generateSitePlanContentPage = (
     const legendColumn =
       legendEntries.length > 0
         ? `
-          <div class="site-plan-legend-container" style="flex: 0 0 15%; max-width: 180px; border: 1px solid #d1d5db; border-radius: 10px; background-color: #ffffff; padding: 16px 20px;">
+          <div class="site-plan-legend-container" style="flex: 0 0 15%; max-width: 180px; border: none; border-radius: 0; background-color: #ffffff; padding: 16px 20px; box-shadow: none;">
             <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
               ${escapeHtml(legendHeading)}
             </div>
@@ -1098,7 +1107,7 @@ const generateSitePlanContentPage = (
         <div class="green-line"></div>
         <div class="content">
           <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
-            <div class="site-plan-container" style="flex: 0 0 60%; max-width: 600px; padding: 32px; border: 2px dashed #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box; color: #4b5563; text-align:center;">
+            <div class="site-plan-container" style="flex: 0 0 60%; max-width: 600px; padding: 32px; border: none; background-color: #f9fafb; border-radius: 0; box-sizing: border-box; color: #4b5563; text-align:center; box-shadow: none;">
               <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No Site Plan Provided</div>
               <div style="font-size: 12px;">A site plan has not been uploaded or drawn for this clearance.</div>
             </div>
@@ -1134,7 +1143,7 @@ const generateSitePlanContentPage = (
   const legendColumn =
     legendEntries.length > 0
         ? `
-          <div class="site-plan-legend-container" style="flex: 0 0 18%; max-width: 220px; border: 1px solid #d1d5db; border-radius: 10px; background-color: #ffffff; padding: 16px 20px; align-self: stretch;">
+          <div class="site-plan-legend-container" style="flex: 0 0 18%; max-width: 220px; border: none; border-radius: 0; background-color: #ffffff; padding: 16px 20px; align-self: stretch; box-shadow: none;">
             <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
               ${escapeHtml(
                 (data[legendTitleField] && data[legendTitleField].trim()) ||
@@ -1161,7 +1170,7 @@ const generateSitePlanContentPage = (
   if (fileType.startsWith('image/') || isDataUrl) {
     content = `
       <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
-        <div class="site-plan-container" style="flex: 1; max-width: 100%; padding: 0; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box;">
+        <div class="site-plan-container" style="flex: 1; max-width: 100%; padding: 0; border: none; background-color: #f9fafb; border-radius: 0; box-sizing: border-box; box-shadow: none;">
           <img src="${imageSrc}" 
                alt="${title}" 
                style="width: 100% !important; height: auto !important; object-fit: contain !important; display: block !important; margin: 0 auto !important;" />
@@ -1175,7 +1184,7 @@ const generateSitePlanContentPage = (
   } else {
     content = `
       <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: center; gap: 24px; align-items: flex-start; margin: 0 auto; width: 100%;">
-        <div class="site-plan-container" style="flex: 1; max-width: 100%; padding: 0; border: 2px solid #d1d5db; background-color: #f9fafb; border-radius: 10px; box-sizing: border-box; text-align:center;">
+        <div class="site-plan-container" style="flex: 1; max-width: 100%; padding: 0; border: none; background-color: #f9fafb; border-radius: 0; box-sizing: border-box; text-align:center; box-shadow: none;">
           <div class="appendix-title" style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">APPENDIX ${appendixLetter}</div>
           <div class="photographs-text" style="font-size: 14px; text-transform: uppercase; margin-bottom: 8px;">${title}</div>
           <div class="file-note" style="font-size: 12px; color: #4b5563;">Document attached</div>

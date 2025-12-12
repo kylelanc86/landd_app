@@ -130,6 +130,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       filterSize: req.body.filterSize,
       startTime: req.body.startTime,
       endTime: req.body.endTime,
+      nextDay: req.body.nextDay === true || req.body.nextDay === 'on' || req.body.nextDay === 'true',
       initialFlowrate: req.body.initialFlowrate,
       finalFlowrate: req.body.finalFlowrate,
       averageFlowrate: req.body.averageFlowrate,
@@ -184,7 +185,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
     // Update other fields
     Object.keys(req.body).forEach(key => {
       if (key !== 'analysis') {
-        sample[key] = req.body[key];
+        // Convert nextDay from string "on" to boolean if needed
+        if (key === 'nextDay') {
+          sample[key] = req.body[key] === true || req.body[key] === 'on' || req.body[key] === 'true';
+        } else {
+          sample[key] = req.body[key];
+        }
       }
     });
 

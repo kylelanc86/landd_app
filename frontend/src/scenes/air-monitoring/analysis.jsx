@@ -69,13 +69,20 @@ const SampleSummary = React.memo(
   }) => {
     const theme = useTheme();
 
+    const isComplete = isSampleAnalyzed(sample._id);
+
     return (
-      <Paper
+      <Box
         sx={{
+          backgroundColor: isComplete
+            ? "#e8f5e9" // Light green
+            : "#f5f5f5", // Light grey
+          borderRadius: 2,
           p: 3,
           display: "block",
           position: "relative",
           overflow: "visible",
+          boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
         }}
       >
         <Stack spacing={3}>
@@ -210,59 +217,75 @@ const SampleSummary = React.memo(
                 minWidth: 0,
               }}
             >
-              <Button
-                variant="contained"
-                size="small"
-                onClick={() => onOpenFibreCountModal(sample._id)}
-                disabled={isReadOnly || isFilterUncountable(sample._id)}
-              >
-                Enter Fibre Counts
-              </Button>
+              {analysis?.edgesDistribution && analysis?.backgroundDust && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => onOpenFibreCountModal(sample._id)}
+                  disabled={isReadOnly || isFilterUncountable(sample._id)}
+                  sx={{
+                    backgroundColor: isSampleAnalyzed(sample._id)
+                      ? "success.main"
+                      : "grey.500",
+                    "&:hover": {
+                      backgroundColor: isSampleAnalyzed(sample._id)
+                        ? "success.dark"
+                        : "grey.600",
+                    },
+                  }}
+                >
+                  {isSampleAnalyzed(sample._id)
+                    ? "Edit Fibre Counts"
+                    : "Enter Fibre Counts"}
+                </Button>
+              )}
             </Box>
           </Stack>
 
-          <Box>
-            <Box sx={{ textAlign: "center", mb: 2 }}>
-              <Typography variant="h5">Fibre Counts</Typography>
-            </Box>
+          {isComplete && (
+            <Box>
+              <Box sx={{ textAlign: "center", mb: 2 }}>
+                <Typography variant="h5">Fibre Counts</Typography>
+              </Box>
 
-            <Stack direction="row" spacing={4} justifyContent="center">
-              <Box sx={{ textAlign: "center" }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Fibres Counted
-                </Typography>
-                <Typography variant="h6">
-                  {analysis.fibresCounted || 0}
-                </Typography>
-              </Box>
-              <Box sx={{ textAlign: "center" }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Fields Counted
-                </Typography>
-                <Typography variant="h6">
-                  {analysis.fieldsCounted || 0}
-                </Typography>
-              </Box>
-              <Box sx={{ textAlign: "center" }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Actual Concentration
-                </Typography>
-                <Typography variant="h6">
-                  {calculateConcentration(sample._id) || "N/A"} fibres/mL
-                </Typography>
-              </Box>
-              <Box sx={{ textAlign: "center" }}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Reported Concentration
-                </Typography>
-                <Typography variant="h6">
-                  {getReportedConcentration(sample._id) || "N/A"} fibres/mL
-                </Typography>
-              </Box>
-            </Stack>
-          </Box>
+              <Stack direction="row" spacing={4} justifyContent="center">
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Fibres Counted
+                  </Typography>
+                  <Typography variant="h6">
+                    {analysis.fibresCounted || 0}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Fields Counted
+                  </Typography>
+                  <Typography variant="h6">
+                    {analysis.fieldsCounted || 0}
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Actual Concentration
+                  </Typography>
+                  <Typography variant="h6">
+                    {calculateConcentration(sample._id) || "N/A"} fibres/mL
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Reported Concentration
+                  </Typography>
+                  <Typography variant="h6">
+                    {getReportedConcentration(sample._id) || "N/A"} fibres/mL
+                  </Typography>
+                </Box>
+              </Stack>
+            </Box>
+          )}
         </Stack>
-      </Paper>
+      </Box>
     );
   }
 );
@@ -403,6 +426,10 @@ const Analysis = () => {
             // Only merge if we don't have existing data
             if (!firstSampleWithAnalysis?.analysis) {
               setAnalysisDetails(parsed.analysisDetails);
+            }
+            // Restore analysedBy if saved
+            if (parsed.analysedBy) {
+              setAnalysedBy(parsed.analysedBy);
             }
             // Merge saved analyses with all samples (preserve backend, add new)
             const mergedAnalyses = { ...initialAnalyses };
@@ -867,6 +894,7 @@ const Analysis = () => {
       shiftId: shiftId,
       analysisDetails,
       sampleAnalyses,
+      analysedBy,
       timestamp: new Date().toISOString(),
     };
     console.log("Saving progress data:", progressData);
@@ -886,6 +914,7 @@ const Analysis = () => {
       shiftId: shiftId,
       analysisDetails,
       sampleAnalyses,
+      analysedBy,
       timestamp: new Date().toISOString(),
     };
     try {
@@ -1048,13 +1077,46 @@ const Analysis = () => {
     setFibreCountSnapshot(null);
   };
 
-  // Check if all microscope calibration fields are selected
+  const handleClearTableInModal = () => {
+    if (activeSampleId) {
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        newAnalyses[activeSampleId] = {
+          ...newAnalyses[activeSampleId],
+          fibreCounts: Array(5)
+            .fill()
+            .map(() => Array(20).fill("")),
+          fibresCounted: 0,
+          fieldsCounted: 0,
+        };
+        return newAnalyses;
+      });
+    }
+  };
+
+  // Check if all microscope calibration fields are selected and microscope has valid calibration date
   const isCalibrationComplete = () => {
-    return (
-      analysisDetails.microscope &&
-      analysisDetails.testSlide &&
-      analysisDetails.testSlideLines
-    );
+    // Check if all three calibration fields are filled
+    if (
+      !analysisDetails.microscope ||
+      !analysisDetails.testSlide ||
+      !analysisDetails.testSlideLines
+    ) {
+      return false;
+    }
+
+    // Check if the selected microscope has a valid calibration date
+    if (pcmCalibrations.length === 0) {
+      return false;
+    }
+
+    // Find the latest PCM calibration for the selected microscope
+    const latestPcmCalibration = pcmCalibrations
+      .filter((cal) => cal.microscopeReference === analysisDetails.microscope)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    // Return true only if calibration exists and has a valid date
+    return latestPcmCalibration && latestPcmCalibration.date;
   };
 
   // Helper to check if all required fields are filled
@@ -1147,8 +1209,22 @@ const Analysis = () => {
   const renderSampleForm = useCallback(
     ({ index, style }) => {
       const sample = samples[index];
+      const isComplete =
+        sampleAnalyses[sample._id] &&
+        sampleAnalyses[sample._id].fibreCounts &&
+        sampleAnalyses[sample._id].fibreCounts.every((row) =>
+          row.every(
+            (cell) => cell !== "" && cell !== null && cell !== undefined
+          )
+        );
       return (
-        <div style={style}>
+        <div
+          style={{
+            ...style,
+            backgroundColor: isComplete ? "#e8f5e9" : "#f5f5f5",
+            padding: "8px",
+          }}
+        >
           <SampleSummary
             key={sample._id}
             sample={sample}
@@ -1377,15 +1453,15 @@ const Analysis = () => {
                     onChange={handleAnalysisDetailsChange}
                   >
                     <FormControlLabel
-                      value="partial 5"
+                      value="5"
                       control={<Radio />}
-                      label="Partial 5"
+                      label="5"
                       disabled={shiftStatus === "analysis_complete"}
                     />
                     <FormControlLabel
-                      value="6"
+                      value="Partial 6"
                       control={<Radio />}
-                      label="6"
+                      label="Partial 6"
                       disabled={shiftStatus === "analysis_complete"}
                     />
                   </RadioGroup>
@@ -1403,7 +1479,8 @@ const Analysis = () => {
                 Complete Microscope Calibration
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Please select all three microscope calibration options above
+                Please select all three microscope calibration options above and
+                ensure the selected microscope has a valid calibration date
                 before proceeding with sample analysis.
               </Typography>
             </Paper>
@@ -1498,10 +1575,7 @@ const Analysis = () => {
                   {shiftStatus !== "analysis_complete" && (
                     <Button
                       startIcon={<ClearIcon />}
-                      onClick={() => {
-                        handleClearTable(activeSampleId);
-                        handleSaveAndCloseFibreCountModal();
-                      }}
+                      onClick={handleClearTableInModal}
                       disabled={isFilterUncountable(activeSampleId)}
                       size="small"
                       color="error"

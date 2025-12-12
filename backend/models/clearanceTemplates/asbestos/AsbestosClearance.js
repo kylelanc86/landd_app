@@ -73,6 +73,9 @@ const asbestosClearanceSchema = new mongoose.Schema(
     sitePlanLegendTitle: {
       type: String,
     },
+    sitePlanFigureTitle: {
+      type: String,
+    },
     jobSpecificExclusions: {
       type: String, // Job-specific exclusions text
     },

@@ -13,6 +13,7 @@ import {
   IconButton,
   Checkbox,
   FormControlLabel,
+  InputAdornment,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -46,6 +47,7 @@ const EditSample = () => {
     filterSize: "",
     startTime: "",
     endTime: "",
+    nextDay: false,
     initialFlowrate: "",
     finalFlowrate: "",
     averageFlowrate: "",
@@ -61,6 +63,7 @@ const EditSample = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [insufficientSampleTime, setInsufficientSampleTime] = useState(false);
 
   const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
 
@@ -176,10 +179,14 @@ const EditSample = () => {
             : sampleData.location || "",
           pumpNo: sampleData.pumpNo || "",
           flowmeter: sampleData.flowmeter || "",
-          cowlNo: sampleData.cowlNo || "",
+          // Strip "C" prefix if it exists (InputAdornment will display it)
+          cowlNo: sampleData.cowlNo
+            ? sampleData.cowlNo.replace(/^C+/i, "")
+            : "",
           filterSize: sampleData.filterSize || "",
           startTime: sampleData.startTime || "",
           endTime: sampleData.endTime || "",
+          nextDay: sampleData.nextDay || false,
           initialFlowrate: sampleData.initialFlowrate || "",
           finalFlowrate: sampleData.finalFlowrate || "",
           averageFlowrate: sampleData.averageFlowrate || "",
@@ -247,6 +254,27 @@ const EditSample = () => {
       return;
     }
 
+    // Handle nextDay checkbox
+    if (name === "nextDay") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+      return;
+    }
+
+    // Handle cowlNo to ensure "C" prefix is always present but not editable
+    // Store value without "C" in state (InputAdornment displays "C" visually)
+    if (name === "cowlNo") {
+      // Remove any "C" prefix if user types it (since InputAdornment shows it as non-editable prefix)
+      const cleanedValue = value.replace(/^C+/i, "");
+      setForm((prev) => ({
+        ...prev,
+        [name]: cleanedValue,
+      }));
+      return;
+    }
+
     setForm({ ...form, [name]: value });
   };
 
@@ -278,6 +306,67 @@ const EditSample = () => {
       }));
     }
   }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
+
+  // Calculate minutes from start and end times
+  const calculateMinutes = (startTime, endTime, nextDay = false) => {
+    if (!startTime || !endTime) return null;
+
+    const [startHours, startMinutes] = startTime.split(":").map(Number);
+    const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    // Handle case where end time is next day (either explicitly checked or inferred)
+    let diffMinutes = endTotalMinutes - startTotalMinutes;
+    if (nextDay || diffMinutes < 0) {
+      diffMinutes += 24 * 60; // Add 24 hours
+    }
+
+    return diffMinutes;
+  };
+
+  // Validate sample time based on filter size
+  useEffect(() => {
+    if (isSimplifiedSample) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    if (!form.startTime || !form.endTime || !form.finalFlowrate) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    const minutes = calculateMinutes(
+      form.startTime,
+      form.endTime,
+      form.nextDay
+    );
+    if (minutes === null) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    const filterSize = form.filterSize || "25mm";
+    let isInsufficient = false;
+
+    if (filterSize === "25mm") {
+      const totalVolume = minutes * parseFloat(form.finalFlowrate);
+      isInsufficient = totalVolume < 360;
+    } else if (filterSize === "13mm") {
+      isInsufficient = minutes < 90;
+    }
+
+    setInsufficientSampleTime(isInsufficient);
+  }, [
+    form.startTime,
+    form.endTime,
+    form.nextDay,
+    form.finalFlowrate,
+    form.filterSize,
+    isSimplifiedSample,
+  ]);
 
   // Separate effect to ensure sample number is calculated when projectID is available
   useEffect(() => {
@@ -436,6 +525,16 @@ const EditSample = () => {
         return time.includes(":") ? time : `${time}:00`;
       };
 
+      // Ensure cowlNo has "C" prefix
+      const cowlNoWithPrefix =
+        form.cowlNo && !form.cowlNo.startsWith("C")
+          ? `C${form.cowlNo}`
+          : form.cowlNo || null;
+      // Ensure nextDay is a boolean
+      const nextDayValue =
+        form.nextDay === true ||
+        form.nextDay === "on" ||
+        form.nextDay === "true";
       const sampleData = {
         shift: shiftId,
         job: job._id,
@@ -445,7 +544,8 @@ const EditSample = () => {
         location: form.location || null,
         pumpNo: form.pumpNo || null,
         flowmeter: form.flowmeter || null,
-        cowlNo: form.cowlNo || null,
+        cowlNo: cowlNoWithPrefix,
+        nextDay: nextDayValue,
         sampler: form.sampler,
         filterSize: form.filterSize || null,
         startTime: form.startTime ? formatTime(form.startTime) : null,
@@ -639,6 +739,7 @@ const EditSample = () => {
             <TextField
               name="location"
               label="Location"
+              autoComplete="off"
               value={
                 form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
               }
@@ -687,12 +788,18 @@ const EditSample = () => {
           <TextField
             name="cowlNo"
             label="Cowl No."
-            value={form.cowlNo}
+            value={form.cowlNo || ""}
             onChange={handleChange}
             required
             fullWidth
             error={!!fieldErrors.cowlNo}
             helperText={fieldErrors.cowlNo}
+            autoComplete="off"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">C</InputAdornment>
+              ),
+            }}
           />
           {!isSimplifiedSample && (
             <FormControl
@@ -786,7 +893,7 @@ const EditSample = () => {
               >
                 Air-monitor Collection
               </Typography>
-              <Box sx={{ display: "flex", gap: 1 }}>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <TextField
                   name="endTime"
                   label="End Time"
@@ -796,6 +903,10 @@ const EditSample = () => {
                   fullWidth
                   InputLabelProps={{ shrink: true }}
                   inputProps={{ step: 60 }}
+                  error={insufficientSampleTime}
+                  helperText={
+                    insufficientSampleTime ? "Insufficient sample time" : ""
+                  }
                 />
                 <IconButton
                   onClick={() => setCurrentTime("endTime")}
@@ -804,6 +915,17 @@ const EditSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="nextDay"
+                    checked={form.nextDay}
+                    onChange={handleChange}
+                  />
+                }
+                label="Next Day"
+                sx={{ mt: -1, mb: 1 }}
+              />
               <TextField
                 name="finalFlowrate"
                 label="Final Flowrate (L/min)"

@@ -29,6 +29,7 @@ import { projectService } from "../../services/api";
 import {
   getCachedTopProjects,
   cacheTopProjects,
+  getCachedTopProjectIDs,
 } from "../../utils/reportsCache";
 
 // Debounce hook for search optimization
@@ -130,41 +131,96 @@ const Reports = () => {
         })();
       }
 
-      // If no cache, do full load
+      // If no cache, check if we have cached projectIDs to fetch just those
       if (!loadedFromCache) {
-        const params = {
-          page: 1,
-          limit: 10000,
-          sortBy: "createdAt",
-          sortOrder: "desc",
-          status: "all",
-        };
+        const cachedProjectIDs = getCachedTopProjectIDs();
 
-        const response = await projectService.getAll(params);
-        const projectsData = Array.isArray(response.data)
-          ? response.data
-          : response.data?.data || [];
+        if (cachedProjectIDs && cachedProjectIDs.length > 0) {
+          // Fast path: Load all projects but filter to cached IDs for immediate display
+          // This is still faster than sorting all projects client-side
+          try {
+            const params = {
+              page: 1,
+              limit: 10000,
+              sortBy: "createdAt",
+              sortOrder: "desc",
+              status: "all",
+            };
 
-        // Sort by projectID descending
-        const sortedProjects = sortProjectsByID(projectsData);
+            const response = await projectService.getAll(params);
+            const allProjectsData = Array.isArray(response.data)
+              ? response.data
+              : response.data?.data || [];
 
-        // Get the top 100 (highest projectIDs)
-        const top100Projects = sortedProjects.slice(0, 100);
+            // Filter to cached projectIDs and sort by cached order
+            const cachedProjectsMap = new Map(
+              cachedProjectIDs.map((id, index) => [id, index])
+            );
+            const top100Projects = allProjectsData
+              .filter((p) => cachedProjectsMap.has(p.projectID))
+              .sort((a, b) => {
+                const aIndex = cachedProjectsMap.get(a.projectID);
+                const bIndex = cachedProjectsMap.get(b.projectID);
+                return aIndex - bIndex;
+              });
 
-        // Cache the top 100 projects
-        cacheTopProjects(sortedProjects);
+            // Display the top 100 immediately
+            setAllProjects(top100Projects);
+            setFilteredProjects(top100Projects);
+            setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
+            setLoading(false);
+            loadedFromCache = true;
 
-        // Display the top 100 immediately
-        setAllProjects(top100Projects);
-        setFilteredProjects(top100Projects);
-        setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
-        setLoading(false);
+            // Now sort all projects and update cache
+            const sortedAllProjects = sortProjectsByID(allProjectsData);
+            cacheTopProjects(sortedAllProjects);
 
-        // Update with all projects
-        if (sortedProjects.length > 100) {
-          setAllProjects(sortedProjects);
-          setFilteredProjects(sortedProjects);
-          setTotalPages(Math.ceil(sortedProjects.length / itemsPerPage));
+            // Update with all projects
+            setAllProjects(sortedAllProjects);
+            setFilteredProjects(sortedAllProjects);
+            setTotalPages(Math.ceil(sortedAllProjects.length / itemsPerPage));
+          } catch (err) {
+            console.error("Error loading projects with cached IDs:", err);
+            loadedFromCache = false;
+          }
+        }
+
+        // If no cached projectIDs or fetch failed, do full load
+        if (!loadedFromCache) {
+          const params = {
+            page: 1,
+            limit: 10000,
+            sortBy: "createdAt",
+            sortOrder: "desc",
+            status: "all",
+          };
+
+          const response = await projectService.getAll(params);
+          const projectsData = Array.isArray(response.data)
+            ? response.data
+            : response.data?.data || [];
+
+          // Sort by projectID descending
+          const sortedProjects = sortProjectsByID(projectsData);
+
+          // Get the top 100 (highest projectIDs)
+          const top100Projects = sortedProjects.slice(0, 100);
+
+          // Cache the top 100 projects
+          cacheTopProjects(sortedProjects);
+
+          // Display the top 100 immediately
+          setAllProjects(top100Projects);
+          setFilteredProjects(top100Projects);
+          setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
+          setLoading(false);
+
+          // Update with all projects
+          if (sortedProjects.length > 100) {
+            setAllProjects(sortedProjects);
+            setFilteredProjects(sortedProjects);
+            setTotalPages(Math.ceil(sortedProjects.length / itemsPerPage));
+          }
         }
       }
     } catch (err) {

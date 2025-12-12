@@ -164,6 +164,21 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     console.warn('job is not an object, using empty object:', job);
     job = {};
   }
+
+  // Check if any sample has nextDay set to true
+  const hasNextDaySample = samples && samples.some(sample => sample.nextDay === true);
+  
+  // Calculate sample dates
+  let sampleDateLabel = isClientSupplied ? 'Samples Received: ' : 'Sample Date: ';
+  let sampleDateValue = shift?.date ? formatDate(shift.date) : 'N/A';
+  
+  if (hasNextDaySample && shift?.date) {
+    sampleDateLabel = isClientSupplied ? 'Samples Received: ' : 'Sample Dates: ';
+    const startDate = new Date(shift.date);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 1);
+    sampleDateValue = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+  }
   
   // Determine base URL for fonts - use window.location.origin to avoid CORS issues
   console.log('Window location:', {
@@ -421,7 +436,7 @@ pdfMake.fonts = {
                         width: '50%'
                       },
                       {
-                        text: [ { text: isClientSupplied ? 'Samples Received: ' : 'Sample Date: ', bold: true }, { text: shift?.date ? formatDate(shift.date) : 'N/A' } ],
+                        text: [ { text: sampleDateLabel, bold: true }, { text: sampleDateValue } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -568,7 +583,7 @@ pdfMake.fonts = {
                   ? [
                       { text: 'L&D Sample Ref', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Client Sample Reference', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                      { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                     ]
                   : [
@@ -577,7 +592,7 @@ pdfMake.fonts = {
                       { text: 'Time On', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Time Off', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Ave flow (L/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                      { text: 'Fields Counted', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
+                      { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                       { text: 'Reported Conc. (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                     ],

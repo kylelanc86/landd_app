@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -56,6 +62,7 @@ const SampleList = () => {
   const [descSaveStatus, setDescSaveStatus] = useState("");
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
+  const recognitionRef = useRef(null);
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [sampleToDelete, setSampleToDelete] = useState(null);
   const [showDescriptionDialog, setShowDescriptionDialog] = useState(false);
@@ -237,6 +244,20 @@ const SampleList = () => {
       setIsCompleteDisabled(true);
     }
   }, [samples, validateSamplesCompleteMemo]);
+
+  // Cleanup: stop dictation when component unmounts
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          // Ignore errors during cleanup
+        }
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSort = (field) => {
     if (field === sortField) {
@@ -574,6 +595,12 @@ const SampleList = () => {
 
   // Dictation functions
   const startDictation = () => {
+    // If already dictating, stop it first
+    if (isDictating && recognitionRef.current) {
+      stopDictation();
+      return;
+    }
+
     // Check if browser supports speech recognition
     if (
       !("webkitSpeechRecognition" in window) &&
@@ -611,9 +638,14 @@ const SampleList = () => {
 
         // Update the description field with the final transcript
         if (finalTranscript) {
-          setDescriptionOfWorks(
-            (prev) => prev + (prev ? " " : "") + finalTranscript
-          );
+          setDescriptionOfWorks((prev) => {
+            const isFirstWord = !prev || prev.trim().length === 0;
+            const newText = isFirstWord
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
+              : finalTranscript;
+            return prev + (prev ? " " : "") + newText;
+          });
           setDescSaveStatus(""); // Reset save status when description changes
         }
       };
@@ -622,21 +654,32 @@ const SampleList = () => {
         console.error("Speech recognition error:", event.error);
         setDictationError(`Dictation error: ${event.error}`);
         setIsDictating(false);
+        recognitionRef.current = null;
       };
 
       recognition.onend = () => {
         setIsDictating(false);
+        recognitionRef.current = null;
       };
 
+      recognitionRef.current = recognition;
       recognition.start();
     } catch (error) {
       console.error("Error starting dictation:", error);
       setDictationError("Failed to start dictation. Please try again.");
+      recognitionRef.current = null;
     }
   };
 
   const stopDictation = () => {
-    // The recognition will automatically stop, but we can set the state
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error("Error stopping dictation:", error);
+      }
+      recognitionRef.current = null;
+    }
     setIsDictating(false);
   };
 

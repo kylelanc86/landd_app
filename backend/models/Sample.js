@@ -64,6 +64,10 @@ const sampleSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  nextDay: {
+    type: Boolean,
+    default: false
+  },
   initialFlowrate: {
     type: Number,
     required: false

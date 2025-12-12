@@ -343,7 +343,8 @@ export const userService = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
-  sendPasswordResetEmail: (email) => api.post('/auth/admin-reset-password', { email })
+  sendPasswordResetEmail: (email) => api.post('/auth/admin-reset-password', { email }),
+  getAsbestosAssessors: () => api.get('/users/asbestos-assessors')
 };
 
 // User preferences service

@@ -20,7 +20,13 @@ import {
 } from "@mui/icons-material";
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
 
-const GoogleMapsDialog = ({ open, onClose, onSelectMap }) => {
+const GoogleMapsDialog = ({
+  open,
+  onClose,
+  onSelectMap,
+  canvasWidth,
+  canvasHeight,
+}) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -158,16 +164,23 @@ const GoogleMapsDialog = ({ open, onClose, onSelectMap }) => {
     { value: "terrain", label: "Terrain" },
   ];
 
+  // Use canvas dimensions if provided, otherwise use default
+  const dialogWidth = canvasWidth ? `${canvasWidth + 100}px` : "90vw";
+  const dialogHeight = canvasHeight ? `${canvasHeight + 150}px` : "90vh";
+  const mapWidth = canvasWidth || 800;
+  const mapHeight = canvasHeight || 600;
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="lg"
-      fullWidth
+      maxWidth={false}
       PaperProps={{
         sx: {
-          height: "90vh",
-          maxHeight: "90vh",
+          width: dialogWidth,
+          height: dialogHeight,
+          maxWidth: dialogWidth,
+          maxHeight: dialogHeight,
         },
       }}
     >
@@ -246,12 +259,20 @@ const GoogleMapsDialog = ({ open, onClose, onSelectMap }) => {
         </Box>
 
         {/* Map */}
-        <Box sx={{ flex: 1, position: "relative" }}>
+        <Box
+          sx={{
+            flex: 1,
+            position: "relative",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
           <div
             ref={mapRef}
             style={{
-              width: "100%",
-              height: "100%",
+              width: `${mapWidth}px`,
+              height: `${mapHeight}px`,
               minHeight: "400px",
             }}
           />

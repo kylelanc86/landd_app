@@ -3,6 +3,7 @@
  */
 
 const CACHE_KEY = "reportsTop100Projects";
+const PROJECT_IDS_CACHE_KEY = "reportsTop100ProjectIDs";
 const CACHE_DURATION = 3600000; // 1 hour in milliseconds
 
 /**
@@ -55,22 +56,11 @@ export const cacheTopProjects = (projects) => {
         timestamp: Date.now(),
       })
     );
+
+    // Also cache the projectIDs separately
+    cacheTopProjectIDs(projects);
   } catch (error) {
     console.error("Error caching projects:", error);
-    // If cache is too large, try storing just IDs as fallback
-    try {
-      const top100 = projects.slice(0, 100);
-      const projectIDs = top100.map((p) => p.projectID).filter(Boolean);
-      localStorage.setItem(
-        "reportsTop100ProjectIDs",
-        JSON.stringify({
-          projectIDs,
-          timestamp: Date.now(),
-        })
-      );
-    } catch (fallbackError) {
-      console.error("Error caching project IDs as fallback:", fallbackError);
-    }
   }
 };
 
@@ -131,11 +121,60 @@ export const removeProjectFromCache = (deletedProjectID) => {
 };
 
 /**
+ * Get cached top 100 projectIDs (separate from full project cache)
+ * @returns {string[]|null} Array of projectIDs or null if cache is invalid/missing
+ */
+export const getCachedTopProjectIDs = () => {
+  try {
+    const cached = localStorage.getItem(PROJECT_IDS_CACHE_KEY);
+    if (cached) {
+      const { projectIDs, timestamp } = JSON.parse(cached);
+      // Check if cache is still valid
+      if (Date.now() - timestamp < CACHE_DURATION && Array.isArray(projectIDs)) {
+        return projectIDs;
+      }
+    }
+  } catch (error) {
+    console.error("Error reading cached project IDs:", error);
+  }
+  return null;
+};
+
+/**
+ * Store top 100 projectIDs separately (for quick access when project cache is empty)
+ * @param {Array} projects - Array of project objects with projectID property
+ */
+export const cacheTopProjectIDs = (projects) => {
+  try {
+    // Sort projects by projectID descending (highest first)
+    const sorted = [...projects].sort((a, b) => {
+      const aNum = parseInt(a.projectID?.replace(/\D/g, "") || "0");
+      const bNum = parseInt(b.projectID?.replace(/\D/g, "") || "0");
+      return bNum - aNum;
+    });
+
+    const top100 = sorted.slice(0, 100);
+    const projectIDs = top100.map((p) => p.projectID).filter(Boolean);
+
+    localStorage.setItem(
+      PROJECT_IDS_CACHE_KEY,
+      JSON.stringify({
+        projectIDs,
+        timestamp: Date.now(),
+      })
+    );
+  } catch (error) {
+    console.error("Error caching project IDs:", error);
+  }
+};
+
+/**
  * Clear the cache (useful for testing or forced refresh)
  */
 export const clearCache = () => {
   try {
     localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(PROJECT_IDS_CACHE_KEY);
   } catch (error) {
     console.error("Error clearing cache:", error);
   }
