@@ -89,6 +89,60 @@ const ProjectReports = () => {
 
   const { showSnackbar } = useSnackbar();
 
+  // Function to format job status for display
+  const formatJobStatus = (status) => {
+    if (!status) return "";
+
+    // Replace underscores with spaces
+    let formatted = status.replace(/_/g, " ");
+
+    // Capitalize first letter of each word
+    formatted = formatted
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+
+    return formatted;
+  };
+
+  // Function to format date or date range for display
+  const formatDateRange = (dates) => {
+    if (!dates || dates.length === 0) return "N/A";
+
+    // Remove duplicates and sort
+    const uniqueDates = [
+      ...new Set(
+        dates.map((date) => {
+          const d = new Date(date);
+          return d.toISOString().split("T")[0]; // Get YYYY-MM-DD format
+        })
+      ),
+    ].sort();
+
+    if (uniqueDates.length === 1) {
+      // Single date
+      const date = new Date(uniqueDates[0]);
+      return date.toLocaleDateString("en-AU", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } else {
+      // Date range
+      const startDate = new Date(uniqueDates[0]);
+      const endDate = new Date(uniqueDates[uniqueDates.length - 1]);
+      return `${startDate.toLocaleDateString("en-AU", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })} - ${endDate.toLocaleDateString("en-AU", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })}`;
+    }
+  };
+
   // Revise dialog state
   const [reviseDialog, setReviseDialog] = useState({
     open: false,
@@ -183,7 +237,21 @@ const ProjectReports = () => {
             job.status === "in_progress"
         );
 
-        activeAsbestosJobs.forEach((job) => {
+        // Fetch shifts for all asbestos removal jobs to get dates
+        for (const job of activeAsbestosJobs) {
+          let dates = [];
+          try {
+            const { shiftService } = await import("../../services/api");
+            const shiftsResponse = await shiftService.getByJob(job._id);
+            const shifts = shiftsResponse.data || [];
+            dates = shifts.map((shift) => shift.date).filter(Boolean);
+          } catch (shiftError) {
+            console.error(
+              `Error fetching shifts for job ${job._id}:`,
+              shiftError
+            );
+          }
+
           activeJobsList.push({
             id: job._id,
             type: "asbestos-removal",
@@ -192,8 +260,9 @@ const ProjectReports = () => {
             asbestosRemovalist: job.asbestosRemovalist,
             jobType: job.jobType || "none",
             url: `/asbestos-removal/jobs/${job._id}/details`,
+            dates: dates,
           });
-        });
+        }
       } catch (error) {
         console.error("Error fetching active asbestos removal jobs:", error);
       }
@@ -214,6 +283,12 @@ const ProjectReports = () => {
         );
 
         activeClientJobs.forEach((job) => {
+          // Collect all relevant dates for client supplied jobs
+          const dates = [];
+          if (job.sampleReceiptDate) dates.push(job.sampleReceiptDate);
+          if (job.analysisDate) dates.push(job.analysisDate);
+          if (job.reportIssueDate) dates.push(job.reportIssueDate);
+
           activeJobsList.push({
             id: job._id,
             type: "fibre-id",
@@ -222,6 +297,7 @@ const ProjectReports = () => {
             status: job.status,
             jobType: job.jobType || "Fibre ID",
             url: `/fibre-id/client-supplied/${job._id}/samples`,
+            dates: dates,
           });
         });
       } catch (error) {
@@ -1647,52 +1723,65 @@ const ProjectReports = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Job Type</TableCell>
-                    <TableCell>Job Name</TableCell>
+                    <TableCell>Date(s)</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell>Asbestos Removalist</TableCell>
                     <TableCell align="center">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {activeJobs.map((job) => (
-                    <TableRow key={job.id}>
-                      <TableCell>
-                        {job.type === "asbestos-removal"
-                          ? "Asbestos Removal"
-                          : job.jobType || "Fibre ID"}
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          sx={{ color: "black", fontWeight: 500 }}
-                        >
-                          {job.name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={job.status}
-                          color={
-                            job.status === "in_progress" ||
-                            job.status === "In Progress"
-                              ? "warning"
-                              : "info"
-                          }
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{job.asbestosRemovalist || "N/A"}</TableCell>
-                      <TableCell align="center">
-                        <Button
-                          variant="contained"
-                          size="small"
-                          onClick={() => navigate(job.url)}
-                        >
-                          View Job
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {activeJobs.map((job) => {
+                    // Format job type with asbestos removalist in brackets if applicable
+                    let jobTypeDisplay =
+                      job.type === "asbestos-removal"
+                        ? "Asbestos Removal"
+                        : job.jobType || "Fibre ID";
+
+                    if (
+                      job.type === "asbestos-removal" &&
+                      job.asbestosRemovalist
+                    ) {
+                      jobTypeDisplay += ` (${job.asbestosRemovalist})`;
+                    }
+
+                    return (
+                      <TableRow key={job.id}>
+                        <TableCell>
+                          <Typography
+                            variant="body2"
+                            sx={{ color: "black", fontWeight: 500 }}
+                          >
+                            {jobTypeDisplay}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {formatDateRange(job.dates || [])}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={formatJobStatus(job.status)}
+                            color={
+                              job.status === "in_progress" ||
+                              job.status === "In Progress"
+                                ? "warning"
+                                : "info"
+                            }
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => navigate(job.url)}
+                          >
+                            View Job
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

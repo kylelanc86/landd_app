@@ -15,6 +15,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import MenuIcon from "@mui/icons-material/Menu";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useTheme } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 import MobileDrawer from "../../components/MobileDrawer";
@@ -72,6 +73,10 @@ const Topbar = () => {
   const handleUserManualClick = () => {
     navigate("/user-manual");
     handleClose();
+  };
+
+  const handleRefresh = () => {
+    window.location.reload();
   };
 
   return (
@@ -169,6 +174,11 @@ const Topbar = () => {
             sx={{ mx: 2, borderColor: "rgba(255,255,255,0.3)" }}
           />
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Tooltip title="Refresh">
+              <IconButton onClick={handleRefresh} sx={{ color: "#FFF" }}>
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Profile">
               <IconButton onClick={handleProfileClick} sx={{ color: "#FFF" }}>
                 <Avatar

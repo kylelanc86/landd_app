@@ -64,6 +64,7 @@ const emptyForm = {
   },
   canSetJobComplete: false,
   labSignatory: false,
+  reportProofer: false,
 };
 
 const AddUserPage = () => {
@@ -265,6 +266,7 @@ const AddUserPage = () => {
         labApprovals: form.labApprovals,
         canSetJobComplete: form.canSetJobComplete,
         labSignatory: form.labSignatory,
+        reportProofer: form.reportProofer,
       };
 
       console.log("Creating user with data:", userData);
@@ -642,6 +644,32 @@ const AddUserPage = () => {
                     </Box>
                   }
                   sx={{ alignItems: "flex-start" }}
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={form.reportProofer}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          reportProofer: e.target.checked,
+                        })
+                      }
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        Report Proofer
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Allow this user to authorise air monitoring and asbestos
+                        clearance reports.
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ alignItems: "flex-start", mt: 2 }}
                 />
               </Box>
             </Box>

@@ -120,6 +120,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  reportProofer: {
+    type: Boolean,
+    default: false
+  },
   notifications: {
     email: {
       type: Boolean,

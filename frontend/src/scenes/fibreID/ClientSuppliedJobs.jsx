@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -35,6 +35,10 @@ import {
   Delete as DeleteIcon,
   Archive as ArchiveIcon,
   Mail as MailIcon,
+  UploadFile as UploadFileIcon,
+  Description as DescriptionIcon,
+  Download as DownloadIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, projectService } from "../../services/api";
@@ -44,6 +48,7 @@ import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
+import { compressImage } from "../../utils/imageCompression";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
@@ -70,6 +75,12 @@ const ClientSuppliedJobs = () => {
   const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
   const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
   const [closingJobs, setClosingJobs] = useState({});
+  const [cocDialogOpen, setCocDialogOpen] = useState(false);
+  const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
+  const [selectedJobForCOC, setSelectedJobForCOC] = useState(null);
+  const [uploadingCOC, setUploadingCOC] = useState({});
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   useEffect(() => {
     fetchClientSuppliedJobs();
@@ -396,6 +407,158 @@ const ClientSuppliedJobs = () => {
     }
   };
 
+  const compressFile = async (file) => {
+    const fileSizeKB = file.size / 1024;
+
+    // If file is under 50KB, return as is
+    if (fileSizeKB <= 50) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // If it's an image, use the image compression utility
+    if (file.type.startsWith("image/")) {
+      try {
+        return await compressImage(file, {
+          maxWidth: 1200,
+          maxHeight: 1200,
+          quality: 0.75,
+          maxSizeKB: 50,
+        });
+      } catch (error) {
+        console.error("Error compressing image:", error);
+        throw error;
+      }
+    }
+
+    // For PDFs and other files over 50KB, we'll still upload but warn the user
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleCOCUpload = async (event, jobId) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+    ];
+    if (!validTypes.includes(file.type)) {
+      showSnackbar(
+        "Please upload a PDF or image file (JPEG, PNG, WEBP)",
+        "error"
+      );
+      return;
+    }
+
+    // Validate file size (max 5MB before compression)
+    const maxSizeMB = 5;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      showSnackbar(
+        `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
+        "error"
+      );
+      return;
+    }
+
+    try {
+      setUploadingCOC((prev) => ({ ...prev, [jobId]: true }));
+      const compressedFile = await compressFile(file);
+
+      // Update job with COC data
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: {
+          fileName: file.name,
+          fileType: file.type,
+          uploadedAt: new Date().toISOString(),
+          data: compressedFile,
+        },
+      });
+
+      // Refresh jobs list to show the uploaded COC
+      await fetchClientSuppliedJobs();
+
+      showSnackbar("Chain of Custody form uploaded successfully", "success");
+      setCocDialogOpen(false);
+      setSelectedJobForCOC(null);
+    } catch (error) {
+      console.error("Error uploading COC:", error);
+      showSnackbar("Failed to upload Chain of Custody form", "error");
+    } finally {
+      setUploadingCOC((prev) => ({ ...prev, [jobId]: false }));
+      // Reset the file input
+      event.target.value = "";
+    }
+  };
+
+  const handleDownloadCOC = (job) => {
+    if (!job?.chainOfCustody?.data) return;
+
+    try {
+      // Convert base64 to blob
+      const byteString = atob(job.chainOfCustody.data.split(",")[1]);
+      const mimeString = job.chainOfCustody.data
+        .split(",")[0]
+        .split(":")[1]
+        .split(";")[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = job.chainOfCustody.fileName || "chain-of-custody.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading COC:", error);
+      showSnackbar("Failed to download Chain of Custody form", "error");
+    }
+  };
+
+  const handleDeleteCOC = async (jobId) => {
+    try {
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: null,
+      });
+
+      // Refresh jobs list
+      await fetchClientSuppliedJobs();
+
+      showSnackbar("Chain of Custody form removed", "success");
+      setCocDialogOpen(false);
+      setSelectedJobForCOC(null);
+    } catch (error) {
+      console.error("Error deleting COC:", error);
+      showSnackbar("Failed to remove Chain of Custody form", "error");
+    }
+  };
+
+  const handleOpenCOCDialog = (job) => {
+    setSelectedJobForCOC(job);
+    setCocDialogOpen(true);
+  };
+
   // Check if all samples in a job have been analyzed (have analysisData)
   const areAllSamplesAnalyzed = (job) => {
     if (!job || !job.samples || job.samples.length === 0) {
@@ -685,7 +848,7 @@ const ClientSuppliedJobs = () => {
                 ) : filteredJobs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} align="center">
-                      No client supplied jobs found
+                      No ACTIVE client supplied jobs found
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -855,22 +1018,59 @@ const ClientSuppliedJobs = () => {
                               </Button>
                             )}
                           {job.status === "Completed" && (
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCloseJob(job._id);
-                              }}
-                              disabled={closingJobs[job._id]}
-                              sx={{
-                                textTransform: "none",
-                              }}
-                            >
-                              {closingJobs[job._id]
-                                ? "Closing..."
-                                : "Close Job"}
-                            </Button>
+                            <>
+                              {!job.chainOfCustody ? (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1,
+                                  }}
+                                >
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<UploadFileIcon />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenCOCDialog(job);
+                                    }}
+                                    sx={{
+                                      textTransform: "none",
+                                    }}
+                                  >
+                                    Upload COC
+                                  </Button>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color: "text.secondary",
+                                      fontSize: "0.7rem",
+                                      fontStyle: "italic",
+                                    }}
+                                  >
+                                    Upload COC to close job
+                                  </Typography>
+                                </Box>
+                              ) : (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCloseJob(job._id);
+                                  }}
+                                  disabled={closingJobs[job._id]}
+                                  sx={{
+                                    textTransform: "none",
+                                  }}
+                                >
+                                  {closingJobs[job._id]
+                                    ? "Closing..."
+                                    : "Close Job"}
+                                </Button>
+                              )}
+                            </>
                           )}
                           {hasPermission(currentUser, "clientSup.delete") && (
                             <IconButton
@@ -1281,6 +1481,254 @@ const ClientSuppliedJobs = () => {
               Archive
             </Button>
           </DialogActions>
+        </Dialog>
+
+        {/* COC View/Edit Dialog */}
+        <Dialog
+          open={cocDialogOpen}
+          onClose={() => {
+            setCocDialogOpen(false);
+            setSelectedJobForCOC(null);
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="h6">Chain of Custody</Typography>
+              <IconButton
+                onClick={() => {
+                  setCocDialogOpen(false);
+                  setSelectedJobForCOC(null);
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {selectedJobForCOC?.chainOfCustody
+                ? `File: ${selectedJobForCOC.chainOfCustody.fileName}`
+                : "No Chain of Custody file uploaded yet."}
+              <br />
+              {selectedJobForCOC?.chainOfCustody?.uploadedAt &&
+                `Uploaded: ${new Date(
+                  selectedJobForCOC.chainOfCustody.uploadedAt
+                ).toLocaleString("en-GB")}`}
+            </Typography>
+
+            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+              {/* Action Buttons - Left Side */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1.5,
+                  minWidth: "160px",
+                }}
+              >
+                {selectedJobForCOC?.chainOfCustody && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => handleDownloadCOC(selectedJobForCOC)}
+                      size="small"
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => {
+                        handleDeleteCOC(selectedJobForCOC._id);
+                      }}
+                      size="small"
+                    >
+                      Remove
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileIcon />}
+                  disabled={uploadingCOC[selectedJobForCOC?._id]}
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingCOC[selectedJobForCOC?._id]
+                    ? "Uploading..."
+                    : selectedJobForCOC?.chainOfCustody
+                    ? "Replace"
+                    : "Upload File"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  disabled={uploadingCOC[selectedJobForCOC?._id]}
+                  size="small"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  {uploadingCOC[selectedJobForCOC?._id]
+                    ? "Uploading..."
+                    : "Take Photo"}
+                </Button>
+              </Box>
+
+              {/* Preview - Right Side */}
+              {selectedJobForCOC?.chainOfCustody && (
+                <Box sx={{ flex: 1, minWidth: "220px" }}>
+                  {/* Preview COC if it's an image */}
+                  {selectedJobForCOC.chainOfCustody.fileType?.startsWith(
+                    "image/"
+                  ) && (
+                    <Box
+                      sx={{
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        overflow: "hidden",
+                        maxHeight: "400px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          opacity: 0.9,
+                        },
+                      }}
+                      onClick={() => setCocFullScreenOpen(true)}
+                      title="Click to view full size"
+                    >
+                      <img
+                        src={selectedJobForCOC.chainOfCustody.data}
+                        alt="Chain of Custody"
+                        style={{
+                          maxHeight: "400px",
+                          maxWidth: "100%",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                    </Box>
+                  )}
+
+                  {/* Show PDF icon for PDFs */}
+                  {selectedJobForCOC.chainOfCustody.fileType ===
+                    "application/pdf" && (
+                    <Box
+                      sx={{
+                        p: 4,
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        textAlign: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "#e8e8e8",
+                        },
+                      }}
+                      onClick={() => handleDownloadCOC(selectedJobForCOC)}
+                      title="Click to download PDF"
+                    >
+                      <DescriptionIcon
+                        sx={{ fontSize: 60, color: "#1976d2", mb: 1 }}
+                      />
+                      <Typography variant="body2">
+                        PDF Document
+                        <br />
+                        Click to download
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+
+            <input
+              type="file"
+              hidden
+              ref={fileInputRef}
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => {
+                if (selectedJobForCOC) {
+                  handleCOCUpload(e, selectedJobForCOC._id);
+                }
+              }}
+            />
+            <input
+              type="file"
+              hidden
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                if (selectedJobForCOC) {
+                  handleCOCUpload(e, selectedJobForCOC._id);
+                }
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+
+        {/* Full Screen COC Viewer */}
+        <Dialog
+          open={cocFullScreenOpen}
+          onClose={() => setCocFullScreenOpen(false)}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "90vh",
+              maxHeight: "90vh",
+            },
+          }}
+        >
+          <DialogTitle>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="h6">
+                Chain of Custody - {selectedJobForCOC?.chainOfCustody?.fileName}
+              </Typography>
+              <IconButton onClick={() => setCocFullScreenOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              p: 2,
+            }}
+          >
+            {selectedJobForCOC?.chainOfCustody?.fileType?.startsWith(
+              "image/"
+            ) && (
+              <img
+                src={selectedJobForCOC.chainOfCustody.data}
+                alt="Chain of Custody Full Size"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                }}
+              />
+            )}
+          </DialogContent>
         </Dialog>
       </Box>
     </Container>

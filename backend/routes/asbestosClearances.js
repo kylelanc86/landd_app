@@ -188,6 +188,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       sitePlanSource,
       sitePlanLegend,
       sitePlanLegendTitle,
+      sitePlanFigureTitle,
       jobSpecificExclusions,
       notes,
       revision,
@@ -223,8 +224,14 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     if (sitePlanLegendTitle !== undefined) {
       clearance.sitePlanLegendTitle = sitePlanLegendTitle;
     }
+    // Handle sitePlanFigureTitle - default to 'Asbestos Removal Site Plan' if site plan exists but title not provided
     if (sitePlanFigureTitle !== undefined) {
       clearance.sitePlanFigureTitle = sitePlanFigureTitle;
+    } else if ((sitePlan !== undefined && sitePlan) || (sitePlanFile !== undefined && sitePlanFile)) {
+      // If site plan is being set/updated but no title provided, use default
+      if (!clearance.sitePlanFigureTitle) {
+        clearance.sitePlanFigureTitle = 'Asbestos Removal Site Plan';
+      }
     }
     if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
       clearance.sitePlanSource = sitePlanSource;
@@ -772,6 +779,194 @@ router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission(
   } catch (error) {
     console.error("Error toggling photo inclusion:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Authorise clearance report
+router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      });
+
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (clearance.status !== "complete") {
+      return res.status(400).json({
+        message: "Clearance must be complete before authorising the report"
+      });
+    }
+
+    if (clearance.reportApprovedBy) {
+      return res.status(400).json({
+        message: "Report has already been authorised"
+      });
+    }
+
+    const approver =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "Unknown";
+
+    clearance.reportApprovedBy = approver;
+    clearance.reportIssueDate = new Date();
+    clearance.updatedBy = req.user.id;
+
+    const updatedClearance = await clearance.save();
+
+    const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName");
+
+    res.json(populatedClearance);
+  } catch (error) {
+    console.error("Error authorising clearance report:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Send clearance report for authorisation
+router.post("/:id/send-for-authorisation", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { sendMail } = require("../services/mailer");
+    const User = require("../models/User");
+    const Project = require("../models/Project");
+    const Client = require("../models/Client");
+
+    const clearance = await AsbestosClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
+      .populate("createdBy", "firstName lastName");
+
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (clearance.status !== "complete") {
+      return res.status(400).json({
+        message: "Clearance must be complete before sending for authorisation"
+      });
+    }
+
+    if (clearance.reportApprovedBy) {
+      return res.status(400).json({
+        message: "Report has already been authorised"
+      });
+    }
+
+    const reportProoferUsers = await User.find({
+      reportProofer: true,
+      isActive: true,
+    }).select("firstName lastName email");
+
+    if (reportProoferUsers.length === 0) {
+      return res.status(400).json({
+        message: "No report proofer users found"
+      });
+    }
+
+    const projectName = clearance.projectId?.name || "Unknown Project";
+    const projectID = clearance.projectId?.projectID || "N/A";
+    const clientName = clearance.projectId?.client?.name || "the client";
+
+    const requesterName =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "A user";
+
+    const clearanceDate = clearance.clearanceDate
+      ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
+      : "N/A";
+    const clearanceType = clearance.clearanceType || "Asbestos Clearance";
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const jobId = clearance.projectId?._id?.toString();
+    const clearanceUrl = jobId
+      ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details?tab=clearances`
+      : `${frontendUrl}/projects`;
+
+    await Promise.all(
+      reportProoferUsers.map(async (user) => {
+        await sendMail({
+          to: user.email,
+          subject: `Report Authorisation Required - ${projectID}: ${clearanceType}`,
+          text: `
+An asbestos clearance report is ready for authorisation.
+
+Project: ${projectName} (${projectID})
+Client: ${clientName}
+Clearance Type: ${clearanceType}
+Clearance Date: ${clearanceDate}
+Requested by: ${requesterName}
+
+Review the report at: ${clearanceUrl}
+          `.trim(),
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="margin-bottom: 30px;">
+                <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+              </div>
+              <div style="color: #333; line-height: 1.6;">
+                <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>An asbestos clearance report is ready for your authorisation:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                  <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                  <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
+                  <p style="margin: 5px 0;"><strong>Clearance Type:</strong> ${clearanceType}</p>
+                  <p style="margin: 5px 0;"><strong>Clearance Date:</strong> ${clearanceDate}</p>
+                  <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${clearanceUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                </div>
+                <p>Please review and authorise the report at your earliest convenience.</p>
+                <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          `,
+        });
+      })
+    );
+
+    return res.json({
+      message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
+      recipients: reportProoferUsers.map((user) => ({
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`,
+      })),
+    });
+  } catch (error) {
+    console.error("Error sending authorisation request emails:", error);
+    return res.status(500).json({
+      message: "Failed to send authorisation request emails",
+      error: error.message,
+    });
   }
 });
 

@@ -136,6 +136,18 @@ const asbestosClearanceService = {
       `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/toggle`
     );
     return response.data;
+  },
+
+  // Authorise clearance report
+  authorise: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/authorise`);
+    return response.data;
+  },
+
+  // Send clearance report for authorisation
+  sendForAuthorisation: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/send-for-authorisation`);
+    return response.data;
   }
 };
 

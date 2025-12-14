@@ -797,14 +797,14 @@ router.post(
       }
 
       const signatoryUsers = await User.find({
-        labSignatory: true,
+        reportProofer: true,
         isActive: true,
       }).select('firstName lastName email');
 
       if (signatoryUsers.length === 0) {
         return res
           .status(400)
-          .json({ message: 'No lab signatory users found' });
+          .json({ message: 'No report proofer users found' });
       }
 
       let projectName =

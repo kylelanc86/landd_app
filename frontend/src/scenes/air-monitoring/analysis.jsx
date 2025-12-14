@@ -282,6 +282,29 @@ const SampleSummary = React.memo(
                   </Typography>
                 </Box>
               </Stack>
+
+              {/* Field Blank Validation Note */}
+              {(sample.isFieldBlank || sample.location === "Field blank") &&
+                analysis.fibresCounted >= 2.5 && (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 1.5,
+                      backgroundColor: "error.light",
+                      borderRadius: 1,
+                      border: "1px solid",
+                      borderColor: "error.main",
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      color="black"
+                      sx={{ fontWeight: "bold", textAlign: "center" }}
+                    >
+                      Elevated fibre count for Field Blank - reject Samples
+                    </Typography>
+                  </Box>
+                )}
             </Box>
           )}
         </Stack>

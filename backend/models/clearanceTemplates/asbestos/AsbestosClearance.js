@@ -162,6 +162,14 @@ const asbestosClearanceSchema = new mongoose.Schema(
         default: Date.now,
       },
     }],
+    reportApprovedBy: {
+      type: String,
+      required: false,
+    },
+    reportIssueDate: {
+      type: Date,
+      required: false,
+    },
   },
   {
     timestamps: true,

@@ -300,6 +300,16 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       reportTypeNameVC = 'Inspection Certificate';
     }
     
+    // Determine report authoriser text
+    let reportAuthoriserText;
+    if (clearanceData.reportApprovedBy) {
+      // Report has been authorised - show the authoriser name
+      reportAuthoriserText = clearanceData.reportApprovedBy;
+    } else {
+      // Report not yet authorised - show "Awaiting Authorisation" in red
+      reportAuthoriserText = '<span style="color: red;">Awaiting Authorisation</span>';
+    }
+    
     // Populate version control template with data
     const populatedVersionControl = versionControlTemplate
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
@@ -308,6 +318,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
+      .replace(/\[REPORT_AUTHORISER\]/g, reportAuthoriserText)
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)

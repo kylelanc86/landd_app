@@ -25,7 +25,11 @@ import {
   Clear as ClearIcon,
 } from "@mui/icons-material";
 
-import { projectService } from "../../services/api";
+import {
+  projectService,
+  jobService,
+  clientSuppliedJobsService,
+} from "../../services/api";
 import {
   getCachedTopProjects,
   cacheTopProjects,
@@ -80,21 +84,259 @@ const Reports = () => {
     });
   }, []);
 
+  // Fetch project IDs that have reports or active jobs
+  const fetchProjectsWithReportsOrActiveJobs = useCallback(async () => {
+    const projectIdsSet = new Set();
+
+    try {
+      // Fetch all project IDs in parallel for efficiency
+      const promises = [];
+
+      // 1. Active air monitoring jobs (status "in_progress")
+      promises.push(
+        jobService
+          .getAll({ status: "in_progress", minimal: true })
+          .then((response) => {
+            const jobs = Array.isArray(response)
+              ? response
+              : response.data || [];
+            jobs.forEach((job) => {
+              const projectId =
+                job.projectId?._id?.toString() || job.projectId?.toString();
+              if (projectId) {
+                projectIdsSet.add(projectId);
+              }
+            });
+          })
+          .catch((err) => {
+            console.error("Error fetching active air monitoring jobs:", err);
+          })
+      );
+
+      // 2. Active asbestos removal jobs (status "in_progress")
+      promises.push(
+        import("../../services/asbestosRemovalJobService")
+          .then((module) => module.default)
+          .then((asbestosRemovalJobService) =>
+            asbestosRemovalJobService.getAll({
+              status: "in_progress",
+              minimal: true,
+            })
+          )
+          .then((response) => {
+            const jobs =
+              response.jobs ||
+              response.data ||
+              (Array.isArray(response) ? response : []);
+            jobs.forEach((job) => {
+              const projectId =
+                job.projectId?._id?.toString() || job.projectId?.toString();
+              if (projectId) {
+                projectIdsSet.add(projectId);
+              }
+            });
+          })
+          .catch((err) => {
+            console.error("Error fetching active asbestos removal jobs:", err);
+          })
+      );
+
+      // 3. Active client supplied jobs (status "In Progress" or "Analysis Complete")
+      promises.push(
+        clientSuppliedJobsService
+          .getAll()
+          .then((response) => {
+            const jobs =
+              response.data || (Array.isArray(response) ? response : []);
+            jobs
+              .filter(
+                (job) =>
+                  job.status === "In Progress" ||
+                  job.status === "Analysis Complete"
+              )
+              .forEach((job) => {
+                const projectId =
+                  job.projectId?._id?.toString() || job.projectId?.toString();
+                if (projectId) {
+                  projectIdsSet.add(projectId);
+                }
+              });
+          })
+          .catch((err) => {
+            console.error("Error fetching active client supplied jobs:", err);
+          })
+      );
+
+      // 4. Completed air monitoring jobs (likely have reports)
+      promises.push(
+        jobService
+          .getAll({ status: "completed", minimal: true })
+          .then((response) => {
+            const jobs = Array.isArray(response)
+              ? response
+              : response.data || [];
+            jobs.forEach((job) => {
+              const projectId =
+                job.projectId?._id?.toString() || job.projectId?.toString();
+              if (projectId) {
+                projectIdsSet.add(projectId);
+              }
+            });
+          })
+          .catch((err) => {
+            console.error("Error fetching completed air monitoring jobs:", err);
+          })
+      );
+
+      // 5. Completed asbestos removal jobs (may have clearance reports)
+      promises.push(
+        import("../../services/asbestosRemovalJobService")
+          .then((module) => module.default)
+          .then((asbestosRemovalJobService) =>
+            asbestosRemovalJobService.getAll({
+              status: "completed",
+              minimal: true,
+            })
+          )
+          .then((response) => {
+            const jobs =
+              response.jobs ||
+              response.data ||
+              (Array.isArray(response) ? response : []);
+            jobs.forEach((job) => {
+              const projectId =
+                job.projectId?._id?.toString() || job.projectId?.toString();
+              if (projectId) {
+                projectIdsSet.add(projectId);
+              }
+            });
+          })
+          .catch((err) => {
+            console.error(
+              "Error fetching completed asbestos removal jobs:",
+              err
+            );
+          })
+      );
+
+      // 6. Projects with fibre ID reports (completed client supplied jobs)
+      promises.push(
+        clientSuppliedJobsService
+          .getAll()
+          .then((response) => {
+            const jobs =
+              response.data || (Array.isArray(response) ? response : []);
+            jobs
+              .filter((job) => job.status === "Completed")
+              .forEach((job) => {
+                const projectId =
+                  job.projectId?._id?.toString() || job.projectId?.toString();
+                if (projectId) {
+                  projectIdsSet.add(projectId);
+                }
+              });
+          })
+          .catch((err) => {
+            console.error(
+              "Error fetching completed client supplied jobs:",
+              err
+            );
+          })
+      );
+
+      // 7. Projects with asbestos assessments
+      promises.push(
+        import("../../services/api")
+          .then((module) => module.asbestosAssessmentService)
+          .then((assessmentService) =>
+            assessmentService.getAsbestosAssessments()
+          )
+          .then((response) => {
+            const assessments =
+              response.data || (Array.isArray(response) ? response : []);
+            assessments.forEach((assessment) => {
+              const projectId =
+                assessment.projectId?._id?.toString() ||
+                assessment.projectId?.toString();
+              if (projectId) {
+                projectIdsSet.add(projectId);
+              }
+            });
+          })
+          .catch((err) => {
+            console.error("Error fetching asbestos assessments:", err);
+          })
+      );
+
+      // 8. Projects with clearance reports (completed clearances)
+      promises.push(
+        import("../../services/asbestosClearanceService")
+          .then((module) => module.default)
+          .then((clearanceService) => clearanceService.getAll())
+          .then((response) => {
+            const clearances =
+              response.data || (Array.isArray(response) ? response : []);
+            clearances
+              .filter(
+                (clearance) =>
+                  clearance.status === "complete" ||
+                  clearance.status === "Site Work Complete"
+              )
+              .forEach((clearance) => {
+                const projectId =
+                  clearance.projectId?._id?.toString() ||
+                  clearance.projectId?.toString();
+                if (projectId) {
+                  projectIdsSet.add(projectId);
+                }
+              });
+          })
+          .catch((err) => {
+            console.error("Error fetching clearance reports:", err);
+          })
+      );
+
+      // Wait for all promises to complete
+      await Promise.all(promises);
+    } catch (error) {
+      console.error(
+        "Error fetching projects with reports or active jobs:",
+        error
+      );
+    }
+
+    return projectIdsSet;
+  }, []);
+
   // Load initial 100 projects (highest projectIDs) - fast load using cache
   const loadInitialProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
+      // Fetch project IDs with reports or active jobs in parallel
+      const validProjectIdsSet = await fetchProjectsWithReportsOrActiveJobs();
+
+      // Helper function to filter projects
+      const filterProjects = (projects) => {
+        return projects.filter((project) => {
+          const projectId = project._id?.toString();
+          return projectId && validProjectIdsSet.has(projectId);
+        });
+      };
+
       // Try to get cached top 100 projects - display immediately without API call
       const cachedProjects = getCachedTopProjects();
       let loadedFromCache = false;
 
       if (cachedProjects && cachedProjects.length > 0) {
-        // Fast path: Display cached projects immediately (no API call!)
-        setAllProjects(cachedProjects);
-        setFilteredProjects(cachedProjects);
-        setTotalPages(Math.ceil(cachedProjects.length / itemsPerPage));
+        // Filter cached projects
+        const filteredCached = filterProjects(cachedProjects);
+
+        // Fast path: Display filtered cached projects immediately (no API call!)
+        setAllProjects(filteredCached);
+        setFilteredProjects(filteredCached);
+        setTotalPages(Math.ceil(filteredCached.length / itemsPerPage));
         setLoading(false);
         loadedFromCache = true;
 
@@ -118,13 +360,16 @@ const Reports = () => {
             // Sort by projectID descending
             const sortedAllProjects = sortProjectsByID(allProjectsData);
 
-            // Update cache with fresh data
+            // Filter projects
+            const filteredProjects = filterProjects(sortedAllProjects);
+
+            // Update cache with fresh data (unfiltered, so cache stays complete)
             cacheTopProjects(sortedAllProjects);
 
-            // Update state with all projects
-            setAllProjects(sortedAllProjects);
-            setFilteredProjects(sortedAllProjects);
-            setTotalPages(Math.ceil(sortedAllProjects.length / itemsPerPage));
+            // Update state with filtered projects
+            setAllProjects(filteredProjects);
+            setFilteredProjects(filteredProjects);
+            setTotalPages(Math.ceil(filteredProjects.length / itemsPerPage));
           } catch (err) {
             console.error("Error loading all projects in background:", err);
           }
@@ -152,17 +397,24 @@ const Reports = () => {
               ? response.data
               : response.data?.data || [];
 
-            // Filter to cached projectIDs and sort by cached order
+            // Sort all projects
+            const sortedAllProjects = sortProjectsByID(allProjectsData);
+
+            // Filter to projects with reports or active jobs
+            const filteredAllProjects = filterProjects(sortedAllProjects);
+
+            // Filter to cached projectIDs and sort by cached order (from filtered set)
             const cachedProjectsMap = new Map(
               cachedProjectIDs.map((id, index) => [id, index])
             );
-            const top100Projects = allProjectsData
+            const top100Projects = filteredAllProjects
               .filter((p) => cachedProjectsMap.has(p.projectID))
               .sort((a, b) => {
                 const aIndex = cachedProjectsMap.get(a.projectID);
                 const bIndex = cachedProjectsMap.get(b.projectID);
                 return aIndex - bIndex;
-              });
+              })
+              .slice(0, 100);
 
             // Display the top 100 immediately
             setAllProjects(top100Projects);
@@ -171,14 +423,13 @@ const Reports = () => {
             setLoading(false);
             loadedFromCache = true;
 
-            // Now sort all projects and update cache
-            const sortedAllProjects = sortProjectsByID(allProjectsData);
+            // Update cache with fresh data (unfiltered, so cache stays complete)
             cacheTopProjects(sortedAllProjects);
 
-            // Update with all projects
-            setAllProjects(sortedAllProjects);
-            setFilteredProjects(sortedAllProjects);
-            setTotalPages(Math.ceil(sortedAllProjects.length / itemsPerPage));
+            // Update with all filtered projects
+            setAllProjects(filteredAllProjects);
+            setFilteredProjects(filteredAllProjects);
+            setTotalPages(Math.ceil(filteredAllProjects.length / itemsPerPage));
           } catch (err) {
             console.error("Error loading projects with cached IDs:", err);
             loadedFromCache = false;
@@ -203,10 +454,13 @@ const Reports = () => {
           // Sort by projectID descending
           const sortedProjects = sortProjectsByID(projectsData);
 
-          // Get the top 100 (highest projectIDs)
-          const top100Projects = sortedProjects.slice(0, 100);
+          // Filter to projects with reports or active jobs
+          const filteredProjects = filterProjects(sortedProjects);
 
-          // Cache the top 100 projects
+          // Get the top 100 (highest projectIDs) from filtered set
+          const top100Projects = filteredProjects.slice(0, 100);
+
+          // Cache the unfiltered projects (so cache stays complete)
           cacheTopProjects(sortedProjects);
 
           // Display the top 100 immediately
@@ -215,11 +469,11 @@ const Reports = () => {
           setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
           setLoading(false);
 
-          // Update with all projects
-          if (sortedProjects.length > 100) {
-            setAllProjects(sortedProjects);
-            setFilteredProjects(sortedProjects);
-            setTotalPages(Math.ceil(sortedProjects.length / itemsPerPage));
+          // Update with all filtered projects
+          if (filteredProjects.length > 100) {
+            setAllProjects(filteredProjects);
+            setFilteredProjects(filteredProjects);
+            setTotalPages(Math.ceil(filteredProjects.length / itemsPerPage));
           }
         }
       }
@@ -230,7 +484,7 @@ const Reports = () => {
       setFilteredProjects([]);
       setLoading(false);
     }
-  }, [itemsPerPage, sortProjectsByID]);
+  }, [itemsPerPage, sortProjectsByID, fetchProjectsWithReportsOrActiveJobs]);
 
   // Filter projects based on search term
   useEffect(() => {

@@ -143,8 +143,15 @@ const AsbestosRemovalJobDetails = () => {
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const { showSnackbar } = useSnackbar();
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
+  const [reportViewedClearanceIds, setReportViewedClearanceIds] = useState(
+    new Set()
+  );
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
+  const [
+    sendingClearanceAuthorisationRequests,
+    setSendingClearanceAuthorisationRequests,
+  ] = useState({});
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
   const [editingShift, setEditingShift] = useState(null);
@@ -1337,6 +1344,48 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
+  const handleViewClearanceReport = async (clearance, event) => {
+    event.stopPropagation();
+    try {
+      console.log(
+        "handleViewClearanceReport called with clearance:",
+        clearance
+      );
+      setGeneratingPDF(true);
+
+      // Get the full clearance data with populated project
+      console.log("Fetching full clearance data...");
+      const fullClearance = await asbestosClearanceService.getById(
+        clearance._id
+      );
+      console.log("Full clearance data:", fullClearance);
+
+      // Use the new HTML template-based PDF generation
+      console.log("Calling generateHTMLTemplatePDF...");
+      const fileName = await generateHTMLTemplatePDF(
+        "asbestos-clearance", // template type
+        fullClearance // clearance data
+      );
+      console.log("PDF generation completed, fileName:", fileName);
+
+      showSnackbar(
+        `PDF generated successfully! Check your downloads folder for: ${
+          fileName.filename || fileName
+        }`,
+        "success"
+      );
+
+      // Mark report as viewed
+      setReportViewedClearanceIds((prev) => new Set(prev).add(clearance._id));
+    } catch (err) {
+      console.error("Error generating PDF:", err);
+      showSnackbar("Failed to generate PDF", "error");
+    } finally {
+      console.log("Setting generatingPDF to false");
+      setGeneratingPDF(false);
+    }
+  };
+
   const handleGeneratePDF = async (clearance, event) => {
     // Prevent row click when clicking PDF icon
     event.stopPropagation();
@@ -1372,6 +1421,79 @@ const AsbestosRemovalJobDetails = () => {
     } finally {
       console.log("Setting generatingPDF to false");
       setGeneratingPDF(false);
+    }
+  };
+
+  const handleAuthoriseClearanceReport = async (clearance, event) => {
+    event.stopPropagation();
+    try {
+      await asbestosClearanceService.authorise(clearance._id);
+
+      // Refresh the clearances list
+      await fetchClearances();
+
+      // Generate and download the authorised report
+      try {
+        const fullClearance = await asbestosClearanceService.getById(
+          clearance._id
+        );
+        await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
+        showSnackbar(
+          "Report authorised and downloaded successfully.",
+          "success"
+        );
+      } catch (reportError) {
+        console.error("Error generating authorised report:", reportError);
+        showSnackbar(
+          "Report authorised but failed to generate download.",
+          "warning"
+        );
+      }
+    } catch (error) {
+      console.error("Error authorising clearance report:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to authorise report. Please try again.",
+        "error"
+      );
+    }
+  };
+
+  const handleSendClearanceForAuthorisation = async (clearance, event) => {
+    event.stopPropagation();
+    if (!clearance?._id) {
+      return;
+    }
+
+    try {
+      setSendingClearanceAuthorisationRequests((prev) => ({
+        ...prev,
+        [clearance._id]: true,
+      }));
+
+      const response = await asbestosClearanceService.sendForAuthorisation(
+        clearance._id
+      );
+
+      showSnackbar(
+        response?.message ||
+          `Authorisation request emails sent successfully to ${
+            response?.recipients?.length || 0
+          } report proofer user(s)`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error sending authorisation request emails:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to send authorisation request emails. Please try again.",
+        "error"
+      );
+    } finally {
+      setSendingClearanceAuthorisationRequests((prev) => ({
+        ...prev,
+        [clearance._id]: false,
+      }));
     }
   };
 
@@ -1942,8 +2064,8 @@ const AsbestosRemovalJobDetails = () => {
                                       currentUser,
                                       "jobs.edit"
                                     ),
-                                    isLabSignatory: Boolean(
-                                      currentUser?.labSignatory
+                                    isReportProofer: Boolean(
+                                      currentUser?.reportProofer
                                     ),
                                   };
                                   const permissionCheckDuration = Math.round(
@@ -1957,10 +2079,10 @@ const AsbestosRemovalJobDetails = () => {
                                     showAuthorise:
                                       baseVisible &&
                                       conditions.hasAdminPermission &&
-                                      conditions.isLabSignatory,
+                                      conditions.isReportProofer,
                                     showSend:
                                       baseVisible &&
-                                      !conditions.isLabSignatory &&
+                                      !conditions.isReportProofer &&
                                       conditions.hasEditPermission,
                                   };
 
@@ -1989,7 +2111,8 @@ const AsbestosRemovalJobDetails = () => {
                                       currentUser: {
                                         id: currentUser?._id,
                                         role: currentUser?.role,
-                                        labSignatory: currentUser?.labSignatory,
+                                        reportProofer:
+                                          currentUser?.reportProofer,
                                       },
                                     }
                                   );
@@ -2152,14 +2275,110 @@ const AsbestosRemovalJobDetails = () => {
                             </IconButton>
                           </PermissionGate>
                           {clearance.status === "complete" && (
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleGeneratePDF(clearance, e)}
-                              disabled={generatingPDF}
-                              title="Generate PDF Report"
-                            >
-                              <PictureAsPdfIcon color="primary" />
-                            </IconButton>
+                            <>
+                              {!reportViewedClearanceIds.has(clearance._id) && (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={(e) =>
+                                    handleViewClearanceReport(clearance, e)
+                                  }
+                                  disabled={generatingPDF}
+                                  sx={{
+                                    borderColor: theme.palette.success.main,
+                                    color: theme.palette.success.main,
+                                    "&:hover": {
+                                      borderColor: theme.palette.success.dark,
+                                      backgroundColor:
+                                        theme.palette.success.light,
+                                    },
+                                    mr: 1,
+                                  }}
+                                >
+                                  View Report
+                                </Button>
+                              )}
+                              {reportViewedClearanceIds.has(clearance._id) &&
+                                !clearance.reportApprovedBy && (
+                                  <>
+                                    {currentUser?.reportProofer &&
+                                      hasPermission(
+                                        currentUser,
+                                        "admin.view"
+                                      ) && (
+                                        <Button
+                                          variant="contained"
+                                          size="small"
+                                          color="success"
+                                          onClick={(e) =>
+                                            handleAuthoriseClearanceReport(
+                                              clearance,
+                                              e
+                                            )
+                                          }
+                                          sx={{
+                                            backgroundColor:
+                                              theme.palette.success.main,
+                                            color: theme.palette.common.white,
+                                            "&:hover": {
+                                              backgroundColor:
+                                                theme.palette.success.dark,
+                                            },
+                                            mr: 1,
+                                          }}
+                                        >
+                                          Authorise Report
+                                        </Button>
+                                      )}
+                                    {(!currentUser?.reportProofer ||
+                                      !hasPermission(
+                                        currentUser,
+                                        "admin.view"
+                                      )) &&
+                                      hasPermission(
+                                        currentUser,
+                                        "asbestos.edit"
+                                      ) && (
+                                        <Button
+                                          variant="outlined"
+                                          size="small"
+                                          color="primary"
+                                          startIcon={<MailIcon />}
+                                          onClick={(e) =>
+                                            handleSendClearanceForAuthorisation(
+                                              clearance,
+                                              e
+                                            )
+                                          }
+                                          disabled={Boolean(
+                                            sendingClearanceAuthorisationRequests[
+                                              clearance._id
+                                            ]
+                                          )}
+                                          sx={{ mr: 1 }}
+                                        >
+                                          {sendingClearanceAuthorisationRequests[
+                                            clearance._id
+                                          ]
+                                            ? "Sending..."
+                                            : "Send for Authorisation"}
+                                        </Button>
+                                      )}
+                                  </>
+                                )}
+                              {clearance.reportApprovedBy && (
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) =>
+                                    handleGeneratePDF(clearance, e)
+                                  }
+                                  disabled={generatingPDF}
+                                  title="Generate PDF Report"
+                                >
+                                  <PictureAsPdfIcon color="primary" />
+                                </IconButton>
+                              )}
+                            </>
                           )}
                         </TableCell>
                       </TableRow>

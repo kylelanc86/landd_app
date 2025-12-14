@@ -1353,15 +1353,16 @@ const ClientSuppliedFibreIDAnalysis = () => {
                               }
                               disabled={isSampleAnalyzed()}
                               sx={{
-                                backgroundColor: "#4caf50",
-                                color: "white",
+                                backgroundColor: "transparent",
+                                color: "transparent",
                                 width: 20,
                                 height: 20,
                                 "&:hover": {
-                                  backgroundColor: "#45a049",
+                                  backgroundColor: "rgba(0, 0, 0, 0.04)",
                                 },
                                 "&.Mui-disabled": {
-                                  backgroundColor: "#ccc",
+                                  backgroundColor: "transparent",
+                                  color: "#ccc",
                                 },
                               }}
                             >
