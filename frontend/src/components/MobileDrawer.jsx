@@ -239,6 +239,17 @@ const MobileDrawer = ({ open, onClose }) => {
               />
             )}
 
+            {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+              <MenuItem
+                title="Fibre Identification"
+                to="/fibre-id"
+                icon={<ScienceIcon />}
+              />
+            )}
+
+            <Divider sx={{ my: 1 }} />
+
+
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem
                 title="Client Supplied"
@@ -247,13 +258,7 @@ const MobileDrawer = ({ open, onClose }) => {
               />
             )}
 
-            {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-              <MenuItem
-                title="FIBRE ID"
-                to="/fibre-id"
-                icon={<ScienceIcon />}
-              />
-            )}
+
           </List>
         </Box>
       </Box>

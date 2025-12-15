@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -101,9 +101,11 @@ const EquipmentList = () => {
       setLoading(true);
       setError(null);
 
+      // Exclude status filter from backend call since it's calculated on frontend
+      const { status, ...backendFilters } = filters;
       const response = await equipmentService.getAll({
         limit: 100,
-        ...filters,
+        ...backendFilters,
       });
       console.log("Equipment data:", response);
       console.log("First equipment item:", response.equipment?.[0]);
@@ -293,17 +295,51 @@ const EquipmentList = () => {
     return daysDiff;
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "active":
+  // Calculate the actual status based on calibration data and stored status
+  const calculateStatus = useCallback((equipment) => {
+    // Handle null/undefined equipment
+    if (!equipment) {
+      return "Out-of-Service";
+    }
+
+    // If explicitly marked as out-of-service, return that
+    if (equipment.status === "out-of-service") {
+      return "Out-of-Service";
+    }
+
+    // If no calibration data (no lastCalibration or no calibrationDue), return out-of-service
+    if (!equipment.lastCalibration || !equipment.calibrationDue) {
+      return "Out-of-Service";
+    }
+
+    // Check if calibration is overdue
+    const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
+    if (daysUntil !== null && daysUntil < 0) {
+      return "Calibration Overdue";
+    }
+
+    // If calibrated and not yet due, return active
+    return "Active";
+  }, []);
+
+  const getStatusColor = (calculatedStatus) => {
+    switch (calculatedStatus) {
+      case "Active":
         return theme.palette.success.main;
-      case "calibration due":
-        return theme.palette.warning.main;
-      case "out-of-service":
+      case "Calibration Overdue":
+        return theme.palette.warning.main; // Orange/warning color
+      case "Out-of-Service":
         return theme.palette.error.main;
       default:
         return theme.palette.grey[500];
     }
+  };
+
+  const isStatusBold = (calculatedStatus) => {
+    return (
+      calculatedStatus === "Calibration Overdue" ||
+      calculatedStatus === "Out-of-Service"
+    );
   };
 
   const getCalibrationFrequencyOptions = (equipmentType) => {
@@ -311,6 +347,43 @@ const EquipmentList = () => {
       (freq) => freq.equipmentType.toLowerCase() === equipmentType.toLowerCase()
     );
   };
+
+  // Filter equipment based on all filters including calculated status
+  const filteredEquipment = useMemo(() => {
+    return equipment.filter((item) => {
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const matchesSearch =
+          item.equipmentReference?.toLowerCase().includes(searchLower) ||
+          item.brandModel?.toLowerCase().includes(searchLower);
+        if (!matchesSearch) return false;
+      }
+
+      // Equipment type filter
+      if (
+        filters.equipmentType &&
+        item.equipmentType !== filters.equipmentType
+      ) {
+        return false;
+      }
+
+      // Section filter
+      if (filters.section && item.section !== filters.section) {
+        return false;
+      }
+
+      // Status filter (based on calculated status)
+      if (filters.status) {
+        const calculatedStatus = calculateStatus(item);
+        if (calculatedStatus !== filters.status) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [equipment, filters, calculateStatus]);
 
   if (loading) {
     return (
@@ -445,11 +518,11 @@ const EquipmentList = () => {
               onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="">All Status</MenuItem>
-              {equipmentService.getStatusOptions().map((status) => (
-                <MenuItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </MenuItem>
-              ))}
+              <MenuItem value="Active">Active</MenuItem>
+              <MenuItem value="Calibration Overdue">
+                Calibration Overdue
+              </MenuItem>
+              <MenuItem value="Out-of-Service">Out-of-Service</MenuItem>
             </Select>
           </FormControl>
           <Button
@@ -472,7 +545,7 @@ const EquipmentList = () => {
       {/* Equipment Table */}
       <Box
         m="40px 0 0 0"
-        height="75vh"
+        height="62vh"
         sx={{
           "& .MuiDataGrid-root": {
             border: "none",
@@ -508,7 +581,7 @@ const EquipmentList = () => {
         }}
       >
         <DataGrid
-          rows={equipment}
+          rows={filteredEquipment}
           sortingOrder={["desc", "asc"]}
           columns={[
             {
@@ -540,13 +613,40 @@ const EquipmentList = () => {
               headerName: "Status",
               flex: 1,
               minWidth: 120,
+              valueGetter: (value, row) => {
+                // Return calculated status for filtering and sorting
+                if (!row) return "Out-of-Service";
+                return calculateStatus(row);
+              },
               renderCell: (params) => {
-                const status = getStatusColor(params.row.status);
+                if (!params || !params.row) {
+                  return (
+                    <Box>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: theme.palette.error.main,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Out-of-Service
+                      </Typography>
+                    </Box>
+                  );
+                }
+                const calculatedStatus = calculateStatus(params.row);
+                const statusColor = getStatusColor(calculatedStatus);
+                const isBold = isStatusBold(calculatedStatus);
                 return (
                   <Box>
-                    <Typography variant="body2" sx={{ color: status }}>
-                      {params.row.status.charAt(0).toUpperCase() +
-                        params.row.status.slice(1)}
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: statusColor,
+                        fontWeight: isBold ? "bold" : "normal",
+                      }}
+                    >
+                      {calculatedStatus}
                     </Typography>
                   </Box>
                 );

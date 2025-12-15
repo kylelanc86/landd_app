@@ -39,6 +39,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { sampleService, shiftService } from "../../services/api";
 import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
+import { equipmentService } from "../../services/equipmentService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../context/AuthContext";
@@ -342,6 +343,8 @@ const Analysis = () => {
   const [activeSampleId, setActiveSampleId] = useState(null);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
   const [fibreCountSnapshot, setFibreCountSnapshot] = useState(null);
+  const [activeMicroscopes, setActiveMicroscopes] = useState([]);
+  const [activeTestSlides, setActiveTestSlides] = useState([]);
 
   // Load samples and in-progress analysis data
   useEffect(() => {
@@ -509,6 +512,87 @@ const Analysis = () => {
       });
     }
   }, [samples]);
+
+  // Calculate days until calibration is due
+  const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
+    if (!calibrationDue) return null;
+
+    const today = new Date();
+    const dueDate = new Date(calibrationDue);
+
+    // Reset time to start of day for accurate day calculation
+    today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const timeDiff = dueDate.getTime() - today.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    return daysDiff;
+  }, []);
+
+  // Calculate the actual status based on calibration data and stored status
+  const calculateStatus = useCallback(
+    (equipment) => {
+      if (!equipment) {
+        return "Out-of-Service";
+      }
+
+      if (equipment.status === "out-of-service") {
+        return "Out-of-Service";
+      }
+
+      if (!equipment.lastCalibration || !equipment.calibrationDue) {
+        return "Out-of-Service";
+      }
+
+      const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
+      if (daysUntil !== null && daysUntil < 0) {
+        return "Calibration Overdue";
+      }
+
+      return "Active";
+    },
+    [calculateDaysUntilCalibration]
+  );
+
+  // Fetch active microscopes and test slides
+  useEffect(() => {
+    const fetchActiveEquipment = async () => {
+      try {
+        const response = await equipmentService.getAll();
+        const allEquipment = response.equipment || [];
+
+        // Filter for active Phase Contrast Microscope
+        const microscopes = allEquipment
+          .filter(
+            (eq) =>
+              eq.equipmentType === "Phase Contrast Microscope" &&
+              calculateStatus(eq) === "Active"
+          )
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+
+        // Filter for active HSE Test Slide
+        const testSlides = allEquipment
+          .filter(
+            (eq) =>
+              eq.equipmentType === "HSE Test Slide" &&
+              calculateStatus(eq) === "Active"
+          )
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+
+        setActiveMicroscopes(microscopes);
+        setActiveTestSlides(testSlides);
+      } catch (error) {
+        console.error("Error fetching equipment:", error);
+      }
+    };
+
+    fetchActiveEquipment();
+  }, [calculateStatus]);
 
   // Fetch users for analyst dropdown - only those with fibre counting approval
   useEffect(() => {
@@ -1425,18 +1509,21 @@ const Analysis = () => {
                     value={analysisDetails.microscope}
                     onChange={handleAnalysisDetailsChange}
                   >
-                    <FormControlLabel
-                      value="LD-PCM1"
-                      control={<Radio />}
-                      label="LD-PCM1"
-                      disabled={shiftStatus === "analysis_complete"}
-                    />
-                    <FormControlLabel
-                      value="LD-PCM2"
-                      control={<Radio />}
-                      label="LDPCM2"
-                      disabled={shiftStatus === "analysis_complete"}
-                    />
+                    {activeMicroscopes.length > 0 ? (
+                      activeMicroscopes.map((microscope) => (
+                        <FormControlLabel
+                          key={microscope._id}
+                          value={microscope.equipmentReference}
+                          control={<Radio />}
+                          label={microscope.equipmentReference}
+                          disabled={shiftStatus === "analysis_complete"}
+                        />
+                      ))
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No active Phase Contrast Microscope available
+                      </Typography>
+                    )}
                   </RadioGroup>
                 </FormControl>
                 <Box sx={{ width: 24 }} />
@@ -1450,18 +1537,21 @@ const Analysis = () => {
                     value={analysisDetails.testSlide}
                     onChange={handleAnalysisDetailsChange}
                   >
-                    <FormControlLabel
-                      value="LD-TS1"
-                      control={<Radio />}
-                      label="LD-TS1"
-                      disabled={shiftStatus === "analysis_complete"}
-                    />
-                    <FormControlLabel
-                      value="LD-TS2"
-                      control={<Radio />}
-                      label="LD-TS2"
-                      disabled={shiftStatus === "analysis_complete"}
-                    />
+                    {activeTestSlides.length > 0 ? (
+                      activeTestSlides.map((testSlide) => (
+                        <FormControlLabel
+                          key={testSlide._id}
+                          value={testSlide.equipmentReference}
+                          control={<Radio />}
+                          label={testSlide.equipmentReference}
+                          disabled={shiftStatus === "analysis_complete"}
+                        />
+                      ))
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No active HSE Test Slide available
+                      </Typography>
+                    )}
                   </RadioGroup>
                 </FormControl>
                 <Box sx={{ width: 24 }} />

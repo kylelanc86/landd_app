@@ -12,7 +12,10 @@ const Incidents = () => {
 
   return (
     <Box m="20px">
-      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> INCIDENTS & NON-CONFORMANCES </Typography>
+      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+        {" "}
+        INCIDENTS & NON-CONFORMANCES{" "}
+      </Typography>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link

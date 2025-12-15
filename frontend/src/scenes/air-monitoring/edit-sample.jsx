@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -101,20 +101,75 @@ const EditSample = () => {
     fetchAsbestosAssessors();
   }, []);
 
-  // Fetch active air pumps when component mounts
+  // Calculate days until calibration is due
+  const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
+    if (!calibrationDue) return null;
+
+    const today = new Date();
+    const dueDate = new Date(calibrationDue);
+
+    // Reset time to start of day for accurate day calculation
+    today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const timeDiff = dueDate.getTime() - today.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    return daysDiff;
+  }, []);
+
+  // Calculate the actual status based on calibration data and stored status
+  const calculateStatus = useCallback(
+    (equipment) => {
+      if (!equipment) {
+        return "Out-of-Service";
+      }
+
+      if (equipment.status === "out-of-service") {
+        return "Out-of-Service";
+      }
+
+      if (!equipment.lastCalibration || !equipment.calibrationDue) {
+        return "Out-of-Service";
+      }
+
+      const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
+      if (daysUntil !== null && daysUntil < 0) {
+        return "Calibration Overdue";
+      }
+
+      return "Active";
+    },
+    [calculateDaysUntilCalibration]
+  );
+
+  // Fetch active air pumps from equipment list
   useEffect(() => {
     const fetchActiveAirPumps = async () => {
       try {
-        const response = await airPumpService.filterByStatus("Active");
-        setAirPumps(response.data || response);
+        const response = await equipmentService.getAll();
+        const allEquipment = response.equipment || [];
+
+        // Filter for active Air pump equipment
+        const activePumps = allEquipment
+          .filter(
+            (eq) =>
+              eq.equipmentType === "Air pump" &&
+              calculateStatus(eq) === "Active"
+          )
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+
+        setAirPumps(activePumps);
       } catch (error) {
         console.error("Error fetching active air pumps:", error);
       }
     };
     fetchActiveAirPumps();
-  }, []);
+  }, [calculateStatus]);
 
-  // Fetch active flowmeters when component mounts
+  // Fetch active flowmeters from equipment list
   useEffect(() => {
     const fetchActiveFlowmeters = async () => {
       try {
@@ -122,19 +177,25 @@ const EditSample = () => {
         console.log("Equipment response:", response);
         const allEquipment = response.equipment || response.data || response;
         console.log("All equipment:", allEquipment);
-        const flowmeters = allEquipment.filter(
-          (equipment) =>
-            equipment.equipmentType === "Site flowmeter" &&
-            equipment.status === "active"
-        );
-        console.log("Filtered flowmeters:", flowmeters);
-        setFlowmeters(flowmeters);
+
+        // Filter for active Site flowmeter equipment using calculated status
+        const activeFlowmeters = allEquipment
+          .filter(
+            (equipment) =>
+              equipment.equipmentType === "Site flowmeter" &&
+              calculateStatus(equipment) === "Active"
+          )
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+        console.log("Filtered active flowmeters:", activeFlowmeters);
+        setFlowmeters(activeFlowmeters);
       } catch (error) {
         console.error("Error fetching active flowmeters:", error);
       }
     };
     fetchActiveFlowmeters();
-  }, []);
+  }, [calculateStatus]);
 
   // Fetch sample data
   useEffect(() => {
@@ -764,11 +825,18 @@ const EditSample = () => {
                   <MenuItem value="">
                     <em>Select a pump</em>
                   </MenuItem>
-                  {airPumps.map((pump) => (
-                    <MenuItem key={pump._id} value={pump.pumpReference}>
-                      {pump.pumpReference} - {pump.pumpDetails}
+                  {airPumps.length > 0 ? (
+                    airPumps.map((pump) => (
+                      <MenuItem key={pump._id} value={pump.equipmentReference}>
+                        {pump.equipmentReference}
+                        {pump.brandModel ? ` - ${pump.brandModel}` : ""}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled value="">
+                      No active air pumps available
                     </MenuItem>
-                  ))}
+                  )}
                 </Select>
               </FormControl>
               <FormControl fullWidth>
@@ -818,15 +886,21 @@ const EditSample = () => {
                 <MenuItem value="">
                   <em>Select a flowmeter</em>
                 </MenuItem>
-                {flowmeters.map((flowmeter) => (
-                  <MenuItem
-                    key={flowmeter._id}
-                    value={flowmeter.equipmentReference}
-                  >
-                    {flowmeter.equipmentReference} - {flowmeter.brandModel} (
-                    {flowmeter.equipmentType})
+                {flowmeters.length > 0 ? (
+                  flowmeters.map((flowmeter) => (
+                    <MenuItem
+                      key={flowmeter._id}
+                      value={flowmeter.equipmentReference}
+                    >
+                      {flowmeter.equipmentReference}
+                      {flowmeter.brandModel ? ` - ${flowmeter.brandModel}` : ""}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled value="">
+                    No active flowmeters available
                   </MenuItem>
-                ))}
+                )}
               </Select>
               {fieldErrors.flowmeter && (
                 <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>

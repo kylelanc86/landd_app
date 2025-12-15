@@ -1,5 +1,12 @@
 import React from "react";
-import { Box, Typography, Paper, Container, Breadcrumbs, Link } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Paper,
+  Container,
+  Breadcrumbs,
+  Link,
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
@@ -26,9 +33,11 @@ const OHSEnvironmental = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Records Home
           </Link>
-          <Typography color="text.primary">OHS & Environmental Targets & Risks</Typography>
+          <Typography color="text.primary">
+            OHS & Environmental Targets & Risks
+          </Typography>
         </Breadcrumbs>
-        
+
         <Paper sx={{ p: 3, mt: 2 }}>
           <Typography variant="h6" gutterBottom>
             OHS & Environmental Management

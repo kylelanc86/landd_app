@@ -1436,6 +1436,261 @@ router.get('/stats/dashboard', auth, checkPermission(['projects.view']), async (
   }
 });
 
+// Get project IDs that have active jobs or reports (optimized for reports page)
+router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view']), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const projectIdsSet = new Set();
+    const mongoose = require('mongoose');
+
+    // Use parallel queries for better performance
+    const promises = [];
+    const Job = require('../models/Job');
+    const Shift = require('../models/Shift');
+
+    // 1. Active air monitoring jobs (status "in_progress")
+    promises.push(
+      Job.find({ status: 'in_progress' })
+        .select('projectId')
+        .lean()
+        .then((jobs) => {
+          jobs.forEach((job) => {
+            const projectId = job.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        })
+        .catch((err) => {
+          console.error('Error fetching active air monitoring jobs:', err);
+        })
+    );
+
+    // 2. Air monitoring jobs with shifts that have reports (analysis_complete or shift_complete)
+    promises.push(
+      (async () => {
+        try {
+          // First, get distinct job IDs from shifts with reports
+          const shiftsWithReports = await Shift.find({ 
+            status: { $in: ['analysis_complete', 'shift_complete'] } 
+          })
+            .select('job')
+            .lean();
+          
+          const jobIds = [...new Set(shiftsWithReports.map(s => s.job?.toString()).filter(Boolean))];
+          
+          if (jobIds.length > 0) {
+            // Then get projectIds from those jobs
+            const jobs = await Job.find({ _id: { $in: jobIds } })
+              .select('projectId')
+              .lean();
+            
+            jobs.forEach((job) => {
+              const projectId = job.projectId?.toString();
+              if (projectId) projectIdsSet.add(projectId);
+            });
+          }
+        } catch (err) {
+          console.error('Error fetching shifts with reports:', err);
+        }
+      })()
+    );
+
+    // 3. Active asbestos removal jobs
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+          const jobs = await AsbestosRemovalJob.find({ status: 'in_progress' })
+            .select('projectId')
+            .lean();
+          jobs.forEach((job) => {
+            const projectId = job.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        } catch (err) {
+          console.error('Error fetching active asbestos removal jobs:', err);
+        }
+      })()
+    );
+
+    // 4. Completed asbestos removal jobs
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+          const jobs = await AsbestosRemovalJob.find({ status: 'completed' })
+            .select('projectId')
+            .lean();
+          jobs.forEach((job) => {
+            const projectId = job.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        } catch (err) {
+          console.error('Error fetching completed asbestos removal jobs:', err);
+        }
+      })()
+    );
+
+    // 5. Active client supplied jobs
+    promises.push(
+      ClientSuppliedJob.find({
+        status: { $in: ['In Progress', 'Analysis Complete'] }
+      })
+        .select('projectId')
+        .lean()
+        .then((jobs) => {
+          jobs.forEach((job) => {
+            const projectId = job.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        })
+        .catch((err) => {
+          console.error('Error fetching active client supplied jobs:', err);
+        })
+    );
+
+    // 6. Completed client supplied jobs (have fibre ID reports)
+    promises.push(
+      ClientSuppliedJob.find({ status: 'Completed' })
+        .select('projectId')
+        .lean()
+        .then((jobs) => {
+          jobs.forEach((job) => {
+            const projectId = job.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        })
+        .catch((err) => {
+          console.error('Error fetching completed client supplied jobs:', err);
+        })
+    );
+
+    // 7. Projects with asbestos assessments
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+          const assessments = await AsbestosAssessment.find()
+            .select('projectId')
+            .lean();
+          assessments.forEach((assessment) => {
+            const projectId = assessment.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        } catch (err) {
+          console.error('Error fetching asbestos assessments:', err);
+        }
+      })()
+    );
+
+    // 8. Projects with clearance reports
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+          const clearances = await AsbestosClearance.find({
+            status: { $in: ['complete', 'Site Work Complete'] }
+          })
+            .select('projectId')
+            .lean();
+          clearances.forEach((clearance) => {
+            const projectId = clearance.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        } catch (err) {
+          console.error('Error fetching clearance reports:', err);
+        }
+      })()
+    );
+
+    // 9. Projects with invoices (non-deleted)
+    promises.push(
+      (async () => {
+        try {
+          const Invoice = require('../models/Invoice');
+          const invoices = await Invoice.find({
+            isDeleted: { $ne: true }
+          })
+            .select('projectId')
+            .lean();
+          invoices.forEach((invoice) => {
+            const projectId = invoice.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        } catch (err) {
+          console.error('Error fetching invoices:', err);
+        }
+      })()
+    );
+
+    // 10. Projects with uploaded reports
+    promises.push(
+      (async () => {
+        try {
+          const UploadedReport = require('../models/UploadedReport');
+          const uploadedReports = await UploadedReport.find()
+            .select('projectId')
+            .lean();
+          uploadedReports.forEach((report) => {
+            const projectId = report.projectId?.toString();
+            if (projectId) projectIdsSet.add(projectId);
+          });
+        } catch (err) {
+          // UploadedReport model might not exist, ignore error
+          console.log('UploadedReport model not found or error:', err.message);
+        }
+      })()
+    );
+
+    // Wait for all queries to complete
+    await Promise.all(promises);
+
+    const projectIds = Array.from(projectIdsSet);
+    const queryTime = Date.now() - startTime;
+    console.log(`[PROJECTS] Found ${projectIds.length} projects with reports/jobs in ${queryTime}ms`);
+
+    res.json({ projectIds, count: projectIds.length });
+  } catch (error) {
+    console.error('Error fetching project IDs with reports or jobs:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get projects by array of IDs (optimized for reports page)
+router.post('/by-ids', auth, checkPermission(['projects.view']), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { projectIds } = req.body;
+
+    if (!Array.isArray(projectIds) || projectIds.length === 0) {
+      return res.status(400).json({ message: 'projectIds must be a non-empty array' });
+    }
+
+    // Convert string IDs to ObjectIds
+    const mongoose = require('mongoose');
+    const objectIds = projectIds
+      .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    if (objectIds.length === 0) {
+      return res.json({ data: [], count: 0 });
+    }
+
+    // Fetch projects with minimal fields for better performance
+    const projects = await Project.find({ _id: { $in: objectIds } })
+      .select('_id projectID name client status department createdAt')
+      .populate('client', 'name')
+      .lean();
+
+    const queryTime = Date.now() - startTime;
+    console.log(`[PROJECTS] Fetched ${projects.length} projects by IDs in ${queryTime}ms`);
+
+    res.json({ data: projects, count: projects.length });
+  } catch (error) {
+    console.error('Error fetching projects by IDs:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Export router as default
 module.exports = router;
 

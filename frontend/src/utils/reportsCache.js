@@ -4,7 +4,9 @@
 
 const CACHE_KEY = "reportsTop100Projects";
 const PROJECT_IDS_CACHE_KEY = "reportsTop100ProjectIDs";
+const PROJECT_IDS_WITH_REPORTS_CACHE_KEY = "reportsProjectIdsWithReportsOrJobs";
 const CACHE_DURATION = 3600000; // 1 hour in milliseconds
+const PROJECT_IDS_CACHE_DURATION = 1800000; // 30 minutes for project IDs list (more dynamic)
 
 /**
  * Get cached top 100 projects
@@ -169,12 +171,56 @@ export const cacheTopProjectIDs = (projects) => {
 };
 
 /**
+ * Get cached project IDs that have reports or active jobs
+ * @returns {string[]|null} Array of project IDs or null if cache is invalid/missing
+ */
+export const getCachedProjectIdsWithReportsOrJobs = () => {
+  try {
+    const cached = localStorage.getItem(PROJECT_IDS_WITH_REPORTS_CACHE_KEY);
+    if (cached) {
+      const { projectIds, timestamp } = JSON.parse(cached);
+      // Check if cache is still valid
+      if (Date.now() - timestamp < PROJECT_IDS_CACHE_DURATION && Array.isArray(projectIds)) {
+        return projectIds;
+      }
+    }
+  } catch (error) {
+    console.error("Error reading cached project IDs with reports:", error);
+  }
+  return null;
+};
+
+/**
+ * Cache project IDs that have reports or active jobs
+ * @param {string[]} projectIds - Array of project ID strings
+ */
+export const cacheProjectIdsWithReportsOrJobs = (projectIds) => {
+  try {
+    if (!Array.isArray(projectIds)) {
+      console.error("cacheProjectIdsWithReportsOrJobs: projectIds must be an array");
+      return;
+    }
+
+    localStorage.setItem(
+      PROJECT_IDS_WITH_REPORTS_CACHE_KEY,
+      JSON.stringify({
+        projectIds,
+        timestamp: Date.now(),
+      })
+    );
+  } catch (error) {
+    console.error("Error caching project IDs with reports:", error);
+  }
+};
+
+/**
  * Clear the cache (useful for testing or forced refresh)
  */
 export const clearCache = () => {
   try {
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(PROJECT_IDS_CACHE_KEY);
+    localStorage.removeItem(PROJECT_IDS_WITH_REPORTS_CACHE_KEY);
   } catch (error) {
     console.error("Error clearing cache:", error);
   }

@@ -49,6 +49,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import DescriptionIcon from "@mui/icons-material/Description";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
+import ProjectLogModalWrapper from "../reports/ProjectLogModalWrapper";
 
 const TimesheetReview = () => {
   const theme = useTheme();
@@ -81,6 +82,10 @@ const TimesheetReview = () => {
   );
   const [reportSelectedUser, setReportSelectedUser] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
+
+  // Project log modal state
+  const [projectLogModalOpen, setProjectLogModalOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
 
   // Fetch users with chargeOutRate for report calculations
   const fetchUsers = async () => {
@@ -1240,7 +1245,45 @@ const TimesheetReview = () => {
                               />
                             )}
                           </TableCell>
-                          <TableCell>{entry.projectId?.name || "-"}</TableCell>
+                          <TableCell>
+                            {entry.projectId ? (
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                }}
+                              >
+                                <Link
+                                  component="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (entry.projectId) {
+                                      setSelectedProject(entry.projectId);
+                                      setProjectLogModalOpen(true);
+                                    }
+                                  }}
+                                  sx={{
+                                    color: theme.palette.primary.main,
+                                    textDecoration: "none",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    "&:hover": {
+                                      textDecoration: "underline",
+                                    },
+                                  }}
+                                >
+                                  {entry.projectId.projectID}
+                                </Link>
+                                <Typography component="span" variant="body2">
+                                  {" - "}
+                                  {entry.projectId.name}
+                                </Typography>
+                              </Box>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
                           <TableCell>{entry.description || "-"}</TableCell>
                         </TableRow>
                       );
@@ -1416,6 +1459,18 @@ const TimesheetReview = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Project Log Modal */}
+      {projectLogModalOpen && selectedProject && (
+        <ProjectLogModalWrapper
+          open={projectLogModalOpen}
+          onClose={() => {
+            setProjectLogModalOpen(false);
+            setSelectedProject(null);
+          }}
+          project={selectedProject}
+        />
+      )}
     </Box>
   );
 };

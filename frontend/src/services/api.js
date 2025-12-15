@@ -256,6 +256,10 @@ export const projectService = {
   delete: (id) => api.delete(`/projects/${id}`),
   checkDependencies: (id) => api.get(`/projects/${id}/dependencies`),
   getTimeLogs: (projectId) => api.get(`/projects/${projectId}/timelogs`),
+  // Get project IDs that have active jobs or reports (optimized for reports page)
+  getProjectIdsWithReportsOrJobs: () => api.get('/projects/with-reports-or-jobs/ids'),
+  // Get projects by array of IDs (optimized for reports page)
+  getProjectsByIds: (projectIds) => api.post('/projects/by-ids', { projectIds }),
 };
 
 // Job service

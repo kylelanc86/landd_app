@@ -12,7 +12,10 @@ const ApprovedSuppliers = () => {
 
   return (
     <Box m="20px">
-      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}> APPROVED SUPPLIERS </Typography>
+      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+        {" "}
+        APPROVED SUPPLIERS{" "}
+      </Typography>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link

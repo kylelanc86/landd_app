@@ -545,21 +545,27 @@ const Sidebar = () => {
             />
           )}
 
+
+          {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+            <CollapsibleSection
+              title="Fibre Identification"
+              to="/fibre-id"
+              icon={<ScienceIcon />}
+            />
+          )}
+
+          <SectionDivider />
+
+
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
-            <Item
+            <CollapsibleSection
               title="Client Supplied"
               to="/client-supplied"
               icon={<ContactsOutlinedIcon />}
             />
           )}
 
-          {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-            <CollapsibleSection
-              title="FIBRE ID"
-              to="/fibre-id"
-              icon={<ScienceIcon />}
-            />
-          )}
+
         </Box>
 
         <Box

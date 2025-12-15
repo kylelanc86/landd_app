@@ -160,9 +160,7 @@ const Calibrations = () => {
           </Grid>
           {/* Effective Filter Area */}
           <Grid item xs={12} md={6} lg={4}>
-            <EFA
-              viewCalibrationsPath="/records/laboratory/calibrations/efa"
-            />
+            <EFA viewCalibrationsPath="/records/laboratory/calibrations/efa" />
           </Grid>
         </Grid>
       )}

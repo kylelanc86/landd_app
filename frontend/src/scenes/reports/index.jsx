@@ -25,15 +25,12 @@ import {
   Clear as ClearIcon,
 } from "@mui/icons-material";
 
-import {
-  projectService,
-  jobService,
-  clientSuppliedJobsService,
-} from "../../services/api";
+import { projectService } from "../../services/api";
 import {
   getCachedTopProjects,
   cacheTopProjects,
-  getCachedTopProjectIDs,
+  getCachedProjectIdsWithReportsOrJobs,
+  cacheProjectIdsWithReportsOrJobs,
 } from "../../utils/reportsCache";
 
 // Debounce hook for search optimization
@@ -84,397 +81,125 @@ const Reports = () => {
     });
   }, []);
 
-  // Fetch project IDs that have reports or active jobs
+  // Fetch project IDs that have reports or active jobs (optimized with backend endpoint)
   const fetchProjectsWithReportsOrActiveJobs = useCallback(async () => {
-    const projectIdsSet = new Set();
-
     try {
-      // Fetch all project IDs in parallel for efficiency
-      const promises = [];
+      // Check cache first
+      const cachedProjectIds = getCachedProjectIdsWithReportsOrJobs();
+      if (cachedProjectIds && cachedProjectIds.length > 0) {
+        console.log(
+          `[REPORTS] Using cached project IDs (${cachedProjectIds.length} projects)`
+        );
+        return new Set(cachedProjectIds);
+      }
 
-      // 1. Active air monitoring jobs (status "in_progress")
-      promises.push(
-        jobService
-          .getAll({ status: "in_progress", minimal: true })
-          .then((response) => {
-            const jobs = Array.isArray(response)
-              ? response
-              : response.data || [];
-            jobs.forEach((job) => {
-              const projectId =
-                job.projectId?._id?.toString() || job.projectId?.toString();
-              if (projectId) {
-                projectIdsSet.add(projectId);
-              }
-            });
-          })
-          .catch((err) => {
-            console.error("Error fetching active air monitoring jobs:", err);
-          })
+      // Fetch from backend (single optimized endpoint)
+      console.log("[REPORTS] Fetching project IDs from backend...");
+      const response = await projectService.getProjectIdsWithReportsOrJobs();
+      const projectIds = response.data?.projectIds || [];
+
+      // Cache the result
+      if (projectIds.length > 0) {
+        cacheProjectIdsWithReportsOrJobs(projectIds);
+      }
+
+      console.log(
+        `[REPORTS] Found ${projectIds.length} projects with reports/jobs`
       );
-
-      // 2. Active asbestos removal jobs (status "in_progress")
-      promises.push(
-        import("../../services/asbestosRemovalJobService")
-          .then((module) => module.default)
-          .then((asbestosRemovalJobService) =>
-            asbestosRemovalJobService.getAll({
-              status: "in_progress",
-              minimal: true,
-            })
-          )
-          .then((response) => {
-            const jobs =
-              response.jobs ||
-              response.data ||
-              (Array.isArray(response) ? response : []);
-            jobs.forEach((job) => {
-              const projectId =
-                job.projectId?._id?.toString() || job.projectId?.toString();
-              if (projectId) {
-                projectIdsSet.add(projectId);
-              }
-            });
-          })
-          .catch((err) => {
-            console.error("Error fetching active asbestos removal jobs:", err);
-          })
-      );
-
-      // 3. Active client supplied jobs (status "In Progress" or "Analysis Complete")
-      promises.push(
-        clientSuppliedJobsService
-          .getAll()
-          .then((response) => {
-            const jobs =
-              response.data || (Array.isArray(response) ? response : []);
-            jobs
-              .filter(
-                (job) =>
-                  job.status === "In Progress" ||
-                  job.status === "Analysis Complete"
-              )
-              .forEach((job) => {
-                const projectId =
-                  job.projectId?._id?.toString() || job.projectId?.toString();
-                if (projectId) {
-                  projectIdsSet.add(projectId);
-                }
-              });
-          })
-          .catch((err) => {
-            console.error("Error fetching active client supplied jobs:", err);
-          })
-      );
-
-      // 4. Completed air monitoring jobs (likely have reports)
-      promises.push(
-        jobService
-          .getAll({ status: "completed", minimal: true })
-          .then((response) => {
-            const jobs = Array.isArray(response)
-              ? response
-              : response.data || [];
-            jobs.forEach((job) => {
-              const projectId =
-                job.projectId?._id?.toString() || job.projectId?.toString();
-              if (projectId) {
-                projectIdsSet.add(projectId);
-              }
-            });
-          })
-          .catch((err) => {
-            console.error("Error fetching completed air monitoring jobs:", err);
-          })
-      );
-
-      // 5. Completed asbestos removal jobs (may have clearance reports)
-      promises.push(
-        import("../../services/asbestosRemovalJobService")
-          .then((module) => module.default)
-          .then((asbestosRemovalJobService) =>
-            asbestosRemovalJobService.getAll({
-              status: "completed",
-              minimal: true,
-            })
-          )
-          .then((response) => {
-            const jobs =
-              response.jobs ||
-              response.data ||
-              (Array.isArray(response) ? response : []);
-            jobs.forEach((job) => {
-              const projectId =
-                job.projectId?._id?.toString() || job.projectId?.toString();
-              if (projectId) {
-                projectIdsSet.add(projectId);
-              }
-            });
-          })
-          .catch((err) => {
-            console.error(
-              "Error fetching completed asbestos removal jobs:",
-              err
-            );
-          })
-      );
-
-      // 6. Projects with fibre ID reports (completed client supplied jobs)
-      promises.push(
-        clientSuppliedJobsService
-          .getAll()
-          .then((response) => {
-            const jobs =
-              response.data || (Array.isArray(response) ? response : []);
-            jobs
-              .filter((job) => job.status === "Completed")
-              .forEach((job) => {
-                const projectId =
-                  job.projectId?._id?.toString() || job.projectId?.toString();
-                if (projectId) {
-                  projectIdsSet.add(projectId);
-                }
-              });
-          })
-          .catch((err) => {
-            console.error(
-              "Error fetching completed client supplied jobs:",
-              err
-            );
-          })
-      );
-
-      // 7. Projects with asbestos assessments
-      promises.push(
-        import("../../services/api")
-          .then((module) => module.asbestosAssessmentService)
-          .then((assessmentService) =>
-            assessmentService.getAsbestosAssessments()
-          )
-          .then((response) => {
-            const assessments =
-              response.data || (Array.isArray(response) ? response : []);
-            assessments.forEach((assessment) => {
-              const projectId =
-                assessment.projectId?._id?.toString() ||
-                assessment.projectId?.toString();
-              if (projectId) {
-                projectIdsSet.add(projectId);
-              }
-            });
-          })
-          .catch((err) => {
-            console.error("Error fetching asbestos assessments:", err);
-          })
-      );
-
-      // 8. Projects with clearance reports (completed clearances)
-      promises.push(
-        import("../../services/asbestosClearanceService")
-          .then((module) => module.default)
-          .then((clearanceService) => clearanceService.getAll())
-          .then((response) => {
-            const clearances =
-              response.data || (Array.isArray(response) ? response : []);
-            clearances
-              .filter(
-                (clearance) =>
-                  clearance.status === "complete" ||
-                  clearance.status === "Site Work Complete"
-              )
-              .forEach((clearance) => {
-                const projectId =
-                  clearance.projectId?._id?.toString() ||
-                  clearance.projectId?.toString();
-                if (projectId) {
-                  projectIdsSet.add(projectId);
-                }
-              });
-          })
-          .catch((err) => {
-            console.error("Error fetching clearance reports:", err);
-          })
-      );
-
-      // Wait for all promises to complete
-      await Promise.all(promises);
+      return new Set(projectIds);
     } catch (error) {
-      console.error(
-        "Error fetching projects with reports or active jobs:",
-        error
-      );
+      console.error("Error fetching project IDs with reports or jobs:", error);
+      // Return empty set on error
+      return new Set();
     }
-
-    return projectIdsSet;
   }, []);
 
-  // Load initial 100 projects (highest projectIDs) - fast load using cache
+  // Load initial projects - optimized with new backend endpoints
   const loadInitialProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      // Fetch project IDs with reports or active jobs in parallel
+      // Step 1: Get project IDs with reports or active jobs (cached or from backend)
       const validProjectIdsSet = await fetchProjectsWithReportsOrActiveJobs();
+      const validProjectIds = Array.from(validProjectIdsSet);
 
-      // Helper function to filter projects
-      const filterProjects = (projects) => {
-        return projects.filter((project) => {
-          const projectId = project._id?.toString();
-          return projectId && validProjectIdsSet.has(projectId);
-        });
-      };
+      if (validProjectIds.length === 0) {
+        console.log("[REPORTS] No projects with reports or active jobs found");
+        setAllProjects([]);
+        setFilteredProjects([]);
+        setTotalPages(1);
+        setLoading(false);
+        return;
+      }
 
-      // Try to get cached top 100 projects - display immediately without API call
+      // Step 2: Try to get cached projects first for instant display
       const cachedProjects = getCachedTopProjects();
       let loadedFromCache = false;
 
       if (cachedProjects && cachedProjects.length > 0) {
-        // Filter cached projects
-        const filteredCached = filterProjects(cachedProjects);
+        // Filter cached projects to only those with reports/jobs
+        const filteredCached = cachedProjects.filter((project) => {
+          const projectId = project._id?.toString();
+          return projectId && validProjectIdsSet.has(projectId);
+        });
 
-        // Fast path: Display filtered cached projects immediately (no API call!)
-        setAllProjects(filteredCached);
-        setFilteredProjects(filteredCached);
-        setTotalPages(Math.ceil(filteredCached.length / itemsPerPage));
-        setLoading(false);
-        loadedFromCache = true;
+        if (filteredCached.length > 0) {
+          // Sort by projectID descending
+          const sortedCached = sortProjectsByID(filteredCached);
 
-        // Now load all projects in the background to refresh cache
-        // Start immediately - the UI is already showing cached data
-        (async () => {
-          try {
-            const params = {
-              page: 1,
-              limit: 10000,
-              sortBy: "createdAt",
-              sortOrder: "desc",
-              status: "all",
-            };
+          // Fast path: Display cached projects immediately (no API call!)
+          setAllProjects(sortedCached);
+          setFilteredProjects(sortedCached);
+          setTotalPages(Math.ceil(sortedCached.length / itemsPerPage));
+          setLoading(false);
+          loadedFromCache = true;
 
-            const response = await projectService.getAll(params);
-            const allProjectsData = Array.isArray(response.data)
-              ? response.data
-              : response.data?.data || [];
-
-            // Sort by projectID descending
-            const sortedAllProjects = sortProjectsByID(allProjectsData);
-
-            // Filter projects
-            const filteredProjects = filterProjects(sortedAllProjects);
-
-            // Update cache with fresh data (unfiltered, so cache stays complete)
-            cacheTopProjects(sortedAllProjects);
-
-            // Update state with filtered projects
-            setAllProjects(filteredProjects);
-            setFilteredProjects(filteredProjects);
-            setTotalPages(Math.ceil(filteredProjects.length / itemsPerPage));
-          } catch (err) {
-            console.error("Error loading all projects in background:", err);
-          }
-        })();
+          console.log(
+            `[REPORTS] Displayed ${sortedCached.length} cached projects`
+          );
+        }
       }
 
-      // If no cache, check if we have cached projectIDs to fetch just those
-      if (!loadedFromCache) {
-        const cachedProjectIDs = getCachedTopProjectIDs();
+      // Step 3: Fetch fresh projects by IDs in the background
+      // If we loaded from cache, this happens in background. Otherwise, wait for it.
+      try {
+        console.log(
+          `[REPORTS] Fetching ${validProjectIds.length} projects by IDs...`
+        );
+        const response = await projectService.getProjectsByIds(validProjectIds);
+        const fetchedProjects = Array.isArray(response.data?.data)
+          ? response.data.data
+          : response.data || [];
 
-        if (cachedProjectIDs && cachedProjectIDs.length > 0) {
-          // Fast path: Load all projects but filter to cached IDs for immediate display
-          // This is still faster than sorting all projects client-side
-          try {
-            const params = {
-              page: 1,
-              limit: 10000,
-              sortBy: "createdAt",
-              sortOrder: "desc",
-              status: "all",
-            };
-
-            const response = await projectService.getAll(params);
-            const allProjectsData = Array.isArray(response.data)
-              ? response.data
-              : response.data?.data || [];
-
-            // Sort all projects
-            const sortedAllProjects = sortProjectsByID(allProjectsData);
-
-            // Filter to projects with reports or active jobs
-            const filteredAllProjects = filterProjects(sortedAllProjects);
-
-            // Filter to cached projectIDs and sort by cached order (from filtered set)
-            const cachedProjectsMap = new Map(
-              cachedProjectIDs.map((id, index) => [id, index])
-            );
-            const top100Projects = filteredAllProjects
-              .filter((p) => cachedProjectsMap.has(p.projectID))
-              .sort((a, b) => {
-                const aIndex = cachedProjectsMap.get(a.projectID);
-                const bIndex = cachedProjectsMap.get(b.projectID);
-                return aIndex - bIndex;
-              })
-              .slice(0, 100);
-
-            // Display the top 100 immediately
-            setAllProjects(top100Projects);
-            setFilteredProjects(top100Projects);
-            setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
-            setLoading(false);
-            loadedFromCache = true;
-
-            // Update cache with fresh data (unfiltered, so cache stays complete)
-            cacheTopProjects(sortedAllProjects);
-
-            // Update with all filtered projects
-            setAllProjects(filteredAllProjects);
-            setFilteredProjects(filteredAllProjects);
-            setTotalPages(Math.ceil(filteredAllProjects.length / itemsPerPage));
-          } catch (err) {
-            console.error("Error loading projects with cached IDs:", err);
-            loadedFromCache = false;
-          }
-        }
-
-        // If no cached projectIDs or fetch failed, do full load
-        if (!loadedFromCache) {
-          const params = {
-            page: 1,
-            limit: 10000,
-            sortBy: "createdAt",
-            sortOrder: "desc",
-            status: "all",
-          };
-
-          const response = await projectService.getAll(params);
-          const projectsData = Array.isArray(response.data)
-            ? response.data
-            : response.data?.data || [];
-
+        if (fetchedProjects.length > 0) {
           // Sort by projectID descending
-          const sortedProjects = sortProjectsByID(projectsData);
+          const sortedProjects = sortProjectsByID(fetchedProjects);
 
-          // Filter to projects with reports or active jobs
-          const filteredProjects = filterProjects(sortedProjects);
+          // Update state with fresh data
+          setAllProjects(sortedProjects);
+          setFilteredProjects(sortedProjects);
+          setTotalPages(Math.ceil(sortedProjects.length / itemsPerPage));
 
-          // Get the top 100 (highest projectIDs) from filtered set
-          const top100Projects = filteredProjects.slice(0, 100);
-
-          // Cache the unfiltered projects (so cache stays complete)
+          // Update cache with fresh data (for next time)
           cacheTopProjects(sortedProjects);
 
-          // Display the top 100 immediately
-          setAllProjects(top100Projects);
-          setFilteredProjects(top100Projects);
-          setTotalPages(Math.ceil(top100Projects.length / itemsPerPage));
-          setLoading(false);
+          console.log(`[REPORTS] Loaded ${sortedProjects.length} projects`);
+        }
 
-          // Update with all filtered projects
-          if (filteredProjects.length > 100) {
-            setAllProjects(filteredProjects);
-            setFilteredProjects(filteredProjects);
-            setTotalPages(Math.ceil(filteredProjects.length / itemsPerPage));
-          }
+        // If we didn't load from cache, stop loading now
+        if (!loadedFromCache) {
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Error fetching projects by IDs:", err);
+        // If we loaded from cache, keep showing cached data
+        // Otherwise, show error
+        if (!loadedFromCache) {
+          setError("Failed to load projects");
+          setAllProjects([]);
+          setFilteredProjects([]);
+          setLoading(false);
         }
       }
     } catch (err) {

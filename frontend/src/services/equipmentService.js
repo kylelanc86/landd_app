@@ -108,10 +108,12 @@ export const equipmentService = {
     "Graticule",
     "HSE Test Slide",
     "Micrometer",
-    "Microscope",
+    "Phase Contrast Microscope",
     "Pneumatic tester",
+    "Polarised Light Microscope",
     "RI Liquids",
-    "Site flowmeter"
+    "Site flowmeter",
+    "Stereomicroscope"
   ],
 
   // Get section options (static)
