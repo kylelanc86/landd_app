@@ -20,6 +20,7 @@ const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
 const graticuleCalibrationRoutes = require('./routes/graticuleCalibrations');
 const efaCalibrationRoutes = require('./routes/efaCalibrations');
 const pcmMicroscopeCalibrationRoutes = require('./routes/pcmMicroscopeCalibrations');
+const hseTestSlideCalibrationRoutes = require('./routes/hseTestSlideCalibrations');
 const calibrationFrequencyRoutes = require('./routes/calibrationFrequency');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
@@ -203,6 +204,9 @@ connectDB()
     
     app.use('/api/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
     app.use('/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
+    
+    app.use('/api/hse-test-slide-calibrations', requireAuth, checkTokenBlacklist, hseTestSlideCalibrationRoutes);
+    app.use('/hse-test-slide-calibrations', requireAuth, checkTokenBlacklist, hseTestSlideCalibrationRoutes);
     
     app.use('/api/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
     app.use('/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);

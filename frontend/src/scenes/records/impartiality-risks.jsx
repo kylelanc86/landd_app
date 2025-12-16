@@ -7,14 +7,16 @@ import {
   Breadcrumbs,
   Link,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
 const ImpartialityRisks = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "general";
 
   const handleBackToHome = () => {
-    navigate("/records");
+    navigate(`/records?view=${view}`);
   };
 
   return (
@@ -31,7 +33,7 @@ const ImpartialityRisks = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
+            General Records
           </Link>
           <Typography color="text.primary">Impartiality Risks</Typography>
         </Breadcrumbs>

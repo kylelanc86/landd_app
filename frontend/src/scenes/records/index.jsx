@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import SchoolIcon from "@mui/icons-material/School";
 import GroupIcon from "@mui/icons-material/Group";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -71,64 +71,78 @@ const RecordWidget = ({ title, icon, onClick, color = "primary" }) => (
 
 const Records = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
-  const [view, setView] = useState("home"); // "home", "general", "laboratory"
+
+  // Initialize view from URL parameter or default to "home"
+  const urlView = searchParams.get("view");
+  const [view, setView] = useState(urlView || "home"); // "home", "general", "laboratory"
+
+  // Update view when URL parameter changes
+  useEffect(() => {
+    const urlView = searchParams.get("view");
+    if (urlView && (urlView === "general" || urlView === "laboratory")) {
+      setView(urlView);
+    } else if (!urlView) {
+      setView("home");
+    }
+  }, [searchParams]);
 
   const generalRecordWidgets = [
     {
       title: "Training Records",
       icon: <SchoolIcon />,
       color: "primary",
-      onClick: () => navigate("/records/training"),
+      onClick: () => navigate("/records/training?view=general"),
     },
     {
       title: "Staff Meetings",
       icon: <GroupIcon />,
       color: "secondary",
-      onClick: () => navigate("/records/staff-meetings"),
+      onClick: () => navigate("/records/staff-meetings?view=general"),
     },
     {
       title: "Document Register",
       icon: <DescriptionIcon />,
       color: "success",
-      onClick: () => navigate("/records/document-register"),
+      onClick: () => navigate("/records/document-register?view=general"),
     },
     {
       title: "Approved Suppliers",
       icon: <BusinessIcon />,
       color: "info",
-      onClick: () => navigate("/records/approved-suppliers"),
+      onClick: () => navigate("/records/approved-suppliers?view=general"),
     },
     {
       title: "Asset Register",
       icon: <InventoryIcon />,
       color: "warning",
-      onClick: () => navigate("/records/asset-register"),
+      onClick: () => navigate("/records/asset-register?view=general"),
     },
     {
       title: "Incidents & Non-conformances",
       icon: <ReportProblemIcon />,
       color: "error",
-      onClick: () => navigate("/records/incidents"),
+      onClick: () => navigate("/records/incidents?view=general"),
     },
     {
       title: "OHS & Environmental Targets & Risks",
       icon: <SecurityIcon />,
       color: "primary",
-      onClick: () => navigate("/records/ohs-environmental"),
+      onClick: () => navigate("/records/ohs-environmental?view=general"),
     },
     {
       title: "Impartiality Risks",
       icon: <GavelIcon />,
       color: "secondary",
-      onClick: () => navigate("/records/impartiality-risks"),
+      onClick: () => navigate("/records/impartiality-risks?view=general"),
     },
     {
       title: "Client Feedback",
       icon: <FeedbackIcon />,
       color: "success",
-      onClick: () => navigate("/records/feedback"),
+      onClick: () => navigate("/records/feedback?view=general"),
     },
   ];
 
@@ -137,37 +151,38 @@ const Records = () => {
       title: "Equipment List",
       icon: <ScienceIcon />,
       color: "primary",
-      onClick: () => navigate("/records/laboratory/equipment"),
+      onClick: () => navigate("/records/laboratory/equipment?view=laboratory"),
     },
     {
       title: "Calibrations",
       icon: <TrendingUpIcon />,
       color: "secondary",
-      onClick: () => navigate("/records/laboratory/calibrations"),
+      onClick: () =>
+        navigate("/records/laboratory/calibrations?view=laboratory"),
     },
     {
       title: "Quality Control",
       icon: <AssignmentIcon />,
       color: "success",
-      onClick: () => navigate("/records/quality-control"),
+      onClick: () => navigate("/records/quality-control?view=laboratory"),
     },
     {
       title: "Indoor Air Quality",
       icon: <AirIcon />,
       color: "info",
-      onClick: () => navigate("/records/indoor-air-quality"),
+      onClick: () => navigate("/records/indoor-air-quality?view=laboratory"),
     },
     {
       title: "Blanks",
       icon: <FilterAltIcon />,
       color: "warning",
-      onClick: () => navigate("/records/blanks"),
+      onClick: () => navigate("/records/blanks?view=laboratory"),
     },
     {
       title: "Audits",
       icon: <AssignmentIcon />,
       color: "error",
-      onClick: () => navigate("/records/audits"),
+      onClick: () => navigate("/records/audits?view=laboratory"),
     },
   ];
 
@@ -194,10 +209,12 @@ const Records = () => {
 
   const handleModuleClick = (module) => {
     setView(module.view);
+    setSearchParams({ view: module.view });
   };
 
   const handleBackClick = () => {
     setView("home");
+    setSearchParams({});
   };
 
   const getHeaderTitle = () => {

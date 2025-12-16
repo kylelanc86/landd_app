@@ -25,29 +25,40 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
+import HistoryIcon from "@mui/icons-material/History";
 import { formatDate } from "../../utils/dateFormat";
 import { equipmentService } from "../../services/equipmentService";
 import { calibrationFrequencyService } from "../../services/calibrationFrequencyService";
-import { useNavigate } from "react-router-dom";
+import { airPumpCalibrationService } from "../../services/airPumpCalibrationService";
+import { flowmeterCalibrationService } from "../../services/flowmeterCalibrationService";
+import { efaService } from "../../services/efaService";
+import pcmMicroscopeService from "../../services/pcmMicroscopeService";
+import { graticuleService } from "../../services/graticuleService";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
 const EquipmentList = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "laboratory";
 
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [editDialog, setEditDialog] = useState(false);
+  const [historyDialog, setHistoryDialog] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [calibrationHistory, setCalibrationHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [calibrationFrequencies, setCalibrationFrequencies] = useState([]);
+  const [referenceError, setReferenceError] = useState(null);
   const [form, setForm] = useState({
     equipmentReference: "",
     equipmentType: "",
     section: "",
     brandModel: "",
-    status: "active",
     lastCalibration: "",
     calibrationDue: "",
     calibrationFrequency: "",
@@ -61,7 +72,7 @@ const EquipmentList = () => {
   });
 
   const handleBackToHome = () => {
-    navigate("/records");
+    navigate(`/records?view=${view}`);
   };
 
   const fetchCalibrationFrequencies = async () => {
@@ -154,6 +165,12 @@ const EquipmentList = () => {
 
   const handleAddEquipment = async (e) => {
     e.preventDefault();
+
+    // Check uniqueness before submitting
+    if (!checkReferenceUniqueness(form.equipmentReference)) {
+      return;
+    }
+
     try {
       // Auto-populate calibration frequency based on equipment type
       const frequencyOptions = getCalibrationFrequencyOptions(
@@ -179,13 +196,15 @@ const EquipmentList = () => {
 
       await equipmentService.create(formData);
 
+      setReferenceError(null);
+
       setAddDialog(false);
+      setReferenceError(null);
       setForm({
         equipmentReference: "",
         equipmentType: "",
         section: "",
         brandModel: "",
-        status: "active",
         lastCalibration: "",
         calibrationDue: "",
         calibrationFrequency: "",
@@ -206,7 +225,6 @@ const EquipmentList = () => {
       equipmentType: equipment.equipmentType,
       section: equipment.section,
       brandModel: equipment.brandModel,
-      status: equipment.status,
       lastCalibration: equipment.lastCalibration
         ? new Date(equipment.lastCalibration).toISOString().split("T")[0]
         : "",
@@ -215,11 +233,20 @@ const EquipmentList = () => {
         : "",
       calibrationFrequency: equipment.calibrationFrequency,
     });
+    setReferenceError(null);
     setEditDialog(true);
   };
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
+
+    // Check uniqueness before submitting (excluding current equipment)
+    if (
+      !checkReferenceUniqueness(form.equipmentReference, selectedEquipment._id)
+    ) {
+      return;
+    }
+
     try {
       // Auto-populate calibration frequency based on equipment type
       const frequencyOptions = getCalibrationFrequencyOptions(
@@ -245,14 +272,16 @@ const EquipmentList = () => {
 
       await equipmentService.update(selectedEquipment._id, formData);
 
+      setReferenceError(null);
+
       setEditDialog(false);
       setSelectedEquipment(null);
+      setReferenceError(null);
       setForm({
         equipmentReference: "",
         equipmentType: "",
         section: "",
         brandModel: "",
-        status: "active",
         lastCalibration: "",
         calibrationDue: "",
         calibrationFrequency: "",
@@ -276,6 +305,144 @@ const EquipmentList = () => {
       console.error("Error deleting equipment:", err);
       setError(err.message || "Failed to delete equipment");
     }
+  };
+
+  const fetchCalibrationHistory = async (equipment) => {
+    try {
+      setLoadingHistory(true);
+      setCalibrationHistory([]);
+
+      const equipmentType = equipment.equipmentType;
+      const equipmentReference = equipment.equipmentReference;
+      let history = [];
+
+      // Fetch calibrations based on equipment type
+      switch (equipmentType) {
+        case "Air pump":
+          try {
+            const pumpData =
+              await airPumpCalibrationService.getPumpCalibrations(
+                equipmentReference,
+                1,
+                1000
+              );
+            history = (pumpData.calibrations || []).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Air Pump Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching air pump calibrations:", err);
+          }
+          break;
+
+        case "Bubble flowmeter":
+        case "Site flowmeter":
+          try {
+            const flowmeterData =
+              await flowmeterCalibrationService.getByFlowmeter(
+                equipmentReference
+              );
+            history = (flowmeterData.calibrations || flowmeterData || []).map(
+              (cal) => ({
+                date: cal.date,
+                calibrationId: cal.calibrationId || cal._id,
+                notes: cal.notes || "",
+                calibratedBy: cal.calibratedBy?.name || "N/A",
+                type: "Flowmeter Calibration",
+              })
+            );
+          } catch (err) {
+            console.error("Error fetching flowmeter calibrations:", err);
+          }
+          break;
+
+        case "Effective Filter Area":
+          try {
+            const efaData = await efaService.getByEquipment(equipmentReference);
+            history = (efaData.calibrations || efaData || []).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "EFA Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching EFA calibrations:", err);
+          }
+          break;
+
+        case "Phase Contrast Microscope":
+          try {
+            const pcmData = await pcmMicroscopeService.getByEquipment(
+              equipmentReference
+            );
+            history = (pcmData.calibrations || pcmData || []).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "PCM Microscope Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching PCM calibrations:", err);
+          }
+          break;
+
+        case "Graticule":
+          try {
+            // Try to get archived calibrations first, then active ones
+            const archivedData = await graticuleService.getArchivedByEquipment(
+              equipmentReference
+            );
+            const allData = await graticuleService.getAll();
+            const filtered = (allData.calibrations || allData || []).filter(
+              (cal) =>
+                cal.graticuleId === equipmentReference ||
+                cal.graticuleReference === equipmentReference
+            );
+            const archived = archivedData.calibrations || archivedData || [];
+            const combined = [...filtered, ...archived];
+            history = combined.map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Graticule Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching graticule calibrations:", err);
+          }
+          break;
+
+        default:
+          // For other equipment types, try to find a generic endpoint or show message
+          history = [];
+          break;
+      }
+
+      // Sort by date descending (most recent first)
+      history.sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        return dateB - dateA;
+      });
+
+      setCalibrationHistory(history);
+    } catch (err) {
+      console.error("Error fetching calibration history:", err);
+      setError(err.message || "Failed to fetch calibration history");
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleViewHistory = (equipment) => {
+    setSelectedEquipment(equipment);
+    setHistoryDialog(true);
+    fetchCalibrationHistory(equipment);
   };
 
   // Calculate days until calibration is due
@@ -346,6 +513,38 @@ const EquipmentList = () => {
     return calibrationFrequencies.filter(
       (freq) => freq.equipmentType.toLowerCase() === equipmentType.toLowerCase()
     );
+  };
+
+  // Check if equipment reference is unique
+  const checkReferenceUniqueness = (reference, excludeId = null) => {
+    if (!reference || !reference.trim()) {
+      setReferenceError(null);
+      return true;
+    }
+
+    const trimmedReference = reference.trim();
+    const existing = equipment.find(
+      (item) =>
+        item.equipmentReference?.toLowerCase() ===
+          trimmedReference.toLowerCase() &&
+        (!excludeId || item._id !== excludeId)
+    );
+
+    if (existing) {
+      setReferenceError("Equipment reference already exists");
+      return false;
+    } else {
+      setReferenceError(null);
+      return true;
+    }
+  };
+
+  // Handle equipment reference change with uniqueness check
+  const handleReferenceChange = (value, isEdit = false) => {
+    const excludeId =
+      isEdit && selectedEquipment ? selectedEquipment._id : null;
+    setForm({ ...form, equipmentReference: value });
+    checkReferenceUniqueness(value, excludeId);
   };
 
   // Filter equipment based on all filters including calculated status
@@ -426,7 +625,7 @@ const EquipmentList = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
+            Laboratory Records
           </Link>
           <Typography color="text.primary">Laboratory Equipment</Typography>
         </Breadcrumbs>
@@ -712,6 +911,14 @@ const EquipmentList = () => {
                   <Box display="flex" alignItems="center" gap={1}>
                     <IconButton
                       size="small"
+                      onClick={() => handleViewHistory(row)}
+                      title="View Calibration History"
+                      sx={{ color: theme.palette.info.main }}
+                    >
+                      <HistoryIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
                       onClick={() => handleEditEquipment(row)}
                       title="Edit Equipment"
                       sx={{ color: theme.palette.primary.main }}
@@ -751,7 +958,10 @@ const EquipmentList = () => {
       {/* Add Equipment Dialog */}
       <Dialog
         open={addDialog}
-        onClose={() => setAddDialog(false)}
+        onClose={() => {
+          setAddDialog(false);
+          setReferenceError(null);
+        }}
         maxWidth="md"
         fullWidth
       >
@@ -762,7 +972,12 @@ const EquipmentList = () => {
             alignItems="center"
           >
             <Typography variant="h6">Add New Equipment</Typography>
-            <IconButton onClick={() => setAddDialog(false)}>
+            <IconButton
+              onClick={() => {
+                setAddDialog(false);
+                setReferenceError(null);
+              }}
+            >
               <CloseIcon />
             </IconButton>
           </Box>
@@ -786,11 +1001,11 @@ const EquipmentList = () => {
               <TextField
                 label="Equipment Reference"
                 value={form.equipmentReference}
-                onChange={(e) =>
-                  setForm({ ...form, equipmentReference: e.target.value })
-                }
+                onChange={(e) => handleReferenceChange(e.target.value, false)}
                 required
                 fullWidth
+                error={!!referenceError}
+                helperText={referenceError}
               />
               <FormControl fullWidth required>
                 <InputLabel>Equipment Type</InputLabel>
@@ -833,20 +1048,6 @@ const EquipmentList = () => {
                 required
                 fullWidth
               />
-              <FormControl fullWidth required>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={form.status}
-                  label="Status"
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                >
-                  {equipmentService.getStatusOptions().map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
               <TextField
                 label="Last Calibration Date"
                 type="date"
@@ -895,7 +1096,14 @@ const EquipmentList = () => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setAddDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setAddDialog(false);
+                setReferenceError(null);
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               type="submit"
               variant="contained"
@@ -904,7 +1112,7 @@ const EquipmentList = () => {
                 !form.equipmentType ||
                 !form.section ||
                 !form.brandModel ||
-                !form.status
+                !!referenceError
               }
             >
               Add Equipment
@@ -916,7 +1124,10 @@ const EquipmentList = () => {
       {/* Edit Equipment Dialog */}
       <Dialog
         open={editDialog}
-        onClose={() => setEditDialog(false)}
+        onClose={() => {
+          setEditDialog(false);
+          setReferenceError(null);
+        }}
         maxWidth="md"
         fullWidth
       >
@@ -927,7 +1138,12 @@ const EquipmentList = () => {
             alignItems="center"
           >
             <Typography variant="h6">Edit Equipment</Typography>
-            <IconButton onClick={() => setEditDialog(false)}>
+            <IconButton
+              onClick={() => {
+                setEditDialog(false);
+                setReferenceError(null);
+              }}
+            >
               <CloseIcon />
             </IconButton>
           </Box>
@@ -951,11 +1167,11 @@ const EquipmentList = () => {
               <TextField
                 label="Equipment Reference"
                 value={form.equipmentReference}
-                onChange={(e) =>
-                  setForm({ ...form, equipmentReference: e.target.value })
-                }
+                onChange={(e) => handleReferenceChange(e.target.value, true)}
                 required
                 fullWidth
+                error={!!referenceError}
+                helperText={referenceError}
               />
               <FormControl fullWidth required>
                 <InputLabel>Equipment Type</InputLabel>
@@ -998,20 +1214,6 @@ const EquipmentList = () => {
                 required
                 fullWidth
               />
-              <FormControl fullWidth required>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={form.status}
-                  label="Status"
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                >
-                  {equipmentService.getStatusOptions().map((status) => (
-                    <MenuItem key={status} value={status}>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
               <TextField
                 label="Last Calibration Date"
                 type="date"
@@ -1060,7 +1262,14 @@ const EquipmentList = () => {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setEditDialog(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setEditDialog(false);
+                setReferenceError(null);
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               type="submit"
               variant="contained"
@@ -1069,13 +1278,177 @@ const EquipmentList = () => {
                 !form.equipmentType ||
                 !form.section ||
                 !form.brandModel ||
-                !form.status
+                !!referenceError
               }
             >
               Save Changes
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      {/* Calibration History Dialog */}
+      <Dialog
+        open={historyDialog}
+        onClose={() => {
+          setHistoryDialog(false);
+          setCalibrationHistory([]);
+          setSelectedEquipment(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">
+              Calibration History - {selectedEquipment?.equipmentReference}
+            </Typography>
+            <IconButton
+              onClick={() => {
+                setHistoryDialog(false);
+                setCalibrationHistory([]);
+                setSelectedEquipment(null);
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {loadingHistory ? (
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              minHeight="200px"
+            >
+              <CircularProgress />
+            </Box>
+          ) : calibrationHistory.length === 0 ? (
+            <Box sx={{ p: 3, textAlign: "center" }}>
+              <Typography variant="body1" color="text.secondary">
+                No calibration history found for this equipment.
+              </Typography>
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                height: "60vh",
+                width: "100%",
+                "& .MuiDataGrid-root": {
+                  border: "none",
+                },
+                "& .MuiDataGrid-cell": {
+                  borderBottom: "none",
+                },
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: theme.palette.primary.main,
+                  borderBottom: "none",
+                  color: theme.palette.common.white,
+                },
+                "& .MuiDataGrid-columnHeader": {
+                  whiteSpace: "normal",
+                  lineHeight: "1.2",
+                  padding: "8px",
+                },
+                "& .MuiDataGrid-virtualScroller": {
+                  backgroundColor: theme.palette.background.default,
+                },
+                "& .MuiDataGrid-footerContainer": {
+                  borderTop: "none",
+                  backgroundColor: theme.palette.primary.main,
+                },
+                "& .MuiDataGrid-row:nth-of-type(even)": {
+                  backgroundColor: "#f8f9fa",
+                },
+                "& .MuiDataGrid-row:nth-of-type(odd)": {
+                  backgroundColor: "#ffffff",
+                },
+                "& .MuiDataGrid-row:hover": {
+                  backgroundColor: "#e3f2fd",
+                },
+              }}
+            >
+              <DataGrid
+                rows={calibrationHistory}
+                columns={[
+                  {
+                    field: "date",
+                    headerName: "Date",
+                    flex: 1,
+                    minWidth: 150,
+                    renderCell: (params) => {
+                      return params.value ? formatDate(params.value) : "N/A";
+                    },
+                  },
+                  {
+                    field: "calibrationId",
+                    headerName: "Calibration ID",
+                    flex: 1,
+                    minWidth: 150,
+                  },
+                  {
+                    field: "type",
+                    headerName: "Type",
+                    flex: 1,
+                    minWidth: 200,
+                  },
+                  {
+                    field: "calibratedBy",
+                    headerName: "Calibrated By",
+                    flex: 1,
+                    minWidth: 150,
+                  },
+                  {
+                    field: "notes",
+                    headerName: "Notes",
+                    flex: 2,
+                    minWidth: 200,
+                    renderCell: (params) => {
+                      return (
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={params.value}
+                        >
+                          {params.value || "-"}
+                        </Typography>
+                      );
+                    },
+                  },
+                ]}
+                getRowId={(row, index) => row.calibrationId || index}
+                disableRowSelectionOnClick
+                components={{
+                  NoRowsOverlay: () => (
+                    <Box sx={{ p: 2, textAlign: "center" }}>
+                      No calibration history found
+                    </Box>
+                  ),
+                }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setHistoryDialog(false);
+              setCalibrationHistory([]);
+              setSelectedEquipment(null);
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

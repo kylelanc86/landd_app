@@ -1441,12 +1441,24 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
   const startTime = Date.now();
   try {
     const projectIdsSet = new Set();
-    const mongoose = require('mongoose');
+    // Track which conditions matched each project ID for debugging
+    const projectIdReasons = new Map(); // Map<projectId, Set<reason>>
 
     // Use parallel queries for better performance
     const promises = [];
     const Job = require('../models/Job');
     const Shift = require('../models/Shift');
+
+    // Helper function to add project ID with reason
+    const addProjectId = (projectId, reason) => {
+      if (!projectId) return;
+      const id = projectId.toString();
+      projectIdsSet.add(id);
+      if (!projectIdReasons.has(id)) {
+        projectIdReasons.set(id, new Set());
+      }
+      projectIdReasons.get(id).add(reason);
+    };
 
     // 1. Active air monitoring jobs (status "in_progress")
     promises.push(
@@ -1454,10 +1466,11 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
         .select('projectId')
         .lean()
         .then((jobs) => {
+          const count = jobs.length;
           jobs.forEach((job) => {
-            const projectId = job.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(job.projectId, 'active_air_monitoring_jobs');
           });
+          console.log(`[REPORTS-FILTER] Condition 1: Found ${count} active air monitoring jobs`);
         })
         .catch((err) => {
           console.error('Error fetching active air monitoring jobs:', err);
@@ -1483,10 +1496,13 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
               .select('projectId')
               .lean();
             
+            const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
             jobs.forEach((job) => {
-              const projectId = job.projectId?.toString();
-              if (projectId) projectIdsSet.add(projectId);
+              addProjectId(job.projectId, 'shifts_with_reports');
             });
+            console.log(`[REPORTS-FILTER] Condition 2: Found ${projectCount} projects with shifts that have reports (${jobIds.length} jobs, ${shiftsWithReports.length} shifts)`);
+          } else {
+            console.log(`[REPORTS-FILTER] Condition 2: No shifts with reports found`);
           }
         } catch (err) {
           console.error('Error fetching shifts with reports:', err);
@@ -1502,10 +1518,11 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           const jobs = await AsbestosRemovalJob.find({ status: 'in_progress' })
             .select('projectId')
             .lean();
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
           jobs.forEach((job) => {
-            const projectId = job.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(job.projectId, 'active_asbestos_removal_jobs');
           });
+          console.log(`[REPORTS-FILTER] Condition 3: Found ${projectCount} projects with active asbestos removal jobs (${jobs.length} jobs)`);
         } catch (err) {
           console.error('Error fetching active asbestos removal jobs:', err);
         }
@@ -1520,10 +1537,11 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           const jobs = await AsbestosRemovalJob.find({ status: 'completed' })
             .select('projectId')
             .lean();
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
           jobs.forEach((job) => {
-            const projectId = job.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(job.projectId, 'completed_asbestos_removal_jobs');
           });
+          console.log(`[REPORTS-FILTER] Condition 4: Found ${projectCount} projects with completed asbestos removal jobs (${jobs.length} jobs)`);
         } catch (err) {
           console.error('Error fetching completed asbestos removal jobs:', err);
         }
@@ -1538,10 +1556,11 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
         .select('projectId')
         .lean()
         .then((jobs) => {
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
           jobs.forEach((job) => {
-            const projectId = job.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(job.projectId, 'active_client_supplied_jobs');
           });
+          console.log(`[REPORTS-FILTER] Condition 5: Found ${projectCount} projects with active client supplied jobs (${jobs.length} jobs)`);
         })
         .catch((err) => {
           console.error('Error fetching active client supplied jobs:', err);
@@ -1554,10 +1573,11 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
         .select('projectId')
         .lean()
         .then((jobs) => {
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
           jobs.forEach((job) => {
-            const projectId = job.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(job.projectId, 'completed_client_supplied_jobs');
           });
+          console.log(`[REPORTS-FILTER] Condition 6: Found ${projectCount} projects with completed client supplied jobs (${jobs.length} jobs)`);
         })
         .catch((err) => {
           console.error('Error fetching completed client supplied jobs:', err);
@@ -1572,10 +1592,11 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           const assessments = await AsbestosAssessment.find()
             .select('projectId')
             .lean();
+          const projectCount = new Set(assessments.map(a => a.projectId?.toString()).filter(Boolean)).size;
           assessments.forEach((assessment) => {
-            const projectId = assessment.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(assessment.projectId, 'asbestos_assessments');
           });
+          console.log(`[REPORTS-FILTER] Condition 7: Found ${projectCount} projects with asbestos assessments (${assessments.length} assessments)`);
         } catch (err) {
           console.error('Error fetching asbestos assessments:', err);
         }
@@ -1592,37 +1613,18 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           })
             .select('projectId')
             .lean();
+          const projectCount = new Set(clearances.map(c => c.projectId?.toString()).filter(Boolean)).size;
           clearances.forEach((clearance) => {
-            const projectId = clearance.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(clearance.projectId, 'clearance_reports');
           });
+          console.log(`[REPORTS-FILTER] Condition 8: Found ${projectCount} projects with clearance reports (${clearances.length} clearances)`);
         } catch (err) {
           console.error('Error fetching clearance reports:', err);
         }
       })()
     );
 
-    // 9. Projects with invoices (non-deleted)
-    promises.push(
-      (async () => {
-        try {
-          const Invoice = require('../models/Invoice');
-          const invoices = await Invoice.find({
-            isDeleted: { $ne: true }
-          })
-            .select('projectId')
-            .lean();
-          invoices.forEach((invoice) => {
-            const projectId = invoice.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
-          });
-        } catch (err) {
-          console.error('Error fetching invoices:', err);
-        }
-      })()
-    );
-
-    // 10. Projects with uploaded reports
+    // 9. Projects with uploaded reports
     promises.push(
       (async () => {
         try {
@@ -1630,13 +1632,14 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           const uploadedReports = await UploadedReport.find()
             .select('projectId')
             .lean();
+          const projectCount = new Set(uploadedReports.map(r => r.projectId?.toString()).filter(Boolean)).size;
           uploadedReports.forEach((report) => {
-            const projectId = report.projectId?.toString();
-            if (projectId) projectIdsSet.add(projectId);
+            addProjectId(report.projectId, 'uploaded_reports');
           });
+          console.log(`[REPORTS-FILTER] Condition 9: Found ${projectCount} projects with uploaded reports (${uploadedReports.length} reports)`);
         } catch (err) {
           // UploadedReport model might not exist, ignore error
-          console.log('UploadedReport model not found or error:', err.message);
+          console.log(`[REPORTS-FILTER] Condition 9: UploadedReport model not found or error: ${err.message}`);
         }
       })()
     );
@@ -1646,9 +1649,24 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
 
     const projectIds = Array.from(projectIdsSet);
     const queryTime = Date.now() - startTime;
-    console.log(`[PROJECTS] Found ${projectIds.length} projects with reports/jobs in ${queryTime}ms`);
+    
+    // Convert reasons map to object for logging
+    const reasonsSummary = {};
+    projectIdReasons.forEach((reasons, projectId) => {
+      reasonsSummary[projectId] = Array.from(reasons);
+    });
 
-    res.json({ projectIds, count: projectIds.length });
+    console.log(`[REPORTS-FILTER] Summary: Found ${projectIds.length} unique projects with reports/jobs in ${queryTime}ms`);
+    console.log(`[REPORTS-FILTER] Project reasons breakdown:`, JSON.stringify(reasonsSummary, null, 2));
+
+    res.json({ 
+      projectIds, 
+      count: projectIds.length,
+      // Include reasons for debugging (optional - can be removed if too large)
+      projectReasons: Object.fromEntries(
+        Array.from(projectIdReasons.entries()).map(([id, reasons]) => [id, Array.from(reasons)])
+      )
+    });
   } catch (error) {
     console.error('Error fetching project IDs with reports or jobs:', error);
     res.status(500).json({ message: error.message });

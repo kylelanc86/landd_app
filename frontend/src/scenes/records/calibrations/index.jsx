@@ -10,7 +10,7 @@ import {
   Tab,
 } from "@mui/material";
 import { tokens } from "../../../theme/tokens";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import ScheduleIcon from "@mui/icons-material/Schedule";
@@ -20,6 +20,7 @@ import AirPumpCalibration from "./widgets/AirPumpCalibration";
 import FlowmeterCalibration from "./widgets/FlowmeterCalibration";
 import EFA from "./widgets/EFA";
 import MicroscopeCalibration from "./widgets/PCMMicroscopeCalibration";
+import HSETestSlideCalibration from "./widgets/HSETestSlideCalibration";
 import AcetoneVaporiser from "./widgets/AcetoneVaporiser";
 import GraticuleCalibration from "./widgets/GraticuleCalibration";
 import PrimaryFlowmeter from "./widgets/PrimaryFlowmeter";
@@ -31,11 +32,13 @@ import { formatDate } from "../../../utils/dateFormat";
 
 const Calibrations = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "laboratory";
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
 
   const handleBackToHome = () => {
-    navigate("/records");
+    navigate(`/records?view=${view}`);
   };
 
   const handleTabChange = (event, newValue) => {
@@ -68,7 +71,7 @@ const Calibrations = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
+            Laboratory Records
           </Link>
           <Typography color="text.primary">Calibrations</Typography>
         </Breadcrumbs>
@@ -172,6 +175,13 @@ const Calibrations = () => {
             <MicroscopeCalibration
               nextCalibrationDue={formatDate("2024-03-30")}
               viewCalibrationsPath="/records/laboratory/calibrations/microscope"
+            />
+          </Grid>
+          {/* HSE Test Slide */}
+          <Grid item xs={12} md={6} lg={4}>
+            <HSETestSlideCalibration
+              nextCalibrationDue={formatDate("2024-04-10")}
+              viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide"
             />
           </Grid>
           {/* Primary Flowmeter */}

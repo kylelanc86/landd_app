@@ -90,13 +90,17 @@ const Reports = () => {
         console.log(
           `[REPORTS] Using cached project IDs (${cachedProjectIds.length} projects)`
         );
-        return new Set(cachedProjectIds);
+        // Note: Cached data doesn't include reasons, fetch fresh for diagnostics
+        console.log(
+          "[REPORTS] Cache hit - fetching fresh data for diagnostics..."
+        );
       }
 
       // Fetch from backend (single optimized endpoint)
       console.log("[REPORTS] Fetching project IDs from backend...");
       const response = await projectService.getProjectIdsWithReportsOrJobs();
       const projectIds = response.data?.projectIds || [];
+      const projectReasons = response.data?.projectReasons || {};
 
       // Cache the result
       if (projectIds.length > 0) {
@@ -106,11 +110,26 @@ const Reports = () => {
       console.log(
         `[REPORTS] Found ${projectIds.length} projects with reports/jobs`
       );
-      return new Set(projectIds);
+
+      // Log diagnostic information about why projects qualified
+      if (Object.keys(projectReasons).length > 0) {
+        console.log("[REPORTS] Project qualification reasons:", projectReasons);
+
+        // Count projects by reason type
+        const reasonCounts = {};
+        Object.values(projectReasons).forEach((reasons) => {
+          reasons.forEach((reason) => {
+            reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+          });
+        });
+        console.log("[REPORTS] Projects count by reason:", reasonCounts);
+      }
+
+      return { projectIdsSet: new Set(projectIds), projectReasons };
     } catch (error) {
       console.error("Error fetching project IDs with reports or jobs:", error);
       // Return empty set on error
-      return new Set();
+      return { projectIdsSet: new Set(), projectReasons: {} };
     }
   }, []);
 
@@ -121,7 +140,8 @@ const Reports = () => {
       setError("");
 
       // Step 1: Get project IDs with reports or active jobs (cached or from backend)
-      const validProjectIdsSet = await fetchProjectsWithReportsOrActiveJobs();
+      const { projectIdsSet: validProjectIdsSet, projectReasons } =
+        await fetchProjectsWithReportsOrActiveJobs();
       const validProjectIds = Array.from(validProjectIdsSet);
 
       if (validProjectIds.length === 0) {
@@ -147,6 +167,17 @@ const Reports = () => {
         if (filteredCached.length > 0) {
           // Sort by projectID descending
           const sortedCached = sortProjectsByID(filteredCached);
+
+          // Log diagnostic info for cached projects
+          sortedCached.forEach((project) => {
+            const projectId = project._id?.toString();
+            const reasons = projectReasons[projectId] || ["unknown"];
+            console.log(
+              `[REPORTS-FOLDER] ${project.projectID || "N/A"}: ${reasons.join(
+                ", "
+              )}`
+            );
+          });
 
           // Fast path: Display cached projects immediately (no API call!)
           setAllProjects(sortedCached);
@@ -175,6 +206,18 @@ const Reports = () => {
         if (fetchedProjects.length > 0) {
           // Sort by projectID descending
           const sortedProjects = sortProjectsByID(fetchedProjects);
+
+          // Log diagnostic info for each project showing why it qualified
+          console.log("[REPORTS-FOLDER] Folder qualification details:");
+          sortedProjects.forEach((project) => {
+            const projectId = project._id?.toString();
+            const reasons = projectReasons[projectId] || ["unknown"];
+            console.log(
+              `[REPORTS-FOLDER] Project: ${project.projectID || "N/A"} (${
+                project.name || "Unnamed"
+              }) - Reasons: ${reasons.join(", ")}`
+            );
+          });
 
           // Update state with fresh data
           setAllProjects(sortedProjects);

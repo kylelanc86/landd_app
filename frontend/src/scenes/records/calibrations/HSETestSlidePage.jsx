@@ -37,19 +37,16 @@ import HistoryIcon from "@mui/icons-material/History";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
-import pcmMicroscopeService from "../../../services/pcmMicroscopeService";
-import { efaService } from "../../../services/efaService";
+import hseTestSlideService from "../../../services/hseTestSlideService";
 import { useAuth } from "../../../context/AuthContext";
 
-const MicroscopePage = () => {
+const HSETestSlidePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
-  const [microscopes, setMicroscopes] = useState([]);
-  const [microscopesLoading, setMicroscopesLoading] = useState(false);
-  const [graticules, setGraticules] = useState([]);
-  const [efaCalibrations, setEfaCalibrations] = useState([]);
+  const [testSlides, setTestSlides] = useState([]);
+  const [testSlidesLoading, setTestSlidesLoading] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -58,21 +55,18 @@ const MicroscopePage = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const [selectedMicroscopeForHistory, setSelectedMicroscopeForHistory] =
+  const [selectedTestSlideForHistory, setSelectedTestSlideForHistory] =
     useState(null);
-  const [microscopeHistory, setMicroscopeHistory] = useState([]);
+  const [testSlideHistory, setTestSlideHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [formData, setFormData] = useState({
-    microscopeReference: "",
-    microscopeEquipmentId: "",
+    testSlideReference: "",
+    testSlideEquipmentId: "",
     date: formatDateForInput(new Date()),
-    servicingCompany: "",
-    graticule: "",
-    graticuleArea: "",
-    constant25mm: "",
-    constant13mm: "",
-    serviceReport: null,
-    serviceReportUrl: null,
+    calibrationCompany: "",
+    certificateNumber: "",
+    certificateUrl: null,
+    certificate: null,
     notes: "",
   });
 
@@ -117,62 +111,38 @@ const MicroscopePage = () => {
     [calculateDaysUntilCalibration]
   );
 
-  // Fetch Phase Contrast Microscope equipment
-  const fetchMicroscopes = useCallback(async () => {
+  // Fetch HSE Test Slide equipment
+  const fetchTestSlides = useCallback(async () => {
     try {
-      setMicroscopesLoading(true);
+      setTestSlidesLoading(true);
       const response = await equipmentService.getAll();
       const allEquipment = response.equipment || [];
 
-      const pcmMicroscopes = allEquipment
+      const hseTestSlides = allEquipment
         .filter(
-          (equipment) => equipment.equipmentType === "Phase Contrast Microscope"
+          (equipment) => equipment.equipmentType === "HSE Test Slide"
         )
         .sort((a, b) =>
           a.equipmentReference.localeCompare(b.equipmentReference)
         );
 
-      setMicroscopes(pcmMicroscopes);
+      setTestSlides(hseTestSlides);
     } catch (err) {
-      console.error("Error fetching microscopes:", err);
-      setError(err.message || "Failed to fetch microscope equipment");
+      console.error("Error fetching test slides:", err);
+      setError(err.message || "Failed to fetch test slide equipment");
     } finally {
-      setMicroscopesLoading(false);
-    }
-  }, []);
-
-  // Fetch graticules
-  const fetchGraticules = useCallback(async () => {
-    try {
-      const data = await pcmMicroscopeService.getGraticules();
-      setGraticules(data);
-    } catch (err) {
-      console.error("Failed to fetch graticules:", err);
-      setGraticules([]);
-    }
-  }, []);
-
-  // Fetch EFA calibrations
-  const fetchEfaCalibrations = useCallback(async () => {
-    try {
-      const response = await efaService.getAll();
-      setEfaCalibrations(response.data || []);
-    } catch (err) {
-      console.error("Failed to fetch EFA calibrations:", err);
-      setEfaCalibrations([]);
+      setTestSlidesLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMicroscopes();
-    fetchGraticules();
-    fetchEfaCalibrations();
-  }, [fetchMicroscopes, fetchGraticules, fetchEfaCalibrations]);
+    fetchTestSlides();
+  }, [fetchTestSlides]);
 
   // Listen for equipment data updates
   useEffect(() => {
     const handleEquipmentDataUpdate = () => {
-      fetchMicroscopes();
+      fetchTestSlides();
     };
 
     window.addEventListener("equipmentDataUpdated", handleEquipmentDataUpdate);
@@ -183,79 +153,19 @@ const MicroscopePage = () => {
         handleEquipmentDataUpdate
       );
     };
-  }, [fetchMicroscopes]);
-
-  // Calculate constants based on EFA areas and graticule area
-  const calculateConstants = (graticuleArea) => {
-    if (!graticuleArea || isNaN(graticuleArea)) {
-      return { constant25mm: "", constant13mm: "" };
-    }
-
-    // Get latest EFA calibrations for 25mm and 13mm filter holders
-    const getLatestEfaArea = (filterSize) => {
-      const latestEfa = efaCalibrations
-        .filter(
-          (cal) =>
-            cal.filterHolderModel &&
-            cal.filterHolderModel.toLowerCase().includes(filterSize)
-        )
-        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-
-      if (!latestEfa) return null;
-
-      // Calculate area from the EFA calibration data
-      const filter1Avg =
-        latestEfa.filter1Diameter1 && latestEfa.filter1Diameter2
-          ? (latestEfa.filter1Diameter1 + latestEfa.filter1Diameter2) / 2
-          : null;
-      const filter2Avg =
-        latestEfa.filter2Diameter1 && latestEfa.filter2Diameter2
-          ? (latestEfa.filter2Diameter1 + latestEfa.filter2Diameter2) / 2
-          : null;
-      const filter3Avg =
-        latestEfa.filter3Diameter1 && latestEfa.filter3Diameter2
-          ? (latestEfa.filter3Diameter1 + latestEfa.filter3Diameter2) / 2
-          : null;
-
-      if (filter1Avg !== null && filter2Avg !== null && filter3Avg !== null) {
-        const overallAvg = (filter1Avg + filter2Avg + filter3Avg) / 3;
-        // Calculate area using formula: π * D² / 4
-        return (Math.PI * Math.pow(overallAvg, 2)) / 4;
-      }
-      return null;
-    };
-
-    const efaArea25mm = getLatestEfaArea("25");
-    const efaArea13mm = getLatestEfaArea("13");
-
-    // Convert graticule area from µm² to mm² (divide by 1,000,000)
-    const graticuleAreaInMm = graticuleArea / 1000000;
-
-    // Calculate constants (round to whole numbers)
-    const constant25mm = efaArea25mm
-      ? Math.round(efaArea25mm / graticuleAreaInMm)
-      : "";
-    const constant13mm = efaArea13mm
-      ? Math.round(efaArea13mm / graticuleAreaInMm)
-      : "";
-
-    return { constant25mm, constant13mm };
-  };
+  }, [fetchTestSlides]);
 
   const handleAdd = () => {
     setEditingCalibration(null);
     const todayDate = formatDateForInput(new Date());
     setFormData({
-      microscopeReference: "",
-      microscopeEquipmentId: "",
+      testSlideReference: "",
+      testSlideEquipmentId: "",
       date: todayDate,
-      servicingCompany: "",
-      graticule: "",
-      graticuleArea: "",
-      constant25mm: "",
-      constant13mm: "",
-      serviceReport: null,
-      serviceReportUrl: null,
+      calibrationCompany: "",
+      certificateNumber: "",
+      certificateUrl: null,
+      certificate: null,
       notes: "",
     });
     setAddDialogOpen(true);
@@ -263,27 +173,18 @@ const MicroscopePage = () => {
 
   const handleEdit = (calibration) => {
     setEditingCalibration(calibration);
-    const microscopeEquipment = microscopes.find(
-      (m) => m.equipmentReference === calibration.microscopeReference
+    const testSlideEquipment = testSlides.find(
+      (ts) => ts.equipmentReference === calibration.testSlideReference
     );
 
     setFormData({
-      microscopeReference: calibration.microscopeReference,
-      microscopeEquipmentId: microscopeEquipment?._id || "",
+      testSlideReference: calibration.testSlideReference,
+      testSlideEquipmentId: testSlideEquipment?._id || "",
       date: formatDateForInput(new Date(calibration.date)),
-      servicingCompany: calibration.servicingCompany,
-      graticule: calibration.graticule,
-      graticuleArea: calibration.graticuleArea
-        ? calibration.graticuleArea.toString()
-        : "",
-      constant25mm: calibration.constant25mm
-        ? calibration.constant25mm.toString()
-        : "",
-      constant13mm: calibration.constant13mm
-        ? calibration.constant13mm.toString()
-        : "",
-      serviceReport: null,
-      serviceReportUrl: calibration.serviceReportUrl || null,
+      calibrationCompany: calibration.calibrationCompany,
+      certificateNumber: calibration.certificateNumber || "",
+      certificateUrl: calibration.certificateUrl || null,
+      certificate: null,
       notes: calibration.notes || "",
     });
     setAddDialogOpen(true);
@@ -298,10 +199,10 @@ const MicroscopePage = () => {
     if (calibrationToDelete) {
       try {
         setLoading(true);
-        await pcmMicroscopeService.delete(calibrationToDelete._id);
+        await hseTestSlideService.delete(calibrationToDelete._id);
         setDeleteDialogOpen(false);
         setCalibrationToDelete(null);
-        fetchMicroscopes();
+        fetchTestSlides();
       } catch (err) {
         setError(err.message || "Failed to delete calibration");
       } finally {
@@ -326,49 +227,37 @@ const MicroscopePage = () => {
       }
 
       if (
-        !formData.microscopeEquipmentId ||
+        !formData.testSlideEquipmentId ||
         !formData.date ||
-        !formData.servicingCompany ||
-        !formData.graticule ||
-        !formData.constant25mm ||
-        !formData.constant13mm
+        !formData.calibrationCompany
       ) {
         setError("Please fill in all required fields");
         return;
       }
 
       const backendData = {
-        microscopeReference: formData.microscopeReference,
+        testSlideReference: formData.testSlideReference,
         date: formData.date,
-        servicingCompany: formData.servicingCompany,
-        graticule: formData.graticule,
-        graticuleArea: formData.graticuleArea
-          ? parseFloat(formData.graticuleArea)
-          : null,
-        constant25mm: parseFloat(formData.constant25mm),
-        constant13mm: parseFloat(formData.constant13mm),
-        serviceReportUrl: formData.serviceReportUrl || null,
+        calibrationCompany: formData.calibrationCompany,
+        certificateNumber: formData.certificateNumber || null,
+        certificateUrl: formData.certificateUrl || null,
         notes: formData.notes || "",
         calibratedBy: currentUser._id,
       };
 
       if (editingCalibration) {
-        await pcmMicroscopeService.update(editingCalibration._id, backendData);
+        await hseTestSlideService.update(editingCalibration._id, backendData);
       } else {
-        await pcmMicroscopeService.create(backendData);
+        await hseTestSlideService.create(backendData);
       }
-
-      // Update equipment record with new calibration dates if needed
-      // Note: PCM microscopes may not have calibration frequency, so this might not be applicable
-      // But we'll keep the structure for consistency
 
       setAddDialogOpen(false);
       setEditingCalibration(null);
-      fetchMicroscopes();
+      fetchTestSlides();
 
       window.dispatchEvent(
         new CustomEvent("equipmentDataUpdated", {
-          detail: { equipmentId: formData.microscopeEquipmentId },
+          detail: { equipmentId: formData.testSlideEquipmentId },
         })
       );
     } catch (err) {
@@ -378,48 +267,32 @@ const MicroscopePage = () => {
     }
   };
 
-  const handleMicroscopeChange = (microscopeEquipmentId) => {
-    const selectedMicroscope = microscopes.find(
-      (m) => m._id === microscopeEquipmentId
+  const handleTestSlideChange = (testSlideEquipmentId) => {
+    const selectedTestSlide = testSlides.find(
+      (ts) => ts._id === testSlideEquipmentId
     );
 
     setFormData((prev) => ({
       ...prev,
-      microscopeEquipmentId: microscopeEquipmentId,
-      microscopeReference: selectedMicroscope
-        ? selectedMicroscope.equipmentReference
+      testSlideEquipmentId: testSlideEquipmentId,
+      testSlideReference: selectedTestSlide
+        ? selectedTestSlide.equipmentReference
         : "",
     }));
 
     setError(null);
   };
 
-  const handleGraticuleChange = (graticuleReference) => {
-    const selectedGraticule = graticules.find(
-      (g) => g.equipmentReference === graticuleReference
-    );
-    const graticuleArea = selectedGraticule?.latestCalibration?.area || "";
-    const constants = calculateConstants(graticuleArea);
-
-    setFormData({
-      ...formData,
-      graticule: graticuleReference,
-      graticuleArea: graticuleArea.toString(),
-      constant25mm: constants.constant25mm.toString(),
-      constant13mm: constants.constant13mm.toString(),
-    });
-  };
-
-  const handleServiceReport = (serviceReportData) => {
-    if (serviceReportData) {
+  const handleCertificate = (certificateData) => {
+    if (certificateData) {
       // If it's base64 data, convert to blob and create object URL
       if (
-        typeof serviceReportData === "string" &&
-        !serviceReportData.startsWith("http")
+        typeof certificateData === "string" &&
+        !certificateData.startsWith("http")
       ) {
         try {
           // Convert base64 to blob
-          const byteCharacters = atob(serviceReportData);
+          const byteCharacters = atob(certificateData);
           const byteNumbers = new Array(byteCharacters.length);
           for (let i = 0; i < byteCharacters.length; i++) {
             byteNumbers[i] = byteCharacters.charCodeAt(i);
@@ -441,7 +314,7 @@ const MicroscopePage = () => {
         }
       } else {
         // If it's already a URL, open it directly
-        window.open(serviceReportData, "_blank");
+        window.open(certificateData, "_blank");
       }
     }
   };
@@ -456,13 +329,13 @@ const MicroscopePage = () => {
         const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
         setFormData({
           ...formData,
-          serviceReport: file,
-          serviceReportUrl: base64Data,
+          certificate: file,
+          certificateUrl: base64Data,
         });
       };
       reader.readAsDataURL(file);
     } else {
-      setFormData({ ...formData, serviceReport: null, serviceReportUrl: null });
+      setFormData({ ...formData, certificate: null, certificateUrl: null });
     }
   };
 
@@ -474,15 +347,15 @@ const MicroscopePage = () => {
     navigate("/records/laboratory/calibrations/list");
   };
 
-  const handleViewHistory = async (microscope) => {
-    setSelectedMicroscopeForHistory(microscope);
+  const handleViewHistory = async (testSlide) => {
+    setSelectedTestSlideForHistory(testSlide);
     setHistoryDialogOpen(true);
     setHistoryLoading(true);
-    setMicroscopeHistory([]);
+    setTestSlideHistory([]);
 
     try {
-      const response = await pcmMicroscopeService.getByEquipment(
-        microscope.equipmentReference
+      const response = await hseTestSlideService.getByEquipment(
+        testSlide.equipmentReference
       );
       const history = response.data || response || [];
       // Sort by date descending (most recent first)
@@ -491,10 +364,10 @@ const MicroscopePage = () => {
         const dateB = new Date(b.date);
         return dateB - dateA;
       });
-      setMicroscopeHistory(sortedHistory);
+      setTestSlideHistory(sortedHistory);
     } catch (err) {
-      console.error("Error fetching microscope history:", err);
-      setMicroscopeHistory([]);
+      console.error("Error fetching test slide history:", err);
+      setTestSlideHistory([]);
     } finally {
       setHistoryLoading(false);
     }
@@ -503,7 +376,7 @@ const MicroscopePage = () => {
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-        PCM Microscope Servicing
+        HSE Test Slide Calibrations
       </Typography>
 
       <Box
@@ -531,12 +404,12 @@ const MicroscopePage = () => {
             Calibrations
           </Link>
           <Typography color="text.primary">
-            PCM Microscope Calibrations
+            HSE Test Slide Calibrations
           </Typography>
         </Breadcrumbs>
 
         <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-          Add Service Record
+          Add Calibration
         </Button>
       </Box>
 
@@ -546,10 +419,10 @@ const MicroscopePage = () => {
         </Alert>
       )}
 
-      {/* Phase Contrast Microscope Equipment Table */}
+      {/* HSE Test Slide Equipment Table */}
       <Box mb="40px">
         <Typography variant="h6" sx={{ mb: 2 }}>
-          Phase Contrast Microscope Equipment
+          HSE Test Slide Equipment
         </Typography>
         <TableContainer component={Paper}>
           <Table>
@@ -565,23 +438,23 @@ const MicroscopePage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {microscopesLoading ? (
+              {testSlidesLoading ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
-              ) : microscopes.length === 0 ? (
+              ) : testSlides.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center">
                     <Typography variant="body2" color="text.secondary">
-                      No microscope equipment found
+                      No HSE Test Slide equipment found
                     </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                microscopes.map((microscope) => {
-                  const status = calculateStatus(microscope);
+                testSlides.map((testSlide) => {
+                  const status = calculateStatus(testSlide);
                   const statusColor =
                     status === "Active"
                       ? theme.palette.success.main
@@ -590,14 +463,14 @@ const MicroscopePage = () => {
                       : theme.palette.error.main;
 
                   return (
-                    <TableRow key={microscope._id}>
+                    <TableRow key={testSlide._id}>
                       <TableCell>
                         <Typography variant="body2" fontWeight="medium">
-                          {microscope.equipmentReference}
+                          {testSlide.equipmentReference}
                         </Typography>
                       </TableCell>
-                      <TableCell>{microscope.brandModel || "-"}</TableCell>
-                      <TableCell>{microscope.section || "-"}</TableCell>
+                      <TableCell>{testSlide.brandModel || "-"}</TableCell>
+                      <TableCell>{testSlide.section || "-"}</TableCell>
                       <TableCell>
                         <Box
                           sx={{
@@ -612,15 +485,15 @@ const MicroscopePage = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {microscope.lastCalibration
-                          ? formatDate(microscope.lastCalibration)
+                        {testSlide.lastCalibration
+                          ? formatDate(testSlide.lastCalibration)
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {microscope.calibrationDue
+                        {testSlide.calibrationDue
                           ? (() => {
                               const daysUntil = calculateDaysUntilCalibration(
-                                microscope.calibrationDue
+                                testSlide.calibrationDue
                               );
                               let daysText;
                               let daysColor;
@@ -655,7 +528,7 @@ const MicroscopePage = () => {
                                     color="text.secondary"
                                     sx={{ fontSize: "0.7rem" }}
                                   >
-                                    {formatDate(microscope.calibrationDue)}
+                                    {formatDate(testSlide.calibrationDue)}
                                   </Typography>
                                 </Box>
                               );
@@ -664,9 +537,9 @@ const MicroscopePage = () => {
                       </TableCell>
                       <TableCell>
                         <IconButton
-                          onClick={() => handleViewHistory(microscope)}
+                          onClick={() => handleViewHistory(testSlide)}
                           size="small"
-                          title="View Servicing History"
+                          title="View Calibration History"
                           sx={{ color: theme.palette.info.main }}
                         >
                           <HistoryIcon />
@@ -681,7 +554,7 @@ const MicroscopePage = () => {
         </TableContainer>
       </Box>
 
-      {/* Add/Edit Servicing Dialog */}
+      {/* Add/Edit Calibration Dialog */}
       <Dialog
         open={addDialogOpen}
         onClose={() => {
@@ -699,7 +572,7 @@ const MicroscopePage = () => {
             alignItems="center"
           >
             <Typography variant="h6">
-              {editingCalibration ? "Edit Servicing" : "Add New Servicing"}
+              {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
             </Typography>
             <IconButton
               onClick={() => {
@@ -722,35 +595,35 @@ const MicroscopePage = () => {
             <Stack spacing={3} sx={{ mt: 1 }}>
               <Box display="flex" gap={2}>
                 <FormControl fullWidth required>
-                  <InputLabel>Microscope</InputLabel>
+                  <InputLabel>Test Slide</InputLabel>
                   <Select
-                    value={formData.microscopeEquipmentId}
-                    onChange={(e) => handleMicroscopeChange(e.target.value)}
-                    label="Microscope"
-                    disabled={microscopesLoading}
+                    value={formData.testSlideEquipmentId}
+                    onChange={(e) => handleTestSlideChange(e.target.value)}
+                    label="Test Slide"
+                    disabled={testSlidesLoading}
                   >
                     <MenuItem value="">
-                      <em>Select a microscope</em>
+                      <em>Select a test slide</em>
                     </MenuItem>
-                    {microscopes.length > 0 ? (
-                      microscopes.map((microscope) => (
-                        <MenuItem key={microscope._id} value={microscope._id}>
-                          {microscope.equipmentReference} -{" "}
-                          {microscope.brandModel}
+                    {testSlides.length > 0 ? (
+                      testSlides.map((testSlide) => (
+                        <MenuItem key={testSlide._id} value={testSlide._id}>
+                          {testSlide.equipmentReference} -{" "}
+                          {testSlide.brandModel}
                         </MenuItem>
                       ))
                     ) : (
                       <MenuItem disabled>
-                        {microscopesLoading
+                        {testSlidesLoading
                           ? "Loading..."
-                          : "No microscopes found"}
+                          : "No test slides found"}
                       </MenuItem>
                     )}
                   </Select>
                 </FormControl>
                 <TextField
                   fullWidth
-                  label="Servicing Date"
+                  label="Calibration Date"
                   type="date"
                   value={formData.date}
                   onChange={(e) =>
@@ -762,57 +635,27 @@ const MicroscopePage = () => {
               </Box>
               <TextField
                 fullWidth
-                label="Servicing Company"
-                value={formData.servicingCompany}
+                label="Calibration Company"
+                value={formData.calibrationCompany}
                 onChange={(e) =>
-                  setFormData({ ...formData, servicingCompany: e.target.value })
+                  setFormData({
+                    ...formData,
+                    calibrationCompany: e.target.value,
+                  })
                 }
                 required
               />
-              <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Graticule</InputLabel>
-                  <Select
-                    value={formData.graticule}
-                    onChange={(e) => handleGraticuleChange(e.target.value)}
-                    label="Graticule"
-                  >
-                    <MenuItem value="">
-                      <em>Select a graticule</em>
-                    </MenuItem>
-                    {graticules.map((graticule) => (
-                      <MenuItem
-                        key={graticule._id}
-                        value={graticule.equipmentReference}
-                      >
-                        {graticule.equipmentReference} - {graticule.brandModel}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  fullWidth
-                  label="Constant 25mm"
-                  type="number"
-                  value={formData.constant25mm}
-                  onChange={(e) =>
-                    setFormData({ ...formData, constant25mm: e.target.value })
-                  }
-                  helperText="Latest EFA area (25mm) ÷ Graticule area"
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Constant 13mm"
-                  type="number"
-                  value={formData.constant13mm}
-                  onChange={(e) =>
-                    setFormData({ ...formData, constant13mm: e.target.value })
-                  }
-                  helperText="Latest EFA area (13mm) ÷ Graticule area"
-                  required
-                />
-              </Box>
+              <TextField
+                fullWidth
+                label="Certificate Number"
+                value={formData.certificateNumber}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    certificateNumber: e.target.value,
+                  })
+                }
+              />
               <TextField
                 fullWidth
                 label="Notes"
@@ -824,7 +667,7 @@ const MicroscopePage = () => {
                 }
               />
               <Button variant="outlined" component="label" fullWidth>
-                Attach Service Report
+                Attach Certificate
                 <input
                   type="file"
                   hidden
@@ -832,16 +675,16 @@ const MicroscopePage = () => {
                   onChange={handleFileChange}
                 />
               </Button>
-              {formData.serviceReport && (
+              {formData.certificate && (
                 <Typography variant="body2" color="primary">
-                  File selected: {formData.serviceReport.name}
+                  File selected: {formData.certificate.name}
                 </Typography>
               )}
               {editingCalibration &&
-                editingCalibration.serviceReportUrl &&
-                !formData.serviceReport && (
+                editingCalibration.certificateUrl &&
+                !formData.certificate && (
                   <Typography variant="body2" color="success.main">
-                    ✓ Service report already uploaded
+                    ✓ Certificate already uploaded
                   </Typography>
                 )}
             </Stack>
@@ -861,12 +704,9 @@ const MicroscopePage = () => {
               variant="contained"
               disabled={
                 loading ||
-                !formData.microscopeEquipmentId ||
+                !formData.testSlideEquipmentId ||
                 !formData.date ||
-                !formData.servicingCompany ||
-                !formData.graticule ||
-                !formData.constant25mm ||
-                !formData.constant13mm
+                !formData.calibrationCompany
               }
             >
               {loading ? <CircularProgress size={24} /> : "Save"}
@@ -883,12 +723,12 @@ const MicroscopePage = () => {
         aria-describedby="delete-dialog-description"
       >
         <DialogTitle id="delete-dialog-title">
-          Delete PCM Microscope Servicing
+          Delete HSE Test Slide Calibration
         </DialogTitle>
         <DialogContent>
           <DialogContentText id="delete-dialog-description">
-            Are you sure you want to delete the servicing record for microscope{" "}
-            {calibrationToDelete?.microscopeReference}? This action cannot be
+            Are you sure you want to delete the calibration record for test slide{" "}
+            {calibrationToDelete?.testSlideReference}? This action cannot be
             undone.
           </DialogContentText>
         </DialogContent>
@@ -908,13 +748,13 @@ const MicroscopePage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Servicing History Dialog */}
+      {/* Calibration History Dialog */}
       <Dialog
         open={historyDialogOpen}
         onClose={() => {
           setHistoryDialogOpen(false);
-          setSelectedMicroscopeForHistory(null);
-          setMicroscopeHistory([]);
+          setSelectedTestSlideForHistory(null);
+          setTestSlideHistory([]);
         }}
         maxWidth="lg"
         fullWidth
@@ -926,14 +766,14 @@ const MicroscopePage = () => {
             alignItems="center"
           >
             <Typography variant="h6">
-              Servicing History -{" "}
-              {selectedMicroscopeForHistory?.equipmentReference}
+              Calibration History -{" "}
+              {selectedTestSlideForHistory?.equipmentReference}
             </Typography>
             <IconButton
               onClick={() => {
                 setHistoryDialogOpen(false);
-                setSelectedMicroscopeForHistory(null);
-                setMicroscopeHistory([]);
+                setSelectedTestSlideForHistory(null);
+                setTestSlideHistory([]);
               }}
             >
               <CloseIcon />
@@ -950,10 +790,10 @@ const MicroscopePage = () => {
             >
               <CircularProgress />
             </Box>
-          ) : microscopeHistory.length === 0 ? (
+          ) : testSlideHistory.length === 0 ? (
             <Box sx={{ p: 3, textAlign: "center" }}>
               <Typography variant="body1" color="text.secondary">
-                No servicing history found for this microscope.
+                No calibration history found for this test slide.
               </Typography>
             </Box>
           ) : (
@@ -961,28 +801,26 @@ const MicroscopePage = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Servicing Date</TableCell>
-                    <TableCell>Servicing Company</TableCell>
-                    <TableCell>Graticule</TableCell>
-                    <TableCell>Constant (25mm)</TableCell>
-                    <TableCell>Constant (13mm)</TableCell>
+                    <TableCell>Calibration Date</TableCell>
+                    <TableCell>Calibration Company</TableCell>
+                    <TableCell>Certificate Number</TableCell>
                     <TableCell>Calibrated By</TableCell>
-                    <TableCell>Service Report</TableCell>
+                    <TableCell>Certificate</TableCell>
                     <TableCell>Notes</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {microscopeHistory.map((calibration) => (
+                  {testSlideHistory.map((calibration) => (
                     <TableRow key={calibration._id}>
                       <TableCell>
                         {calibration.date ? formatDate(calibration.date) : "-"}
                       </TableCell>
                       <TableCell>
-                        {calibration.servicingCompany || "-"}
+                        {calibration.calibrationCompany || "-"}
                       </TableCell>
-                      <TableCell>{calibration.graticule || "-"}</TableCell>
-                      <TableCell>{calibration.constant25mm || "-"}</TableCell>
-                      <TableCell>{calibration.constant13mm || "-"}</TableCell>
+                      <TableCell>
+                        {calibration.certificateNumber || "-"}
+                      </TableCell>
                       <TableCell>
                         {calibration.calibratedBy?.name ||
                           (calibration.calibratedBy?.firstName &&
@@ -991,13 +829,13 @@ const MicroscopePage = () => {
                             : "-")}
                       </TableCell>
                       <TableCell>
-                        {calibration.serviceReportUrl ? (
+                        {calibration.certificateUrl ? (
                           <IconButton
                             size="small"
                             onClick={() =>
-                              handleServiceReport(calibration.serviceReportUrl)
+                              handleCertificate(calibration.certificateUrl)
                             }
-                            title="View Service Report"
+                            title="View Certificate"
                           >
                             <PictureAsPdfIcon />
                           </IconButton>
@@ -1017,8 +855,8 @@ const MicroscopePage = () => {
           <Button
             onClick={() => {
               setHistoryDialogOpen(false);
-              setSelectedMicroscopeForHistory(null);
-              setMicroscopeHistory([]);
+              setSelectedTestSlideForHistory(null);
+              setTestSlideHistory([]);
             }}
           >
             Close
@@ -1029,4 +867,5 @@ const MicroscopePage = () => {
   );
 };
 
-export default MicroscopePage;
+export default HSETestSlidePage;
+

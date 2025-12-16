@@ -33,6 +33,7 @@ import AirPumpCalibrationPage from "./scenes/records/calibrations/AirPumpCalibra
 import FlowmeterPage from "./scenes/records/calibrations/FlowmeterPage.jsx";
 import EFAPage from "./scenes/records/calibrations/EFAPage.jsx";
 import PCMMicroscopePage from "./scenes/records/calibrations/PCMMicroscopePage.jsx";
+import HSETestSlidePage from "./scenes/records/calibrations/HSETestSlidePage.jsx";
 import AcetoneVaporiserPage from "./scenes/records/calibrations/AcetoneVaporiserPage.jsx";
 import GraticulePage from "./scenes/records/calibrations/GraticulePage.jsx";
 import GraticuleHistoryPage from "./scenes/records/calibrations/GraticuleHistoryPage.jsx";
@@ -600,6 +601,16 @@ function App() {
                                     requiredPermissions={["calibrations.view"]}
                                   >
                                     <PCMMicroscopePage />
+                                  </ProtectedRoute>
+                                }
+                              />
+                              <Route
+                                path="/records/laboratory/calibrations/hse-test-slide"
+                                element={
+                                  <ProtectedRoute
+                                    requiredPermissions={["calibrations.view"]}
+                                  >
+                                    <HSETestSlidePage />
                                   </ProtectedRoute>
                                 }
                               />

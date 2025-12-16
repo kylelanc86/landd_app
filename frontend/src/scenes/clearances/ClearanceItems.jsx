@@ -125,6 +125,15 @@ const ClearanceItems = () => {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
 
+  // Pinch zoom state
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [lastPinchDistance, setLastPinchDistance] = useState(null);
+  const [lastPanPoint, setLastPanPoint] = useState(null);
+  const [lastTapTime, setLastTapTime] = useState(0);
+  const videoContainerRef = useRef(null);
+
   // Track first tap for tablet two-tap behavior
   const [firstTapFields, setFirstTapFields] = useState({
     levelFloor: false,
@@ -898,6 +907,12 @@ const ClearanceItems = () => {
 
       console.log("Camera stream obtained:", mediaStream);
       setStream(mediaStream);
+      // Reset zoom and pan when opening camera
+      setZoom(1);
+      setPanX(0);
+      setPanY(0);
+      setLastPinchDistance(null);
+      setLastPanPoint(null);
       setCameraDialogOpen(true);
     } catch (error) {
       console.error("Error accessing camera:", error);
@@ -928,8 +943,74 @@ const ClearanceItems = () => {
       canvas.width = videoRef.videoWidth;
       canvas.height = videoRef.videoHeight;
 
-      // Draw the current video frame to canvas
-      context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+      // If zoomed, capture the zoomed portion
+      if (zoom > 1 && videoContainerRef.current) {
+        // Get container dimensions to calculate scale factor
+        const container = videoContainerRef.current;
+        const containerRect = container.getBoundingClientRect();
+
+        // Calculate the scale factor between container and video
+        // The video is displayed with objectFit: cover, so we need to account for that
+        const videoAspect = videoRef.videoWidth / videoRef.videoHeight;
+        const containerAspect = containerRect.width / containerRect.height;
+
+        let videoDisplayWidth, videoDisplayHeight;
+        if (videoAspect > containerAspect) {
+          // Video is wider - height fits container
+          videoDisplayHeight = containerRect.height;
+          videoDisplayWidth = videoDisplayHeight * videoAspect;
+        } else {
+          // Video is taller - width fits container
+          videoDisplayWidth = containerRect.width;
+          videoDisplayHeight = videoDisplayWidth / videoAspect;
+        }
+
+        // Calculate the source rectangle based on zoom and pan
+        const sourceWidth = videoRef.videoWidth / zoom;
+        const sourceHeight = videoRef.videoHeight / zoom;
+
+        // Convert pan from container pixels to video pixels
+        const panXVideo = (panX * videoDisplayWidth) / containerRect.width;
+        const panYVideo = (panY * videoDisplayHeight) / containerRect.height;
+
+        // Calculate source X and Y, accounting for pan
+        const sourceX = (videoRef.videoWidth - sourceWidth) / 2 - panXVideo;
+        const sourceY = (videoRef.videoHeight - sourceHeight) / 2 - panYVideo;
+
+        // Ensure we don't go out of bounds
+        const clampedSourceX = Math.max(
+          0,
+          Math.min(sourceX, videoRef.videoWidth - sourceWidth)
+        );
+        const clampedSourceY = Math.max(
+          0,
+          Math.min(sourceY, videoRef.videoHeight - sourceHeight)
+        );
+        const clampedSourceWidth = Math.min(
+          sourceWidth,
+          videoRef.videoWidth - clampedSourceX
+        );
+        const clampedSourceHeight = Math.min(
+          sourceHeight,
+          videoRef.videoHeight - clampedSourceY
+        );
+
+        // Draw the zoomed portion to canvas, scaled to fill
+        context.drawImage(
+          videoRef,
+          clampedSourceX,
+          clampedSourceY,
+          clampedSourceWidth,
+          clampedSourceHeight,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+      } else {
+        // No zoom, capture full frame
+        context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+      }
 
       // Generate filename with timestamp
       const timestamp = new Date()
@@ -983,6 +1064,140 @@ const ClearanceItems = () => {
       setStream(null);
     }
     setCameraDialogOpen(false);
+    // Reset zoom and pan when closing camera
+    setZoom(1);
+    setPanX(0);
+    setPanY(0);
+    setLastPinchDistance(null);
+    setLastPanPoint(null);
+  };
+
+  // Calculate distance between two touch points
+  const getDistance = (touch1, touch2) => {
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Get center point between two touches
+  const getCenter = (touch1, touch2) => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
+  };
+
+  // Handle touch start for pinch zoom
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      // Two fingers - pinch zoom
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      setLastPinchDistance(distance);
+      const center = getCenter(e.touches[0], e.touches[1]);
+      setLastPanPoint(center);
+    } else if (e.touches.length === 1) {
+      // Single finger - check for double tap to reset zoom
+      const currentTime = new Date().getTime();
+      const timeSinceLastTap = currentTime - lastTapTime;
+
+      if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+        // Double tap detected - reset zoom
+        setZoom(1);
+        setPanX(0);
+        setPanY(0);
+        setLastTapTime(0);
+        return;
+      }
+
+      setLastTapTime(currentTime);
+
+      if (zoom > 1) {
+        // Single finger - pan when zoomed, prepare for pan
+        setLastPanPoint({
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+        });
+      }
+    }
+  };
+
+  // Handle touch move for pinch zoom and pan
+  const handleTouchMove = (e) => {
+    e.preventDefault(); // Prevent scrolling while zooming/panning
+
+    if (e.touches.length === 2) {
+      // Two fingers - pinch zoom
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      const center = getCenter(e.touches[0], e.touches[1]);
+
+      if (lastPinchDistance !== null && videoContainerRef.current) {
+        const scale = distance / lastPinchDistance;
+        const newZoom = Math.max(1, Math.min(5, zoom * scale)); // Limit zoom between 1x and 5x
+
+        const container = videoContainerRef.current;
+        const rect = container.getBoundingClientRect();
+        const containerCenterX = rect.width / 2;
+        const containerCenterY = rect.height / 2;
+
+        // Calculate the pinch center relative to container
+        const pinchCenterX = center.x - rect.left - containerCenterX;
+        const pinchCenterY = center.y - rect.top - containerCenterY;
+
+        // Adjust pan to keep the pinch center point stable
+        // When zooming, we need to adjust pan to maintain the pinch point
+        const zoomChange = newZoom / zoom;
+        setZoom(newZoom);
+        setPanX((prevPanX) => {
+          // Adjust pan to keep pinch center stable
+          const newPanX =
+            prevPanX - (pinchCenterX * (zoomChange - 1)) / newZoom;
+          // Limit pan based on zoom level (can pan more when more zoomed)
+          const maxPan = (newZoom - 1) * 50;
+          return Math.max(-maxPan, Math.min(maxPan, newPanX));
+        });
+        setPanY((prevPanY) => {
+          const newPanY =
+            prevPanY - (pinchCenterY * (zoomChange - 1)) / newZoom;
+          const maxPan = (newZoom - 1) * 50;
+          return Math.max(-maxPan, Math.min(maxPan, newPanY));
+        });
+
+        setLastPinchDistance(distance);
+        setLastPanPoint(center);
+      } else {
+        setLastPinchDistance(distance);
+        setLastPanPoint(center);
+      }
+    } else if (e.touches.length === 1 && zoom > 1 && lastPanPoint) {
+      // Single finger - pan when zoomed
+      const deltaX = (e.touches[0].clientX - lastPanPoint.x) / zoom;
+      const deltaY = (e.touches[0].clientY - lastPanPoint.y) / zoom;
+
+      const maxPan = (zoom - 1) * 50;
+      setPanX((prevPanX) => {
+        const newPanX = prevPanX + deltaX;
+        return Math.max(-maxPan, Math.min(maxPan, newPanX));
+      });
+      setPanY((prevPanY) => {
+        const newPanY = prevPanY + deltaY;
+        return Math.max(-maxPan, Math.min(maxPan, newPanY));
+      });
+
+      setLastPanPoint({
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      });
+    }
+  };
+
+  // Handle touch end
+  const handleTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      setLastPinchDistance(null);
+    }
+    if (e.touches.length === 0) {
+      setLastPanPoint(null);
+    }
   };
 
   // Open photo gallery for an item
@@ -1153,16 +1368,18 @@ const ClearanceItems = () => {
   // Save all photo changes to backend
   const savePhotoChanges = async () => {
     try {
-      const promises = [];
+      const togglePromises = [];
+      let toggleResults = [];
+      let deletionResults = [];
 
-      // Handle photo inclusion changes
+      // Handle photo inclusion changes (can be done in parallel)
       Object.entries(localPhotoChanges).forEach(
         ([photoId, includeInReport]) => {
           const photo = selectedItemForPhotos?.photographs?.find(
             (p) => p._id === photoId
           );
           if (photo && photo.includeInReport !== includeInReport) {
-            promises.push(
+            togglePromises.push(
               asbestosClearanceService.togglePhotoInReport(
                 clearanceId,
                 selectedItemForPhotos._id,
@@ -1173,24 +1390,67 @@ const ClearanceItems = () => {
         }
       );
 
-      // Handle photo deletions
-      photosToDelete.forEach((photoId) => {
-        promises.push(
-          asbestosClearanceService.deletePhotoFromItem(
+      // Process toggle operations in parallel
+      if (togglePromises.length > 0) {
+        toggleResults = await Promise.allSettled(togglePromises);
+      }
+
+      // Handle photo deletions sequentially to avoid backend race conditions
+      // Process deletions one at a time to prevent concurrent modification errors
+      for (const photoId of photosToDelete) {
+        try {
+          await asbestosClearanceService.deletePhotoFromItem(
             clearanceId,
             selectedItemForPhotos._id,
             photoId
-          )
-        );
+          );
+          deletionResults.push({ status: "fulfilled", photoId });
+        } catch (error) {
+          console.error(`Error deleting photo ${photoId}:`, error);
+          deletionResults.push({ status: "rejected", photoId, reason: error });
+        }
+      }
+
+      // Combine results
+      const allResults = [...toggleResults, ...deletionResults];
+      const failures = allResults.filter((r) => r.status === "rejected");
+      const successes = allResults.filter((r) => r.status === "fulfilled");
+
+      // Log any failures for debugging
+      failures.forEach((result) => {
+        if (result.reason) {
+          console.error(
+            `Operation failed for photo ${result.photoId || "unknown"}:`,
+            result.reason
+          );
+        }
       });
 
-      await Promise.all(promises);
+      if (failures.length > 0) {
+        if (successes.length === 0) {
+          // All operations failed
+          showSnackbar("Failed to save photo changes", "error");
+          return;
+        } else {
+          // Some operations succeeded, some failed
+          showSnackbar(
+            `Saved ${successes.length} of ${allResults.length} changes. Some operations failed.`,
+            "warning"
+          );
+        }
+      } else {
+        // All operations succeeded
+        showSnackbar("Photo changes saved successfully", "success");
+      }
 
-      // Clear local changes
-      setLocalPhotoChanges({});
-      setPhotosToDelete(new Set());
+      // Clear local changes - refresh will update the state
+      // Only clear if we had at least some successes
+      if (successes.length > 0) {
+        setLocalPhotoChanges({});
+        setPhotosToDelete(new Set());
+      }
 
-      // Refresh data
+      // Refresh data to get updated state
       await fetchData();
 
       // Update selected item
@@ -1198,9 +1458,9 @@ const ClearanceItems = () => {
       const updatedItem = updatedItems.find(
         (item) => item._id === selectedItemForPhotos._id
       );
-      setSelectedItemForPhotos(updatedItem);
-
-      showSnackbar("Photo changes saved successfully", "success");
+      if (updatedItem) {
+        setSelectedItemForPhotos(updatedItem);
+      }
     } catch (error) {
       console.error("Error saving photo changes:", error);
       showSnackbar("Failed to save photo changes", "error");
@@ -3428,6 +3688,7 @@ const ClearanceItems = () => {
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box
+              ref={videoContainerRef}
               sx={{
                 display: "flex",
                 justifyContent: "center",
@@ -3437,7 +3698,11 @@ const ClearanceItems = () => {
                 borderRadius: 2,
                 overflow: "hidden",
                 position: "relative",
+                touchAction: "none", // Prevent default touch behaviors
               }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             >
               {stream ? (
                 <video
@@ -3455,6 +3720,9 @@ const ClearanceItems = () => {
                     width: "100%",
                     height: "100%",
                     objectFit: "cover",
+                    transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
+                    transformOrigin: "center center",
+                    transition: zoom === 1 ? "transform 0.1s" : "none", // Smooth transition only when resetting
                   }}
                   onLoadedMetadata={() => {
                     console.log("Video metadata loaded");
@@ -3487,7 +3755,7 @@ const ClearanceItems = () => {
               sx={{ mt: 2, textAlign: "center" }}
             >
               Position the item within the frame and click "Capture" to take the
-              photo.
+              photo. Pinch to zoom (up to 5x) or double-tap to reset zoom.
             </Typography>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
