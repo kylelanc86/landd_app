@@ -422,6 +422,7 @@ const ProjectInformation = () => {
   const [placesService, setPlacesService] = useState(null);
   const [googleMaps, setGoogleMaps] = useState(null);
   const [googleMapsError, setGoogleMapsError] = useState(null);
+  const placesServiceDivRef = useRef(null);
 
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
@@ -684,13 +685,31 @@ const ProjectInformation = () => {
 
       try {
         const google = await loadGoogleMapsApi(apiKey);
+
+        // Verify Google Maps API is fully loaded
+        if (!google || !google.maps || !google.maps.places) {
+          throw new Error("Google Maps Places API is not available");
+        }
+
         setGoogleMaps(google);
+
+        // Create a proper DOM element for PlacesService that's attached to the document
+        // This is required for PlacesService to work properly
+        if (!placesServiceDivRef.current) {
+          const div = document.createElement("div");
+          div.style.display = "none";
+          div.style.visibility = "hidden";
+          div.style.position = "absolute";
+          div.style.top = "-9999px";
+          document.body.appendChild(div);
+          placesServiceDivRef.current = div;
+        }
 
         // Initialize the autocomplete service
         const autocompleteService =
           new google.maps.places.AutocompleteService();
         const placesService = new google.maps.places.PlacesService(
-          document.createElement("div")
+          placesServiceDivRef.current
         );
 
         setAutocompleteService(autocompleteService);
@@ -698,13 +717,29 @@ const ProjectInformation = () => {
 
         setGoogleMapsError(null); // Clear any previous errors
       } catch (error) {
+        console.error("Error initializing Google Maps Places API:", error);
         setGoogleMapsError(
-          "Error loading Google Maps. Please try refreshing the page."
+          `Error loading Google Maps: ${
+            error.message || "Please try refreshing the page."
+          }`
         );
       }
     };
 
     initializeGoogleMaps();
+
+    // Cleanup: remove the PlacesService div when component unmounts
+    return () => {
+      if (
+        placesServiceDivRef.current &&
+        placesServiceDivRef.current.parentNode
+      ) {
+        placesServiceDivRef.current.parentNode.removeChild(
+          placesServiceDivRef.current
+        );
+        placesServiceDivRef.current = null;
+      }
+    };
   }, []);
 
   // Sync addressInput with form address when editing
@@ -720,7 +755,19 @@ const ProjectInformation = () => {
     // Always update the form state, even for empty values
     setForm((prev) => ({ ...prev, address: value }));
 
-    if (!value || value.length < 2 || !autocompleteService || !googleMaps) {
+    if (!value || value.length < 2) {
+      setAddressOptions([]);
+      return;
+    }
+
+    // Verify services are available
+    if (
+      !autocompleteService ||
+      !googleMaps ||
+      !googleMaps.maps ||
+      !googleMaps.maps.places
+    ) {
+      console.warn("Google Maps Places API is not available");
       setAddressOptions([]);
       return;
     }
@@ -742,15 +789,28 @@ const ProjectInformation = () => {
             // Enhanced error handling with specific status messages
             switch (status) {
               case googleMaps.maps.places.PlacesServiceStatus.ZERO_RESULTS:
+                // No results found - this is normal, not an error
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
                 console.error(
                   "REQUEST_DENIED: API key may be invalid or have restrictions"
                 );
-                console.error("Check Google Cloud Console API key settings");
+                console.error("Check Google Cloud Console API key settings:");
+                console.error("1. Verify API key is correct");
+                console.error("2. Ensure Places API is enabled");
+                console.error(
+                  "3. Check API key restrictions (HTTP referrers, IP addresses)"
+                );
+                console.error("4. Verify billing is enabled");
+                setGoogleMapsError(
+                  "Address search is unavailable. Please check API configuration."
+                );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT:
                 console.error("OVER_QUERY_LIMIT: API quota exceeded");
+                setGoogleMapsError(
+                  "Address search quota exceeded. Please try again later."
+                );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.INVALID_REQUEST:
                 console.error(
@@ -773,6 +833,9 @@ const ProjectInformation = () => {
       console.error("Error fetching address predictions:", error);
       setAddressOptions([]);
       setIsAddressLoading(false);
+      setGoogleMapsError(
+        "Error fetching address suggestions. Please try again."
+      );
     }
   };
 
@@ -808,7 +871,19 @@ const ProjectInformation = () => {
 
   // Handle new client address input change for autocomplete
   const handleNewClientAddressInputChange = async (value) => {
-    if (!autocompleteService || !value || value.length < 2) {
+    if (!value || value.length < 2) {
+      setNewClientAddressOptions([]);
+      return;
+    }
+
+    // Verify services are available
+    if (
+      !autocompleteService ||
+      !googleMaps ||
+      !googleMaps.maps ||
+      !googleMaps.maps.places
+    ) {
+      console.warn("Google Maps Places API is not available");
       setNewClientAddressOptions([]);
       return;
     }
@@ -835,6 +910,16 @@ const ProjectInformation = () => {
             console.log("Setting new client address options:", predictions);
             setNewClientAddressOptions(predictions);
           } else {
+            // Handle errors similar to main address handler
+            if (
+              status ===
+              googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED
+            ) {
+              console.error("REQUEST_DENIED for new client address");
+              setGoogleMapsError(
+                "Address search is unavailable. Please check API configuration."
+              );
+            }
             console.log(
               "No new client address predictions found or error:",
               status
@@ -848,6 +933,9 @@ const ProjectInformation = () => {
       console.error("Error fetching new client address predictions:", error);
       setNewClientAddressOptions([]);
       setIsNewClientAddressLoading(false);
+      setGoogleMapsError(
+        "Error fetching address suggestions. Please try again."
+      );
     }
   };
 

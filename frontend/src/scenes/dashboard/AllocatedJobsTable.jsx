@@ -631,20 +631,6 @@ const AllocatedJobsTable = () => {
       >
         <Typography variant="h5">
           MY ACTIVE PROJECTS
-          {dataFromCache && (
-            <Typography
-              component="span"
-              variant="caption"
-              sx={{
-                ml: 1,
-                color: "text.secondary",
-                fontSize: "0.75rem",
-                fontStyle: "italic",
-              }}
-            >
-              (cached)
-            </Typography>
-          )}
         </Typography>
         <Button
           onClick={handleRefresh}
