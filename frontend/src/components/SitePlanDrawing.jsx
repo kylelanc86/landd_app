@@ -329,23 +329,27 @@ const SitePlanDrawing = ({
       // Wait a bit to ensure the container is fully rendered
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      if (mapRef.current) {
-        const map = new window.google.maps.Map(mapRef.current, {
-          center: { lat: -35.2809, lng: 149.13 }, // Canberra default
-          zoom: 15,
-          mapTypeId: window.google.maps.MapTypeId.SATELLITE,
-          mapTypeControl: true, // Enable map type control in canvas
-          streetViewControl: false,
-          fullscreenControl: false,
-          zoomControl: true, // Enable zoom control in canvas
-          gestureHandling: "greedy", // Allow map interaction in canvas
-          tilt: 0,
-          heading: 0,
-        });
-
-        mapInstanceRef.current = map;
-        setMapLoaded(true);
+      // Ensure the map container element exists and is a valid DOM element
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error("Map container element is not available");
+        return;
       }
+
+      const map = new window.google.maps.Map(mapRef.current, {
+        center: { lat: -35.2809, lng: 149.13 }, // Canberra default
+        zoom: 15,
+        mapTypeId: window.google.maps.MapTypeId.SATELLITE,
+        mapTypeControl: true, // Enable map type control in canvas
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControl: true, // Enable zoom control in canvas
+        gestureHandling: "greedy", // Allow map interaction in canvas
+        tilt: 0,
+        heading: 0,
+      });
+
+      mapInstanceRef.current = map;
+      setMapLoaded(true);
     } catch (error) {
       console.error("Error initializing Google Maps:", error);
     }
@@ -1783,76 +1787,87 @@ const SitePlanDrawing = ({
       // Wait a bit longer to ensure the container is fully rendered
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      if (mapRef.current) {
-        console.log(
-          "Creating map with center:",
-          mapData.center,
-          "zoom:",
-          mapData.zoom
+      // Ensure the map container element exists and is a valid DOM element
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error(
+          "Map container element is not available after loading API"
         );
+        return;
+      }
 
-        // Log container dimensions
-        const containerRect = mapRef.current.getBoundingClientRect();
-        console.log(
-          "Map container dimensions:",
-          containerRect.width,
-          "x",
-          containerRect.height
+      console.log(
+        "Creating map with center:",
+        mapData.center,
+        "zoom:",
+        mapData.zoom
+      );
+
+      // Log container dimensions
+      const containerRect = mapRef.current.getBoundingClientRect();
+      console.log(
+        "Map container dimensions:",
+        containerRect.width,
+        "x",
+        containerRect.height
+      );
+
+      // Check if container has proper dimensions
+      if (containerRect.width === 0 || containerRect.height === 0) {
+        console.warn("Map container has zero dimensions, retrying in 500ms");
+        setTimeout(() => initializeGoogleMapsWithData(mapData), 500);
+        return;
+      }
+
+      // Use bounds if available for more accurate positioning
+      const mapOptions = {
+        mapTypeId: window.google.maps.MapTypeId[mapData.mapType.toUpperCase()],
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControl: false,
+        gestureHandling: "none",
+        tilt: 0,
+        heading: 0,
+      };
+
+      // Use center and zoom directly to match the exact view from dialog
+      mapOptions.center = mapData.center;
+      mapOptions.zoom = mapData.zoom;
+
+      // Double-check the element still exists before creating the map
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error(
+          "Map container element is not available before map creation"
         );
+        return;
+      }
 
-        // Check if container has proper dimensions
-        if (containerRect.width === 0 || containerRect.height === 0) {
-          console.warn("Map container has zero dimensions, retrying in 500ms");
-          setTimeout(() => initializeGoogleMapsWithData(mapData), 500);
-          return;
-        }
+      const map = new window.google.maps.Map(mapRef.current, mapOptions);
 
-        // Use bounds if available for more accurate positioning
-        const mapOptions = {
-          mapTypeId:
-            window.google.maps.MapTypeId[mapData.mapType.toUpperCase()],
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          zoomControl: false,
-          gestureHandling: "none",
-          tilt: 0,
-          heading: 0,
-        };
+      // Add a listener to ensure the map is fully loaded, then capture it
+      window.google.maps.event.addListenerOnce(map, "idle", async () => {
+        console.log("Map is idle - fully loaded");
+        console.log("Final map center:", map.getCenter().toJSON());
+        console.log("Final map zoom:", map.getZoom());
+        console.log("Final map type:", map.getMapTypeId());
 
-        // Use center and zoom directly to match the exact view from dialog
-        mapOptions.center = mapData.center;
-        mapOptions.zoom = mapData.zoom;
-
-        const map = new window.google.maps.Map(mapRef.current, mapOptions);
-
-        // Add a listener to ensure the map is fully loaded, then capture it
-        window.google.maps.event.addListenerOnce(map, "idle", async () => {
-          console.log("Map is idle - fully loaded");
-          console.log("Final map center:", map.getCenter().toJSON());
-          console.log("Final map zoom:", map.getZoom());
-          console.log("Final map type:", map.getMapTypeId());
-
-          // Force multiple resizes to ensure proper rendering
+        // Force multiple resizes to ensure proper rendering
+        setTimeout(() => {
+          window.google.maps.event.trigger(map, "resize");
           setTimeout(() => {
             window.google.maps.event.trigger(map, "resize");
-            setTimeout(() => {
-              window.google.maps.event.trigger(map, "resize");
-              // After map is fully rendered, capture it as background
-              setTimeout(async () => {
-                await captureMapAsBackground();
-              }, 300);
-            }, 200);
+            // After map is fully rendered, capture it as background
+            setTimeout(async () => {
+              await captureMapAsBackground();
+            }, 300);
           }, 200);
-        });
+        }, 200);
+      });
 
-        mapInstanceRef.current = map;
-        setMapLoaded(true);
+      mapInstanceRef.current = map;
+      setMapLoaded(true);
 
-        console.log("Map created successfully");
-      } else {
-        console.error("Map ref not available");
-      }
+      console.log("Map created successfully");
     } catch (error) {
       console.error("Error initializing Google Maps:", error);
     }

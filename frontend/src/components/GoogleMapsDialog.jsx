@@ -36,7 +36,12 @@ const GoogleMapsDialog = ({
 
   useEffect(() => {
     if (open && !mapLoaded) {
-      initializeMap();
+      // Use setTimeout to ensure the Dialog is fully rendered and the map container element exists
+      const timeoutId = setTimeout(() => {
+        initializeMap();
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
     }
   }, [open, mapLoaded]);
 
@@ -49,6 +54,12 @@ const GoogleMapsDialog = ({
 
   const initializeMap = async () => {
     try {
+      // Ensure the map container element exists and is a valid DOM element
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error("Map container element is not available");
+        return;
+      }
+
       const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
       if (!apiKey) {
         console.error("Google Maps API key not found");
@@ -57,41 +68,54 @@ const GoogleMapsDialog = ({
 
       await loadGoogleMapsApi(apiKey);
 
-      if (mapRef.current) {
-        const map = new window.google.maps.Map(mapRef.current, {
-          center: mapCenter,
-          zoom: mapZoom,
-          mapTypeId: window.google.maps.MapTypeId[mapType.toUpperCase()],
-          mapTypeControl: true,
-          streetViewControl: true,
-          fullscreenControl: true,
-          zoomControl: true,
-          gestureHandling: "greedy",
-        });
-
-        // Add map type change listener
-        map.addListener("maptypeid_changed", () => {
-          const mapTypeId = map.getMapTypeId();
-          setMapType(mapTypeId.toLowerCase());
-        });
-
-        // Add zoom change listener
-        map.addListener("zoom_changed", () => {
-          setMapZoom(map.getZoom());
-        });
-
-        // Add center change listener
-        map.addListener("center_changed", () => {
-          const center = map.getCenter();
-          setMapCenter({
-            lat: center.lat(),
-            lng: center.lng(),
-          });
-        });
-
-        mapInstanceRef.current = map;
-        setMapLoaded(true);
+      // Double-check the element still exists after async operations
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error(
+          "Map container element is not available after loading API"
+        );
+        return;
       }
+
+      const map = new window.google.maps.Map(mapRef.current, {
+        center: mapCenter,
+        zoom: mapZoom,
+        mapTypeId: window.google.maps.MapTypeId[mapType.toUpperCase()],
+        mapTypeControl: true,
+        streetViewControl: true,
+        fullscreenControl: true,
+        zoomControl: true,
+        gestureHandling: "greedy",
+      });
+
+      // Trigger resize event to ensure map renders correctly in the Dialog
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          window.google.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 100);
+
+      // Add map type change listener
+      map.addListener("maptypeid_changed", () => {
+        const mapTypeId = map.getMapTypeId();
+        setMapType(mapTypeId.toLowerCase());
+      });
+
+      // Add zoom change listener
+      map.addListener("zoom_changed", () => {
+        setMapZoom(map.getZoom());
+      });
+
+      // Add center change listener
+      map.addListener("center_changed", () => {
+        const center = map.getCenter();
+        setMapCenter({
+          lat: center.lat(),
+          lng: center.lng(),
+        });
+      });
+
+      mapInstanceRef.current = map;
+      setMapLoaded(true);
     } catch (error) {
       console.error("Error initializing Google Maps:", error);
     }

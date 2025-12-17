@@ -61,7 +61,12 @@ const SitePlanMap = ({
   // Initialize map
   useEffect(() => {
     if (open && !mapLoaded) {
-      initializeMap();
+      // Use setTimeout to ensure the Dialog is fully rendered and the map container element exists
+      const timeoutId = setTimeout(() => {
+        initializeMap();
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
     }
   }, [open, mapLoaded]);
 
@@ -87,6 +92,12 @@ const SitePlanMap = ({
 
   const initializeMap = async () => {
     try {
+      // Ensure the map container element exists and is a valid DOM element
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error("Map container element is not available");
+        return;
+      }
+
       const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
       if (!apiKey) {
         console.error("Google Maps API key not found");
@@ -94,6 +105,14 @@ const SitePlanMap = ({
       }
 
       await loadGoogleMapsApi(apiKey);
+
+      // Double-check the element still exists after async operations
+      if (!mapRef.current || !(mapRef.current instanceof Element)) {
+        console.error(
+          "Map container element is not available after loading API"
+        );
+        return;
+      }
 
       const map = new window.google.maps.Map(mapRef.current, {
         center: mapCenter,
@@ -109,6 +128,13 @@ const SitePlanMap = ({
       });
 
       mapInstanceRef.current = map;
+
+      // Trigger resize event to ensure map renders correctly in the Dialog
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          window.google.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 100);
 
       // Add click listener for adding markers
       map.addListener("click", (event) => {
