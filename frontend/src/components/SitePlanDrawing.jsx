@@ -299,7 +299,12 @@ const SitePlanDrawing = ({
   // Initialize Google Maps when showGoogleMaps changes
   useEffect(() => {
     if (showGoogleMaps && !mapLoaded) {
-      initializeGoogleMaps();
+      // Add a delay to ensure the container is visible in the DOM
+      const timeoutId = setTimeout(() => {
+        initializeGoogleMaps();
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
     }
   }, [showGoogleMaps, mapLoaded]);
 
@@ -326,6 +331,12 @@ const SitePlanDrawing = ({
 
       await loadGoogleMapsApi(apiKey);
 
+      // Verify Google Maps API is fully loaded
+      if (!window.google || !window.google.maps || !window.google.maps.Map) {
+        console.error("Google Maps API failed to load properly");
+        throw new Error("Google Maps API is not available");
+      }
+
       // Wait a bit to ensure the container is fully rendered
       await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -335,6 +346,45 @@ const SitePlanDrawing = ({
         return;
       }
 
+      // Check if container has proper dimensions - Google Maps requires visible dimensions
+      const containerRect = mapRef.current.getBoundingClientRect();
+      if (containerRect.width === 0 || containerRect.height === 0) {
+        console.warn("Map container has zero dimensions, retrying in 500ms");
+        setTimeout(() => {
+          if (showGoogleMaps && !mapLoaded) {
+            initializeGoogleMaps();
+          }
+        }, 500);
+        return;
+      }
+
+      // Ensure container is actually in the DOM and has proper computed styles
+      const containerStyle = window.getComputedStyle(mapRef.current);
+      const parentElement = mapRef.current.parentElement;
+      const parentStyle = parentElement
+        ? window.getComputedStyle(parentElement)
+        : null;
+
+      // Check if container or parent is hidden
+      if (
+        containerStyle.display === "none" ||
+        containerStyle.visibility === "hidden" ||
+        (parentStyle &&
+          (parentStyle.display === "none" ||
+            parentStyle.visibility === "hidden"))
+      ) {
+        console.warn(
+          "Map container or parent is not visible, waiting for visibility..."
+        );
+        setTimeout(() => {
+          if (showGoogleMaps && !mapLoaded) {
+            initializeGoogleMaps();
+          }
+        }, 500);
+        return;
+      }
+
+      // Create the map - Google Maps should work even with opacity 0 as long as dimensions are valid
       const map = new window.google.maps.Map(mapRef.current, {
         center: { lat: -35.2809, lng: 149.13 }, // Canberra default
         zoom: 15,
@@ -349,9 +399,28 @@ const SitePlanDrawing = ({
       });
 
       mapInstanceRef.current = map;
+
+      // Trigger resize after a short delay to ensure proper rendering
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          window.google.maps.event.trigger(mapInstanceRef.current, "resize");
+        }
+      }, 100);
+
       setMapLoaded(true);
     } catch (error) {
       console.error("Error initializing Google Maps:", error);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        containerExists: !!mapRef.current,
+        containerDimensions: mapRef.current
+          ? mapRef.current.getBoundingClientRect()
+          : null,
+      });
+      // Reset state on error so user can retry
+      setMapLoaded(false);
+      mapInstanceRef.current = null;
     }
   };
 
