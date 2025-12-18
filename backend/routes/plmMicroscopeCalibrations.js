@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const PCMMicroscopeCalibration = require('../models/PCMMicroscopeCalibration');
+const PLMMicroscopeCalibration = require('../models/PLMMicroscopeCalibration');
 const Equipment = require('../models/Equipment');
-const GraticuleCalibration = require('../models/GraticuleCalibration');
 const CalibrationFrequency = require('../models/CalibrationFrequency');
 
-// Get all PCM microscope calibrations
+// Get all PLM microscope calibrations
 router.get('/', async (req, res) => {
   try {
     const { microscopeReference } = req.query;
@@ -15,7 +14,7 @@ router.get('/', async (req, res) => {
       filter.microscopeReference = { $regex: microscopeReference, $options: 'i' };
     }
 
-    const calibrations = await PCMMicroscopeCalibration.find(filter)
+    const calibrations = await PLMMicroscopeCalibration.find(filter)
       .populate('calibratedBy', 'firstName lastName')
       .sort({ date: -1 });
 
@@ -25,10 +24,6 @@ router.get('/', async (req, res) => {
       microscopeReference: calibration.microscopeReference,
       date: calibration.date,
       servicingCompany: calibration.servicingCompany,
-      graticule: calibration.graticule,
-      graticuleArea: calibration.graticuleArea,
-      constant25mm: calibration.constant25mm,
-      constant13mm: calibration.constant13mm,
       serviceReportUrl: calibration.serviceReportUrl,
       notes: calibration.notes,
       nextCalibration: calibration.nextCalibration,
@@ -42,75 +37,29 @@ router.get('/', async (req, res) => {
 
     res.json(data);
   } catch (error) {
-    console.error('Error fetching PCM microscope calibrations:', error);
-    res.status(500).json({ error: 'Failed to fetch PCM microscope calibrations' });
+    console.error('Error fetching PLM microscope calibrations:', error);
+    res.status(500).json({ error: 'Failed to fetch PLM microscope calibrations' });
   }
 });
 
-// Get all PCM microscopes from equipment
+// Get all PLM microscopes from equipment
 router.get('/equipment', async (req, res) => {
   try {
     const microscopes = await Equipment.find({ 
-      equipmentType: 'Microscope',
-      section: 'Air Monitoring'
+      equipmentType: 'Polarised Light Microscope'
     }).sort({ equipmentReference: 1 });
 
     res.json(microscopes);
   } catch (error) {
-    console.error('Error fetching PCM microscopes:', error);
-    res.status(500).json({ error: 'Failed to fetch PCM microscopes' });
-  }
-});
-
-// Get graticules from equipment with latest calibration data
-router.get('/graticules', async (req, res) => {
-  try {
-    const graticules = await Equipment.find({ 
-      equipmentType: 'Graticule',
-      section: 'Air Monitoring'
-    }).sort({ equipmentReference: 1 });
-
-    // Get latest calibration data for each graticule
-    const graticulesWithCalibration = await Promise.all(
-      graticules.map(async (graticule) => {
-        // Get the latest calibration for this graticule
-        const latestCalibration = await GraticuleCalibration.findOne({
-          graticuleId: graticule.equipmentReference
-        }).sort({ date: -1 });
-
-        let area = null;
-        if (latestCalibration && latestCalibration.scale) {
-          // Extract diameter from scale field (format: "100 µm (Area: 7853.98 µm²)")
-          const diameterMatch = latestCalibration.scale.match(/(\d+(?:\.\d+)?)\s*µm/);
-          if (diameterMatch) {
-            const diameter = parseFloat(diameterMatch[1]);
-            // Calculate area using formula: (π * diameter²) / 4
-            area = (Math.PI * diameter * diameter) / 4;
-          }
-        }
-
-        return {
-          ...graticule.toObject(),
-          latestCalibration: latestCalibration ? {
-            date: latestCalibration.date,
-            scale: latestCalibration.scale,
-            area: area
-          } : null
-        };
-      })
-    );
-
-    res.json(graticulesWithCalibration);
-  } catch (error) {
-    console.error('Error fetching graticules:', error);
-    res.status(500).json({ error: 'Failed to fetch graticules' });
+    console.error('Error fetching PLM microscopes:', error);
+    res.status(500).json({ error: 'Failed to fetch PLM microscopes' });
   }
 });
 
 // Get calibrations by microscope reference
 router.get('/equipment/:microscopeReference', async (req, res) => {
   try {
-    const calibrations = await PCMMicroscopeCalibration.find({
+    const calibrations = await PLMMicroscopeCalibration.find({
       microscopeReference: req.params.microscopeReference
     })
       .populate('calibratedBy', 'firstName lastName')
@@ -122,10 +71,6 @@ router.get('/equipment/:microscopeReference', async (req, res) => {
       microscopeReference: calibration.microscopeReference,
       date: calibration.date,
       servicingCompany: calibration.servicingCompany,
-      graticule: calibration.graticule,
-      graticuleArea: calibration.graticuleArea,
-      constant25mm: calibration.constant25mm,
-      constant13mm: calibration.constant13mm,
       serviceReportUrl: calibration.serviceReportUrl,
       notes: calibration.notes,
       nextCalibration: calibration.nextCalibration,
@@ -139,24 +84,20 @@ router.get('/equipment/:microscopeReference', async (req, res) => {
 
     res.json(data);
   } catch (error) {
-    console.error('Error fetching PCM microscope calibrations by equipment:', error);
-    res.status(500).json({ error: 'Failed to fetch PCM microscope calibrations' });
+    console.error('Error fetching PLM microscope calibrations by equipment:', error);
+    res.status(500).json({ error: 'Failed to fetch PLM microscope calibrations' });
   }
 });
 
-// Create new PCM microscope calibration
+// Create new PLM microscope calibration
 router.post('/', async (req, res) => {
   try {
-    console.log('PCM Microscope calibration creation request:', req.body);
+    console.log('PLM Microscope calibration creation request:', req.body);
     
     const {
       microscopeReference,
       date,
       servicingCompany,
-      graticule,
-      graticuleArea,
-      constant25mm,
-      constant13mm,
       serviceReportUrl,
       notes,
       calibratedBy
@@ -165,8 +106,8 @@ router.post('/', async (req, res) => {
     // Generate calibration ID if not provided
     let calibrationId = req.body.calibrationId;
     if (!calibrationId) {
-      const count = await PCMMicroscopeCalibration.countDocuments();
-      calibrationId = `PCM-${String(count + 1).padStart(4, '0')}`;
+      const count = await PLMMicroscopeCalibration.countDocuments();
+      calibrationId = `PLM-${String(count + 1).padStart(4, '0')}`;
     }
 
     // Validate required fields
@@ -218,10 +159,6 @@ router.post('/', async (req, res) => {
       microscopeReference,
       date: new Date(date),
       servicingCompany,
-      graticule: graticule || null,
-      graticuleArea: graticuleArea ? parseFloat(graticuleArea) : null,
-      constant25mm: constant25mm ? parseFloat(constant25mm) : null,
-      constant13mm: constant13mm ? parseFloat(constant13mm) : null,
       serviceReportUrl: serviceReportUrl || null,
       notes: notes || '',
       nextCalibration: nextCalibrationDate,
@@ -230,32 +167,28 @@ router.post('/', async (req, res) => {
 
     console.log('Calibration data to save:', calibrationData);
     
-    const calibration = new PCMMicroscopeCalibration(calibrationData);
+    const calibration = new PLMMicroscopeCalibration(calibrationData);
     await calibration.save();
 
     console.log('Calibration saved successfully:', calibration);
 
     res.status(201).json({
-      message: 'PCM microscope calibration created successfully',
+      message: 'PLM microscope calibration created successfully',
       calibration: calibration
     });
   } catch (error) {
-    console.error('Error creating PCM microscope calibration:', error);
-    res.status(500).json({ error: 'Failed to create PCM microscope calibration' });
+    console.error('Error creating PLM microscope calibration:', error);
+    res.status(500).json({ error: 'Failed to create PLM microscope calibration' });
   }
 });
 
-// Update PCM microscope calibration
+// Update PLM microscope calibration
 router.put('/:id', async (req, res) => {
   try {
     const {
       microscopeReference,
       date,
       servicingCompany,
-      graticule,
-      graticuleArea,
-      constant25mm,
-      constant13mm,
       serviceReportUrl,
       notes
     } = req.body;
@@ -266,19 +199,15 @@ router.put('/:id', async (req, res) => {
     }
 
     // Get existing calibration to check if nextCalibration needs to be recalculated
-    const existingCalibration = await PCMMicroscopeCalibration.findById(req.params.id);
+    const existingCalibration = await PLMMicroscopeCalibration.findById(req.params.id);
     if (!existingCalibration) {
-      return res.status(404).json({ error: 'PCM microscope calibration not found' });
+      return res.status(404).json({ error: 'PLM microscope calibration not found' });
     }
     
     const updateData = {
       microscopeReference,
       date: new Date(date),
       servicingCompany,
-      graticule: graticule || null,
-      graticuleArea: graticuleArea ? parseFloat(graticuleArea) : null,
-      constant25mm: constant25mm ? parseFloat(constant25mm) : null,
-      constant13mm: constant13mm ? parseFloat(constant13mm) : null,
       serviceReportUrl: serviceReportUrl || null,
       notes: notes || ''
     };
@@ -323,35 +252,35 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    const calibration = await PCMMicroscopeCalibration.findByIdAndUpdate(
+    const calibration = await PLMMicroscopeCalibration.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
     );
 
     res.json({
-      message: 'PCM microscope calibration updated successfully',
+      message: 'PLM microscope calibration updated successfully',
       calibration: calibration
     });
   } catch (error) {
-    console.error('Error updating PCM microscope calibration:', error);
-    res.status(500).json({ error: 'Failed to update PCM microscope calibration' });
+    console.error('Error updating PLM microscope calibration:', error);
+    res.status(500).json({ error: 'Failed to update PLM microscope calibration' });
   }
 });
 
-// Delete PCM microscope calibration
+// Delete PLM microscope calibration
 router.delete('/:id', async (req, res) => {
   try {
-    const calibration = await PCMMicroscopeCalibration.findByIdAndDelete(req.params.id);
+    const calibration = await PLMMicroscopeCalibration.findByIdAndDelete(req.params.id);
 
     if (!calibration) {
-      return res.status(404).json({ error: 'PCM microscope calibration not found' });
+      return res.status(404).json({ error: 'PLM microscope calibration not found' });
     }
 
-    res.json({ message: 'PCM microscope calibration deleted successfully' });
+    res.json({ message: 'PLM microscope calibration deleted successfully' });
   } catch (error) {
-    console.error('Error deleting PCM microscope calibration:', error);
-    res.status(500).json({ error: 'Failed to delete PCM microscope calibration' });
+    console.error('Error deleting PLM microscope calibration:', error);
+    res.status(500).json({ error: 'Failed to delete PLM microscope calibration' });
   }
 });
 

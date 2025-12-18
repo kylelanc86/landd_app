@@ -46,20 +46,14 @@ const equipmentSchema = new mongoose.Schema(
       enum: ["active", "calibration due", "out-of-service"],
       default: "active",
     },
-    lastCalibration: {
-      type: Date,
-      required: true,
-    },
-    calibrationDue: {
-      type: Date,
-      required: false,
-    },
     calibrationFrequency: {
       type: Number,
       required: false,
       min: 1,
       max: 60, // Assuming max 60 months (5 years)
     },
+    // Note: Calibration data (lastCalibration, calibrationDue, flowrateCalibrations) 
+    // is now fetched dynamically from calibration records, not stored in Equipment model
   },
   {
     timestamps: true,

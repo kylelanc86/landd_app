@@ -125,8 +125,24 @@ const CalibrationFrequency = () => {
   };
 
   const handleFrequencyChange = (id, field, value) => {
-    const updatedData = frequencyData.map((item) =>
-      item._id === id ? { ...item, [field]: value } : item
+    const item = frequencyData.find((item) => item._id === id);
+    if (!item) return;
+
+    let updatedItem = { ...item, [field]: value };
+
+    // If the unit is being changed, convert the value accordingly
+    if (field === "frequencyUnit" && item.frequencyUnit !== value) {
+      if (value === "months" && item.frequencyUnit === "years") {
+        // Converting from years to months: multiply by 12
+        updatedItem.frequencyValue = item.frequencyValue * 12;
+      } else if (value === "years" && item.frequencyUnit === "months") {
+        // Converting from months to years: divide by 12
+        updatedItem.frequencyValue = Math.round(item.frequencyValue / 12);
+      }
+    }
+
+    const updatedData = frequencyData.map((dataItem) =>
+      dataItem._id === id ? updatedItem : dataItem
     );
     setFrequencyData(updatedData);
   };

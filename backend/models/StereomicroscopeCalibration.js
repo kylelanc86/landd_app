@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const hseTestSlideCalibrationSchema = new mongoose.Schema({
+const stereomicroscopeCalibrationSchema = new mongoose.Schema({
   calibrationId: {
     type: String,
     required: false,
@@ -8,7 +8,7 @@ const hseTestSlideCalibrationSchema = new mongoose.Schema({
     unique: true,
     sparse: true // Allows multiple null values
   },
-  testSlideReference: {
+  microscopeReference: {
     type: String,
     required: true,
     trim: true
@@ -18,17 +18,12 @@ const hseTestSlideCalibrationSchema = new mongoose.Schema({
     required: true,
     default: Date.now
   },
-  calibrationCompany: {
+  servicingCompany: {
     type: String,
     required: true,
     trim: true
   },
-  certificateNumber: {
-    type: String,
-    required: false,
-    trim: true
-  },
-  certificateUrl: {
+  serviceReportUrl: {
     type: String,
     required: false,
     trim: true
@@ -51,16 +46,16 @@ const hseTestSlideCalibrationSchema = new mongoose.Schema({
 });
 
 // Pre-save middleware to calculate next calibration date
-hseTestSlideCalibrationSchema.pre('save', async function(next) {
+stereomicroscopeCalibrationSchema.pre('save', async function(next) {
   // Calculate next calibration due date using the calibration frequency configuration
   // Only calculate if nextCalibration is not already set
-  if (this.date && this.testSlideReference && !this.nextCalibration) {
+  if (this.date && this.microscopeReference && !this.nextCalibration) {
     try {
       const Equipment = mongoose.model('Equipment');
       const CalibrationFrequency = mongoose.model('CalibrationFrequency');
       
       // First, get the equipment to find its equipmentType
-      const equipment = await Equipment.findOne({ equipmentReference: this.testSlideReference });
+      const equipment = await Equipment.findOne({ equipmentReference: this.microscopeReference });
       
       if (equipment && equipment.equipmentType) {
         // Try to get calibration frequency from CalibrationFrequency model (preferred source)
@@ -86,23 +81,11 @@ hseTestSlideCalibrationSchema.pre('save', async function(next) {
           const nextDue = new Date(this.date);
           nextDue.setMonth(nextDue.getMonth() + frequencyInMonths);
           this.nextCalibration = nextDue;
-        } else {
-          // If lookup fails or no frequency set, fall back to 60 months (5 years)
-          const nextDue = new Date(this.date);
-          nextDue.setMonth(nextDue.getMonth() + 60);
-          this.nextCalibration = nextDue;
         }
-      } else {
-        // If equipment not found, fall back to 60 months (5 years)
-        const nextDue = new Date(this.date);
-        nextDue.setMonth(nextDue.getMonth() + 60);
-        this.nextCalibration = nextDue;
       }
     } catch (error) {
-      // If lookup fails, fall back to 60 months (5 years)
-      const nextDue = new Date(this.date);
-      nextDue.setMonth(nextDue.getMonth() + 60);
-      this.nextCalibration = nextDue;
+      console.error('Error calculating next calibration date for Stereomicroscope:', error);
+      // Don't set nextCalibration if calculation fails
     }
   }
 
@@ -110,8 +93,7 @@ hseTestSlideCalibrationSchema.pre('save', async function(next) {
 });
 
 // Index for efficient querying
-hseTestSlideCalibrationSchema.index({ calibrationId: 1 });
-hseTestSlideCalibrationSchema.index({ testSlideReference: 1 });
+stereomicroscopeCalibrationSchema.index({ calibrationId: 1 });
+stereomicroscopeCalibrationSchema.index({ microscopeReference: 1 });
 
-module.exports = mongoose.model('HSETestSlideCalibration', hseTestSlideCalibrationSchema);
-
+module.exports = mongoose.model('StereomicroscopeCalibration', stereomicroscopeCalibrationSchema);

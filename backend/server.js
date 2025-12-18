@@ -20,7 +20,10 @@ const airPumpCalibrationRoutes = require('./routes/airPumpCalibrations');
 const graticuleCalibrationRoutes = require('./routes/graticuleCalibrations');
 const efaCalibrationRoutes = require('./routes/efaCalibrations');
 const pcmMicroscopeCalibrationRoutes = require('./routes/pcmMicroscopeCalibrations');
+const plmMicroscopeCalibrationRoutes = require('./routes/plmMicroscopeCalibrations');
+const stereomicroscopeCalibrationRoutes = require('./routes/stereomicroscopeCalibrations');
 const hseTestSlideCalibrationRoutes = require('./routes/hseTestSlideCalibrations');
+const flowmeterCalibrationRoutes = require('./routes/flowmeterCalibrations');
 const calibrationFrequencyRoutes = require('./routes/calibrationFrequency');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
@@ -205,8 +208,17 @@ connectDB()
     app.use('/api/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
     app.use('/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
     
+    app.use('/api/plm-microscope-calibrations', requireAuth, checkTokenBlacklist, plmMicroscopeCalibrationRoutes);
+    app.use('/plm-microscope-calibrations', requireAuth, checkTokenBlacklist, plmMicroscopeCalibrationRoutes);
+    
+    app.use('/api/stereomicroscope-calibrations', requireAuth, checkTokenBlacklist, stereomicroscopeCalibrationRoutes);
+    app.use('/stereomicroscope-calibrations', requireAuth, checkTokenBlacklist, stereomicroscopeCalibrationRoutes);
+    
     app.use('/api/hse-test-slide-calibrations', requireAuth, checkTokenBlacklist, hseTestSlideCalibrationRoutes);
     app.use('/hse-test-slide-calibrations', requireAuth, checkTokenBlacklist, hseTestSlideCalibrationRoutes);
+    
+    app.use('/api/flowmeter-calibrations', requireAuth, checkTokenBlacklist, flowmeterCalibrationRoutes);
+    app.use('/flowmeter-calibrations', requireAuth, checkTokenBlacklist, flowmeterCalibrationRoutes);
     
     app.use('/api/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
     app.use('/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);

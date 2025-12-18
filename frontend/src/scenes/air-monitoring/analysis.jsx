@@ -40,6 +40,7 @@ import { sampleService, shiftService } from "../../services/api";
 import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { equipmentService } from "../../services/equipmentService";
+import hseTestSlideService from "../../services/hseTestSlideService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../context/AuthContext";
@@ -555,37 +556,163 @@ const Analysis = () => {
     [calculateDaysUntilCalibration]
   );
 
-  // Fetch active microscopes and test slides
+  // Fetch active microscopes and test slides with calibration data
   useEffect(() => {
     const fetchActiveEquipment = async () => {
       try {
         const response = await equipmentService.getAll();
         const allEquipment = response.equipment || [];
 
-        // Filter for active Phase Contrast Microscope
-        const microscopes = allEquipment
-          .filter(
-            (eq) =>
-              eq.equipmentType === "Phase Contrast Microscope" &&
-              calculateStatus(eq) === "Active"
-          )
+        // Filter for Phase Contrast Microscope equipment
+        const microscopeEquipment = allEquipment
+          .filter((eq) => eq.equipmentType === "Phase Contrast Microscope")
           .sort((a, b) =>
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
 
-        // Filter for active HSE Test Slide
-        const testSlides = allEquipment
-          .filter(
-            (eq) =>
-              eq.equipmentType === "HSE Test Slide" &&
-              calculateStatus(eq) === "Active"
-          )
+        // Fetch calibration data for each microscope to determine active status
+        const microscopesWithCalibrations = await Promise.all(
+          microscopeEquipment.map(async (microscope) => {
+            try {
+              // Fetch PCM calibrations for this microscope
+              const calibrationResponse =
+                await pcmMicroscopeService.getByEquipment(
+                  microscope.equipmentReference
+                );
+              const calibrations =
+                calibrationResponse.calibrations || calibrationResponse || [];
+
+              // Calculate lastCalibration (most recent calibration date)
+              const lastCalibration =
+                calibrations.length > 0
+                  ? new Date(
+                      Math.max(
+                        ...calibrations.map((cal) =>
+                          new Date(cal.date).getTime()
+                        )
+                      )
+                    )
+                  : null;
+
+              // Calculate calibrationDue (most recent nextCalibration date)
+              const calibrationDue =
+                calibrations.length > 0
+                  ? calibrations
+                      .filter((cal) => cal.nextCalibration)
+                      .map((cal) => new Date(cal.nextCalibration).getTime())
+                      .length > 0
+                    ? new Date(
+                        Math.max(
+                          ...calibrations
+                            .filter((cal) => cal.nextCalibration)
+                            .map((cal) =>
+                              new Date(cal.nextCalibration).getTime()
+                            )
+                        )
+                      )
+                    : null
+                  : null;
+
+              return {
+                ...microscope,
+                lastCalibration,
+                calibrationDue,
+              };
+            } catch (err) {
+              console.error(
+                `Error fetching calibrations for ${microscope.equipmentReference}:`,
+                err
+              );
+              return {
+                ...microscope,
+                lastCalibration: null,
+                calibrationDue: null,
+              };
+            }
+          })
+        );
+
+        // Filter for active microscopes (have calibration data and are not overdue)
+        const activeMicroscopes = microscopesWithCalibrations.filter(
+          (eq) => calculateStatus(eq) === "Active"
+        );
+
+        // Filter for HSE Test Slide equipment
+        const testSlideEquipment = allEquipment
+          .filter((eq) => eq.equipmentType === "HSE Test Slide")
           .sort((a, b) =>
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
 
-        setActiveMicroscopes(microscopes);
-        setActiveTestSlides(testSlides);
+        // Fetch calibration data for each test slide to determine active status
+        const testSlidesWithCalibrations = await Promise.all(
+          testSlideEquipment.map(async (testSlide) => {
+            try {
+              // Fetch HSE test slide calibrations for this test slide
+              const calibrationResponse =
+                await hseTestSlideService.getByEquipment(
+                  testSlide.equipmentReference
+                );
+              const calibrations =
+                calibrationResponse.data || calibrationResponse || [];
+
+              // Calculate lastCalibration (most recent calibration date)
+              const lastCalibration =
+                calibrations.length > 0
+                  ? new Date(
+                      Math.max(
+                        ...calibrations.map((cal) =>
+                          new Date(cal.date).getTime()
+                        )
+                      )
+                    )
+                  : null;
+
+              // Calculate calibrationDue (most recent nextCalibration date)
+              const calibrationDue =
+                calibrations.length > 0
+                  ? calibrations
+                      .filter((cal) => cal.nextCalibration)
+                      .map((cal) => new Date(cal.nextCalibration).getTime())
+                      .length > 0
+                    ? new Date(
+                        Math.max(
+                          ...calibrations
+                            .filter((cal) => cal.nextCalibration)
+                            .map((cal) =>
+                              new Date(cal.nextCalibration).getTime()
+                            )
+                        )
+                      )
+                    : null
+                  : null;
+
+              return {
+                ...testSlide,
+                lastCalibration,
+                calibrationDue,
+              };
+            } catch (err) {
+              console.error(
+                `Error fetching calibrations for ${testSlide.equipmentReference}:`,
+                err
+              );
+              return {
+                ...testSlide,
+                lastCalibration: null,
+                calibrationDue: null,
+              };
+            }
+          })
+        );
+
+        // Filter for active test slides (have calibration data and are not overdue)
+        const activeTestSlides = testSlidesWithCalibrations.filter(
+          (eq) => calculateStatus(eq) === "Active"
+        );
+
+        setActiveMicroscopes(activeMicroscopes);
+        setActiveTestSlides(activeTestSlides);
       } catch (error) {
         console.error("Error fetching equipment:", error);
       }

@@ -31,9 +31,9 @@ import {
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import HistoryIcon from "@mui/icons-material/History";
+import EditIcon from "@mui/icons-material/Edit";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
@@ -117,7 +117,7 @@ const FlowmeterPage = () => {
     [calculateDaysUntilCalibration]
   );
 
-  // Fetch Site flowmeter equipment
+  // Fetch Site flowmeter equipment with calibration data from calibration records
   const fetchFlowmeters = useCallback(async () => {
     try {
       setFlowmetersLoading(true);
@@ -130,7 +130,81 @@ const FlowmeterPage = () => {
           a.equipmentReference.localeCompare(b.equipmentReference)
         );
 
-      setFlowmeters(siteFlowmeters);
+      // Fetch calibration data for each flowmeter
+      const flowmetersWithCalibrations = await Promise.all(
+        siteFlowmeters.map(async (flowmeter) => {
+          try {
+            // Fetch all calibrations for this flowmeter
+            const calibrationResponse =
+              await flowmeterCalibrationService.getByFlowmeter(
+                flowmeter.equipmentReference
+              );
+            const calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+
+            // Calculate lastCalibration (most recent calibration date)
+            const lastCalibration =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) => new Date(cal.date).getTime())
+                    )
+                  )
+                : null;
+
+            // Calculate calibrationDue (most recent nextCalibration date)
+            const calibrationDue =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) =>
+                        new Date(cal.nextCalibration).getTime()
+                      )
+                    )
+                  )
+                : null;
+
+            // Calculate flowrateCalibrations (group by flowrate, get most recent for each)
+            const flowrateCalibrations = {};
+            calibrations.forEach((cal) => {
+              const flowrateKey = cal.flowRate.toString();
+              if (
+                !flowrateCalibrations[flowrateKey] ||
+                new Date(cal.date) >
+                  new Date(
+                    flowrateCalibrations[flowrateKey].lastCalibrationDate
+                  )
+              ) {
+                flowrateCalibrations[flowrateKey] = {
+                  status: cal.status,
+                  lastCalibrationDate: cal.date,
+                };
+              }
+            });
+
+            return {
+              ...flowmeter,
+              lastCalibration,
+              calibrationDue,
+              flowrateCalibrations,
+            };
+          } catch (err) {
+            console.error(
+              `Error fetching calibrations for ${flowmeter.equipmentReference}:`,
+              err
+            );
+            // Return flowmeter without calibration data if fetch fails
+            return {
+              ...flowmeter,
+              lastCalibration: null,
+              calibrationDue: null,
+              flowrateCalibrations: {},
+            };
+          }
+        })
+      );
+
+      setFlowmeters(flowmetersWithCalibrations);
     } catch (err) {
       console.error("Error fetching flowmeters:", err);
       setError(err.message || "Failed to fetch flowmeter equipment");
@@ -275,7 +349,7 @@ const FlowmeterPage = () => {
       const backendData = {
         flowmeterId: formData.flowmeterId,
         date: new Date(formData.date),
-        flowRate: formData.flowRate,
+        flowRate: parseFloat(formData.flowRate),
         bubbleflowVolume: formData.bubbleflowVolume || "",
         status: formData.status,
         technician: formData.technicianName,
@@ -287,6 +361,7 @@ const FlowmeterPage = () => {
         averageRuntime: formData.averageRuntime
           ? parseFloat(formData.averageRuntime)
           : null,
+        // Note: equivalentFlowrate and difference are calculated in backend pre-save middleware
       };
 
       if (editingCalibration) {
@@ -298,23 +373,8 @@ const FlowmeterPage = () => {
         await flowmeterCalibrationService.create(backendData);
       }
 
-      // Update equipment record with new calibration dates
-      try {
-        const equipmentUpdateData = {
-          lastCalibration: new Date(formData.date),
-          calibrationDue: new Date(formData.nextCalibration + "T00:00:00"),
-        };
-
-        await equipmentService.update(
-          formData.flowmeterEquipmentId,
-          equipmentUpdateData
-        );
-      } catch (equipmentError) {
-        console.error(
-          "Failed to update equipment calibration dates:",
-          equipmentError
-        );
-      }
+      // Note: Calibration data is now fetched dynamically from calibration records
+      // No need to update Equipment model
 
       setAddDialogOpen(false);
       setEditingCalibration(null);
@@ -490,8 +550,46 @@ const FlowmeterPage = () => {
         flowmeter.equipmentReference
       );
       const history = response.data || response || [];
+
+      // Calculate equivalentFlowrate and difference for records that don't have them
+      const historyWithCalculations = history.map((cal) => {
+        if (cal.equivalentFlowrate && cal.difference) {
+          return cal; // Already has values
+        }
+
+        // Calculate if we have the required data
+        if (
+          cal.flowRate &&
+          cal.bubbleflowVolume &&
+          cal.averageRuntime &&
+          cal.averageRuntime > 0
+        ) {
+          const flowRateNum = parseFloat(cal.flowRate);
+          const volume = parseFloat(cal.bubbleflowVolume);
+          const expectedTime = (volume / (flowRateNum * 1000)) * 60;
+          const equivalentFlowrate =
+            (expectedTime / cal.averageRuntime) * flowRateNum * 1000;
+          const flowRateMlMin = flowRateNum * 1000;
+
+          let difference = null;
+          if (flowRateMlMin !== 0) {
+            difference = Math.abs(
+              ((equivalentFlowrate - flowRateMlMin) / flowRateMlMin) * 100
+            );
+          }
+
+          return {
+            ...cal,
+            equivalentFlowrate,
+            difference,
+          };
+        }
+
+        return cal;
+      });
+
       // Sort by date descending (most recent first)
-      const sortedHistory = history.sort((a, b) => {
+      const sortedHistory = historyWithCalculations.sort((a, b) => {
         const dateA = new Date(a.date);
         const dateB = new Date(b.date);
         return dateB - dateA;
@@ -503,6 +601,58 @@ const FlowmeterPage = () => {
     } finally {
       setHistoryLoading(false);
     }
+  };
+
+  const handleEditFromHistory = (calibration) => {
+    // Find the equipment for this calibration
+    const flowmeter = flowmeters.find(
+      (f) => f.equipmentReference === calibration.flowmeterId
+    );
+
+    if (!flowmeter) {
+      setError("Flowmeter equipment not found");
+      return;
+    }
+
+    // Find technician ID if we have the name
+    let technicianId = "";
+    if (calibration.technician || calibration.technicianName) {
+      const techName = calibration.technician || calibration.technicianName;
+      const technician = labSignatories.find(
+        (t) => `${t.firstName} ${t.lastName}` === techName
+      );
+      if (technician) {
+        technicianId = technician._id;
+      }
+    }
+
+    // Set form data for editing
+    setFormData({
+      flowmeterId: calibration.flowmeterId,
+      flowmeterEquipmentId: flowmeter._id,
+      date: formatDateForInput(new Date(calibration.date)),
+      flowRate: calibration.flowRate ? calibration.flowRate.toString() : "",
+      bubbleflowVolume: calibration.bubbleflowVolume || "",
+      status: calibration.status || "Pass",
+      technicianId: technicianId,
+      technicianName:
+        calibration.technician || calibration.technicianName || "",
+      nextCalibration: calibration.nextCalibration
+        ? formatDateForInput(new Date(calibration.nextCalibration))
+        : "",
+      notes: calibration.notes || "",
+      runtime1: calibration.runtime1 ? calibration.runtime1.toString() : "",
+      runtime2: calibration.runtime2 ? calibration.runtime2.toString() : "",
+      runtime3: calibration.runtime3 ? calibration.runtime3.toString() : "",
+      averageRuntime: calibration.averageRuntime
+        ? calibration.averageRuntime.toString()
+        : "",
+    });
+
+    setEditingCalibration(calibration);
+    setHistoryDialogOpen(false);
+    setAddDialogOpen(true);
+    setError(null);
   };
 
   return (
@@ -561,6 +711,7 @@ const FlowmeterPage = () => {
                 <TableCell>Equipment Reference</TableCell>
                 <TableCell>Brand/Model</TableCell>
                 <TableCell>Section</TableCell>
+                <TableCell>Flowrate (L/min)</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Last Calibration</TableCell>
                 <TableCell>Calibration Due</TableCell>
@@ -570,13 +721,13 @@ const FlowmeterPage = () => {
             <TableBody>
               {flowmetersLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={8} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : flowmeters.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={8} align="center">
                     <Typography variant="body2" color="text.secondary">
                       No flowmeter equipment found
                     </Typography>
@@ -601,6 +752,62 @@ const FlowmeterPage = () => {
                       </TableCell>
                       <TableCell>{flowmeter.brandModel || "-"}</TableCell>
                       <TableCell>{flowmeter.section || "-"}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          // Handle both Map and object formats (MongoDB Maps are converted to objects in JSON)
+                          const flowrateCalibrations =
+                            flowmeter.flowrateCalibrations;
+                          const entries =
+                            flowrateCalibrations instanceof Map
+                              ? Array.from(flowrateCalibrations.entries())
+                              : flowrateCalibrations
+                              ? Object.entries(flowrateCalibrations)
+                              : [];
+
+                          if (entries.length > 0) {
+                            return (
+                              <Box display="flex" gap={0.5} flexWrap="wrap">
+                                {entries.map(([flowrate, calData]) => {
+                                  const calStatus =
+                                    typeof calData === "object" &&
+                                    calData !== null
+                                      ? calData.status
+                                      : calData;
+                                  const statusColor =
+                                    calStatus === "Pass"
+                                      ? theme.palette.success.main
+                                      : theme.palette.error.main;
+                                  return (
+                                    <Box
+                                      key={flowrate}
+                                      sx={{
+                                        backgroundColor: statusColor,
+                                        color: "white",
+                                        padding: "2px 6px",
+                                        borderRadius: "4px",
+                                        fontSize: "0.75rem",
+                                        display: "inline-block",
+                                      }}
+                                      title={`${flowrate} L/min: ${calStatus}`}
+                                    >
+                                      {flowrate}
+                                    </Box>
+                                  );
+                                })}
+                              </Box>
+                            );
+                          } else {
+                            return (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                No calibrations
+                              </Typography>
+                            );
+                          }
+                        })()}
+                      </TableCell>
                       <TableCell>
                         <Box
                           sx={{
@@ -1194,6 +1401,7 @@ const FlowmeterPage = () => {
                     <TableCell>Difference (%)</TableCell>
                     <TableCell>Next Calibration</TableCell>
                     <TableCell>Notes</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1252,12 +1460,14 @@ const FlowmeterPage = () => {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {calibration.equivalentFlowrate
+                        {calibration.equivalentFlowrate !== null &&
+                        calibration.equivalentFlowrate !== undefined
                           ? calibration.equivalentFlowrate.toFixed(2)
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {calibration.difference
+                        {calibration.difference !== null &&
+                        calibration.difference !== undefined
                           ? `${calibration.difference.toFixed(2)}%`
                           : "-"}
                       </TableCell>
@@ -1267,6 +1477,16 @@ const FlowmeterPage = () => {
                           : "-"}
                       </TableCell>
                       <TableCell>{calibration.notes || "-"}</TableCell>
+                      <TableCell>
+                        <IconButton
+                          onClick={() => handleEditFromHistory(calibration)}
+                          size="small"
+                          title="Edit Calibration"
+                          sx={{ color: theme.palette.primary.main }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

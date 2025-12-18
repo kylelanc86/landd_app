@@ -32,13 +32,13 @@ import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import CloseIcon from "@mui/icons-material/Close";
 import HistoryIcon from "@mui/icons-material/History";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import pcmMicroscopeService from "../../../services/pcmMicroscopeService";
-import { efaService } from "../../../services/efaService";
 import { useAuth } from "../../../context/AuthContext";
 
 const MicroscopePage = () => {
@@ -48,8 +48,6 @@ const MicroscopePage = () => {
 
   const [microscopes, setMicroscopes] = useState([]);
   const [microscopesLoading, setMicroscopesLoading] = useState(false);
-  const [graticules, setGraticules] = useState([]);
-  const [efaCalibrations, setEfaCalibrations] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -67,10 +65,6 @@ const MicroscopePage = () => {
     microscopeEquipmentId: "",
     date: formatDateForInput(new Date()),
     servicingCompany: "",
-    graticule: "",
-    graticuleArea: "",
-    constant25mm: "",
-    constant13mm: "",
     serviceReport: null,
     serviceReportUrl: null,
     notes: "",
@@ -117,7 +111,7 @@ const MicroscopePage = () => {
     [calculateDaysUntilCalibration]
   );
 
-  // Fetch Phase Contrast Microscope equipment
+  // Fetch Phase Contrast Microscope equipment with calibration data
   const fetchMicroscopes = useCallback(async () => {
     try {
       setMicroscopesLoading(true);
@@ -132,7 +126,65 @@ const MicroscopePage = () => {
           a.equipmentReference.localeCompare(b.equipmentReference)
         );
 
-      setMicroscopes(pcmMicroscopes);
+      // Fetch calibration data for each microscope
+      const microscopesWithCalibrations = await Promise.all(
+        pcmMicroscopes.map(async (microscope) => {
+          try {
+            // Fetch all calibrations for this microscope
+            const calibrationResponse =
+              await pcmMicroscopeService.getByEquipment(
+                microscope.equipmentReference
+              );
+            const calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+
+            // Calculate lastCalibration (most recent calibration date)
+            const lastCalibration =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations
+                        .map((cal) => new Date(cal.date).getTime())
+                        .filter((time) => !isNaN(time))
+                    )
+                  )
+                : null;
+
+            // Calculate calibrationDue (most recent nextCalibration date)
+            const calibrationDue =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations
+                        .filter((cal) => cal.nextCalibration)
+                        .map((cal) => new Date(cal.nextCalibration).getTime())
+                        .filter((time) => !isNaN(time))
+                    )
+                  )
+                : null;
+
+            return {
+              ...microscope,
+              lastCalibration,
+              calibrationDue,
+            };
+          } catch (err) {
+            console.error(
+              `Error fetching calibrations for ${microscope.equipmentReference}:`,
+              err
+            );
+            // Return microscope without calibration data if fetch fails
+            return {
+              ...microscope,
+              lastCalibration: null,
+              calibrationDue: null,
+            };
+          }
+        })
+      );
+
+      setMicroscopes(microscopesWithCalibrations);
+      setError(null);
     } catch (err) {
       console.error("Error fetching microscopes:", err);
       setError(err.message || "Failed to fetch microscope equipment");
@@ -141,33 +193,9 @@ const MicroscopePage = () => {
     }
   }, []);
 
-  // Fetch graticules
-  const fetchGraticules = useCallback(async () => {
-    try {
-      const data = await pcmMicroscopeService.getGraticules();
-      setGraticules(data);
-    } catch (err) {
-      console.error("Failed to fetch graticules:", err);
-      setGraticules([]);
-    }
-  }, []);
-
-  // Fetch EFA calibrations
-  const fetchEfaCalibrations = useCallback(async () => {
-    try {
-      const response = await efaService.getAll();
-      setEfaCalibrations(response.data || []);
-    } catch (err) {
-      console.error("Failed to fetch EFA calibrations:", err);
-      setEfaCalibrations([]);
-    }
-  }, []);
-
   useEffect(() => {
     fetchMicroscopes();
-    fetchGraticules();
-    fetchEfaCalibrations();
-  }, [fetchMicroscopes, fetchGraticules, fetchEfaCalibrations]);
+  }, [fetchMicroscopes]);
 
   // Listen for equipment data updates
   useEffect(() => {
@@ -185,61 +213,18 @@ const MicroscopePage = () => {
     };
   }, [fetchMicroscopes]);
 
-  // Calculate constants based on EFA areas and graticule area
-  const calculateConstants = (graticuleArea) => {
-    if (!graticuleArea || isNaN(graticuleArea)) {
-      return { constant25mm: "", constant13mm: "" };
-    }
+  // Calculate next calibration date based on calibration frequency
+  const calculateNextCalibration = (calibrationDate, calibrationFrequency) => {
+    if (!calibrationDate || !calibrationFrequency) return "";
 
-    // Get latest EFA calibrations for 25mm and 13mm filter holders
-    const getLatestEfaArea = (filterSize) => {
-      const latestEfa = efaCalibrations
-        .filter(
-          (cal) =>
-            cal.filterHolderModel &&
-            cal.filterHolderModel.toLowerCase().includes(filterSize)
-        )
-        .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    const date = new Date(calibrationDate);
+    const frequency = parseInt(calibrationFrequency);
 
-      if (!latestEfa) return null;
+    if (isNaN(frequency)) return "";
 
-      // Calculate area from the EFA calibration data
-      const filter1Avg =
-        latestEfa.filter1Diameter1 && latestEfa.filter1Diameter2
-          ? (latestEfa.filter1Diameter1 + latestEfa.filter1Diameter2) / 2
-          : null;
-      const filter2Avg =
-        latestEfa.filter2Diameter1 && latestEfa.filter2Diameter2
-          ? (latestEfa.filter2Diameter1 + latestEfa.filter2Diameter2) / 2
-          : null;
-      const filter3Avg =
-        latestEfa.filter3Diameter1 && latestEfa.filter3Diameter2
-          ? (latestEfa.filter3Diameter1 + latestEfa.filter3Diameter2) / 2
-          : null;
+    date.setMonth(date.getMonth() + frequency);
 
-      if (filter1Avg !== null && filter2Avg !== null && filter3Avg !== null) {
-        const overallAvg = (filter1Avg + filter2Avg + filter3Avg) / 3;
-        // Calculate area using formula: π * D² / 4
-        return (Math.PI * Math.pow(overallAvg, 2)) / 4;
-      }
-      return null;
-    };
-
-    const efaArea25mm = getLatestEfaArea("25");
-    const efaArea13mm = getLatestEfaArea("13");
-
-    // Convert graticule area from µm² to mm² (divide by 1,000,000)
-    const graticuleAreaInMm = graticuleArea / 1000000;
-
-    // Calculate constants (round to whole numbers)
-    const constant25mm = efaArea25mm
-      ? Math.round(efaArea25mm / graticuleAreaInMm)
-      : "";
-    const constant13mm = efaArea13mm
-      ? Math.round(efaArea13mm / graticuleAreaInMm)
-      : "";
-
-    return { constant25mm, constant13mm };
+    return formatDateForInput(date);
   };
 
   const handleAdd = () => {
@@ -250,10 +235,6 @@ const MicroscopePage = () => {
       microscopeEquipmentId: "",
       date: todayDate,
       servicingCompany: "",
-      graticule: "",
-      graticuleArea: "",
-      constant25mm: "",
-      constant13mm: "",
       serviceReport: null,
       serviceReportUrl: null,
       notes: "",
@@ -272,21 +253,40 @@ const MicroscopePage = () => {
       microscopeEquipmentId: microscopeEquipment?._id || "",
       date: formatDateForInput(new Date(calibration.date)),
       servicingCompany: calibration.servicingCompany,
-      graticule: calibration.graticule,
-      graticuleArea: calibration.graticuleArea
-        ? calibration.graticuleArea.toString()
-        : "",
-      constant25mm: calibration.constant25mm
-        ? calibration.constant25mm.toString()
-        : "",
-      constant13mm: calibration.constant13mm
-        ? calibration.constant13mm.toString()
-        : "",
       serviceReport: null,
       serviceReportUrl: calibration.serviceReportUrl || null,
       notes: calibration.notes || "",
     });
     setAddDialogOpen(true);
+    setError(null);
+  };
+
+  const handleEditFromHistory = (calibration) => {
+    // Find the microscope equipment for this calibration
+    const microscopeEquipment = microscopes.find(
+      (m) => m.equipmentReference === calibration.microscopeReference
+    );
+
+    if (!microscopeEquipment) {
+      setError("Microscope equipment not found");
+      return;
+    }
+
+    // Set form data for editing
+    setFormData({
+      microscopeReference: calibration.microscopeReference,
+      microscopeEquipmentId: microscopeEquipment._id,
+      date: formatDateForInput(new Date(calibration.date)),
+      servicingCompany: calibration.servicingCompany || "",
+      serviceReport: null,
+      serviceReportUrl: calibration.serviceReportUrl || null,
+      notes: calibration.notes || "",
+    });
+
+    setEditingCalibration(calibration);
+    setHistoryDialogOpen(false);
+    setAddDialogOpen(true);
+    setError(null);
   };
 
   const handleDelete = (calibration) => {
@@ -300,8 +300,29 @@ const MicroscopePage = () => {
         setLoading(true);
         await pcmMicroscopeService.delete(calibrationToDelete._id);
         setDeleteDialogOpen(false);
+        const deletedMicroscopeReference =
+          calibrationToDelete.microscopeReference;
         setCalibrationToDelete(null);
         fetchMicroscopes();
+
+        // If history dialog is open for the deleted calibration's microscope, refresh the history
+        if (
+          historyDialogOpen &&
+          selectedMicroscopeForHistory &&
+          selectedMicroscopeForHistory.equipmentReference ===
+            deletedMicroscopeReference
+        ) {
+          const response = await pcmMicroscopeService.getByEquipment(
+            deletedMicroscopeReference
+          );
+          const history = response.data || response || [];
+          const sortedHistory = history.sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateB - dateA;
+          });
+          setMicroscopeHistory(sortedHistory);
+        }
       } catch (err) {
         setError(err.message || "Failed to delete calibration");
       } finally {
@@ -328,12 +349,20 @@ const MicroscopePage = () => {
       if (
         !formData.microscopeEquipmentId ||
         !formData.date ||
-        !formData.servicingCompany ||
-        !formData.graticule ||
-        !formData.constant25mm ||
-        !formData.constant13mm
+        !formData.servicingCompany
       ) {
         setError("Please fill in all required fields");
+        return;
+      }
+
+      const selectedMicroscope = microscopes.find(
+        (m) => m._id === formData.microscopeEquipmentId
+      );
+
+      if (!selectedMicroscope || !selectedMicroscope.calibrationFrequency) {
+        setError(
+          "Selected microscope does not have a calibration frequency set. Please set the calibration frequency in the Equipment List first."
+        );
         return;
       }
 
@@ -341,16 +370,12 @@ const MicroscopePage = () => {
         microscopeReference: formData.microscopeReference,
         date: formData.date,
         servicingCompany: formData.servicingCompany,
-        graticule: formData.graticule,
-        graticuleArea: formData.graticuleArea
-          ? parseFloat(formData.graticuleArea)
-          : null,
-        constant25mm: parseFloat(formData.constant25mm),
-        constant13mm: parseFloat(formData.constant13mm),
         serviceReportUrl: formData.serviceReportUrl || null,
         notes: formData.notes || "",
         calibratedBy: currentUser._id,
       };
+
+      const updatedMicroscopeReference = formData.microscopeReference;
 
       if (editingCalibration) {
         await pcmMicroscopeService.update(editingCalibration._id, backendData);
@@ -365,6 +390,29 @@ const MicroscopePage = () => {
       setAddDialogOpen(false);
       setEditingCalibration(null);
       fetchMicroscopes();
+
+      // If history dialog is open for the updated/created calibration's microscope, refresh the history
+      if (
+        historyDialogOpen &&
+        selectedMicroscopeForHistory &&
+        selectedMicroscopeForHistory.equipmentReference ===
+          updatedMicroscopeReference
+      ) {
+        try {
+          const response = await pcmMicroscopeService.getByEquipment(
+            updatedMicroscopeReference
+          );
+          const history = response.data || response || [];
+          const sortedHistory = history.sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateB - dateA;
+          });
+          setMicroscopeHistory(sortedHistory);
+        } catch (err) {
+          console.error("Error refreshing history after save:", err);
+        }
+      }
 
       window.dispatchEvent(
         new CustomEvent("equipmentDataUpdated", {
@@ -392,22 +440,32 @@ const MicroscopePage = () => {
     }));
 
     setError(null);
+
+    if (selectedMicroscope && !selectedMicroscope.calibrationFrequency) {
+      setError(
+        "Selected microscope does not have a calibration frequency set. Please set the calibration frequency in the Equipment List first."
+      );
+    }
   };
 
-  const handleGraticuleChange = (graticuleReference) => {
-    const selectedGraticule = graticules.find(
-      (g) => g.equipmentReference === graticuleReference
+  const handleDateChange = (date) => {
+    const selectedMicroscope = microscopes.find(
+      (m) => m._id === formData.microscopeEquipmentId
     );
-    const graticuleArea = selectedGraticule?.latestCalibration?.area || "";
-    const constants = calculateConstants(graticuleArea);
 
-    setFormData({
-      ...formData,
-      graticule: graticuleReference,
-      graticuleArea: graticuleArea.toString(),
-      constant25mm: constants.constant25mm.toString(),
-      constant13mm: constants.constant13mm.toString(),
-    });
+    if (selectedMicroscope && !selectedMicroscope.calibrationFrequency) {
+      setError(
+        "Selected microscope does not have a calibration frequency set. Please set the calibration frequency in the Equipment List first."
+      );
+    } else if (selectedMicroscope && selectedMicroscope.calibrationFrequency) {
+      // Clear error if calibration frequency exists
+      setError(null);
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      date: date,
+    }));
   };
 
   const handleServiceReport = (serviceReportData) => {
@@ -753,9 +811,7 @@ const MicroscopePage = () => {
                   label="Servicing Date"
                   type="date"
                   value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
+                  onChange={(e) => handleDateChange(e.target.value)}
                   InputLabelProps={{ shrink: true }}
                   required
                 />
@@ -769,50 +825,6 @@ const MicroscopePage = () => {
                 }
                 required
               />
-              <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Graticule</InputLabel>
-                  <Select
-                    value={formData.graticule}
-                    onChange={(e) => handleGraticuleChange(e.target.value)}
-                    label="Graticule"
-                  >
-                    <MenuItem value="">
-                      <em>Select a graticule</em>
-                    </MenuItem>
-                    {graticules.map((graticule) => (
-                      <MenuItem
-                        key={graticule._id}
-                        value={graticule.equipmentReference}
-                      >
-                        {graticule.equipmentReference} - {graticule.brandModel}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  fullWidth
-                  label="Constant 25mm"
-                  type="number"
-                  value={formData.constant25mm}
-                  onChange={(e) =>
-                    setFormData({ ...formData, constant25mm: e.target.value })
-                  }
-                  helperText="Latest EFA area (25mm) ÷ Graticule area"
-                  required
-                />
-                <TextField
-                  fullWidth
-                  label="Constant 13mm"
-                  type="number"
-                  value={formData.constant13mm}
-                  onChange={(e) =>
-                    setFormData({ ...formData, constant13mm: e.target.value })
-                  }
-                  helperText="Latest EFA area (13mm) ÷ Graticule area"
-                  required
-                />
-              </Box>
               <TextField
                 fullWidth
                 label="Notes"
@@ -863,10 +875,7 @@ const MicroscopePage = () => {
                 loading ||
                 !formData.microscopeEquipmentId ||
                 !formData.date ||
-                !formData.servicingCompany ||
-                !formData.graticule ||
-                !formData.constant25mm ||
-                !formData.constant13mm
+                !formData.servicingCompany
               }
             >
               {loading ? <CircularProgress size={24} /> : "Save"}
@@ -963,12 +972,10 @@ const MicroscopePage = () => {
                   <TableRow>
                     <TableCell>Servicing Date</TableCell>
                     <TableCell>Servicing Company</TableCell>
-                    <TableCell>Graticule</TableCell>
-                    <TableCell>Constant (25mm)</TableCell>
-                    <TableCell>Constant (13mm)</TableCell>
                     <TableCell>Calibrated By</TableCell>
                     <TableCell>Service Report</TableCell>
                     <TableCell>Notes</TableCell>
+                    <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -980,9 +987,6 @@ const MicroscopePage = () => {
                       <TableCell>
                         {calibration.servicingCompany || "-"}
                       </TableCell>
-                      <TableCell>{calibration.graticule || "-"}</TableCell>
-                      <TableCell>{calibration.constant25mm || "-"}</TableCell>
-                      <TableCell>{calibration.constant13mm || "-"}</TableCell>
                       <TableCell>
                         {calibration.calibratedBy?.name ||
                           (calibration.calibratedBy?.firstName &&
@@ -1006,6 +1010,24 @@ const MicroscopePage = () => {
                         )}
                       </TableCell>
                       <TableCell>{calibration.notes || "-"}</TableCell>
+                      <TableCell>
+                        <IconButton
+                          onClick={() => handleEditFromHistory(calibration)}
+                          size="small"
+                          title="Edit Calibration"
+                          sx={{ color: theme.palette.primary.main }}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => handleDelete(calibration)}
+                          size="small"
+                          title="Delete Calibration"
+                          sx={{ color: theme.palette.error.main }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

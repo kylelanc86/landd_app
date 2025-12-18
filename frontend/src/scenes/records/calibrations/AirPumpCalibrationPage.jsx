@@ -40,7 +40,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { useNavigate, useParams } from "react-router-dom";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
-import airPumpService from "../../../services/airPumpService";
+import { equipmentService } from "../../../services/equipmentService";
 import { formatDate } from "../../../utils/dateFormat";
 
 const AirPumpCalibrationPage = () => {
@@ -91,28 +91,34 @@ const AirPumpCalibrationPage = () => {
       setLoading(true);
       setError(null);
 
-      // Load pump details
-      const pumpData = await airPumpService.getById(pumpId);
-      setPump(pumpData);
+      // Load pump details from Equipment model
+      const pumpData = await equipmentService.getById(pumpId);
+      setPump(pumpData.data || pumpData);
 
-      // Load calibrations
+      // Load calibrations using Equipment ID
       const calibrationsData =
         await airPumpCalibrationService.getPumpCalibrations(
           pumpId,
           page + 1,
           rowsPerPage
         );
-      setCalibrations(calibrationsData.data);
-      setTotal(calibrationsData.pagination.total);
+      setCalibrations(calibrationsData.data || calibrationsData || []);
+      setTotal(calibrationsData.pagination?.total || 0);
 
       // Load statistics
-      const statsData = await airPumpCalibrationService.getPumpCalibrationStats(
-        pumpId
-      );
-      setStats(statsData);
+      try {
+        const statsData =
+          await airPumpCalibrationService.getPumpCalibrationStats(pumpId);
+        setStats(statsData);
+      } catch (statsErr) {
+        console.warn("Could not load statistics:", statsErr);
+        // Statistics are optional, so don't fail the whole page
+      }
     } catch (err) {
       console.error("Error loading data:", err);
-      setError(err.message || "Failed to load data");
+      setError(
+        err.response?.data?.message || err.message || "Failed to load data"
+      );
     } finally {
       setLoading(false);
     }
@@ -256,13 +262,11 @@ const AirPumpCalibrationPage = () => {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              {pump.pumpReference} - {pump.pumpDetails}
+              {pump.equipmentReference}
+              {pump.brandModel ? ` - ${pump.brandModel}` : ""}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Status: {pump.status} | Last Calibrated:{" "}
-              {pump.calibrationDate
-                ? formatDate(pump.calibrationDate)
-                : "Never"}
+              Section: {pump.section || "N/A"} | Status: {pump.status || "N/A"}
             </Typography>
           </CardContent>
         </Card>
@@ -314,57 +318,92 @@ const AirPumpCalibrationPage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {calibrations.map((calibration) => (
-              <TableRow key={calibration._id} hover>
-                <TableCell>{formatDate(calibration.calibrationDate)}</TableCell>
-                <TableCell>
-                  {calibration.calibratedBy?.firstName}{" "}
-                  {calibration.calibratedBy?.lastName}
-                </TableCell>
-                <TableCell>
-                  {calibration.testsPassed}/{calibration.totalTests} passed
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={calibration.overallResult}
-                    color={getResultColor(calibration.overallResult)}
-                    size="small"
-                    icon={
-                      calibration.overallResult === "Pass" ? (
-                        <CheckCircleIcon />
-                      ) : (
-                        <CancelIcon />
-                      )
-                    }
-                  />
-                </TableCell>
-                <TableCell>
-                  {calibration.averagePercentError?.toFixed(2)}%
-                </TableCell>
-                <TableCell>
-                  {formatDate(calibration.nextCalibrationDue)}
-                </TableCell>
-                <TableCell>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleEdit(calibration)}
-                    color="primary"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      setCalibrationToDelete(calibration);
-                      setDeleteDialog(true);
-                    }}
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+            {calibrations.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center">
+                  <Typography variant="body2" color="text.secondary">
+                    No calibration records found
+                  </Typography>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              calibrations.map((calibration) => (
+                <TableRow key={calibration._id} hover>
+                  <TableCell>
+                    {calibration.calibrationDate
+                      ? formatDate(calibration.calibrationDate)
+                      : "N/A"}
+                  </TableCell>
+                  <TableCell>
+                    {calibration.calibratedBy
+                      ? `${calibration.calibratedBy.firstName || ""} ${
+                          calibration.calibratedBy.lastName || ""
+                        }`.trim() || "N/A"
+                      : "N/A"}
+                  </TableCell>
+                  <TableCell>
+                    {calibration.testsPassed !== undefined &&
+                    calibration.totalTests !== undefined
+                      ? `${calibration.testsPassed}/${calibration.totalTests} passed`
+                      : calibration.testResults?.length
+                      ? `${
+                          calibration.testResults.filter((t) => t.passed).length
+                        }/${calibration.testResults.length} passed`
+                      : "N/A"}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={calibration.overallResult || "N/A"}
+                      color={getResultColor(calibration.overallResult)}
+                      size="small"
+                      icon={
+                        calibration.overallResult === "Pass" ? (
+                          <CheckCircleIcon />
+                        ) : (
+                          <CancelIcon />
+                        )
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {calibration.averagePercentError !== undefined
+                      ? `${calibration.averagePercentError.toFixed(2)}%`
+                      : calibration.testResults?.length
+                      ? `${(
+                          calibration.testResults.reduce(
+                            (sum, t) => sum + (t.percentError || 0),
+                            0
+                          ) / calibration.testResults.length
+                        ).toFixed(2)}%`
+                      : "N/A"}
+                  </TableCell>
+                  <TableCell>
+                    {calibration.nextCalibrationDue
+                      ? formatDate(calibration.nextCalibrationDue)
+                      : "N/A"}
+                  </TableCell>
+                  <TableCell>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleEdit(calibration)}
+                      color="primary"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        setCalibrationToDelete(calibration);
+                        setDeleteDialog(true);
+                      }}
+                      color="error"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
         <TablePagination

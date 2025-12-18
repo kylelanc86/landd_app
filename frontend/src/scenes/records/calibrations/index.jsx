@@ -20,6 +20,8 @@ import AirPumpCalibration from "./widgets/AirPumpCalibration";
 import FlowmeterCalibration from "./widgets/FlowmeterCalibration";
 import EFA from "./widgets/EFA";
 import MicroscopeCalibration from "./widgets/PCMMicroscopeCalibration";
+import PLMMicroscopeCalibration from "./widgets/PLMMicroscopeCalibration";
+import StereomicroscopeCalibration from "./widgets/StereomicroscopeCalibration";
 import HSETestSlideCalibration from "./widgets/HSETestSlideCalibration";
 import AcetoneVaporiser from "./widgets/AcetoneVaporiser";
 import GraticuleCalibration from "./widgets/GraticuleCalibration";
@@ -170,11 +172,25 @@ const Calibrations = () => {
 
       {activeTab === 1 && (
         <Grid container spacing={3}>
-          {/* Microscope */}
+          {/* PCM Microscope */}
           <Grid item xs={12} md={6} lg={4}>
             <MicroscopeCalibration
               nextCalibrationDue={formatDate("2024-03-30")}
               viewCalibrationsPath="/records/laboratory/calibrations/microscope"
+            />
+          </Grid>
+          {/* PLM Microscope */}
+          <Grid item xs={12} md={6} lg={4}>
+            <PLMMicroscopeCalibration
+              nextCalibrationDue={formatDate("2024-03-30")}
+              viewCalibrationsPath="/records/laboratory/calibrations/plm-microscope"
+            />
+          </Grid>
+          {/* Stereomicroscope */}
+          <Grid item xs={12} md={6} lg={4}>
+            <StereomicroscopeCalibration
+              nextCalibrationDue={formatDate("2024-03-30")}
+              viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope"
             />
           </Grid>
           {/* HSE Test Slide */}

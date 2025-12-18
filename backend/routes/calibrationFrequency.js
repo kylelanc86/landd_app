@@ -2,8 +2,125 @@ const express = require('express');
 const router = express.Router();
 const CalibrationFrequency = require('../models/CalibrationFrequency');
 const VariableCalibrationFrequency = require('../models/VariableCalibrationFrequency');
+const Equipment = require('../models/Equipment');
+const FlowmeterCalibration = require('../models/FlowmeterCalibration');
+const GraticuleCalibration = require('../models/GraticuleCalibration');
+const HSETestSlideCalibration = require('../models/HSETestSlideCalibration');
+const AirPumpCalibration = require('../models/AirPumpCalibration');
+const AirPump = require('../models/AirPump');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+
+// Helper function to recalculate calibration dates for an equipment reference
+const recalculateCalibrationDates = async (equipmentReference, newCalibrationFrequency) => {
+  if (!newCalibrationFrequency) {
+    console.log(`Skipping recalculation for ${equipmentReference}: no calibration frequency provided`);
+    return;
+  }
+
+  try {
+    console.log(`Starting recalculation for ${equipmentReference} with frequency ${newCalibrationFrequency} months`);
+    let updatedCount = 0;
+
+    // Recalculate FlowmeterCalibration records
+    const flowmeterCalibrations = await FlowmeterCalibration.find({ 
+      flowmeterId: equipmentReference 
+    });
+    console.log(`Found ${flowmeterCalibrations.length} FlowmeterCalibration records`);
+    for (const cal of flowmeterCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        // Use updateOne to bypass pre-save middleware that might recalculate
+        await FlowmeterCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate GraticuleCalibration records
+    const graticuleCalibrations = await GraticuleCalibration.find({ 
+      graticuleId: equipmentReference 
+    });
+    console.log(`Found ${graticuleCalibrations.length} GraticuleCalibration records`);
+    for (const cal of graticuleCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        // Use updateOne to bypass pre-save middleware
+        await GraticuleCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate HSETestSlideCalibration records
+    const hseCalibrations = await HSETestSlideCalibration.find({ 
+      testSlideReference: equipmentReference 
+    });
+    console.log(`Found ${hseCalibrations.length} HSETestSlideCalibration records`);
+    for (const cal of hseCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        // Use updateOne to bypass pre-save middleware
+        await HSETestSlideCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate AirPumpCalibration records (through AirPump model)
+    const airPump = await AirPump.findOne({ pumpReference: equipmentReference });
+    if (airPump) {
+      const airPumpCalibrations = await AirPumpCalibration.find({ 
+        pumpId: airPump._id 
+      });
+      console.log(`Found ${airPumpCalibrations.length} AirPumpCalibration records`);
+      for (const cal of airPumpCalibrations) {
+        if (cal.calibrationDate) {
+          const nextDue = new Date(cal.calibrationDate);
+          nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+          // Use updateOne to bypass pre-save middleware
+          await AirPumpCalibration.updateOne(
+            { _id: cal._id },
+            { $set: { nextCalibrationDue: nextDue } }
+          );
+          updatedCount++;
+        }
+      }
+    }
+
+    console.log(`Completed recalculation for ${equipmentReference}: updated ${updatedCount} calibration records`);
+  } catch (error) {
+    console.error(`Error recalculating calibration dates for ${equipmentReference}:`, error);
+    // Don't throw - we don't want to fail if recalculation fails
+  }
+};
+
+// Helper function to recalculate calibration dates for all equipment of a type
+const recalculateCalibrationDatesForEquipmentType = async (equipmentType, newCalibrationFrequency) => {
+  if (!newCalibrationFrequency) return;
+
+  try {
+    // Get all equipment of this type
+    const equipmentList = await Equipment.find({ equipmentType });
+    
+    // Recalculate calibration dates for each equipment
+    for (const equipment of equipmentList) {
+      await recalculateCalibrationDates(equipment.equipmentReference, newCalibrationFrequency);
+    }
+  } catch (error) {
+    console.error(`Error recalculating calibration dates for equipment type ${equipmentType}:`, error);
+    // Don't throw - we don't want to fail if recalculation fails
+  }
+};
 
 // ===== FIXED CALIBRATION FREQUENCY ROUTES =====
 
@@ -72,6 +189,30 @@ router.post('/fixed', auth, checkPermission(['admin.access']), async (req, res) 
     const frequency = new CalibrationFrequency(frequencyData);
     const savedFrequency = await frequency.save();
 
+    // Update all Equipment records of this type with the new calibration frequency (in months)
+    try {
+      let calibrationFrequencyInMonths = null;
+      if (savedFrequency.frequencyUnit === 'years') {
+        calibrationFrequencyInMonths = savedFrequency.frequencyValue * 12;
+      } else {
+        calibrationFrequencyInMonths = savedFrequency.frequencyValue;
+      }
+
+      // Update all equipment of this type
+      await Equipment.updateMany(
+        { equipmentType: savedFrequency.equipmentType },
+        { $set: { calibrationFrequency: calibrationFrequencyInMonths } }
+      );
+      
+      console.log(`Updated calibration frequency for all ${savedFrequency.equipmentType} equipment to ${calibrationFrequencyInMonths} months`);
+
+      // Recalculate calibration dates for all equipment of this type
+      await recalculateCalibrationDatesForEquipmentType(savedFrequency.equipmentType, calibrationFrequencyInMonths);
+    } catch (equipmentUpdateError) {
+      // Log error but don't fail the request
+      console.error('Error updating equipment calibration frequencies:', equipmentUpdateError);
+    }
+
     const populatedFrequency = await CalibrationFrequency.findById(savedFrequency._id)
       .populate('createdBy', 'firstName lastName')
       .populate('updatedBy', 'firstName lastName');
@@ -91,6 +232,9 @@ router.put('/fixed/:id', auth, checkPermission(['admin.access']), async (req, re
       return res.status(404).json({ message: 'Calibration frequency not found' });
     }
 
+    // Store old equipment type for updating equipment records
+    const oldEquipmentType = frequency.equipmentType;
+
     // Update fields
     Object.keys(req.body).forEach(key => {
       if (req.body[key] !== undefined) {
@@ -100,6 +244,32 @@ router.put('/fixed/:id', auth, checkPermission(['admin.access']), async (req, re
     frequency.updatedBy = req.user.id;
 
     const updatedFrequency = await frequency.save();
+
+    // Update all Equipment records of this type with the new calibration frequency (in months)
+    try {
+      const equipmentType = updatedFrequency.equipmentType || oldEquipmentType;
+      let calibrationFrequencyInMonths = null;
+      
+      if (updatedFrequency.frequencyUnit === 'years') {
+        calibrationFrequencyInMonths = updatedFrequency.frequencyValue * 12;
+      } else {
+        calibrationFrequencyInMonths = updatedFrequency.frequencyValue;
+      }
+
+      // Update all equipment of this type
+      await Equipment.updateMany(
+        { equipmentType: equipmentType },
+        { $set: { calibrationFrequency: calibrationFrequencyInMonths } }
+      );
+      
+      console.log(`Updated calibration frequency for all ${equipmentType} equipment to ${calibrationFrequencyInMonths} months`);
+
+      // Recalculate calibration dates for all equipment of this type
+      await recalculateCalibrationDatesForEquipmentType(equipmentType, calibrationFrequencyInMonths);
+    } catch (equipmentUpdateError) {
+      // Log error but don't fail the request
+      console.error('Error updating equipment calibration frequencies:', equipmentUpdateError);
+    }
 
     const populatedFrequency = await CalibrationFrequency.findById(updatedFrequency._id)
       .populate('createdBy', 'firstName lastName')

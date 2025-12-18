@@ -34,8 +34,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import HistoryIcon from "@mui/icons-material/History";
 import CloseIcon from "@mui/icons-material/Close";
-import airPumpService from "../../../services/airPumpService";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
+import { equipmentService } from "../../../services/equipmentService";
 import userService from "../../../services/userService";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { useAuth } from "../../../context/AuthContext";
@@ -58,6 +58,10 @@ const AirPumpPage = () => {
     date: formatDateForInput(new Date()),
     technicianId: "",
     technicianName: "",
+    flowRate: "",
+    actualFlow: "",
+    errorPercent: "",
+    status: "Pass",
     notes: "",
   });
 
@@ -79,20 +83,20 @@ const AirPumpPage = () => {
 
   // Calculate equipment status
   const calculateStatus = useCallback(
-    (pump) => {
-      if (!pump) {
+    (equipment) => {
+      if (!equipment) {
         return "Out-of-Service";
       }
 
-      if (pump.status === "Out of Service" || pump.status === "Inactive") {
+      if (equipment.status === "out-of-service") {
         return "Out-of-Service";
       }
 
-      if (!pump.calibrationDate || !pump.calibrationDue) {
+      if (!equipment.lastCalibration || !equipment.calibrationDue) {
         return "Out-of-Service";
       }
 
-      const daysUntil = calculateDaysUntilCalibration(pump.calibrationDue);
+      const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
       if (daysUntil !== null && daysUntil < 0) {
         return "Calibration Overdue";
       }
@@ -105,8 +109,104 @@ const AirPumpPage = () => {
   const fetchPumps = useCallback(async () => {
     try {
       setPumpsLoading(true);
-      const response = await airPumpService.getAll({ limit: 100 });
-      setPumps(response.data || []);
+      const response = await equipmentService.getAll();
+      const allEquipment = response.equipment || [];
+
+      // Filter for Air pump equipment
+      const airPumps = allEquipment
+        .filter((equipment) => equipment.equipmentType === "Air pump")
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference)
+        );
+
+      // Fetch calibration data for each pump
+      const pumpsWithCalibrations = await Promise.all(
+        airPumps.map(async (pump) => {
+          try {
+            // Fetch all calibrations for this pump using Equipment ID
+            const calibrationResponse =
+              await airPumpCalibrationService.getPumpCalibrations(
+                pump._id,
+                1,
+                1000
+              );
+            const calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+
+            // Calculate lastCalibration (most recent calibration date)
+            const lastCalibration =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) =>
+                        new Date(cal.calibrationDate).getTime()
+                      )
+                    )
+                  )
+                : null;
+
+            // Calculate calibrationDue (most recent nextCalibrationDue date)
+            const calibrationDue =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations
+                        .filter((cal) => cal.nextCalibrationDue)
+                        .map((cal) =>
+                          new Date(cal.nextCalibrationDue).getTime()
+                        )
+                    )
+                  )
+                : null;
+
+            // Calculate flowrateCalibrations (group by flowrate, get most recent for each)
+            // Convert setFlowrate from mL/min to L/min and get the most recent status
+            const flowrateCalibrations = {};
+            calibrations.forEach((cal) => {
+              if (cal.testResults && cal.testResults.length > 0) {
+                // Get the setFlowrate from the first test result (all testResults in a calibration have the same setFlowrate)
+                const setFlowrateMlMin = cal.testResults[0].setFlowrate;
+                const flowrateLMin = (setFlowrateMlMin / 1000).toString();
+
+                // Use overallResult as the status for this flowrate
+                if (
+                  !flowrateCalibrations[flowrateLMin] ||
+                  new Date(cal.calibrationDate) >
+                    new Date(
+                      flowrateCalibrations[flowrateLMin].lastCalibrationDate
+                    )
+                ) {
+                  flowrateCalibrations[flowrateLMin] = {
+                    status: cal.overallResult || "Fail",
+                    lastCalibrationDate: cal.calibrationDate,
+                  };
+                }
+              }
+            });
+
+            return {
+              ...pump,
+              lastCalibration,
+              calibrationDue,
+              flowrateCalibrations,
+            };
+          } catch (err) {
+            console.error(
+              `Error fetching calibrations for ${pump.equipmentReference}:`,
+              err
+            );
+            // Return pump without calibration data if fetch fails
+            return {
+              ...pump,
+              lastCalibration: null,
+              calibrationDue: null,
+              flowrateCalibrations: {},
+            };
+          }
+        })
+      );
+
+      setPumps(pumpsWithCalibrations);
       setError(null);
     } catch (err) {
       console.error("Error fetching air pumps:", err);
@@ -163,6 +263,10 @@ const AirPumpPage = () => {
       date: todayDate,
       technicianId: "",
       technicianName: "",
+      flowRate: "",
+      actualFlow: "",
+      errorPercent: "",
+      status: "Pass",
       notes: "",
     });
     setAddDialogOpen(true);
@@ -174,7 +278,7 @@ const AirPumpPage = () => {
     setFormData((prev) => ({
       ...prev,
       pumpEquipmentId: pumpEquipmentId,
-      pumpId: selectedPump ? selectedPump._id : "",
+      pumpId: selectedPump ? selectedPump.equipmentReference : "",
     }));
 
     setError(null);
@@ -193,6 +297,50 @@ const AirPumpPage = () => {
     }));
   };
 
+  const handleFlowRateChange = (flowRate) => {
+    setFormData((prev) => {
+      const newData = { ...prev, flowRate };
+      // Recalculate error if actualFlow exists
+      if (newData.actualFlow && flowRate) {
+        const actualFlowNum = parseFloat(newData.actualFlow);
+        const flowRateNum = parseFloat(flowRate);
+        if (!isNaN(actualFlowNum) && !isNaN(flowRateNum) && flowRateNum !== 0) {
+          const errorValue = Math.abs(
+            ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+          );
+          newData.errorPercent = errorValue.toFixed(2);
+          newData.status = errorValue < 5 ? "Pass" : "Fail";
+        } else {
+          newData.errorPercent = "";
+        }
+      }
+      return newData;
+    });
+  };
+
+  const handleActualFlowChange = (actualFlow) => {
+    setFormData((prev) => {
+      const newData = { ...prev, actualFlow };
+      // Calculate error percentage
+      if (newData.flowRate && actualFlow) {
+        const actualFlowNum = parseFloat(actualFlow);
+        const flowRateNum = parseFloat(newData.flowRate);
+        if (!isNaN(actualFlowNum) && !isNaN(flowRateNum) && flowRateNum !== 0) {
+          const errorValue = Math.abs(
+            ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+          );
+          newData.errorPercent = errorValue.toFixed(2);
+          newData.status = errorValue < 5 ? "Pass" : "Fail";
+        } else {
+          newData.errorPercent = "";
+        }
+      } else {
+        newData.errorPercent = "";
+      }
+      return newData;
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -203,20 +351,52 @@ const AirPumpPage = () => {
         throw new Error("User not authenticated");
       }
 
-      if (!formData.pumpEquipmentId || !formData.date || !formData.technicianId) {
+      if (
+        !formData.pumpEquipmentId ||
+        !formData.date ||
+        !formData.technicianId ||
+        !formData.flowRate ||
+        !formData.actualFlow
+      ) {
         setError("Please fill in all required fields");
         return;
       }
 
-      // TODO: Add air pump calibration specific fields here
-      // This is a template - will be customized for air pump calibrations
+      // Convert flowrate from L/min to mL/min (multiply by 1000)
+      const setFlowrateMlMin = Math.round(parseFloat(formData.flowRate) * 1000);
+      const actualFlowrateMlMin = parseFloat(formData.actualFlow) * 1000;
+
+      // Validate setFlowrate is in the allowed enum values
+      const allowedFlowrates = [1000, 1500, 2000, 3000, 4000];
+      if (!allowedFlowrates.includes(setFlowrateMlMin)) {
+        setError(`Invalid flowrate. Must be one of: 1, 1.5, 2, 3, or 4 L/min`);
+        return;
+      }
+
+      // Calculate percent error
+      const percentError = Math.abs(
+        ((actualFlowrateMlMin - setFlowrateMlMin) / setFlowrateMlMin) * 100
+      );
+
+      // Determine if test passed
+      const passed = percentError < 5;
+
       const backendData = {
-        pumpId: formData.pumpId,
-        calibrationDate: formData.date,
-        calibratedBy: currentUser._id,
+        pumpId: formData.pumpEquipmentId, // Use equipment ID
+        calibrationDate: new Date(formData.date),
+        testResults: [
+          {
+            setFlowrate: setFlowrateMlMin,
+            actualFlowrate: actualFlowrateMlMin,
+            percentError: percentError,
+            passed: passed,
+          },
+        ],
+        overallResult: formData.status,
         notes: formData.notes || "",
-        // testResults: [], // Will be added in customization
       };
+
+      console.log("Sending calibration data:", backendData);
 
       await airPumpCalibrationService.createCalibration(backendData);
 
@@ -250,9 +430,7 @@ const AirPumpPage = () => {
   // Filter pumps based on showOutOfService toggle
   const filteredPumps = showOutOfService
     ? pumps
-    : pumps.filter(
-        (pump) => pump.status !== "Out of Service" && pump.status !== "Inactive"
-      );
+    : pumps.filter((pump) => pump.status !== "out-of-service");
 
   if (pumpsLoading) {
     return (
@@ -312,12 +490,7 @@ const AirPumpPage = () => {
         </Alert>
       )}
 
-      <Box
-        display="flex"
-        alignItems="center"
-        gap={2}
-        mb={2}
-      >
+      <Box display="flex" alignItems="center" gap={2} mb={2}>
         <FormControlLabel
           control={
             <Switch
@@ -329,39 +502,10 @@ const AirPumpPage = () => {
           label="Show Out of Service Pumps"
         />
         <Typography variant="body2" color="text.secondary">
-          ({pumps.filter((p) => p.status === "Active").length} active,{" "}
-          {
-            pumps.filter(
-              (p) => p.status === "Out of Service" || p.status === "Inactive"
-            ).length
-          }{" "}
+          ({pumps.filter((p) => calculateStatus(p) === "Active").length} active,{" "}
+          {pumps.filter((p) => calculateStatus(p) === "Out-of-Service").length}{" "}
           out of service)
         </Typography>
-        {pumps.some((p) => p.status === "Inactive") && (
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={async () => {
-              if (
-                window.confirm(
-                  'Update all "Inactive" statuses to "Out of Service"? This action cannot be undone.'
-                )
-              ) {
-                try {
-                  const result = await airPumpService.updateInactiveStatus();
-                  alert(
-                    `Updated ${result.modifiedCount} pumps from "Inactive" to "Out of Service"`
-                  );
-                  fetchPumps(); // Refresh the data
-                } catch (err) {
-                  setError("Error updating statuses: " + err.message);
-                }
-              }
-            }}
-          >
-            Update Inactive → Out of Service
-          </Button>
-        )}
       </Box>
 
       {/* Air Pump Equipment Table */}
@@ -373,13 +517,13 @@ const AirPumpPage = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Equipment Reference</TableCell>
+                <TableCell>Equipment Ref</TableCell>
                 <TableCell>Brand/Model</TableCell>
                 <TableCell>Section</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Last Calibration</TableCell>
                 <TableCell>Calibration Due</TableCell>
-                <TableCell>Max Flowrate</TableCell>
+                <TableCell>Flowrates (L/min)</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -414,11 +558,11 @@ const AirPumpPage = () => {
                     <TableRow key={pump._id}>
                       <TableCell>
                         <Typography variant="body2" fontWeight="medium">
-                          {pump.pumpReference}
+                          {pump.equipmentReference}
                         </Typography>
                       </TableCell>
-                      <TableCell>{pump.pumpDetails || "-"}</TableCell>
-                      <TableCell>-</TableCell>
+                      <TableCell>{pump.brandModel || "-"}</TableCell>
+                      <TableCell>{pump.section || "-"}</TableCell>
                       <TableCell>
                         <Box
                           sx={{
@@ -433,8 +577,8 @@ const AirPumpPage = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {pump.calibrationDate
-                          ? formatDate(pump.calibrationDate)
+                        {pump.lastCalibration
+                          ? formatDate(pump.lastCalibration)
                           : "-"}
                       </TableCell>
                       <TableCell>
@@ -483,7 +627,62 @@ const AirPumpPage = () => {
                             })()
                           : "-"}
                       </TableCell>
-                      <TableCell>{pump.maxFlowrate || "-"}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          // Handle both Map and object formats (MongoDB Maps are converted to objects in JSON)
+                          const flowrateCalibrations =
+                            pump.flowrateCalibrations;
+                          const entries =
+                            flowrateCalibrations instanceof Map
+                              ? Array.from(flowrateCalibrations.entries())
+                              : flowrateCalibrations
+                              ? Object.entries(flowrateCalibrations)
+                              : [];
+
+                          if (entries.length > 0) {
+                            return (
+                              <Box display="flex" gap={0.5} flexWrap="wrap">
+                                {entries.map(([flowrate, calData]) => {
+                                  const calStatus =
+                                    typeof calData === "object" &&
+                                    calData !== null
+                                      ? calData.status
+                                      : calData;
+                                  const statusColor =
+                                    calStatus === "Pass"
+                                      ? theme.palette.success.main
+                                      : theme.palette.error.main;
+                                  return (
+                                    <Box
+                                      key={flowrate}
+                                      sx={{
+                                        backgroundColor: statusColor,
+                                        color: "white",
+                                        padding: "2px 6px",
+                                        borderRadius: "4px",
+                                        fontSize: "0.75rem",
+                                        display: "inline-block",
+                                      }}
+                                      title={`${flowrate} L/min: ${calStatus}`}
+                                    >
+                                      {flowrate}
+                                    </Box>
+                                  );
+                                })}
+                              </Box>
+                            );
+                          } else {
+                            return (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                No calibrations
+                              </Typography>
+                            );
+                          }
+                        })()}
+                      </TableCell>
                       <TableCell>
                         <IconButton
                           onClick={() => handleViewHistory(pump)}
@@ -553,7 +752,7 @@ const AirPumpPage = () => {
                     {pumps.length > 0 ? (
                       pumps.map((pump) => (
                         <MenuItem key={pump._id} value={pump._id}>
-                          {pump.pumpReference} - {pump.pumpDetails}
+                          {pump.equipmentReference} - {pump.brandModel}
                         </MenuItem>
                       ))
                     ) : (
@@ -601,6 +800,129 @@ const AirPumpPage = () => {
                   </Select>
                 </FormControl>
               </Box>
+              <Box display="flex" gap={2}>
+                <FormControl fullWidth required>
+                  <InputLabel>Flowrate (L/min)</InputLabel>
+                  <Select
+                    value={formData.flowRate}
+                    onChange={(e) => handleFlowRateChange(e.target.value)}
+                    label="Flowrate (L/min)"
+                  >
+                    <MenuItem value="">
+                      <em>Select flowrate</em>
+                    </MenuItem>
+                    <MenuItem value="1">1 L/min</MenuItem>
+                    <MenuItem value="1.5">1.5 L/min</MenuItem>
+                    <MenuItem value="2">2 L/min</MenuItem>
+                    <MenuItem value="3">3 L/min</MenuItem>
+                    <MenuItem value="4">4 L/min</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField
+                  fullWidth
+                  label="Actual Flow (L/min)"
+                  type="number"
+                  value={formData.actualFlow}
+                  onChange={(e) => handleActualFlowChange(e.target.value)}
+                  inputProps={{ step: "0.01", min: "0" }}
+                  sx={{
+                    "& input[type=number]": {
+                      "-moz-appearance": "textfield",
+                    },
+                    "& input[type=number]::-webkit-outer-spin-button": {
+                      "-webkit-appearance": "none",
+                      margin: 0,
+                    },
+                    "& input[type=number]::-webkit-inner-spin-button": {
+                      "-webkit-appearance": "none",
+                      margin: 0,
+                    },
+                  }}
+                  required
+                />
+              </Box>
+              {(() => {
+                // Calculate error percentage and status
+                let errorPercent = "";
+                let calculatedStatus = "";
+
+                if (formData.flowRate && formData.actualFlow) {
+                  const flowRateNum = parseFloat(formData.flowRate);
+                  const actualFlowNum = parseFloat(formData.actualFlow);
+
+                  if (
+                    !isNaN(flowRateNum) &&
+                    !isNaN(actualFlowNum) &&
+                    flowRateNum !== 0
+                  ) {
+                    const errorValue = Math.abs(
+                      ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+                    );
+                    errorPercent = errorValue.toFixed(2);
+                    calculatedStatus = errorValue < 5 ? "Pass" : "Fail";
+
+                    // Update status in formData if it changed
+                    if (calculatedStatus !== formData.status) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        status: calculatedStatus,
+                        errorPercent: errorPercent,
+                      }));
+                    } else if (formData.errorPercent !== errorPercent) {
+                      // Update errorPercent if status hasn't changed
+                      setFormData((prev) => ({
+                        ...prev,
+                        errorPercent: errorPercent,
+                      }));
+                    }
+                  }
+                }
+
+                return (
+                  <>
+                    <TextField
+                      fullWidth
+                      label="Error (%)"
+                      value={
+                        errorPercent
+                          ? `${errorPercent}%`
+                          : formData.errorPercent
+                          ? `${formData.errorPercent}%`
+                          : ""
+                      }
+                      InputLabelProps={{ shrink: true }}
+                      disabled
+                    />
+                    <Box>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: 1, fontSize: "16px", fontWeight: "600" }}
+                      >
+                        Status:
+                      </Typography>
+                      {errorPercent || formData.errorPercent ? (
+                        <Typography
+                          variant="h5"
+                          sx={{
+                            color:
+                              (calculatedStatus || formData.status) === "Pass"
+                                ? theme.palette.success.main
+                                : theme.palette.error.main,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {calculatedStatus || formData.status}
+                        </Typography>
+                      ) : (
+                        <Typography variant="h5" color="text.secondary">
+                          N/A
+                        </Typography>
+                      )}
+                    </Box>
+                  </>
+                );
+              })()}
               <TextField
                 fullWidth
                 label="Notes"
@@ -629,7 +951,9 @@ const AirPumpPage = () => {
                 loading ||
                 !formData.pumpEquipmentId ||
                 !formData.date ||
-                !formData.technicianId
+                !formData.technicianId ||
+                !formData.flowRate ||
+                !formData.actualFlow
               }
             >
               {loading ? <CircularProgress size={24} /> : "Save"}

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const HSETestSlideCalibration = require('../models/HSETestSlideCalibration');
 const Equipment = require('../models/Equipment');
+const CalibrationFrequency = require('../models/CalibrationFrequency');
 
 // Get all HSE Test Slide calibrations
 router.get('/', async (req, res) => {
@@ -26,6 +27,7 @@ router.get('/', async (req, res) => {
       certificateNumber: calibration.certificateNumber,
       certificateUrl: calibration.certificateUrl,
       notes: calibration.notes,
+      nextCalibration: calibration.nextCalibration,
       calibratedBy: calibration.calibratedBy ? {
         _id: calibration.calibratedBy._id,
         name: `${calibration.calibratedBy.firstName} ${calibration.calibratedBy.lastName}`
@@ -59,6 +61,7 @@ router.get('/equipment/:testSlideReference', async (req, res) => {
       certificateNumber: calibration.certificateNumber,
       certificateUrl: calibration.certificateUrl,
       notes: calibration.notes,
+      nextCalibration: calibration.nextCalibration,
       calibratedBy: calibration.calibratedBy ? {
         _id: calibration.calibratedBy._id,
         name: `${calibration.calibratedBy.firstName} ${calibration.calibratedBy.lastName}`
@@ -154,6 +157,52 @@ router.put('/:id', async (req, res) => {
       certificateUrl: certificateUrl || null,
       notes: notes || ''
     };
+
+    // If nextCalibration is provided, include it; otherwise calculate it based on equipment calibration frequency
+    if (req.body.nextCalibration) {
+      updateData.nextCalibration = new Date(req.body.nextCalibration);
+    } else {
+      // Calculate nextCalibration based on calibration frequency configuration
+      try {
+        const equipment = await Equipment.findOne({ equipmentReference: testSlideReference });
+        let frequencyInMonths = null;
+        
+        if (equipment && equipment.equipmentType) {
+          // Try to get calibration frequency from CalibrationFrequency model (preferred source)
+          const calibrationFreqConfig = await CalibrationFrequency.findOne({ 
+            equipmentType: equipment.equipmentType 
+          });
+          
+          if (calibrationFreqConfig) {
+            // Convert to months if needed
+            if (calibrationFreqConfig.frequencyUnit === 'years') {
+              frequencyInMonths = calibrationFreqConfig.frequencyValue * 12;
+            } else {
+              frequencyInMonths = calibrationFreqConfig.frequencyValue;
+            }
+          } else if (equipment.calibrationFrequency) {
+            // Fall back to equipment's calibrationFrequency field
+            frequencyInMonths = equipment.calibrationFrequency;
+          }
+        }
+        
+        if (frequencyInMonths) {
+          const nextDue = new Date(date);
+          nextDue.setMonth(nextDue.getMonth() + frequencyInMonths);
+          updateData.nextCalibration = nextDue;
+        } else {
+          // Fall back to 60 months (5 years)
+          const nextDue = new Date(date);
+          nextDue.setMonth(nextDue.getMonth() + 60);
+          updateData.nextCalibration = nextDue;
+        }
+      } catch (error) {
+        // Fall back to 60 months (5 years) if lookup fails
+        const nextDue = new Date(date);
+        nextDue.setMonth(nextDue.getMonth() + 60);
+        updateData.nextCalibration = nextDue;
+      }
+    }
 
     const calibration = await HSETestSlideCalibration.findByIdAndUpdate(
       req.params.id,

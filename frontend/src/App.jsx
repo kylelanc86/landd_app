@@ -33,6 +33,8 @@ import AirPumpCalibrationPage from "./scenes/records/calibrations/AirPumpCalibra
 import FlowmeterPage from "./scenes/records/calibrations/FlowmeterPage.jsx";
 import EFAPage from "./scenes/records/calibrations/EFAPage.jsx";
 import PCMMicroscopePage from "./scenes/records/calibrations/PCMMicroscopePage.jsx";
+import PLMMicroscopePage from "./scenes/records/calibrations/PLMMicroscopePage.jsx";
+import StereomicroscopePage from "./scenes/records/calibrations/StereomicroscopePage.jsx";
 import HSETestSlidePage from "./scenes/records/calibrations/HSETestSlidePage.jsx";
 import AcetoneVaporiserPage from "./scenes/records/calibrations/AcetoneVaporiserPage.jsx";
 import GraticulePage from "./scenes/records/calibrations/GraticulePage.jsx";
@@ -601,6 +603,26 @@ function App() {
                                     requiredPermissions={["calibrations.view"]}
                                   >
                                     <PCMMicroscopePage />
+                                  </ProtectedRoute>
+                                }
+                              />
+                              <Route
+                                path="/records/laboratory/calibrations/plm-microscope"
+                                element={
+                                  <ProtectedRoute
+                                    requiredPermissions={["calibrations.view"]}
+                                  >
+                                    <PLMMicroscopePage />
+                                  </ProtectedRoute>
+                                }
+                              />
+                              <Route
+                                path="/records/laboratory/calibrations/stereomicroscope"
+                                element={
+                                  <ProtectedRoute
+                                    requiredPermissions={["calibrations.view"]}
+                                  >
+                                    <StereomicroscopePage />
                                   </ProtectedRoute>
                                 }
                               />
