@@ -1806,19 +1806,6 @@ const ProjectReports = () => {
             <Typography variant="h5" gutterBottom>
               No Reports Available
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              This project doesn't have any reports yet.
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={() => navigate(backPath)}
-              sx={{ mr: 2 }}
-            >
-              {backText}
-            </Button>
-            <Button variant="outlined" onClick={() => setLogModalOpen(true)}>
-              View Project Log
-            </Button>
           </Box>
         )
       ) : (

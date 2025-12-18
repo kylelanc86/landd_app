@@ -98,6 +98,7 @@ const Item = ({ title, to, icon }) => {
       isTargetClientPage: to.startsWith("/clients/"),
     });
 
+    // Check for unsaved changes on project/client/user pages
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
@@ -109,6 +110,31 @@ const Item = ({ title, to, icon }) => {
       !to.startsWith("/users/")
     ) {
       console.log("🔍 Sidebar showing unsaved changes dialog");
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
+    // Check for unsaved changes on analysis pages
+    if (
+      window.hasUnsavedChanges &&
+      window.currentAnalysisPath &&
+      (location.pathname.includes("/analysis") ||
+        location.pathname.includes("/sample/") ||
+        location.pathname.startsWith("/air-monitoring/") ||
+        location.pathname.startsWith("/client-supplied/") ||
+        location.pathname.startsWith("/fibre-id/client-supplied/")) &&
+      !to.includes("/analysis") &&
+      !to.includes("/sample/") &&
+      !to.startsWith("/air-monitoring/") &&
+      !to.startsWith("/client-supplied/") &&
+      !to.startsWith("/fibre-id/client-supplied/")
+    ) {
+      console.log(
+        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+      );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
@@ -223,6 +249,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
       isTargetClientPage: to.startsWith("/clients/"),
     });
 
+    // Check for unsaved changes on project/client/user pages
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
@@ -234,6 +261,31 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
       !to.startsWith("/users/")
     ) {
       console.log("🔍 Sidebar showing unsaved changes dialog");
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
+    // Check for unsaved changes on analysis pages
+    if (
+      window.hasUnsavedChanges &&
+      window.currentAnalysisPath &&
+      (location.pathname.includes("/analysis") ||
+        location.pathname.includes("/sample/") ||
+        location.pathname.startsWith("/air-monitoring/") ||
+        location.pathname.startsWith("/client-supplied/") ||
+        location.pathname.startsWith("/fibre-id/client-supplied/")) &&
+      !to.includes("/analysis") &&
+      !to.includes("/sample/") &&
+      !to.startsWith("/air-monitoring/") &&
+      !to.startsWith("/client-supplied/") &&
+      !to.startsWith("/fibre-id/client-supplied/")
+    ) {
+      console.log(
+        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+      );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
@@ -480,11 +532,7 @@ const Sidebar = () => {
               icon={<AccessTimeIcon />}
             />
 
-            <Item
-              title="Projects"
-              to="/projects"
-              icon={<StorageIcon />}
-            />
+            <Item title="Projects" to="/projects" icon={<StorageIcon />} />
           </PermissionGate>
 
           {/* Collapsible Sections */}
@@ -545,7 +593,6 @@ const Sidebar = () => {
             />
           )}
 
-
           {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
             <CollapsibleSection
               title="Fibre Identification"
@@ -556,7 +603,6 @@ const Sidebar = () => {
 
           <SectionDivider />
 
-
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
             <CollapsibleSection
               title="Client Supplied"
@@ -564,8 +610,6 @@ const Sidebar = () => {
               icon={<ContactsOutlinedIcon />}
             />
           )}
-
-
         </Box>
 
         <Box

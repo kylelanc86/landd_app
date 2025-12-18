@@ -129,6 +129,29 @@ const SitePlanMap = ({
 
       mapInstanceRef.current = map;
 
+      // Prevent 3D view by resetting tilt and heading whenever they change
+      map.addListener("tilt_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+      });
+
+      map.addListener("heading_changed", () => {
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
+      });
+
+      // Also reset on zoom changes to prevent automatic 3D switching
+      map.addListener("zoom_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
+      });
+
       // Trigger resize event to ensure map renders correctly in the Dialog
       setTimeout(() => {
         if (mapInstanceRef.current) {

@@ -400,6 +400,29 @@ const SitePlanDrawing = ({
 
       mapInstanceRef.current = map;
 
+      // Prevent 3D view by resetting tilt and heading whenever they change
+      map.addListener("tilt_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+      });
+
+      map.addListener("heading_changed", () => {
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
+      });
+
+      // Also reset on zoom changes to prevent automatic 3D switching
+      map.addListener("zoom_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
+      });
+
       // Trigger resize after a short delay to ensure proper rendering
       setTimeout(() => {
         if (mapInstanceRef.current) {
@@ -1751,6 +1774,9 @@ const SitePlanDrawing = ({
       // Use center and zoom directly to match the exact view from dialog
       mapInstanceRef.current.setCenter(mapData.center);
       mapInstanceRef.current.setZoom(mapData.zoom);
+      // Ensure 2D view is maintained
+      mapInstanceRef.current.setTilt(0);
+      mapInstanceRef.current.setHeading(0);
       console.log("Applied center:", mapData.center, "zoom:", mapData.zoom);
 
       // Wait for map to process the changes
@@ -1912,6 +1938,29 @@ const SitePlanDrawing = ({
       }
 
       const map = new window.google.maps.Map(mapRef.current, mapOptions);
+
+      // Prevent 3D view by resetting tilt and heading whenever they change
+      map.addListener("tilt_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+      });
+
+      map.addListener("heading_changed", () => {
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
+      });
+
+      // Also reset on zoom changes to prevent automatic 3D switching
+      map.addListener("zoom_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
+      });
 
       // Add a listener to ensure the map is fully loaded, then capture it
       window.google.maps.event.addListenerOnce(map, "idle", async () => {

@@ -540,32 +540,36 @@ const ClientSuppliedSamples = () => {
               </Button>
 
               {/* Analysis Status Chip */}
-              {samples.length > 0 && (
-                <Chip
-                  label={
-                    samples.every(
-                      (sample) =>
-                        sample.analysisData &&
-                        sample.analysisData.fieldsCounted !== undefined &&
-                        sample.analyzedAt
-                    )
-                      ? "Analysis Complete"
-                      : "Analysis In Progress"
-                  }
-                  color={
-                    samples.every(
-                      (sample) =>
-                        sample.analysisData &&
-                        sample.analysisData.fieldsCounted !== undefined &&
-                        sample.analyzedAt
-                    )
-                      ? "success"
-                      : "warning"
-                  }
-                  size="medium"
-                  sx={{ ml: 2 }}
-                />
-              )}
+              {samples.length > 0 &&
+                (() => {
+                  // Determine if all samples are analyzed based on job type
+                  const isAllAnalysisComplete =
+                    job.jobType === "Fibre ID"
+                      ? samples.every(
+                          (sample) =>
+                            sample.analysisData &&
+                            sample.analysisData.isAnalyzed === true
+                        )
+                      : samples.every(
+                          (sample) =>
+                            sample.analysisData &&
+                            sample.analysisData.fieldsCounted !== undefined &&
+                            sample.analyzedAt
+                        );
+
+                  return (
+                    <Chip
+                      label={
+                        isAllAnalysisComplete
+                          ? "Analysis Complete"
+                          : "Analysis In Progress"
+                      }
+                      color={isAllAnalysisComplete ? "success" : "warning"}
+                      size="medium"
+                      sx={{ ml: 2 }}
+                    />
+                  );
+                })()}
             </Box>
           </Box>
         </Box>

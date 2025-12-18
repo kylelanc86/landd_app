@@ -33,6 +33,8 @@ import { clientSuppliedJobsService } from "../../services/api";
 import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { equipmentService } from "../../services/equipmentService";
+import hseTestSlideService from "../../services/hseTestSlideService";
+import { graticuleService } from "../../services/graticuleService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../context/AuthContext";
@@ -257,6 +259,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const { showSnackbar } = useSnackbar();
   const [samples, setSamples] = useState([]);
   const [pcmCalibrations, setPcmCalibrations] = useState([]);
+  const [graticuleCalibrations, setGraticuleCalibrations] = useState([]);
   const [analysisDetails, setAnalysisDetails] = useState({
     microscope: "",
     testSlide: "",
@@ -280,6 +283,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const [activeMicroscopes, setActiveMicroscopes] = useState([]);
   const [activeTestSlides, setActiveTestSlides] = useState([]);
 
+  // Unsaved changes detection
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] =
+    useState(false);
+  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [originalState, setOriginalState] = useState(null);
+
   // Load samples and in-progress analysis data
   useEffect(() => {
     let isMounted = true;
@@ -295,11 +306,17 @@ const ClientSuppliedFibreCountAnalysis = () => {
         // Samples are now embedded in the job
         const samplesResponse = { data: job.samples || [] };
         const pcmCalibrationsResponse = await pcmMicroscopeService.getAll();
+        const graticuleCalibrationsResponse = await graticuleService.getAll();
 
         if (!isMounted) return;
 
         setJobStatus(job.status || "In Progress");
         setPcmCalibrations(pcmCalibrationsResponse);
+        const graticuleData =
+          graticuleCalibrationsResponse.data ||
+          graticuleCalibrationsResponse ||
+          [];
+        setGraticuleCalibrations(graticuleData);
 
         // Sort samples by labReference and add unique IDs
         const sortedSamples = (samplesResponse.data || [])
@@ -418,6 +435,27 @@ const ClientSuppliedFibreCountAnalysis = () => {
           setSampleAnalyses(initialAnalyses);
         }
 
+        // Set original state for change tracking after data is loaded
+        if (isMounted) {
+          setTimeout(() => {
+            setOriginalState({
+              analysisDetails: {
+                microscope:
+                  firstSampleWithAnalysis?.analysisData?.microscope || "",
+                testSlide:
+                  firstSampleWithAnalysis?.analysisData?.testSlide || "",
+                testSlideLines:
+                  firstSampleWithAnalysis?.analysisData?.testSlideLines || "",
+              },
+              sampleAnalyses: initialAnalyses,
+              analysedBy: job.analyst || "",
+              analysisDate: job.analysisDate
+                ? new Date(job.analysisDate).toISOString().split("T")[0]
+                : new Date().toISOString().split("T")[0],
+            });
+          }, 100);
+        }
+
         setSamples(sortedSamples);
         setError(null);
       } catch (err) {
@@ -480,37 +518,163 @@ const ClientSuppliedFibreCountAnalysis = () => {
     [calculateDaysUntilCalibration]
   );
 
-  // Fetch active microscopes and test slides
+  // Fetch active microscopes and test slides with calibration data
   useEffect(() => {
     const fetchActiveEquipment = async () => {
       try {
         const response = await equipmentService.getAll();
         const allEquipment = response.equipment || [];
 
-        // Filter for active Phase Contrast Microscope
-        const microscopes = allEquipment
-          .filter(
-            (eq) =>
-              eq.equipmentType === "Phase Contrast Microscope" &&
-              calculateStatus(eq) === "Active"
-          )
+        // Filter for Phase Contrast Microscope equipment
+        const microscopeEquipment = allEquipment
+          .filter((eq) => eq.equipmentType === "Phase Contrast Microscope")
           .sort((a, b) =>
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
 
-        // Filter for active HSE Test Slide
-        const testSlides = allEquipment
-          .filter(
-            (eq) =>
-              eq.equipmentType === "HSE Test Slide" &&
-              calculateStatus(eq) === "Active"
-          )
+        // Fetch calibration data for each microscope to determine active status
+        const microscopesWithCalibrations = await Promise.all(
+          microscopeEquipment.map(async (microscope) => {
+            try {
+              // Fetch PCM calibrations for this microscope
+              const calibrationResponse =
+                await pcmMicroscopeService.getByEquipment(
+                  microscope.equipmentReference
+                );
+              const calibrations =
+                calibrationResponse.calibrations || calibrationResponse || [];
+
+              // Calculate lastCalibration (most recent calibration date)
+              const lastCalibration =
+                calibrations.length > 0
+                  ? new Date(
+                      Math.max(
+                        ...calibrations.map((cal) =>
+                          new Date(cal.date).getTime()
+                        )
+                      )
+                    )
+                  : null;
+
+              // Calculate calibrationDue (most recent nextCalibration date)
+              const calibrationDue =
+                calibrations.length > 0
+                  ? calibrations
+                      .filter((cal) => cal.nextCalibration)
+                      .map((cal) => new Date(cal.nextCalibration).getTime())
+                      .length > 0
+                    ? new Date(
+                        Math.max(
+                          ...calibrations
+                            .filter((cal) => cal.nextCalibration)
+                            .map((cal) =>
+                              new Date(cal.nextCalibration).getTime()
+                            )
+                        )
+                      )
+                    : null
+                  : null;
+
+              return {
+                ...microscope,
+                lastCalibration,
+                calibrationDue,
+              };
+            } catch (err) {
+              console.error(
+                `Error fetching calibrations for ${microscope.equipmentReference}:`,
+                err
+              );
+              return {
+                ...microscope,
+                lastCalibration: null,
+                calibrationDue: null,
+              };
+            }
+          })
+        );
+
+        // Filter for active microscopes (have calibration data and are not overdue)
+        const activeMicroscopes = microscopesWithCalibrations.filter(
+          (eq) => calculateStatus(eq) === "Active"
+        );
+
+        // Filter for HSE Test Slide equipment
+        const testSlideEquipment = allEquipment
+          .filter((eq) => eq.equipmentType === "HSE Test Slide")
           .sort((a, b) =>
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
 
-        setActiveMicroscopes(microscopes);
-        setActiveTestSlides(testSlides);
+        // Fetch calibration data for each test slide to determine active status
+        const testSlidesWithCalibrations = await Promise.all(
+          testSlideEquipment.map(async (testSlide) => {
+            try {
+              // Fetch HSE test slide calibrations for this test slide
+              const calibrationResponse =
+                await hseTestSlideService.getByEquipment(
+                  testSlide.equipmentReference
+                );
+              const calibrations =
+                calibrationResponse.data || calibrationResponse || [];
+
+              // Calculate lastCalibration (most recent calibration date)
+              const lastCalibration =
+                calibrations.length > 0
+                  ? new Date(
+                      Math.max(
+                        ...calibrations.map((cal) =>
+                          new Date(cal.date).getTime()
+                        )
+                      )
+                    )
+                  : null;
+
+              // Calculate calibrationDue (most recent nextCalibration date)
+              const calibrationDue =
+                calibrations.length > 0
+                  ? calibrations
+                      .filter((cal) => cal.nextCalibration)
+                      .map((cal) => new Date(cal.nextCalibration).getTime())
+                      .length > 0
+                    ? new Date(
+                        Math.max(
+                          ...calibrations
+                            .filter((cal) => cal.nextCalibration)
+                            .map((cal) =>
+                              new Date(cal.nextCalibration).getTime()
+                            )
+                        )
+                      )
+                    : null
+                  : null;
+
+              return {
+                ...testSlide,
+                lastCalibration,
+                calibrationDue,
+              };
+            } catch (err) {
+              console.error(
+                `Error fetching calibrations for ${testSlide.equipmentReference}:`,
+                err
+              );
+              return {
+                ...testSlide,
+                lastCalibration: null,
+                calibrationDue: null,
+              };
+            }
+          })
+        );
+
+        // Filter for active test slides (have calibration data and are not overdue)
+        const activeTestSlides = testSlidesWithCalibrations.filter(
+          (eq) => calculateStatus(eq) === "Active"
+        );
+
+        setActiveMicroscopes(activeMicroscopes);
+        setActiveTestSlides(activeTestSlides);
       } catch (error) {
         console.error("Error fetching equipment:", error);
       }
@@ -518,6 +682,179 @@ const ClientSuppliedFibreCountAnalysis = () => {
 
     fetchActiveEquipment();
   }, [calculateStatus]);
+
+  // Track form changes and compare with original values
+  useEffect(() => {
+    if (!originalState) return;
+
+    const currentState = {
+      analysisDetails,
+      sampleAnalyses,
+      analysedBy,
+      analysisDate,
+    };
+
+    const hasChanges =
+      JSON.stringify(currentState) !== JSON.stringify(originalState);
+
+    setHasUnsavedChanges(hasChanges);
+
+    // Set global variables for sidebar navigation
+    window.hasUnsavedChanges = hasChanges;
+    window.currentAnalysisPath = window.location.pathname;
+    window.showUnsavedChangesDialog = () => {
+      setPendingNavigation(null);
+      setUnsavedChangesDialogOpen(true);
+    };
+
+    return () => {
+      // Clean up global variables when component unmounts or changes are cleared
+      if (!hasChanges) {
+        window.hasUnsavedChanges = false;
+        window.currentAnalysisPath = null;
+        window.showUnsavedChangesDialog = null;
+      }
+    };
+  }, [
+    analysisDetails,
+    sampleAnalyses,
+    analysedBy,
+    analysisDate,
+    originalState,
+  ]);
+
+  // Handle page refresh and browser navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+        return "You have unsaved changes. Are you sure you want to leave?";
+      }
+    };
+
+    // Handle browser back/forward buttons
+    const handlePopState = (e) => {
+      if (hasUnsavedChanges) {
+        window.history.pushState(null, "", window.location.pathname);
+        setPendingNavigation(null);
+        setUnsavedChangesDialogOpen(true);
+      }
+    };
+
+    // Handle refresh button clicks and F5 key
+    const handleRefreshClick = (e) => {
+      const isRefreshButton = e.target.closest(
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+      );
+      const isF5Key = e.key === "F5";
+
+      if ((isRefreshButton || isF5Key) && hasUnsavedChanges) {
+        e.preventDefault();
+        e.stopPropagation();
+        setRefreshDialogOpen(true);
+        return false;
+      }
+    };
+
+    if (hasUnsavedChanges) {
+      window.history.pushState(null, "", window.location.pathname);
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+    document.addEventListener("click", handleRefreshClick, true);
+    document.addEventListener("keydown", handleRefreshClick, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleRefreshClick, true);
+      document.removeEventListener("keydown", handleRefreshClick, true);
+    };
+  }, [hasUnsavedChanges]);
+
+  // Intercept clicks on navigation links
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const handleLinkClick = (e) => {
+      const target = e.target.closest("a[href]");
+      if (!target) return;
+
+      const href = target.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:"))
+        return;
+
+      const currentPath = window.location.pathname;
+      const basePath = currentPath.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id/client-supplied";
+
+      if (href.startsWith("/") && !href.startsWith(basePath)) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPendingNavigation(href);
+        setUnsavedChangesDialogOpen(true);
+        return false;
+      }
+    };
+
+    document.addEventListener("click", handleLinkClick, true);
+
+    return () => {
+      document.removeEventListener("click", handleLinkClick, true);
+    };
+  }, [hasUnsavedChanges]);
+
+  // Confirm navigation and discard changes
+  const confirmNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setHasUnsavedChanges(false);
+
+    // Clear window variables
+    window.hasUnsavedChanges = false;
+    window.currentAnalysisPath = null;
+    window.showUnsavedChangesDialog = null;
+
+    // Get the target path before clearing pendingNavigation
+    const targetPath = pendingNavigation;
+    setPendingNavigation(null);
+
+    // Use setTimeout to ensure state updates complete before navigation
+    setTimeout(() => {
+      if (targetPath === -1) {
+        navigate(-1);
+      } else if (targetPath) {
+        navigate(targetPath);
+      } else if (window.pendingNavigation) {
+        // Handle sidebar navigation
+        navigate(window.pendingNavigation);
+        window.pendingNavigation = null;
+      } else {
+        navigate(-1);
+      }
+    }, 0);
+  };
+
+  // Cancel navigation and stay on page
+  const cancelNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setPendingNavigation(null);
+  };
+
+  // Confirm page refresh and discard changes
+  const confirmRefresh = () => {
+    setRefreshDialogOpen(false);
+    setHasUnsavedChanges(false);
+    window.location.reload();
+  };
+
+  // Cancel page refresh and stay on page
+  const cancelRefresh = () => {
+    setRefreshDialogOpen(false);
+  };
 
   // Fetch users for analyst dropdown
   useEffect(() => {
@@ -731,34 +1068,116 @@ const ClientSuppliedFibreCountAnalysis = () => {
     );
   };
 
-  // Get microscope constant info
+  // Get microscope constant info for display
+  // Uses graticule calibrations (which have constants for 13mm and 25mm filter holders)
+  // Logic: Find graticules assigned to the microscope, get the most recent active calibration
   const getMicroscopeConstantInfo = (microscopeReference, filterSize) => {
-    if (!microscopeReference || !filterSize || pcmCalibrations.length === 0) {
+    if (
+      !microscopeReference ||
+      !filterSize ||
+      graticuleCalibrations.length === 0
+    ) {
       return { constant: 50000, source: "Default (50000)" };
     }
 
-    const latestPcmCalibration = pcmCalibrations
-      .filter((cal) => cal.microscopeReference === microscopeReference)
-      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    // Normalize the microscope reference for comparison (trim and lowercase)
+    const normalizedMicroscopeRef = microscopeReference.toLowerCase().trim();
 
-    if (!latestPcmCalibration) {
+    // Find all graticule calibrations assigned to the selected microscope
+    // Match by microscopeReference (string) or microscopeId (populated object with equipmentReference)
+    // Use case-insensitive matching to handle variations
+    const matchingCalibrations = graticuleCalibrations.filter((cal) => {
+      // Match by microscopeReference string (case-insensitive)
+      if (cal.microscopeReference) {
+        if (
+          cal.microscopeReference.toLowerCase().trim() ===
+          normalizedMicroscopeRef
+        ) {
+          return true;
+        }
+      }
+      // Match by populated microscopeId object
+      if (
+        cal.microscopeId &&
+        typeof cal.microscopeId === "object" &&
+        cal.microscopeId.equipmentReference
+      ) {
+        if (
+          cal.microscopeId.equipmentReference.toLowerCase().trim() ===
+          normalizedMicroscopeRef
+        ) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (matchingCalibrations.length === 0) {
       return {
         constant: 50000,
-        source: `Default (no calibration for ${microscopeReference})`,
+        source: `Default (no graticule calibration for ${microscopeReference})`,
       };
     }
 
+    // Filter to only "Pass" status calibrations (active graticules)
+    const activeCalibrations = matchingCalibrations.filter(
+      (cal) => cal.status === "Pass"
+    );
+
+    // If no active calibrations, use all calibrations (including failed ones)
+    const calibrationsToUse =
+      activeCalibrations.length > 0 ? activeCalibrations : matchingCalibrations;
+
+    // Group by graticuleId and get the most recent calibration for each graticule
+    const calibrationsByGraticule = {};
+    calibrationsToUse.forEach((cal) => {
+      const graticuleId = cal.graticuleId;
+      if (
+        !calibrationsByGraticule[graticuleId] ||
+        new Date(cal.date) > new Date(calibrationsByGraticule[graticuleId].date)
+      ) {
+        calibrationsByGraticule[graticuleId] = cal;
+      }
+    });
+
+    // Get the most recent calibration overall from all graticules
+    const latestGraticuleCalibration = Object.values(
+      calibrationsByGraticule
+    ).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    if (!latestGraticuleCalibration) {
+      return {
+        constant: 50000,
+        source: `Default (no valid graticule calibration for ${microscopeReference})`,
+      };
+    }
+
+    const graticuleId = latestGraticuleCalibration.graticuleId;
+
+    // Return the appropriate constant info based on filter size
     if (filterSize === "25mm") {
-      const constant = latestPcmCalibration.constant25mm || 50000;
+      const constant = latestGraticuleCalibration.constant25mm;
+      if (constant === null || constant === undefined || constant === 0) {
+        return {
+          constant: 50000,
+          source: `Default (no constant25mm for ${graticuleId})`,
+        };
+      }
       return {
         constant,
-        source: `25mm (${constant})`,
+        source: `Graticule ${graticuleId} - 25mm (${constant})`,
       };
     } else if (filterSize === "13mm") {
-      const constant = latestPcmCalibration.constant13mm || 50000;
+      const constant = latestGraticuleCalibration.constant13mm;
+      if (constant === null || constant === undefined || constant === 0) {
+        return {
+          constant: 50000,
+          source: `Default (no constant13mm for ${graticuleId})`,
+        };
+      }
       return {
         constant,
-        source: `13mm (${constant})`,
+        source: `Graticule ${graticuleId} - 13mm (${constant})`,
       };
     }
 
@@ -868,6 +1287,15 @@ const ClientSuppliedFibreCountAnalysis = () => {
       };
       localStorage.setItem(ANALYSIS_PROGRESS_KEY, JSON.stringify(progressData));
 
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      setOriginalState({
+        analysisDetails,
+        sampleAnalyses,
+        analysedBy,
+        analysisDate,
+      });
+
       showSnackbar("Analysis saved successfully", "success");
       // Navigate back to client supplied jobs page
       const basePath = location.pathname.startsWith("/client-supplied")
@@ -920,6 +1348,9 @@ const ClientSuppliedFibreCountAnalysis = () => {
       // Clear localStorage
       localStorage.removeItem(ANALYSIS_PROGRESS_KEY);
 
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+
       showSnackbar("Analysis finalized successfully", "success");
 
       // Navigate back to samples page
@@ -935,22 +1366,12 @@ const ClientSuppliedFibreCountAnalysis = () => {
   };
 
   const handleCancel = () => {
-    const progressData = localStorage.getItem(ANALYSIS_PROGRESS_KEY);
-    if (progressData) {
-      const parsed = JSON.parse(progressData);
-      if (parsed.jobId === jobId) {
-        // Has unsaved changes
-        if (
-          window.confirm(
-            "You have unsaved changes. Are you sure you want to leave?"
-          )
-        ) {
-          navigate(-1);
-        }
-        return;
-      }
+    if (hasUnsavedChanges) {
+      setPendingNavigation(-1);
+      setUnsavedChangesDialogOpen(true);
+    } else {
+      navigate(-1);
     }
-    navigate(-1);
   };
 
   const handleOpenFibreCountModal = (sampleId) => {
@@ -1020,7 +1441,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate(getBackPath())}
+        onClick={() => {
+          if (hasUnsavedChanges) {
+            setPendingNavigation(getBackPath());
+            setUnsavedChangesDialogOpen(true);
+          } else {
+            navigate(getBackPath());
+          }
+        }}
         sx={{ mb: 4 }}
       >
         Back to Samples
@@ -1474,6 +1902,136 @@ const ClientSuppliedFibreCountAnalysis = () => {
           <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
           <Button onClick={confirmClearTable} color="error">
             Clear
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Unsaved Changes Confirmation Dialog */}
+      <Dialog
+        open={unsavedChangesDialogOpen}
+        onClose={cancelNavigation}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 2, px: 3, pt: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                !
+              </Typography>
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Unsaved Changes
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1 }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to leave this page
+            without saving? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={cancelNavigation}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmNavigation}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Leave Without Saving
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Page Refresh Confirmation Dialog */}
+      <Dialog
+        open={refreshDialogOpen}
+        onClose={cancelRefresh}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 2, px: 3, pt: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                !
+              </Typography>
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Unsaved Changes
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1 }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to refresh this
+            page? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={cancelRefresh}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmRefresh}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Refresh Anyway
           </Button>
         </DialogActions>
       </Dialog>

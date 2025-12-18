@@ -27,6 +27,10 @@ import {
   Stack,
   Menu,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
@@ -72,6 +76,14 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const { showSnackbar } = useSnackbar();
   const [asbestosMenuAnchor, setAsbestosMenuAnchor] = useState(null);
   const [selectedFibreId, setSelectedFibreId] = useState(null);
+
+  // Unsaved changes detection
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] =
+    useState(false);
+  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [originalState, setOriginalState] = useState(null);
 
   useEffect(() => {
     if (jobId && sampleIndex !== undefined && sampleIndex !== null) {
@@ -182,6 +194,37 @@ const ClientSuppliedFibreIDAnalysis = () => {
             setAnalyst(sampleData.analyzedBy);
           }
         }
+
+        // Set original state for change tracking after data is loaded
+        setTimeout(() => {
+          setOriginalState({
+            microscope: savedData?.microscope || "LD-PLM-1",
+            sampleDescription: savedData?.sampleDescription || "",
+            sampleType: savedData?.sampleType || "mass",
+            sampleMass: savedData?.sampleMass || "",
+            sampleDimensions: savedData?.sampleDimensions || {
+              x: "",
+              y: "",
+              z: "",
+            },
+            ashing: savedData?.ashing || "no",
+            crucibleNo: savedData?.crucibleNo || "",
+            fibres: savedData?.fibres || [],
+            finalResult: savedData?.finalResult || "",
+            noFibreDetected: wasNoFibreDetected,
+            analysisDate: savedData?.analyzedAt
+              ? new Date(savedData.analyzedAt)
+              : new Date(),
+            analyst: sampleData.analyzedBy
+              ? typeof sampleData.analyzedBy === "object" &&
+                sampleData.analyzedBy._id
+                ? sampleData.analyzedBy._id
+                : typeof sampleData.analyzedBy === "string"
+                ? sampleData.analyzedBy
+                : ""
+              : "",
+          });
+        }, 100);
       } else {
         // Reset all form fields for new analysis
         setNoFibreDetected(false);
@@ -200,6 +243,24 @@ const ClientSuppliedFibreIDAnalysis = () => {
         if (analysts.length > 0 && !analyst) {
           setAnalyst(analysts[0]._id);
         }
+
+        // For new analysis, set original state as empty
+        setTimeout(() => {
+          setOriginalState({
+            microscope: "LD-PLM-1",
+            sampleDescription: "",
+            sampleType: "mass",
+            sampleMass: "",
+            sampleDimensions: { x: "", y: "", z: "" },
+            ashing: "no",
+            crucibleNo: "",
+            fibres: [],
+            finalResult: "",
+            noFibreDetected: false,
+            analysisDate: new Date(),
+            analyst: analysts.length > 0 ? analysts[0]._id : "",
+          });
+        }, 100);
       }
       setLoading(false);
     } catch (error) {
@@ -229,17 +290,33 @@ const ClientSuppliedFibreIDAnalysis = () => {
   };
 
   const handleBackToSamples = () => {
-    const basePath = location.pathname.startsWith("/client-supplied")
-      ? "/client-supplied"
-      : "/fibre-id/client-supplied";
-    navigate(`${basePath}/${jobId}/samples`);
+    if (hasUnsavedChanges) {
+      const basePath = location.pathname.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id/client-supplied";
+      setPendingNavigation(`${basePath}/${jobId}/samples`);
+      setUnsavedChangesDialogOpen(true);
+    } else {
+      const basePath = location.pathname.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id/client-supplied";
+      navigate(`${basePath}/${jobId}/samples`);
+    }
   };
 
   const handleBackToHome = () => {
-    if (location.pathname.startsWith("/client-supplied")) {
-      navigate("/client-supplied");
+    if (hasUnsavedChanges) {
+      const targetPath = location.pathname.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id";
+      setPendingNavigation(targetPath);
+      setUnsavedChangesDialogOpen(true);
     } else {
-      navigate("/fibre-id");
+      if (location.pathname.startsWith("/client-supplied")) {
+        navigate("/client-supplied");
+      } else {
+        navigate("/fibre-id");
+      }
     }
   };
 
@@ -539,6 +616,9 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
       showSnackbar("Analysis finalised successfully!", "success");
 
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+
       // Navigate back to samples page
       navigate(
         location.pathname.startsWith("/client-supplied")
@@ -632,6 +712,23 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
       // Refresh job data to ensure we have the latest state
       await fetchJobAndSampleDetails();
+
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      setOriginalState({
+        microscope,
+        sampleDescription,
+        sampleType,
+        sampleMass,
+        sampleDimensions,
+        ashing,
+        crucibleNo,
+        fibres: fibres.map((f) => ({ ...f })),
+        finalResult,
+        noFibreDetected,
+        analysisDate,
+        analyst,
+      });
 
       // Show success message
       showSnackbar("Analysis saved successfully!", "success");
@@ -732,6 +829,23 @@ const ClientSuppliedFibreIDAnalysis = () => {
       // Refresh job data to ensure we have the latest state
       await fetchJobAndSampleDetails();
 
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      setOriginalState({
+        microscope,
+        sampleDescription,
+        sampleType,
+        sampleMass,
+        sampleDimensions,
+        ashing,
+        crucibleNo,
+        fibres: fibres.map((f) => ({ ...f })),
+        finalResult,
+        noFibreDetected,
+        analysisDate,
+        analyst,
+      });
+
       showSnackbar("Sample marked as analysed successfully!", "success");
     } catch (error) {
       console.error("Error marking sample as analysed:", error);
@@ -826,6 +940,191 @@ const ClientSuppliedFibreIDAnalysis = () => {
     setFinalResult(calculateFinalResult());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fibres]);
+
+  // Track form changes and compare with original values
+  useEffect(() => {
+    if (!originalState) return;
+
+    const currentState = {
+      microscope,
+      sampleDescription,
+      sampleType,
+      sampleMass,
+      sampleDimensions,
+      ashing,
+      crucibleNo,
+      fibres: fibres.map((f) => ({ ...f })),
+      finalResult,
+      noFibreDetected,
+      analysisDate,
+      analyst,
+    };
+
+    const hasChanges =
+      JSON.stringify(currentState) !== JSON.stringify(originalState);
+
+    setHasUnsavedChanges(hasChanges);
+
+    // Set global variables for sidebar navigation
+    window.hasUnsavedChanges = hasChanges;
+    window.currentAnalysisPath = window.location.pathname;
+    window.showUnsavedChangesDialog = () => {
+      setPendingNavigation(null);
+      setUnsavedChangesDialogOpen(true);
+    };
+
+    return () => {
+      // Clean up global variables when component unmounts or changes are cleared
+      if (!hasChanges) {
+        window.hasUnsavedChanges = false;
+        window.currentAnalysisPath = null;
+        window.showUnsavedChangesDialog = null;
+      }
+    };
+  }, [
+    microscope,
+    sampleDescription,
+    sampleType,
+    sampleMass,
+    sampleDimensions,
+    ashing,
+    crucibleNo,
+    fibres,
+    finalResult,
+    noFibreDetected,
+    analysisDate,
+    analyst,
+    originalState,
+  ]);
+
+  // Handle page refresh and browser navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
+        return "You have unsaved changes. Are you sure you want to leave?";
+      }
+    };
+
+    // Handle browser back/forward buttons
+    const handlePopState = (e) => {
+      if (hasUnsavedChanges) {
+        window.history.pushState(null, "", window.location.pathname);
+        setPendingNavigation(null);
+        setUnsavedChangesDialogOpen(true);
+      }
+    };
+
+    // Handle refresh button clicks and F5 key
+    const handleRefreshClick = (e) => {
+      const isRefreshButton = e.target.closest(
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+      );
+      const isF5Key = e.key === "F5";
+
+      if ((isRefreshButton || isF5Key) && hasUnsavedChanges) {
+        e.preventDefault();
+        e.stopPropagation();
+        setRefreshDialogOpen(true);
+        return false;
+      }
+    };
+
+    if (hasUnsavedChanges) {
+      window.history.pushState(null, "", window.location.pathname);
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+    document.addEventListener("click", handleRefreshClick, true);
+    document.addEventListener("keydown", handleRefreshClick, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleRefreshClick, true);
+      document.removeEventListener("keydown", handleRefreshClick, true);
+    };
+  }, [hasUnsavedChanges]);
+
+  // Intercept clicks on navigation links
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const handleLinkClick = (e) => {
+      const target = e.target.closest("a[href]");
+      if (!target) return;
+
+      const href = target.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:"))
+        return;
+
+      const currentPath = window.location.pathname;
+      const basePath = currentPath.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id/client-supplied";
+
+      if (href.startsWith("/") && !href.startsWith(basePath)) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPendingNavigation(href);
+        setUnsavedChangesDialogOpen(true);
+        return false;
+      }
+    };
+
+    document.addEventListener("click", handleLinkClick, true);
+
+    return () => {
+      document.removeEventListener("click", handleLinkClick, true);
+    };
+  }, [hasUnsavedChanges]);
+
+  // Confirm navigation and discard changes
+  const confirmNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setHasUnsavedChanges(false);
+
+    // Clear window variables
+    window.hasUnsavedChanges = false;
+    window.currentAnalysisPath = null;
+    window.showUnsavedChangesDialog = null;
+
+    // Get the target path before clearing pendingNavigation
+    const targetPath = pendingNavigation;
+    setPendingNavigation(null);
+
+    // Use setTimeout to ensure state updates complete before navigation
+    setTimeout(() => {
+      if (targetPath) {
+        navigate(targetPath);
+      } else if (window.pendingNavigation) {
+        // Handle sidebar navigation
+        navigate(window.pendingNavigation);
+        window.pendingNavigation = null;
+      }
+    }, 0);
+  };
+
+  // Cancel navigation and stay on page
+  const cancelNavigation = () => {
+    setUnsavedChangesDialogOpen(false);
+    setPendingNavigation(null);
+  };
+
+  // Confirm page refresh and discard changes
+  const confirmRefresh = () => {
+    setRefreshDialogOpen(false);
+    setHasUnsavedChanges(false);
+    window.location.reload();
+  };
+
+  // Cancel page refresh and stay on page
+  const cancelRefresh = () => {
+    setRefreshDialogOpen(false);
+  };
 
   useEffect(() => {
     if (noFibreDetected) {
@@ -1908,6 +2207,136 @@ const ClientSuppliedFibreIDAnalysis = () => {
           Crocidolite Asbestos
         </MenuItem>
       </Menu>
+
+      {/* Unsaved Changes Confirmation Dialog */}
+      <Dialog
+        open={unsavedChangesDialogOpen}
+        onClose={cancelNavigation}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 2, px: 3, pt: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                !
+              </Typography>
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Unsaved Changes
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1 }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to leave this page
+            without saving? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={cancelNavigation}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmNavigation}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Leave Without Saving
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Page Refresh Confirmation Dialog */}
+      <Dialog
+        open={refreshDialogOpen}
+        onClose={cancelRefresh}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 2, px: 3, pt: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                !
+              </Typography>
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Unsaved Changes
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1 }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            You have unsaved changes. Are you sure you want to refresh this
+            page? All unsaved changes will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={cancelRefresh}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Stay on Page
+          </Button>
+          <Button
+            onClick={confirmRefresh}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Refresh Anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

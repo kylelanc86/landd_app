@@ -247,18 +247,25 @@ router.put("/:id", auth, checkPermission("equipment.edit"), async (req, res) => 
       }
     }
     
+    // Build update object, explicitly handling null for calibrationFrequency
+    const updateData = {
+      equipmentReference,
+      equipmentType,
+      section,
+      brandModel,
+      status,
+      lastCalibration,
+      calibrationDue,
+    };
+    
+    // Explicitly set calibrationFrequency to null if provided as null/undefined, otherwise use the value
+    if (calibrationFrequency !== undefined) {
+      updateData.calibrationFrequency = calibrationFrequency === null || calibrationFrequency === "" ? null : calibrationFrequency;
+    }
+    
     const equipment = await Equipment.findByIdAndUpdate(
       req.params.id,
-      {
-        equipmentReference,
-        equipmentType,
-        section,
-        brandModel,
-        status,
-        lastCalibration,
-        calibrationDue,
-        calibrationFrequency,
-      },
+      updateData,
       { new: true, runValidators: true }
     );
     

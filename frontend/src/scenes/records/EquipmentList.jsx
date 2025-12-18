@@ -457,18 +457,57 @@ const EquipmentList = () => {
       // Note: lastCalibration and calibrationDue are now calculated from calibration records
       // Don't include them in the update
       // Convert calibration frequency to months if needed
-      // Preserve existing calibrationFrequency if no frequency options available
-      let calibrationFrequencyInMonths =
-        form.calibrationFrequency ||
-        selectedEquipment.calibrationFrequency ||
-        null;
-      if (frequencyOptions.length > 0) {
-        const freq = frequencyOptions[0];
-        if (freq.frequencyUnit === "years") {
-          calibrationFrequencyInMonths = freq.frequencyValue * 12;
+      // For Graticules: allow null calibration frequency (they're active forever)
+      // For other equipment: preserve existing or use default from frequency options
+      let calibrationFrequencyInMonths = null;
+
+      // Check if user explicitly set calibration frequency (including empty string for null)
+      const hasExplicitFrequency =
+        form.calibrationFrequency !== undefined &&
+        form.calibrationFrequency !== null &&
+        form.calibrationFrequency !== "";
+
+      // If equipment type is Graticule, allow null calibration frequency
+      if (form.equipmentType === "Graticule") {
+        // Allow null - graticules don't need calibration frequency
+        // If user explicitly cleared it (empty string), set to null
+        if (
+          form.calibrationFrequency === "" ||
+          form.calibrationFrequency === undefined ||
+          form.calibrationFrequency === null
+        ) {
+          calibrationFrequencyInMonths = null;
         } else {
-          calibrationFrequencyInMonths = freq.frequencyValue;
+          calibrationFrequencyInMonths = Number(form.calibrationFrequency);
         }
+      } else {
+        // For other equipment types
+        if (hasExplicitFrequency) {
+          // User explicitly set a value
+          calibrationFrequencyInMonths = Number(form.calibrationFrequency);
+        } else {
+          // Preserve existing or use default
+          calibrationFrequencyInMonths =
+            selectedEquipment.calibrationFrequency || null;
+
+          // Only auto-populate if no existing value and frequency options are available
+          if (!calibrationFrequencyInMonths && frequencyOptions.length > 0) {
+            const freq = frequencyOptions[0];
+            if (freq.frequencyUnit === "years") {
+              calibrationFrequencyInMonths = freq.frequencyValue * 12;
+            } else {
+              calibrationFrequencyInMonths = freq.frequencyValue;
+            }
+          }
+        }
+      }
+
+      // Ensure we send null (not undefined) to backend
+      if (
+        calibrationFrequencyInMonths === undefined ||
+        calibrationFrequencyInMonths === ""
+      ) {
+        calibrationFrequencyInMonths = null;
       }
 
       const formData = {
@@ -1353,34 +1392,58 @@ const EquipmentList = () => {
                 InputLabelProps={{ shrink: true }}
                 helperText="Automatically calculated from calibration records"
               />
+              <TextField
+                label="Calibration Frequency (months)"
+                type="number"
+                value={form.calibrationFrequency || ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow empty string or valid number
+                  setForm({
+                    ...form,
+                    calibrationFrequency: value === "" ? "" : Number(value),
+                  });
+                }}
+                fullWidth
+                inputProps={{ min: 0, step: 1 }}
+                helperText={
+                  form.equipmentType === "Graticule"
+                    ? "Optional for graticules - leave empty for 'active forever'"
+                    : "Leave empty to use default from equipment type, or enter custom value in months"
+                }
+              />
             </Stack>
 
-            {/* Calibration Frequency Display */}
-            {form.equipmentType && (
-              <Box
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  backgroundColor: theme.palette.grey[100],
-                  borderRadius: 1,
-                }}
-              >
-                <Typography
-                  variant="subtitle2"
-                  color="text.secondary"
-                  gutterBottom
+            {/* Calibration Frequency Info Display */}
+            {form.equipmentType &&
+              (form.calibrationFrequency === "" ||
+                form.calibrationFrequency === null ||
+                form.calibrationFrequency === undefined) && (
+                <Box
+                  sx={{
+                    mt: 2,
+                    p: 2,
+                    backgroundColor: theme.palette.grey[100],
+                    borderRadius: 1,
+                  }}
                 >
-                  Calibration Frequency:
-                </Typography>
-                <Typography variant="body2">
-                  {getCalibrationFrequencyOptions(form.equipmentType).length > 0
-                    ? getCalibrationFrequencyOptions(form.equipmentType)
-                        .map((freq) => freq.displayText)
-                        .join(", ")
-                    : "No calibration frequency configured for this equipment type"}
-                </Typography>
-              </Box>
-            )}
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    Default Calibration Frequency for {form.equipmentType}:
+                  </Typography>
+                  <Typography variant="body2">
+                    {getCalibrationFrequencyOptions(form.equipmentType).length >
+                    0
+                      ? getCalibrationFrequencyOptions(form.equipmentType)
+                          .map((freq) => freq.displayText)
+                          .join(", ")
+                      : "No calibration frequency configured for this equipment type"}
+                  </Typography>
+                </Box>
+              )}
           </DialogContent>
           <DialogActions>
             <Button
@@ -1519,10 +1582,30 @@ const EquipmentList = () => {
                 InputLabelProps={{ shrink: true }}
                 helperText="Automatically calculated from calibration records"
               />
+              <TextField
+                label="Calibration Frequency (months)"
+                type="number"
+                value={form.calibrationFrequency || ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow empty string or valid number
+                  setForm({
+                    ...form,
+                    calibrationFrequency: value === "" ? "" : Number(value),
+                  });
+                }}
+                fullWidth
+                inputProps={{ min: 0, step: 1 }}
+                helperText={
+                  form.equipmentType === "Graticule"
+                    ? "Optional for graticules - leave empty for 'active forever'"
+                    : "Leave empty to use default from equipment type, or enter custom value in months"
+                }
+              />
             </Stack>
 
-            {/* Calibration Frequency Display */}
-            {form.equipmentType && (
+            {/* Calibration Frequency Info Display */}
+            {form.equipmentType && form.calibrationFrequency === "" && (
               <Box
                 sx={{
                   mt: 2,
@@ -1536,7 +1619,7 @@ const EquipmentList = () => {
                   color="text.secondary"
                   gutterBottom
                 >
-                  Calibration Frequency:
+                  Default Calibration Frequency for {form.equipmentType}:
                 </Typography>
                 <Typography variant="body2">
                   {getCalibrationFrequencyOptions(form.equipmentType).length > 0

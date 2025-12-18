@@ -645,6 +645,24 @@ const AddUserPage = () => {
                   }
                   sx={{ alignItems: "flex-start" }}
                 />
+              </Box>
+            </Box>
+          )}
+
+          {/* Report Authorization Section - Available for all roles */}
+          {hasPermission(currentUser, "users.create") && (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Report Authorization
+              </Typography>
+              <Box
+                sx={{
+                  border: "1px solid #e0e0e0",
+                  borderRadius: 1,
+                  p: 2,
+                  backgroundColor: "#fafafa",
+                }}
+              >
                 <FormControlLabel
                   control={
                     <Checkbox
@@ -665,11 +683,12 @@ const AddUserPage = () => {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Allow this user to authorise air monitoring and asbestos
-                        clearance reports.
+                        clearance reports. Requires admin permission to
+                        authorise.
                       </Typography>
                     </Box>
                   }
-                  sx={{ alignItems: "flex-start", mt: 2 }}
+                  sx={{ alignItems: "flex-start" }}
                 />
               </Box>
             </Box>

@@ -1972,6 +1972,11 @@ const AsbestosRemovalJobDetails = () => {
                               >
                                 <DeleteIcon color="error" />
                               </IconButton>
+                            </PermissionGate>
+                            <PermissionGate
+                              requiredPermissions={["admin.update"]}
+                              fallback={null}
+                            >
                               {(shift.status === "analysis_complete" ||
                                 shift.status === "shift_complete") && (
                                 <IconButton

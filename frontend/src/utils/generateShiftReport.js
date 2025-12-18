@@ -537,11 +537,20 @@ pdfMake.fonts = {
                         fontSize: 9,
                       },
                       {
-                        stack: [
-                          { text: '1. The analysed samples covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of the samples collected or the accompanying descriptions.', style: 'notes' },
-                          { text: '2. Report must not be reproduced except in full.', style: 'notes' },
-                          { text: '3. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
-                        ],
+                        stack: isClientSupplied
+                          ? [
+                              { text: '1. The analysed samples covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of the samples collected or the accompanying descriptions.', style: 'notes' },
+                              { text: '2. Report must not be reproduced except in full.', style: 'notes' },
+                              { text: '3. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                            ]
+                          : [
+                              { text: '1. Samples taken from the direct flow of negative air units are reported as a fibre count only', style: 'notes' },
+                              { text: '2. The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL', style: 'notes' },
+                              { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
+                              { text: '4. AFC = air fibre concentration (fibres/ml)', style: 'notes' },
+                              { text: '5. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
+                              { text: '6. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                            ],
                         margin: [0, 0, 0, 3],
                       }
                     ]

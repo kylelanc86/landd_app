@@ -684,6 +684,42 @@ const NewSample = () => {
       return;
     }
 
+    // Calculate average flowrate immediately when initial or final flowrate changes
+    if (name === "initialFlowrate" || name === "finalFlowrate") {
+      setForm((prev) => {
+        const newForm = {
+          ...prev,
+          [name]: value,
+        };
+
+        // Calculate average if both flowrates are present
+        if (newForm.initialFlowrate && newForm.finalFlowrate) {
+          const initial = parseFloat(newForm.initialFlowrate);
+          const final = parseFloat(newForm.finalFlowrate);
+
+          if (!isNaN(initial) && !isNaN(final)) {
+            const avg = (initial + final) / 2;
+            const newStatus =
+              Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+            return {
+              ...newForm,
+              averageFlowrate: avg.toFixed(1),
+              status: newStatus,
+            };
+          }
+        }
+
+        // Clear average if either flowrate is missing or invalid
+        return {
+          ...newForm,
+          averageFlowrate: "",
+          status: "pending",
+        };
+      });
+      return;
+    }
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -702,34 +738,46 @@ const NewSample = () => {
     }
   };
 
-  // Calculate average flowrate when initial or final flowrate changes
+  // Calculate average flowrate when initial or final flowrate changes (fallback)
   useEffect(() => {
-    // Don't run this effect if we're currently submitting or if there are any field errors
-    if (isSubmitting || Object.keys(fieldErrors).length > 0) return;
+    if (isSubmitting) return;
 
     if (form.initialFlowrate && form.finalFlowrate) {
-      const avg =
-        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
-
-      // Check if flowrates are equal to determine status
       const initial = parseFloat(form.initialFlowrate);
       const final = parseFloat(form.finalFlowrate);
-      const newStatus = Math.abs(initial - final) < 0.1 ? "pending" : "failed";
 
-      setForm((prev) => ({
-        ...prev,
-        averageFlowrate: avg.toFixed(1),
-        status: newStatus,
-      }));
+      if (!isNaN(initial) && !isNaN(final)) {
+        const avg = (initial + final) / 2;
+        const newStatus =
+          Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+        setForm((prev) => {
+          // Only update if the calculated values are different to avoid infinite loops
+          const currentAvg = parseFloat(prev.averageFlowrate);
+          if (Math.abs(currentAvg - avg) > 0.01 || prev.status !== newStatus) {
+            return {
+              ...prev,
+              averageFlowrate: avg.toFixed(1),
+              status: newStatus,
+            };
+          }
+          return prev;
+        });
+      }
     } else {
       // Clear average flowrate and status if either flowrate is missing
-      setForm((prev) => ({
-        ...prev,
-        averageFlowrate: "",
-        status: "pending",
-      }));
+      setForm((prev) => {
+        if (prev.averageFlowrate || prev.status !== "pending") {
+          return {
+            ...prev,
+            averageFlowrate: "",
+            status: "pending",
+          };
+        }
+        return prev;
+      });
     }
-  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
+  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting]);
 
   // Calculate minutes from start and end times
   const calculateMinutes = (startTime, endTime, nextDay = false) => {

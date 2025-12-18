@@ -482,12 +482,12 @@ pdfMake.fonts = {
                     
                     const result = {
                       nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(' ') : 'None',
-                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(' ') : 'None detected'
+                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(' ') : 'No Asbestos Detected'
                     };
                     
                     // Ensure we never return undefined values
                     if (!result.nonAsbestos) result.nonAsbestos = 'None';
-                    if (!result.asbestos) result.asbestos = 'None detected';
+                    if (!result.asbestos) result.asbestos = 'No Asbestos Detected';
                     
                     console.log('Final fibre results:', result);
                     console.log('=== END FIBRE RESULTS DEBUG ===');
@@ -522,7 +522,7 @@ pdfMake.fonts = {
                     (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) : 'No description';
                   const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
                   const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None';
-                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'None detected';
+                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'No asbestos detected';
                   
                   // DEBUG: Log every single value being passed to pdfMake
                   console.log(`=== TABLE ROW ${index + 1} DEBUG ===`);

@@ -379,6 +379,9 @@ const Projects = ({ initialFilters = {} }) => {
   const searchInputRef = useRef(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
+  // Add ref to track request ID to prevent stale responses from updating state
+  const requestIdRef = useRef(0);
+
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [isClientSearching, setIsClientSearching] = useState(false);
@@ -448,6 +451,9 @@ const Projects = ({ initialFilters = {} }) => {
     ) => {
       const fetchStartTime = performance.now();
 
+      // Increment request ID to track the latest request
+      const currentRequestId = ++requestIdRef.current;
+
       // Use current filters state if currentFilters is null (for search operations)
       const filtersToUse = currentFilters || filtersRef.current;
       try {
@@ -496,25 +502,44 @@ const Projects = ({ initialFilters = {} }) => {
 
         const response = await projectService.getAll(params);
 
+        // Check if a newer request has started - if so, ignore this response
+        if (currentRequestId !== requestIdRef.current) {
+          return; // Don't update state if this request is stale
+        }
+
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
 
-        setProjects(projectsData);
-        setPagination((prev) => ({
-          total: projectsData.length,
-          pages: Math.ceil(projectsData.length / prev.pageSize),
-          page: 0,
-          limit: prev.pageSize,
-        }));
+        // Double-check that this is still the latest request before updating state
+        if (currentRequestId === requestIdRef.current) {
+          setProjects(projectsData);
+          setPagination((prev) => ({
+            total: projectsData.length,
+            pages: Math.ceil(projectsData.length / prev.pageSize),
+            page: 0,
+            limit: prev.pageSize,
+          }));
+        }
 
         // Status counts will be updated when the component re-renders with new projects
       } catch (err) {
-        setError(err.message);
-        setProjects([]);
+        // Don't update state if a newer request has started
+        if (currentRequestId !== requestIdRef.current) {
+          return;
+        }
+
+        // Only set error if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setError(err.message);
+          setProjects([]);
+        }
       } finally {
-        setLoading(false);
-        setSearchLoading(false);
+        // Only update loading state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+          setSearchLoading(false);
+        }
       }
     },
     [activeStatuses, inactiveStatuses] // Depend on both active and inactive statuses
@@ -552,6 +577,9 @@ const Projects = ({ initialFilters = {} }) => {
     (filterType, value) => {
       // Create a new function to fetch with updated filter values
       const fetchWithUpdatedFilters = async () => {
+        // Increment request ID to track the latest request
+        const currentRequestId = ++requestIdRef.current;
+
         try {
           setSearchLoading(true);
 
@@ -607,23 +635,42 @@ const Projects = ({ initialFilters = {} }) => {
 
           const response = await projectService.getAll(params);
 
+          // Check if a newer request has started - if so, ignore this response
+          if (currentRequestId !== requestIdRef.current) {
+            return; // Don't update state if this request is stale
+          }
+
           const projectsData = Array.isArray(response.data)
             ? response.data
             : response.data?.data || [];
 
-          setProjects(projectsData);
-          setPagination((prev) => ({
-            ...prev,
-            total: response.data.pagination?.total || 0,
-            pages: response.data.pagination?.pages || 0,
-          }));
+          // Double-check that this is still the latest request before updating state
+          if (currentRequestId === requestIdRef.current) {
+            setProjects(projectsData);
+            setPagination((prev) => ({
+              ...prev,
+              total: response.data.pagination?.total || 0,
+              pages: response.data.pagination?.pages || 0,
+            }));
+          }
 
           // Status counts will be updated when the component re-renders with new projects
         } catch (err) {
-          setError(err.message);
-          setProjects([]);
+          // Don't update state if a newer request has started
+          if (currentRequestId !== requestIdRef.current) {
+            return;
+          }
+
+          // Only set error if this is still the latest request
+          if (currentRequestId === requestIdRef.current) {
+            setError(err.message);
+            setProjects([]);
+          }
         } finally {
-          setSearchLoading(false);
+          // Only update loading state if this is still the latest request
+          if (currentRequestId === requestIdRef.current) {
+            setSearchLoading(false);
+          }
         }
       };
 
@@ -1199,6 +1246,9 @@ const Projects = ({ initialFilters = {} }) => {
 
     // Create a temporary fetch function that uses the updated department
     const fetchWithUpdatedDepartment = async () => {
+      // Increment request ID to track the latest request
+      const currentRequestId = ++requestIdRef.current;
+
       try {
         setSearchLoading(true);
 
@@ -1241,21 +1291,40 @@ const Projects = ({ initialFilters = {} }) => {
 
         const response = await projectService.getAll(params);
 
+        // Check if a newer request has started - if so, ignore this response
+        if (currentRequestId !== requestIdRef.current) {
+          return; // Don't update state if this request is stale
+        }
+
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
 
-        setProjects(projectsData);
-        setPagination((prev) => ({
-          ...prev,
-          total: response.data?.pagination?.total || 0,
-          pages: response.data?.pagination?.pages || 0,
-        }));
+        // Double-check that this is still the latest request before updating state
+        if (currentRequestId === requestIdRef.current) {
+          setProjects(projectsData);
+          setPagination((prev) => ({
+            ...prev,
+            total: response.data?.pagination?.total || 0,
+            pages: response.data?.pagination?.pages || 0,
+          }));
+        }
       } catch (err) {
-        setError(err.message);
-        setProjects([]);
+        // Don't update state if a newer request has started
+        if (currentRequestId !== requestIdRef.current) {
+          return;
+        }
+
+        // Only set error if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setError(err.message);
+          setProjects([]);
+        }
       } finally {
-        setSearchLoading(false);
+        // Only update loading state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setSearchLoading(false);
+        }
       }
     };
 

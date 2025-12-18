@@ -39,6 +39,8 @@ const EditSample = () => {
   const [airPumps, setAirPumps] = useState([]);
   const [flowmeters, setFlowmeters] = useState([]);
   const [availableFlowrates, setAvailableFlowrates] = useState([]);
+  // Cache for calibration data to avoid re-fetching
+  const [pumpCalibrationsCache, setPumpCalibrationsCache] = useState(new Map());
   const [form, setForm] = useState({
     sampler: "",
     sampleNumber: "",
@@ -146,12 +148,17 @@ const EditSample = () => {
     [calculateDaysUntilCalibration]
   );
 
-  // Fetch active air pumps from equipment list with calibration data
+  // Fetch equipment and calibrations in a single optimized call
   useEffect(() => {
-    const fetchActiveAirPumps = async () => {
+    let isMounted = true;
+
+    const fetchEquipmentAndCalibrations = async () => {
       try {
+        // Fetch equipment once
         const response = await equipmentService.getAll();
         const allEquipment = response.equipment || [];
+
+        if (!isMounted) return;
 
         // Filter for Air pump equipment
         const airPumps = allEquipment
@@ -160,65 +167,136 @@ const EditSample = () => {
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
 
-        // Fetch calibration data for each pump
-        const pumpsWithCalibrations = await Promise.all(
-          airPumps.map(async (pump) => {
-            try {
-              // Fetch all calibrations for this pump using Equipment ID
-              const calibrationResponse =
-                await airPumpCalibrationService.getPumpCalibrations(
-                  pump._id,
-                  1,
-                  1000
-                );
-              const calibrations =
-                calibrationResponse.data || calibrationResponse || [];
-
-              // Calculate lastCalibration (most recent calibration date)
-              const lastCalibration =
-                calibrations.length > 0
-                  ? new Date(
-                      Math.max(
-                        ...calibrations.map((cal) =>
-                          new Date(cal.calibrationDate).getTime()
-                        )
-                      )
-                    )
-                  : null;
-
-              // Calculate calibrationDue (most recent nextCalibrationDue date)
-              const calibrationDue =
-                calibrations.length > 0
-                  ? new Date(
-                      Math.max(
-                        ...calibrations
-                          .filter((cal) => cal.nextCalibrationDue)
-                          .map((cal) =>
-                            new Date(cal.nextCalibrationDue).getTime()
-                          )
-                      )
-                    )
-                  : null;
-
-              return {
-                ...pump,
-                lastCalibration,
-                calibrationDue,
-              };
-            } catch (err) {
-              console.error(
-                `Error fetching calibrations for ${pump.equipmentReference}:`,
-                err
-              );
-              // Return pump without calibration data if fetch fails
-              return {
-                ...pump,
-                lastCalibration: null,
-                calibrationDue: null,
-              };
-            }
-          })
+        // Filter for Site flowmeter equipment
+        const siteFlowmeters = allEquipment.filter(
+          (equipment) => equipment.equipmentType === "Site flowmeter"
         );
+
+        // Fetch calibration data for all pumps and flowmeters in parallel
+        const [pumpsWithCalibrations, flowmetersWithCalibrations] =
+          await Promise.all([
+            // Fetch pump calibrations
+            Promise.all(
+              airPumps.map(async (pump) => {
+                try {
+                  const calibrationResponse =
+                    await airPumpCalibrationService.getPumpCalibrations(
+                      pump._id,
+                      1,
+                      1000
+                    );
+                  const calibrations =
+                    calibrationResponse.data || calibrationResponse || [];
+
+                  const lastCalibration =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations.map((cal) =>
+                              new Date(cal.calibrationDate).getTime()
+                            )
+                          )
+                        )
+                      : null;
+
+                  const calibrationDue =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations
+                              .filter((cal) => cal.nextCalibrationDue)
+                              .map((cal) =>
+                                new Date(cal.nextCalibrationDue).getTime()
+                              )
+                          )
+                        )
+                      : null;
+
+                  return {
+                    ...pump,
+                    lastCalibration,
+                    calibrationDue,
+                    calibrations, // Store calibrations for later use
+                  };
+                } catch (err) {
+                  console.error(
+                    `Error fetching calibrations for ${pump.equipmentReference}:`,
+                    err
+                  );
+                  return {
+                    ...pump,
+                    lastCalibration: null,
+                    calibrationDue: null,
+                    calibrations: [],
+                  };
+                }
+              })
+            ),
+            // Fetch flowmeter calibrations
+            Promise.all(
+              siteFlowmeters.map(async (flowmeter) => {
+                try {
+                  const calibrationResponse =
+                    await flowmeterCalibrationService.getByFlowmeter(
+                      flowmeter.equipmentReference
+                    );
+                  const calibrations =
+                    calibrationResponse.data || calibrationResponse || [];
+
+                  const lastCalibration =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations.map((cal) =>
+                              new Date(cal.date).getTime()
+                            )
+                          )
+                        )
+                      : null;
+
+                  const calibrationDue =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations.map((cal) =>
+                              new Date(cal.nextCalibration).getTime()
+                            )
+                          )
+                        )
+                      : null;
+
+                  return {
+                    ...flowmeter,
+                    lastCalibration,
+                    calibrationDue,
+                  };
+                } catch (err) {
+                  console.error(
+                    `Error fetching calibrations for ${flowmeter.equipmentReference}:`,
+                    err
+                  );
+                  return {
+                    ...flowmeter,
+                    lastCalibration: null,
+                    calibrationDue: null,
+                  };
+                }
+              })
+            ),
+          ]);
+
+        if (!isMounted) return;
+
+        // Update cache with all pump calibrations (batch update after all data is fetched)
+        const newCache = new Map();
+        pumpsWithCalibrations.forEach((pump) => {
+          if (pump.calibrations && pump.calibrations.length > 0) {
+            newCache.set(pump._id, pump.calibrations);
+          }
+        });
+        if (newCache.size > 0) {
+          setPumpCalibrationsCache(newCache);
+        }
 
         // Filter for active pumps using calculated status
         const activePumps = pumpsWithCalibrations
@@ -227,144 +305,89 @@ const EditSample = () => {
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
 
-        setAirPumps(activePumps);
-      } catch (error) {
-        console.error("Error fetching active air pumps:", error);
-      }
-    };
-    fetchActiveAirPumps();
-  }, [calculateStatus]);
-
-  // Fetch active flowmeters from equipment list with calibration data
-  useEffect(() => {
-    const fetchActiveFlowmeters = async () => {
-      try {
-        const response = await equipmentService.getAll();
-        console.log("Equipment response:", response);
-        const allEquipment = response.equipment || response.data || response;
-        console.log("All equipment:", allEquipment);
-
-        // Filter for Site flowmeter equipment
-        const siteFlowmeters = allEquipment.filter(
-          (equipment) => equipment.equipmentType === "Site flowmeter"
-        );
-
-        // Fetch calibration data for each flowmeter
-        const flowmetersWithCalibrations = await Promise.all(
-          siteFlowmeters.map(async (flowmeter) => {
-            try {
-              // Fetch all calibrations for this flowmeter
-              const calibrationResponse =
-                await flowmeterCalibrationService.getByFlowmeter(
-                  flowmeter.equipmentReference
-                );
-              const calibrations =
-                calibrationResponse.data || calibrationResponse || [];
-
-              // Calculate lastCalibration (most recent calibration date)
-              const lastCalibration =
-                calibrations.length > 0
-                  ? new Date(
-                      Math.max(
-                        ...calibrations.map((cal) =>
-                          new Date(cal.date).getTime()
-                        )
-                      )
-                    )
-                  : null;
-
-              // Calculate calibrationDue (most recent nextCalibration date)
-              const calibrationDue =
-                calibrations.length > 0
-                  ? new Date(
-                      Math.max(
-                        ...calibrations.map((cal) =>
-                          new Date(cal.nextCalibration).getTime()
-                        )
-                      )
-                    )
-                  : null;
-
-              return {
-                ...flowmeter,
-                lastCalibration,
-                calibrationDue,
-              };
-            } catch (err) {
-              console.error(
-                `Error fetching calibrations for ${flowmeter.equipmentReference}:`,
-                err
-              );
-              // Return flowmeter without calibration data if fetch fails
-              return {
-                ...flowmeter,
-                lastCalibration: null,
-                calibrationDue: null,
-              };
-            }
-          })
-        );
-
         // Filter for active flowmeters using calculated status
         const activeFlowmeters = flowmetersWithCalibrations
           .filter((equipment) => calculateStatus(equipment) === "Active")
           .sort((a, b) =>
             a.equipmentReference.localeCompare(b.equipmentReference)
           );
-        console.log("Filtered active flowmeters:", activeFlowmeters);
+
+        setAirPumps(activePumps);
         setFlowmeters(activeFlowmeters);
       } catch (error) {
-        console.error("Error fetching active flowmeters:", error);
+        console.error("Error fetching equipment and calibrations:", error);
       }
     };
-    fetchActiveFlowmeters();
+    fetchEquipmentAndCalibrations();
+
+    return () => {
+      isMounted = false;
+    };
   }, [calculateStatus]);
 
   // Fetch available flowrates for selected pump (based on passed calibrations)
-  const fetchAvailableFlowrates = async (pumpEquipmentReference) => {
-    try {
-      // Find the pump by equipmentReference
-      const selectedPump = airPumps.find(
-        (p) => p.equipmentReference === pumpEquipmentReference
-      );
-
-      if (!selectedPump) {
-        setAvailableFlowrates([]);
-        return;
-      }
-
-      // Fetch all calibrations for this pump using Equipment ID
-      const calibrationResponse =
-        await airPumpCalibrationService.getPumpCalibrations(
-          selectedPump._id,
-          1,
-          1000
+  // Uses cached calibration data if available, otherwise fetches it
+  const fetchAvailableFlowrates = useCallback(
+    async (pumpEquipmentReference) => {
+      try {
+        // Find the pump by equipmentReference
+        const selectedPump = airPumps.find(
+          (p) => p.equipmentReference === pumpEquipmentReference
         );
-      const calibrations =
-        calibrationResponse.data || calibrationResponse || [];
 
-      // Filter for passed calibrations and extract unique flowrates
-      // Convert setFlowrate from mL/min to L/min
-      const passedFlowrates = calibrations
-        .filter((cal) => cal.overallResult === "Pass")
-        .map((cal) => {
-          if (cal.testResults && cal.testResults.length > 0) {
-            // Get the setFlowrate from the first test result (all testResults in a calibration have the same setFlowrate)
-            const setFlowrateMlMin = cal.testResults[0].setFlowrate;
-            return setFlowrateMlMin / 1000; // Convert to L/min
+        if (!selectedPump) {
+          setAvailableFlowrates([]);
+          return;
+        }
+
+        // Use cached calibrations if available, otherwise fetch
+        let calibrations = selectedPump.calibrations;
+        if (!calibrations || calibrations.length === 0) {
+          // Check cache first
+          const cached = pumpCalibrationsCache.get(selectedPump._id);
+          if (cached) {
+            calibrations = cached;
+          } else {
+            // Fetch if not in cache
+            const calibrationResponse =
+              await airPumpCalibrationService.getPumpCalibrations(
+                selectedPump._id,
+                1,
+                1000
+              );
+            calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+            // Cache for future use
+            const cache = new Map(pumpCalibrationsCache);
+            cache.set(selectedPump._id, calibrations);
+            setPumpCalibrationsCache(cache);
           }
-          return null;
-        })
-        .filter((flowrate) => flowrate != null)
-        .filter((value, index, self) => self.indexOf(value) === index) // Get unique values
-        .sort((a, b) => a - b); // Sort ascending
+        }
 
-      setAvailableFlowrates(passedFlowrates);
-    } catch (error) {
-      console.error("Error fetching available flowrates:", error);
-      setAvailableFlowrates([]);
-    }
-  };
+        // Filter for passed calibrations and extract unique flowrates
+        // Convert setFlowrate from mL/min to L/min
+        const passedFlowrates = calibrations
+          .filter((cal) => cal.overallResult === "Pass")
+          .map((cal) => {
+            if (cal.testResults && cal.testResults.length > 0) {
+              // Get the setFlowrate from the first test result (all testResults in a calibration have the same setFlowrate)
+              const setFlowrateMlMin = cal.testResults[0].setFlowrate;
+              return setFlowrateMlMin / 1000; // Convert to L/min
+            }
+            return null;
+          })
+          .filter((flowrate) => flowrate != null)
+          .filter((value, index, self) => self.indexOf(value) === index) // Get unique values
+          .sort((a, b) => a - b); // Sort ascending
+
+        setAvailableFlowrates(passedFlowrates);
+      } catch (error) {
+        console.error("Error fetching available flowrates:", error);
+        setAvailableFlowrates([]);
+      }
+    },
+    [airPumps, pumpCalibrationsCache]
+  );
 
   // Fetch sample data
   useEffect(() => {
@@ -373,7 +396,6 @@ const EditSample = () => {
         setIsLoading(true);
         const response = await sampleService.getById(sampleId);
         const sampleData = response.data;
-        console.log("Fetched sample data:", sampleData);
 
         // Extract the sample number from fullSampleID
         const sampleNumber = sampleData.fullSampleID.split("-")[1];
@@ -418,9 +440,15 @@ const EditSample = () => {
           startTime: sampleData.startTime || "",
           endTime: sampleData.endTime || "",
           nextDay: sampleData.nextDay || false,
-          initialFlowrate: sampleData.initialFlowrate || "",
-          finalFlowrate: sampleData.finalFlowrate || "",
-          averageFlowrate: sampleData.averageFlowrate || "",
+          initialFlowrate: sampleData.initialFlowrate
+            ? parseFloat(sampleData.initialFlowrate).toFixed(1)
+            : "",
+          finalFlowrate: sampleData.finalFlowrate
+            ? parseFloat(sampleData.finalFlowrate).toFixed(1)
+            : "",
+          averageFlowrate: sampleData.averageFlowrate
+            ? parseFloat(sampleData.averageFlowrate).toFixed(1)
+            : "",
           notes: sampleData.notes || "",
           sampler: sampleData.collectedBy?._id || sampleData.collectedBy || "",
           isFieldBlank: isFieldBlankSample,
@@ -446,7 +474,7 @@ const EditSample = () => {
     if (form.pumpNo && airPumps.length > 0) {
       fetchAvailableFlowrates(form.pumpNo);
     }
-  }, [form.pumpNo, airPumps.length]);
+  }, [form.pumpNo, airPumps.length, fetchAvailableFlowrates]);
 
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
@@ -514,7 +542,46 @@ const EditSample = () => {
       return;
     }
 
-    setForm({ ...form, [name]: value });
+    // Calculate average flowrate immediately when initial or final flowrate changes
+    if (name === "initialFlowrate" || name === "finalFlowrate") {
+      setForm((prev) => {
+        const newForm = {
+          ...prev,
+          [name]: value,
+        };
+
+        // Calculate average if both flowrates are present
+        if (newForm.initialFlowrate && newForm.finalFlowrate) {
+          const initial = parseFloat(newForm.initialFlowrate);
+          const final = parseFloat(newForm.finalFlowrate);
+
+          if (!isNaN(initial) && !isNaN(final)) {
+            const avg = (initial + final) / 2;
+            const newStatus =
+              Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+            return {
+              ...newForm,
+              averageFlowrate: avg.toFixed(1),
+              status: newStatus,
+            };
+          }
+        }
+
+        // Clear average if either flowrate is missing or invalid
+        return {
+          ...newForm,
+          averageFlowrate: "",
+          status: "pending",
+        };
+      });
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
 
     // When pump changes, fetch available flowrates
     if (name === "pumpNo" && value) {
@@ -529,34 +596,46 @@ const EditSample = () => {
     }
   };
 
-  // Calculate average flowrate when initial or final flowrate changes
+  // Calculate average flowrate when initial or final flowrate changes (fallback)
   useEffect(() => {
-    // Don't run this effect if we're currently submitting or if there are any field errors
-    if (isSubmitting || Object.keys(fieldErrors).length > 0) return;
+    if (isSubmitting) return;
 
     if (form.initialFlowrate && form.finalFlowrate) {
-      const avg =
-        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
-
-      // Check if flowrates are equal to determine status
       const initial = parseFloat(form.initialFlowrate);
       const final = parseFloat(form.finalFlowrate);
-      const newStatus = Math.abs(initial - final) < 0.1 ? "pending" : "failed";
 
-      setForm((prev) => ({
-        ...prev,
-        averageFlowrate: avg.toFixed(1),
-        status: newStatus,
-      }));
+      if (!isNaN(initial) && !isNaN(final)) {
+        const avg = (initial + final) / 2;
+        const newStatus =
+          Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+        setForm((prev) => {
+          // Only update if the calculated values are different to avoid infinite loops
+          const currentAvg = parseFloat(prev.averageFlowrate);
+          if (Math.abs(currentAvg - avg) > 0.01 || prev.status !== newStatus) {
+            return {
+              ...prev,
+              averageFlowrate: avg.toFixed(1),
+              status: newStatus,
+            };
+          }
+          return prev;
+        });
+      }
     } else {
       // Clear average flowrate and status if either flowrate is missing
-      setForm((prev) => ({
-        ...prev,
-        averageFlowrate: "",
-        status: "pending",
-      }));
+      setForm((prev) => {
+        if (prev.averageFlowrate || prev.status !== "pending") {
+          return {
+            ...prev,
+            averageFlowrate: "",
+            status: "pending",
+          };
+        }
+        return prev;
+      });
     }
-  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
+  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting]);
 
   // Calculate minutes from start and end times
   const calculateMinutes = (startTime, endTime, nextDay = false) => {
@@ -650,10 +729,6 @@ const EditSample = () => {
         );
 
         const nextSampleNumber = `AM${highestNumber + 1}`;
-        console.log(
-          "Auto-calculated next sample number for edit:",
-          nextSampleNumber
-        );
 
         // Only update if we don't already have a sample number
         setForm((prev) => ({
@@ -744,12 +819,6 @@ const EditSample = () => {
     setIsSubmitting(true);
 
     try {
-      console.log("Starting sample update...");
-      console.log("Current user:", currentUser);
-      console.log("Form data:", form);
-      console.log("Project ID:", projectID);
-      console.log("Job:", job);
-
       if (!projectID) {
         throw new Error("Project ID is required");
       }
@@ -764,7 +833,6 @@ const EditSample = () => {
 
       // Generate full sample ID in the format: {projectID}-{sampleNumber}
       const fullSampleID = `${projectID}-${form.sampleNumber}`;
-      console.log("Generated full sample ID:", fullSampleID);
 
       // Map sample type to match backend enum
       // Field blanks should have type set to "-"
@@ -1155,11 +1223,14 @@ const EditSample = () => {
                         : "Select flowrate"}
                     </em>
                   </MenuItem>
-                  {availableFlowrates.map((flowrate) => (
-                    <MenuItem key={flowrate} value={flowrate.toString()}>
-                      {flowrate}
-                    </MenuItem>
-                  ))}
+                  {availableFlowrates.map((flowrate) => {
+                    const flowrateStr = flowrate.toFixed(1);
+                    return (
+                      <MenuItem key={flowrateStr} value={flowrateStr}>
+                        {flowrateStr}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
                 {fieldErrors.initialFlowrate && (
                   <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
@@ -1230,11 +1301,14 @@ const EditSample = () => {
                         : "Select flowrate"}
                     </em>
                   </MenuItem>
-                  {availableFlowrates.map((flowrate) => (
-                    <MenuItem key={flowrate} value={flowrate.toString()}>
-                      {flowrate}
-                    </MenuItem>
-                  ))}
+                  {availableFlowrates.map((flowrate) => {
+                    const flowrateStr = flowrate.toFixed(1);
+                    return (
+                      <MenuItem key={flowrateStr} value={flowrateStr}>
+                        {flowrateStr}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
                 {fieldErrors.finalFlowrate && (
                   <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>

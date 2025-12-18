@@ -47,6 +47,16 @@ const graticuleCalibrationSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  constant13mm: {
+    type: Number,
+    required: false,
+    min: 0
+  },
+  constant25mm: {
+    type: Number,
+    required: false,
+    min: 0
+  },
   notes: {
     type: String,
     trim: true

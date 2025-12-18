@@ -35,6 +35,7 @@ import HistoryIcon from "@mui/icons-material/History";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import { graticuleService } from "../../../services/graticuleService";
+import { efaService } from "../../../services/efaService";
 import userService from "../../../services/userService";
 
 const GraticulePage = () => {
@@ -54,23 +55,52 @@ const GraticulePage = () => {
   const [labSignatories, setLabSignatories] = useState([]);
   const [labSignatoriesLoading, setLabSignatoriesLoading] = useState(false);
 
+  // PCM microscopes state
+  const [pcmMicroscopes, setPcmMicroscopes] = useState([]);
+  const [pcmMicroscopesLoading, setPcmMicroscopesLoading] = useState(false);
+
+  // Effective filter areas state (from EFA calibrations)
+  const [effectiveArea13mm, setEffectiveArea13mm] = useState(null);
+  const [effectiveArea25mm, setEffectiveArea25mm] = useState(null);
+
   const combineTableData = useCallback(() => {
-    // Create a map of calibrations by graticuleId for quick lookup
-    const calibrationsMap = {};
+    // Group calibrations by graticuleId and get the most recent one for each
+    const calibrationsByGraticule = {};
     calibrations.forEach((cal) => {
-      calibrationsMap[cal.graticuleId] = cal;
+      const graticuleId = cal.graticuleId;
+      if (!calibrationsByGraticule[graticuleId]) {
+        calibrationsByGraticule[graticuleId] = [];
+      }
+      calibrationsByGraticule[graticuleId].push(cal);
     });
 
-    // Combine graticule equipment with their calibration data
+    // Get the most recent calibration for each graticule (sorted by date descending)
+    const mostRecentCalibrations = {};
+    Object.keys(calibrationsByGraticule).forEach((graticuleId) => {
+      const graticuleCals = calibrationsByGraticule[graticuleId];
+      // Sort by date descending to get most recent first
+      graticuleCals.sort((a, b) => {
+        const dateA = new Date(a.date || a.createdAt || 0);
+        const dateB = new Date(b.date || b.createdAt || 0);
+        return dateB - dateA;
+      });
+      mostRecentCalibrations[graticuleId] = graticuleCals[0];
+    });
+
+    // Combine graticule equipment with their most recent calibration data
     const combinedData = graticules.map((graticule) => {
-      const calibration = calibrationsMap[graticule.equipmentReference];
+      const calibration = mostRecentCalibrations[graticule.equipmentReference];
 
       if (calibration) {
-        // Graticule has been calibrated
+        // Graticule has been calibrated - use most recent calibration
+        // Status: Active if latest calibration is Pass, Out-of-Service if Fail
+        const effectiveStatus =
+          calibration.status === "Fail" ? "Out-of-Service" : "Active";
         return {
           ...calibration,
           graticuleEquipment: graticule,
           isCalibrated: true,
+          effectiveStatus, // Add effective status for display
         };
       } else {
         // Graticule has not been calibrated yet
@@ -81,6 +111,7 @@ const GraticulePage = () => {
           date: null,
           scale: null,
           status: "Not Calibrated",
+          effectiveStatus: "Not Calibrated",
           technician: null,
           technicianName: null,
           nextCalibration: null,
@@ -106,6 +137,8 @@ const GraticulePage = () => {
     fetchCalibrations();
     fetchGraticules();
     fetchLabSignatories();
+    fetchPcmMicroscopes();
+    fetchEffectiveFilterAreas();
   }, []);
 
   // Update table data when calibrations or graticules change
@@ -166,8 +199,13 @@ const GraticulePage = () => {
       const allUsers = response.data || [];
 
       // Filter users who have labSignatory permission and are active
+      // Check both role-based and property-based lab signatory flags
       const labSignatoryUsers = allUsers.filter(
-        (user) => user.isActive && user.labSignatory === true
+        (user) =>
+          user.isActive &&
+          (user.role === "lab-signatory" ||
+            user.role === "admin" ||
+            user.labSignatory === true)
       );
 
       // Sort alphabetically by name
@@ -183,6 +221,142 @@ const GraticulePage = () => {
       setError("Failed to load lab signatories");
     } finally {
       setLabSignatoriesLoading(false);
+    }
+  };
+
+  const fetchPcmMicroscopes = async () => {
+    try {
+      setPcmMicroscopesLoading(true);
+
+      const response = await equipmentService.getAll({
+        equipmentType: "Phase Contrast Microscope",
+        limit: 100,
+      });
+
+      // Filter for PCM microscopes from the equipment array
+      const pcmEquipment = (response.equipment || []).filter(
+        (item) => item.equipmentType === "Phase Contrast Microscope"
+      );
+
+      // Sort by equipment reference
+      const sortedPcm = pcmEquipment.sort((a, b) =>
+        a.equipmentReference.localeCompare(b.equipmentReference)
+      );
+
+      setPcmMicroscopes(sortedPcm);
+    } catch (err) {
+      console.error("Error fetching PCM microscopes:", err);
+      setError("Failed to load PCM microscopes");
+    } finally {
+      setPcmMicroscopesLoading(false);
+    }
+  };
+
+  const fetchEffectiveFilterAreas = async () => {
+    try {
+      // Fetch all EFA calibrations
+      const response = await efaService.getAll();
+      const allEfaCalibrations = response.data || [];
+
+      // Calculate effective filter area from EFA calibration data
+      // Formula: π * (average diameter)² / 4
+      const calculateEffectiveArea = (calibration) => {
+        const filter1Avg =
+          calibration.filter1Diameter1 && calibration.filter1Diameter2
+            ? (calibration.filter1Diameter1 + calibration.filter1Diameter2) / 2
+            : null;
+        const filter2Avg =
+          calibration.filter2Diameter1 && calibration.filter2Diameter2
+            ? (calibration.filter2Diameter1 + calibration.filter2Diameter2) / 2
+            : null;
+        const filter3Avg =
+          calibration.filter3Diameter1 && calibration.filter3Diameter2
+            ? (calibration.filter3Diameter1 + calibration.filter3Diameter2) / 2
+            : null;
+
+        if (filter1Avg && filter2Avg && filter3Avg) {
+          const overallAvg = (filter1Avg + filter2Avg + filter3Avg) / 3;
+          // Area in mm²
+          const area = (Math.PI * Math.pow(overallAvg, 2)) / 4;
+          return area;
+        }
+        return null;
+      };
+
+      // Find calibrations for 13mm and 25mm filter holders
+      // Filter holder models might contain "13" or "25" or be named "13mm" or "25mm"
+      // Be careful: "13" might match "130" or "213", so check for word boundaries or exact matches
+      const calibrations13mm = allEfaCalibrations.filter((cal) => {
+        const model = (cal.filterHolderModel || "").toLowerCase();
+        // Match "13mm" or "13 mm" or starts/ends with "13" (but not "130" or "213")
+        return (
+          model.includes("13mm") ||
+          model.includes("13 mm") ||
+          model === "13" ||
+          /^13[^0-9]/.test(model) ||
+          /[^0-9]13$/.test(model)
+        );
+      });
+
+      const calibrations25mm = allEfaCalibrations.filter((cal) => {
+        const model = (cal.filterHolderModel || "").toLowerCase();
+        // Match "25mm" or "25 mm" or starts/ends with "25"
+        return (
+          model.includes("25mm") ||
+          model.includes("25 mm") ||
+          model === "25" ||
+          /^25[^0-9]/.test(model) ||
+          /[^0-9]25$/.test(model)
+        );
+      });
+
+      // Get the most recent calibration for each size
+      const latest13mm = calibrations13mm.sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      )[0];
+      const latest25mm = calibrations25mm.sort(
+        (a, b) => new Date(b.date) - new Date(a.date)
+      )[0];
+
+      // Calculate effective areas from calibrations
+      let area13mm = null;
+      let area25mm = null;
+
+      if (latest13mm) {
+        const area = calculateEffectiveArea(latest13mm);
+        if (area) {
+          // Convert mm² to µm² (1 mm² = 1,000,000 µm²)
+          area13mm = area * 1000000;
+        }
+      }
+
+      if (latest25mm) {
+        const area = calculateEffectiveArea(latest25mm);
+        if (area) {
+          // Convert mm² to µm² (1 mm² = 1,000,000 µm²)
+          area25mm = area * 1000000;
+        }
+      }
+
+      // Use calculated values or fallback to theoretical values
+      // Theoretical: π * (13/2)² = 132.73 mm² = 132,730,000 µm²
+      setEffectiveArea13mm(area13mm || 132730000);
+      // Theoretical: π * (25/2)² = 490.87 mm² = 490,870,000 µm²
+      setEffectiveArea25mm(area25mm || 490870000);
+
+      console.log("Effective filter areas loaded:", {
+        area13mm: area13mm || 132730000,
+        area25mm: area25mm || 490870000,
+        fromCalibration: {
+          has13mm: !!latest13mm,
+          has25mm: !!latest25mm,
+        },
+      });
+    } catch (err) {
+      console.error("Error fetching effective filter areas:", err);
+      // Use theoretical values as fallback
+      setEffectiveArea13mm(132730000); // 132.73 mm² in µm²
+      setEffectiveArea25mm(490870000); // 490.87 mm² in µm²
     }
   };
 
@@ -205,6 +379,10 @@ const GraticulePage = () => {
     technicianId: "",
     technicianName: "",
     nextCalibration: "",
+    microscopeId: "",
+    microscopeReference: "",
+    constant13mm: "",
+    constant25mm: "",
   });
 
   const handleAdd = () => {
@@ -220,6 +398,10 @@ const GraticulePage = () => {
       technicianId: "",
       technicianName: "",
       nextCalibration: "", // Will be calculated when graticule is selected
+      microscopeId: "",
+      microscopeReference: "",
+      constant13mm: "",
+      constant25mm: "",
     });
     setOpenDialog(true);
   };
@@ -246,6 +428,15 @@ const GraticulePage = () => {
         }
       }
 
+      // Calculate constants from area if not already set
+      const constants =
+        calibration.constant13mm && calibration.constant25mm
+          ? {
+              constant13mm: calibration.constant13mm.toString(),
+              constant25mm: calibration.constant25mm.toString(),
+            }
+          : calculateConstants(area);
+
       // Find the graticule equipment ID by matching the graticule reference
       const graticuleEquipment = graticules.find(
         (g) => g.equipmentReference === calibration.graticuleId
@@ -271,6 +462,35 @@ const GraticulePage = () => {
         (tech) => `${tech.firstName} ${tech.lastName}` === technicianName
       );
 
+      // Find the microscope if it exists
+      let microscopeId = "";
+      let microscopeReference = "";
+      if (calibration.microscopeId || calibration.microscopeReference) {
+        // Try to find by ID first
+        if (calibration.microscopeId) {
+          const matchingMicroscope = pcmMicroscopes.find(
+            (m) => m._id === calibration.microscopeId
+          );
+          if (matchingMicroscope) {
+            microscopeId = matchingMicroscope._id;
+            microscopeReference = matchingMicroscope.equipmentReference;
+          }
+        }
+        // If not found by ID, try by reference
+        if (!microscopeId && calibration.microscopeReference) {
+          const matchingMicroscope = pcmMicroscopes.find(
+            (m) => m.equipmentReference === calibration.microscopeReference
+          );
+          if (matchingMicroscope) {
+            microscopeId = matchingMicroscope._id;
+            microscopeReference = matchingMicroscope.equipmentReference;
+          } else {
+            // Keep the reference even if not found in current list
+            microscopeReference = calibration.microscopeReference;
+          }
+        }
+      }
+
       setFormData({
         graticuleId: calibration.graticuleId,
         graticuleEquipmentId:
@@ -284,6 +504,10 @@ const GraticulePage = () => {
         nextCalibration:
           recalculatedNextCalibration ||
           formatDateForInput(calibration.nextCalibration),
+        microscopeId: microscopeId,
+        microscopeReference: microscopeReference,
+        constant13mm: constants.constant13mm,
+        constant25mm: constants.constant25mm,
       });
       setOpenDialog(true);
     }
@@ -333,32 +557,15 @@ const GraticulePage = () => {
         return;
       }
 
-      // Check if graticule has calibration frequency
+      // Get selected graticule for reference (calibration frequency is optional for graticules)
       const selectedGraticule = graticules.find(
         (g) => g._id === formData.graticuleEquipmentId
       );
 
-      if (!selectedGraticule || !selectedGraticule.calibrationFrequency) {
-        setError(
-          "Selected graticule does not have a calibration frequency set. Please set the calibration frequency in the Equipment List first."
-        );
-        return;
-      }
-
-      // Check if nextCalibration is calculated
-      if (!formData.nextCalibration) {
-        console.log(
-          "Next calibration validation failed - nextCalibration is empty"
-        );
-        setError(
-          "Next calibration date could not be calculated. Please ensure the graticule has a valid calibration frequency."
-        );
-        return;
-      }
-
       console.log("All validations passed, proceeding with submission");
 
       // Map form data to backend expected format
+      // For graticules: nextCalibration is optional - graticules are active forever unless status is Fail
       const backendData = {
         graticuleId: formData.graticuleId, // Just the graticule ID
         graticuleEquipmentId: formData.graticuleEquipmentId, // Store original equipment ID for filtering
@@ -366,10 +573,20 @@ const GraticulePage = () => {
         scale: `${formData.diameter} µm`, // Just the diameter
         status: formData.status,
         technician: formData.technicianName, // Send technician name instead of ID
+        // Calculate nextCalibration if frequency exists, otherwise use a far future date to indicate "active forever"
         nextCalibration: formData.nextCalibration
           ? new Date(formData.nextCalibration + "T00:00:00")
-          : new Date(formData.date + "T00:00:00"), // Use calibration date as fallback
-        // Note: microscopeId and microscopeReference are not needed anymore
+          : new Date("2099-12-31"), // Far future date to indicate active forever
+        // Include microscope assignment if selected
+        microscopeId: formData.microscopeId || null,
+        microscopeReference: formData.microscopeReference || null,
+        // Include constants for 13mm and 25mm filter holders
+        constant13mm: formData.constant13mm
+          ? parseFloat(formData.constant13mm)
+          : null,
+        constant25mm: formData.constant25mm
+          ? parseFloat(formData.constant25mm)
+          : null,
       };
 
       console.log("Backend data being sent:", backendData);
@@ -386,15 +603,16 @@ const GraticulePage = () => {
         await graticuleService.create(backendData);
       }
 
-      // Update the equipment record with new calibration dates
+      // Update the equipment record with new calibration date
+      // For graticules: only update lastCalibration, not calibrationDue (they're active forever unless status is Fail)
       try {
         const equipmentUpdateData = {
           lastCalibration: new Date(formData.date),
-          calibrationDue: new Date(formData.nextCalibration + "T00:00:00"),
+          // Don't set calibrationDue for graticules - they're active forever unless latest calibration fails
         };
 
         console.log(
-          "Updating equipment calibration dates:",
+          "Updating equipment calibration date:",
           equipmentUpdateData
         );
         await equipmentService.update(
@@ -403,7 +621,7 @@ const GraticulePage = () => {
         );
       } catch (equipmentError) {
         console.error(
-          "Failed to update equipment calibration dates:",
+          "Failed to update equipment calibration date:",
           equipmentError
         );
         // Don't fail the whole operation if equipment update fails
@@ -496,12 +714,7 @@ const GraticulePage = () => {
     // Clear any existing errors when selecting a new graticule
     setError(null);
 
-    // Check if the selected graticule has calibration frequency
-    if (selectedGraticule && !selectedGraticule.calibrationFrequency) {
-      setError(
-        "Selected graticule does not have a calibration frequency set. Please set the calibration frequency in the Equipment List first."
-      );
-    }
+    // Note: Calibration frequency is optional for graticules - they're active forever unless status is Fail
   };
 
   const handleTechnicianChange = (technicianId) => {
@@ -513,6 +726,19 @@ const GraticulePage = () => {
       technicianId: technicianId,
       technicianName: selectedTechnician
         ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
+        : "",
+    }));
+  };
+
+  const handleMicroscopeChange = (microscopeEquipmentId) => {
+    const selectedMicroscope = pcmMicroscopes.find(
+      (m) => m._id === microscopeEquipmentId
+    );
+    setFormData((prev) => ({
+      ...prev,
+      microscopeId: microscopeEquipmentId,
+      microscopeReference: selectedMicroscope
+        ? selectedMicroscope.equipmentReference
         : "",
     }));
   };
@@ -540,6 +766,37 @@ const GraticulePage = () => {
     return area.toFixed(2);
   };
 
+  // Calculate constants for 13mm and 25mm filter holders
+  // Uses effective filter areas from EFA calibration data (or theoretical values as fallback)
+  // Constants are rounded to the nearest multiple of 10 (no decimals)
+  const calculateConstants = (areaInUm2) => {
+    if (!areaInUm2 || isNaN(parseFloat(areaInUm2))) {
+      return { constant13mm: "", constant25mm: "" };
+    }
+
+    const area = parseFloat(areaInUm2);
+    if (area === 0) {
+      return { constant13mm: "", constant25mm: "" };
+    }
+
+    // Use effective filter areas from state (fetched from EFA calibrations)
+    // Fallback to theoretical values if not yet loaded
+    const effectiveArea13mmValue = effectiveArea13mm || 132730000; // 132.73 mm² in µm²
+    const effectiveArea25mmValue = effectiveArea25mm || 490870000; // 490.87 mm² in µm²
+
+    // Calculate constants and round to nearest multiple of 10
+    const constant13mmRaw = effectiveArea13mmValue / area;
+    const constant25mmRaw = effectiveArea25mmValue / area;
+
+    const constant13mm = Math.round(constant13mmRaw / 10) * 10;
+    const constant25mm = Math.round(constant25mmRaw / 10) * 10;
+
+    return {
+      constant13mm: constant13mm.toString(),
+      constant25mm: constant25mm.toString(),
+    };
+  };
+
   const calculateStatus = (diameter) => {
     if (!diameter || isNaN(parseFloat(diameter))) return "Pass";
 
@@ -556,14 +813,44 @@ const GraticulePage = () => {
   const handleDiameterChange = (diameter) => {
     const area = calculateArea(diameter);
     const status = calculateStatus(diameter);
+    // Recalculate constants whenever diameter/area changes
+    const constants = calculateConstants(area);
 
     setFormData((prev) => ({
       ...prev,
       diameter: diameter,
       area: area,
       status: status,
+      constant13mm: constants.constant13mm,
+      constant25mm: constants.constant25mm,
     }));
   };
+
+  // Recalculate constants when effective areas are loaded and form has area
+  useEffect(() => {
+    if (
+      formData.area &&
+      formData.diameter &&
+      (effectiveArea13mm || effectiveArea25mm)
+    ) {
+      const constants = calculateConstants(formData.area);
+      setFormData((prev) => {
+        // Only update if constants have changed to avoid unnecessary re-renders
+        if (
+          prev.constant13mm !== constants.constant13mm ||
+          prev.constant25mm !== constants.constant25mm
+        ) {
+          return {
+            ...prev,
+            constant13mm: constants.constant13mm,
+            constant25mm: constants.constant25mm,
+          };
+        }
+        return prev;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveArea13mm, effectiveArea25mm, formData.area]);
 
   const handleDateChange = (date) => {
     const selectedGraticule = graticules.find(
@@ -579,18 +866,16 @@ const GraticulePage = () => {
 
     let nextCalibration = "";
 
+    // Calculate next calibration if frequency exists (optional for graticules)
     if (selectedGraticule && selectedGraticule.calibrationFrequency) {
       nextCalibration = calculateNextCalibration(
         date,
         selectedGraticule.calibrationFrequency
       );
       console.log("Calculated next calibration:", nextCalibration);
-    } else if (selectedGraticule) {
-      // Show error if graticule is selected but has no calibration frequency
-      setError(
-        "Selected graticule does not have a calibration frequency set. Please set the calibration frequency in the Equipment List first."
-      );
     }
+    // Note: If no calibration frequency, nextCalibration remains empty
+    // Graticules are active forever unless latest calibration status is Fail
 
     setFormData((prev) => ({
       ...prev,
@@ -752,8 +1037,35 @@ const GraticulePage = () => {
                   </TableCell>
                   <TableCell>
                     {(() => {
-                      if (!item.nextCalibration) return "-";
+                      // For graticules: show "Active Forever" unless latest calibration failed
+                      // Check if nextCalibration is a far future date (2099) indicating "active forever"
+                      if (
+                        !item.nextCalibration ||
+                        new Date(item.nextCalibration).getFullYear() >= 2099
+                      ) {
+                        // Graticules are active forever unless latest calibration status is Fail
+                        if (item.status === "Fail") {
+                          return (
+                            <Typography
+                              variant="body2"
+                              sx={{ color: theme.palette.error.main }}
+                            >
+                              Out of Service
+                            </Typography>
+                          );
+                        }
+                        return (
+                          <Typography
+                            variant="body2"
+                            sx={{ color: theme.palette.success.main }}
+                            fontWeight="medium"
+                          >
+                            Active Forever
+                          </Typography>
+                        );
+                      }
 
+                      // If there's a specific nextCalibration date, show it (for backward compatibility)
                       const daysUntil = calculateDaysUntilCalibration(
                         item.nextCalibration
                       );
@@ -887,6 +1199,22 @@ const GraticulePage = () => {
               disabled
               helperText="Automatically calculated using (πd²)/4"
             />
+            <TextField
+              fullWidth
+              label="Constant for 13mm Filter Holder"
+              value={formData.constant13mm}
+              InputLabelProps={{ shrink: true }}
+              disabled
+              helperText="Calculated as: (Effective Filter Area 13mm) / (Graticule Area)"
+            />
+            <TextField
+              fullWidth
+              label="Constant for 25mm Filter Holder"
+              value={formData.constant25mm}
+              InputLabelProps={{ shrink: true }}
+              disabled
+              helperText="Calculated as: (Effective Filter Area 25mm) / (Graticule Area)"
+            />
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
               <Select value={formData.status} label="Status" disabled>
@@ -927,14 +1255,40 @@ const GraticulePage = () => {
                 )}
               </Select>
             </FormControl>
+            <FormControl fullWidth>
+              <InputLabel>PCM Microscope</InputLabel>
+              <Select
+                value={formData.microscopeId}
+                onChange={(e) => handleMicroscopeChange(e.target.value)}
+                label="PCM Microscope"
+                disabled={pcmMicroscopesLoading}
+              >
+                <MenuItem value="">
+                  <em>Select a PCM microscope (optional)</em>
+                </MenuItem>
+                {pcmMicroscopes.length > 0 ? (
+                  pcmMicroscopes.map((microscope) => (
+                    <MenuItem key={microscope._id} value={microscope._id}>
+                      {microscope.equipmentReference}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled>
+                    {pcmMicroscopesLoading
+                      ? "Loading..."
+                      : "No PCM microscopes found"}
+                  </MenuItem>
+                )}
+              </Select>
+            </FormControl>
             <TextField
               fullWidth
-              label="Next Calibration"
+              label="Next Calibration (Optional)"
               type="date"
               value={formData.nextCalibration}
               InputLabelProps={{ shrink: true }}
               disabled
-              helperText="Automatically calculated from calibration date and frequency"
+              helperText="Graticules are active forever unless calibration status is Fail. This field is calculated if calibration frequency is set, but not required."
             />
           </Box>
         </DialogContent>

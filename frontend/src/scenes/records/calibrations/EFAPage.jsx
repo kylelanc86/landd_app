@@ -132,8 +132,13 @@ const EFAPage = () => {
       const allUsers = response.data || [];
 
       // Filter users who have labSignatory permission and are active
+      // Check both role-based and property-based lab signatory flags
       const labSignatoryUsers = allUsers.filter(
-        (user) => user.isActive && user.labSignatory === true
+        (user) =>
+          user.isActive &&
+          (user.role === "lab-signatory" ||
+            user.role === "admin" ||
+            user.labSignatory === true)
       );
 
       // Sort alphabetically by name
@@ -174,7 +179,7 @@ const EFAPage = () => {
     status: "Pass",
     technicianId: "",
     technicianName: "",
-    nextCalibration: "On change of Filter Holder model",
+    nextCalibration: "On change of Cowl model",
   });
 
   const handleAdd = () => {
@@ -192,7 +197,7 @@ const EFAPage = () => {
       status: "Pass",
       technicianId: "",
       technicianName: "",
-      nextCalibration: "On change of Filter Holder model",
+      nextCalibration: "On change of Cowl model",
     });
     setOpenDialog(true);
   };
@@ -223,7 +228,7 @@ const EFAPage = () => {
         status: calibration.status,
         technicianId: matchingTechnician?._id || calibration.technicianId || "",
         technicianName: technicianName,
-        nextCalibration: "On change of Filter Holder model",
+        nextCalibration: "On change of Cowl model",
       });
       setOpenDialog(true);
     }
@@ -305,7 +310,7 @@ const EFAPage = () => {
         filter3Diameter2: parseFloat(formData.filter3Diameter2) || null,
         status: formData.status,
         technician: formData.technicianName, // Send technician name instead of ID
-        nextCalibration: "On change of Filter Holder model",
+        nextCalibration: "On change of Cowl model",
         // notes: formData.notes || "", // Remove notes field if it doesn't exist in form
       };
 
@@ -692,7 +697,7 @@ const EFAPage = () => {
                   <TableCell>
                     <Typography variant="body2" fontWeight="medium">
                       {item.nextCalibration ||
-                        "On change of Filter Holder model"}
+                        "On change of Cowl model"}
                     </Typography>
                   </TableCell>
                   <TableCell>

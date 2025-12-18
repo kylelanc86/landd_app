@@ -85,6 +85,21 @@ const GoogleMapsDialog = ({
         fullscreenControl: true,
         zoomControl: true,
         gestureHandling: "greedy",
+        tilt: 0, // Force 2D overhead view - no tilt
+        heading: 0, // Force north-up orientation
+      });
+
+      // Prevent 3D view by resetting tilt and heading whenever they change
+      map.addListener("tilt_changed", () => {
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+      });
+
+      map.addListener("heading_changed", () => {
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
       });
 
       // Trigger resize event to ensure map renders correctly in the Dialog
@@ -100,9 +115,16 @@ const GoogleMapsDialog = ({
         setMapType(mapTypeId.toLowerCase());
       });
 
-      // Add zoom change listener
+      // Add zoom change listener - also reset tilt/heading on zoom to prevent 3D
       map.addListener("zoom_changed", () => {
         setMapZoom(map.getZoom());
+        // Reset tilt and heading when zooming to prevent automatic 3D switching
+        if (map.getTilt() !== 0) {
+          map.setTilt(0);
+        }
+        if (map.getHeading() !== 0) {
+          map.setHeading(0);
+        }
       });
 
       // Add center change listener
