@@ -30,7 +30,6 @@ import PureAsbestos from "./widgets/PureAsbestos";
 import RiLiquid from "./widgets/RiLiquid";
 import Sieves from "./widgets/Sieves";
 import Furnace from "./widgets/Furnace";
-import { formatDate } from "../../../utils/dateFormat";
 
 const Calibrations = () => {
   const navigate = useNavigate();
@@ -133,31 +132,19 @@ const Calibrations = () => {
         <Grid container spacing={3}>
           {/* Air Monitors */}
           <Grid item xs={12} md={6} lg={4}>
-            <AirPumpCalibration
-              nextCalibrationDue={formatDate("2024-03-15")}
-              viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
-            />
+            <AirPumpCalibration viewCalibrationsPath="/records/laboratory/calibrations/air-pump" />
           </Grid>
           {/* Site Rotameters */}
           <Grid item xs={12} md={6} lg={4}>
-            <FlowmeterCalibration
-              nextCalibrationDue={formatDate("2024-03-20")}
-              viewCalibrationsPath="/records/laboratory/calibrations/flowmeter"
-            />
+            <FlowmeterCalibration viewCalibrationsPath="/records/laboratory/calibrations/flowmeter" />
           </Grid>
           {/* Acetone Vaporiser */}
           <Grid item xs={12} md={6} lg={4}>
-            <AcetoneVaporiser
-              nextCalibrationDue={formatDate("2024-04-05")}
-              viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
-            />
+            <AcetoneVaporiser viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser" />
           </Grid>
           {/* RI Liquids */}
           <Grid item xs={12} md={6} lg={4}>
-            <RiLiquid
-              nextCalibrationDue={formatDate("2024-04-25")}
-              viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
-            />
+            <RiLiquid viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid" />
           </Grid>
           {/* PCM Graticules */}
           <Grid item xs={12} md={6} lg={4}>
@@ -174,56 +161,35 @@ const Calibrations = () => {
         <Grid container spacing={3}>
           {/* PCM Microscope */}
           <Grid item xs={12} md={6} lg={4}>
-            <MicroscopeCalibration
-              nextCalibrationDue={formatDate("2024-03-30")}
-              viewCalibrationsPath="/records/laboratory/calibrations/microscope"
-            />
+            <MicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/microscope" />
           </Grid>
           {/* PLM Microscope */}
           <Grid item xs={12} md={6} lg={4}>
-            <PLMMicroscopeCalibration
-              nextCalibrationDue={formatDate("2024-03-30")}
-              viewCalibrationsPath="/records/laboratory/calibrations/plm-microscope"
-            />
+            <PLMMicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/plm-microscope" />
           </Grid>
           {/* Stereomicroscope */}
           <Grid item xs={12} md={6} lg={4}>
-            <StereomicroscopeCalibration
-              nextCalibrationDue={formatDate("2024-03-30")}
-              viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope"
-            />
+            <StereomicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope" />
           </Grid>
           {/* HSE Test Slide */}
           <Grid item xs={12} md={6} lg={4}>
-            <HSETestSlideCalibration
-              nextCalibrationDue={formatDate("2024-04-10")}
-              viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide"
-            />
+            <HSETestSlideCalibration viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide" />
           </Grid>
           {/* Primary Flowmeter */}
           <Grid item xs={12} md={6} lg={4}>
-            <PrimaryFlowmeter
-              nextCalibrationDue={formatDate("2024-04-15")}
-              viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
-            />
+            <PrimaryFlowmeter viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter" />
           </Grid>
           {/* Sieves */}
           <Grid item xs={12} md={6} lg={4}>
-            <Sieves
-              nextCalibrationDue={formatDate("2024-04-30")}
-              viewCalibrationsPath="/records/laboratory/calibrations/sieves"
-            />
+            <Sieves viewCalibrationsPath="/records/laboratory/calibrations/sieves" />
           </Grid>
           {/* Pure Asbestos */}
           <Grid item xs={12} md={6} lg={4}>
-            <PureAsbestos
-              nextCalibrationDue={formatDate("2024-04-20")}
-              viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
-            />
+            <PureAsbestos viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos" />
           </Grid>
           {/* Furnace */}
           <Grid item xs={12} md={6} lg={4}>
-            <Furnace />
+            <Furnace viewCalibrationsPath="/records/laboratory/calibrations/furnace" />
           </Grid>
         </Grid>
       )}

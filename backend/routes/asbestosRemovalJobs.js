@@ -432,6 +432,53 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 
     const previousStatus = job.status;
 
+    // If status is being set to "completed", validate that all shifts and clearances are authorised
+    if (status === "completed" && previousStatus !== "completed") {
+      const Shift = require('../models/Shift');
+      const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+      
+      // Check all shifts for this job are complete AND authorised
+      const shifts = await Shift.find({ 
+        job: job._id,
+        $or: [
+          { jobModel: { $exists: false } },
+          { jobModel: null },
+          { jobModel: "AsbestosRemovalJob" },
+        ]
+      }).select("status reportApprovedBy").lean();
+      
+      if (shifts.length > 0) {
+        const unauthorisedShifts = shifts.filter(
+          (shift) => shift.status !== "shift_complete" || !shift.reportApprovedBy
+        );
+        
+        if (unauthorisedShifts.length > 0) {
+          return res.status(400).json({
+            message: `Cannot complete job: ${unauthorisedShifts.length} shift(s) are not complete or not authorised. All shifts must be complete and authorised before completing the job.`
+          });
+        }
+      }
+      
+      // Check all clearances for this project are complete AND authorised
+      const projectIdToCheck = job.projectId?._id?.toString() || job.projectId?.toString() || job.projectId;
+      if (projectIdToCheck) {
+        const clearances = await AsbestosClearance.find({ projectId: projectIdToCheck })
+          .select("status reportApprovedBy").lean();
+        
+        if (clearances.length > 0) {
+          const unauthorisedClearances = clearances.filter(
+            (clearance) => clearance.status !== "complete" || !clearance.reportApprovedBy
+          );
+          
+          if (unauthorisedClearances.length > 0) {
+            return res.status(400).json({
+              message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`
+            });
+          }
+        }
+      }
+    }
+
     // Update fields
     if (projectId !== undefined) job.projectId = projectId;
     if (projectName !== undefined) job.projectName = projectName;
@@ -495,6 +542,54 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
     }
 
     const previousStatus = job.status;
+    
+    // If status is being set to "completed", validate that all shifts and clearances are authorised
+    if (status === "completed" && previousStatus !== "completed") {
+      const Shift = require('../models/Shift');
+      const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+      
+      // Check all shifts for this job are complete AND authorised
+      const shifts = await Shift.find({ 
+        job: job._id,
+        $or: [
+          { jobModel: { $exists: false } },
+          { jobModel: null },
+          { jobModel: "AsbestosRemovalJob" },
+        ]
+      }).select("status reportApprovedBy").lean();
+      
+      if (shifts.length > 0) {
+        const unauthorisedShifts = shifts.filter(
+          (shift) => shift.status !== "shift_complete" || !shift.reportApprovedBy
+        );
+        
+        if (unauthorisedShifts.length > 0) {
+          return res.status(400).json({
+            message: `Cannot complete job: ${unauthorisedShifts.length} shift(s) are not complete or not authorised. All shifts must be complete and authorised before completing the job.`
+          });
+        }
+      }
+      
+      // Check all clearances for this project are complete AND authorised
+      const projectIdToCheck = job.projectId?._id?.toString() || job.projectId?.toString() || job.projectId;
+      if (projectIdToCheck) {
+        const clearances = await AsbestosClearance.find({ projectId: projectIdToCheck })
+          .select("status reportApprovedBy").lean();
+        
+        if (clearances.length > 0) {
+          const unauthorisedClearances = clearances.filter(
+            (clearance) => clearance.status !== "complete" || !clearance.reportApprovedBy
+          );
+          
+          if (unauthorisedClearances.length > 0) {
+            return res.status(400).json({
+              message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`
+            });
+          }
+        }
+      }
+    }
+    
     job.status = status;
     job.updatedBy = req.user.id;
 

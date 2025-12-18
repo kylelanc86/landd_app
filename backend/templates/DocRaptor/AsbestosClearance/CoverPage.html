@@ -139,6 +139,7 @@
         width: 50%;
         margin: 0;
         margin-top: 220px;
+        box-sizing: border-box;
       }
 
       .cover-page .cover-content h1 {
@@ -161,10 +162,16 @@
         margin-bottom: 32px;
         color: #222;
         width: 100%;
+        max-width: 100%;
         text-align: left;
-        hyphens: none;
-        -webkit-hyphens: none;
-        -ms-hyphens: none;
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: break-all !important;
+        overflow-wrap: anywhere !important;
+        line-height: 1.4;
+        box-sizing: border-box;
+        display: block;
       }
 
       .cover-page .secondary-header {

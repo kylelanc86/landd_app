@@ -236,8 +236,16 @@ const AddUserPage = () => {
         return;
       }
 
+      // Convert file to data URL first
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
       // Compress the image
-      const compressedImage = await compressSignatureImage(file);
+      const compressedImage = await compressSignatureImage(dataUrl);
       setForm({ ...form, signature: compressedImage });
     } catch (error) {
       console.error("Error processing signature:", error);

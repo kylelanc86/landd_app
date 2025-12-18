@@ -152,6 +152,8 @@ const AsbestosRemovalJobDetails = () => {
     sendingClearanceAuthorisationRequests,
     setSendingClearanceAuthorisationRequests,
   ] = useState({});
+  const [authorisingClearanceReports, setAuthorisingClearanceReports] =
+    useState({});
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
   const [editingShift, setEditingShift] = useState(null);
@@ -570,7 +572,25 @@ const AsbestosRemovalJobDetails = () => {
         const dateB = b.clearanceDate ? new Date(b.clearanceDate).getTime() : 0;
         return dateB - dateA; // Newest first
       });
-      setClearances(sortedClearances);
+
+      // Preserve reportApprovedBy and reportIssueDate from existing state
+      // (getClearances doesn't return these fields, so we need to merge them)
+      setClearances((prevClearances) => {
+        const clearanceMap = new Map(prevClearances.map((c) => [c._id, c]));
+        return sortedClearances.map((c) => {
+          const existing = clearanceMap.get(c._id);
+          return {
+            ...c,
+            // Preserve reportApprovedBy and reportIssueDate if they exist in the previous state
+            ...(existing?.reportApprovedBy && {
+              reportApprovedBy: existing.reportApprovedBy,
+            }),
+            ...(existing?.reportIssueDate && {
+              reportIssueDate: existing.reportIssueDate,
+            }),
+          };
+        });
+      });
       setClearancesLoaded(true);
       logDebug("fetchClearances success", {
         clearanceCount: clearancesData.length,
@@ -879,20 +899,26 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
-  // Check if all shifts and clearances are complete
-  const allShiftsComplete =
+  // Check if all shifts are complete AND authorised
+  const allShiftsCompleteAndAuthorised =
     airMonitoringShifts.length > 0 &&
-    airMonitoringShifts.every((shift) => shift.status === "shift_complete");
+    airMonitoringShifts.every(
+      (shift) => shift.status === "shift_complete" && shift.reportApprovedBy
+    );
 
-  const allClearancesComplete =
+  // Check if all clearances are complete AND authorised
+  const allClearancesCompleteAndAuthorised =
     clearances.length > 0 &&
-    clearances.every((clearance) => clearance.status === "complete");
+    clearances.every(
+      (clearance) =>
+        clearance.status === "complete" && clearance.reportApprovedBy
+    );
 
   // Job can only be completed if:
   // 1. Job is not already completed
   // 2. At least one shift or clearance has been added
-  // 3. All shifts are complete (if there are any)
-  // 4. All clearances are complete (if there are any)
+  // 3. All shifts are complete AND authorised (if there are any)
+  // 4. All clearances are complete AND authorised (if there are any)
   const hasShiftsOrClearances =
     airMonitoringShifts.length > 0 || clearances.length > 0;
 
@@ -900,8 +926,8 @@ const AsbestosRemovalJobDetails = () => {
     job &&
     job.status !== "completed" &&
     hasShiftsOrClearances &&
-    (airMonitoringShifts.length === 0 || allShiftsComplete) &&
-    (clearances.length === 0 || allClearancesComplete);
+    (airMonitoringShifts.length === 0 || allShiftsCompleteAndAuthorised) &&
+    (clearances.length === 0 || allClearancesCompleteAndAuthorised);
 
   const handleViewReport = async (shift) => {
     try {
@@ -1426,17 +1452,52 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleAuthoriseClearanceReport = async (clearance, event) => {
     event.stopPropagation();
-    try {
-      await asbestosClearanceService.authorise(clearance._id);
 
-      // Refresh the clearances list
-      await fetchClearances();
+    // Prevent double-clicking
+    if (authorisingClearanceReports[clearance._id]) {
+      return;
+    }
+
+    try {
+      // Set loading state
+      setAuthorisingClearanceReports((prev) => ({
+        ...prev,
+        [clearance._id]: true,
+      }));
+
+      // Authorise the clearance - the API returns the updated clearance
+      const response = await asbestosClearanceService.authorise(clearance._id);
+      // The service returns response.data, so response is already the clearance object
+      const updatedClearance = response;
+
+      console.log("Authorisation response:", updatedClearance);
+      console.log("reportApprovedBy:", updatedClearance.reportApprovedBy);
+
+      // Immediately update the clearance in state to reflect the authorisation
+      // This ensures the UI updates right away
+      setClearances((prevClearances) => {
+        const updated = prevClearances.map((c) =>
+          c._id === clearance._id
+            ? {
+                ...c,
+                reportApprovedBy: updatedClearance.reportApprovedBy,
+                reportIssueDate: updatedClearance.reportIssueDate,
+              }
+            : c
+        );
+        console.log(
+          "Updated clearances state:",
+          updated.find((c) => c._id === clearance._id)
+        );
+        return updated;
+      });
 
       // Generate and download the authorised report
       try {
         const fullClearance = await asbestosClearanceService.getById(
           clearance._id
         );
+
         await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
         showSnackbar(
           "Report authorised and downloaded successfully.",
@@ -1449,6 +1510,36 @@ const AsbestosRemovalJobDetails = () => {
           "warning"
         );
       }
+
+      // Refresh the clearances list after download completes to ensure everything is in sync
+      // Reset the loading ref to ensure fetchClearances actually runs
+      clearancesLoadingRef.current = false;
+      await fetchClearances();
+
+      // fetchClearances now preserves reportApprovedBy, but let's ensure it's set
+      // in case the merge didn't work properly
+      setClearances((prevClearances) => {
+        const refreshedClearance = prevClearances.find(
+          (c) => c._id === clearance._id
+        );
+        if (
+          refreshedClearance &&
+          !refreshedClearance.reportApprovedBy &&
+          updatedClearance.reportApprovedBy
+        ) {
+          console.log("Ensuring reportApprovedBy is set after fetchClearances");
+          return prevClearances.map((c) =>
+            c._id === clearance._id
+              ? {
+                  ...c,
+                  reportApprovedBy: updatedClearance.reportApprovedBy,
+                  reportIssueDate: updatedClearance.reportIssueDate,
+                }
+              : c
+          );
+        }
+        return prevClearances;
+      });
     } catch (error) {
       console.error("Error authorising clearance report:", error);
       showSnackbar(
@@ -1456,6 +1547,13 @@ const AsbestosRemovalJobDetails = () => {
           "Failed to authorise report. Please try again.",
         "error"
       );
+    } finally {
+      // Clear loading state only after everything is complete
+      setAuthorisingClearanceReports((prev) => {
+        const updated = { ...prev };
+        delete updated[clearance._id];
+        return updated;
+      });
     }
   };
 
@@ -1948,16 +2046,18 @@ const AsbestosRemovalJobDetails = () => {
                             gap={1}
                             flexWrap="wrap"
                           >
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditShift(shift, e);
-                              }}
-                              title="Edit Shift Date"
-                            >
-                              <EditIcon color="primary" />
-                            </IconButton>
+                            {shift.status !== "shift_complete" && (
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditShift(shift, e);
+                                }}
+                                title="Edit Shift Date"
+                              >
+                                <EditIcon color="primary" />
+                              </IconButton>
+                            )}
                             <PermissionGate
                               requiredPermissions={["admin.view"]}
                               fallback={null}
@@ -2281,7 +2381,43 @@ const AsbestosRemovalJobDetails = () => {
                           </PermissionGate>
                           {clearance.status === "complete" && (
                             <>
-                              {!reportViewedClearanceIds.has(clearance._id) && (
+                              {clearance.reportApprovedBy ||
+                              authorisingClearanceReports[clearance._id] ? (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={(e) =>
+                                    handleGeneratePDF(clearance, e)
+                                  }
+                                  disabled={
+                                    generatingPDF ||
+                                    authorisingClearanceReports[clearance._id]
+                                  }
+                                  startIcon={
+                                    authorisingClearanceReports[
+                                      clearance._id
+                                    ] ? (
+                                      <CircularProgress size={16} />
+                                    ) : null
+                                  }
+                                  sx={{
+                                    borderColor: theme.palette.success.main,
+                                    color: theme.palette.success.main,
+                                    "&:hover": {
+                                      borderColor: theme.palette.success.dark,
+                                      backgroundColor:
+                                        theme.palette.success.light,
+                                    },
+                                    mr: 1,
+                                  }}
+                                >
+                                  {authorisingClearanceReports[clearance._id]
+                                    ? "Authorising..."
+                                    : "Download Report"}
+                                </Button>
+                              ) : !reportViewedClearanceIds.has(
+                                  clearance._id
+                                ) ? (
                                 <Button
                                   variant="outlined"
                                   size="small"
@@ -2302,86 +2438,94 @@ const AsbestosRemovalJobDetails = () => {
                                 >
                                   View Report
                                 </Button>
-                              )}
-                              {reportViewedClearanceIds.has(clearance._id) &&
-                                !clearance.reportApprovedBy && (
-                                  <>
-                                    {currentUser?.reportProofer &&
-                                      hasPermission(
-                                        currentUser,
-                                        "admin.view"
-                                      ) && (
-                                        <Button
-                                          variant="contained"
-                                          size="small"
-                                          color="success"
-                                          onClick={(e) =>
-                                            handleAuthoriseClearanceReport(
-                                              clearance,
-                                              e
-                                            )
-                                          }
-                                          sx={{
+                              ) : (
+                                <>
+                                  {currentUser?.reportProofer &&
+                                    hasPermission(currentUser, "admin.view") &&
+                                    !clearance.reportApprovedBy && (
+                                      <Button
+                                        variant="contained"
+                                        size="small"
+                                        color="success"
+                                        onClick={(e) =>
+                                          handleAuthoriseClearanceReport(
+                                            clearance,
+                                            e
+                                          )
+                                        }
+                                        disabled={
+                                          authorisingClearanceReports[
+                                            clearance._id
+                                          ] || generatingPDF
+                                        }
+                                        startIcon={
+                                          authorisingClearanceReports[
+                                            clearance._id
+                                          ] ? (
+                                            <CircularProgress
+                                              size={16}
+                                              color="inherit"
+                                            />
+                                          ) : null
+                                        }
+                                        sx={{
+                                          backgroundColor:
+                                            theme.palette.success.main,
+                                          color: theme.palette.common.white,
+                                          "&:hover": {
+                                            backgroundColor:
+                                              theme.palette.success.dark,
+                                          },
+                                          "&:disabled": {
                                             backgroundColor:
                                               theme.palette.success.main,
-                                            color: theme.palette.common.white,
-                                            "&:hover": {
-                                              backgroundColor:
-                                                theme.palette.success.dark,
-                                            },
-                                            mr: 1,
-                                          }}
-                                        >
-                                          Authorise Report
-                                        </Button>
-                                      )}
-                                    {(!currentUser?.reportProofer ||
-                                      !hasPermission(
-                                        currentUser,
-                                        "admin.view"
-                                      )) &&
-                                      hasPermission(
-                                        currentUser,
-                                        "asbestos.edit"
-                                      ) && (
-                                        <Button
-                                          variant="outlined"
-                                          size="small"
-                                          color="primary"
-                                          startIcon={<MailIcon />}
-                                          onClick={(e) =>
-                                            handleSendClearanceForAuthorisation(
-                                              clearance,
-                                              e
-                                            )
-                                          }
-                                          disabled={Boolean(
-                                            sendingClearanceAuthorisationRequests[
-                                              clearance._id
-                                            ]
-                                          )}
-                                          sx={{ mr: 1 }}
-                                        >
-                                          {sendingClearanceAuthorisationRequests[
+                                            opacity: 0.7,
+                                          },
+                                          mr: 1,
+                                        }}
+                                      >
+                                        {authorisingClearanceReports[
+                                          clearance._id
+                                        ]
+                                          ? "Authorising..."
+                                          : "Authorise Report"}
+                                      </Button>
+                                    )}
+                                  {(!currentUser?.reportProofer ||
+                                    !hasPermission(
+                                      currentUser,
+                                      "admin.view"
+                                    )) &&
+                                    hasPermission(
+                                      currentUser,
+                                      "asbestos.edit"
+                                    ) && (
+                                      <Button
+                                        variant="outlined"
+                                        size="small"
+                                        color="primary"
+                                        startIcon={<MailIcon />}
+                                        onClick={(e) =>
+                                          handleSendClearanceForAuthorisation(
+                                            clearance,
+                                            e
+                                          )
+                                        }
+                                        disabled={Boolean(
+                                          sendingClearanceAuthorisationRequests[
                                             clearance._id
                                           ]
-                                            ? "Sending..."
-                                            : "Send for Authorisation"}
-                                        </Button>
-                                      )}
-                                  </>
-                                )}
-                              {clearance.reportApprovedBy && (
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) =>
-                                    handleGeneratePDF(clearance, e)
-                                  }
-                                  disabled={generatingPDF}
-                                  title="Generate PDF Report"
-                                >
-                                  <PictureAsPdfIcon color="primary" />
-                                </IconButton>
+                                        )}
+                                        sx={{ mr: 1 }}
+                                      >
+                                        {sendingClearanceAuthorisationRequests[
+                                          clearance._id
+                                        ]
+                                          ? "Sending..."
+                                          : "Send for Authorisation"}
+                                      </Button>
+                                    )}
+                                </>
                               )}
                             </>
                           )}

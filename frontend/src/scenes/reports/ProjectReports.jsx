@@ -296,7 +296,7 @@ const ProjectReports = () => {
               job.jobNumber || `Fibre ID Job - ${job.jobType || "Fibre ID"}`,
             status: job.status,
             jobType: job.jobType || "Fibre ID",
-            url: `/fibre-id/client-supplied/${job._id}/samples`,
+            url: `/client-supplied/${job._id}/samples`,
             dates: dates,
           });
         });
