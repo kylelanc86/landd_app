@@ -7,6 +7,11 @@ const asbestosClearanceSchema = new mongoose.Schema(
       ref: "Project",
       required: true,
     },
+    asbestosRemovalJobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AsbestosRemovalJob",
+      required: false,
+    },
     clearanceDate: {
       type: Date,
       required: true,
@@ -179,5 +184,6 @@ const asbestosClearanceSchema = new mongoose.Schema(
 // Index for better query performance
 asbestosClearanceSchema.index({ projectId: 1, status: 1 });
 asbestosClearanceSchema.index({ clearanceDate: 1 });
+asbestosClearanceSchema.index({ asbestosRemovalJobId: 1 });
 
 module.exports = mongoose.model("AsbestosClearance", asbestosClearanceSchema); 

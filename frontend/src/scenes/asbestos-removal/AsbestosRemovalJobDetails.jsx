@@ -573,21 +573,17 @@ const AsbestosRemovalJobDetails = () => {
         return dateB - dateA; // Newest first
       });
 
-      // Preserve reportApprovedBy and reportIssueDate from existing state
-      // (getClearances doesn't return these fields, so we need to merge them)
+      // Set clearances directly - API now returns reportApprovedBy and reportIssueDate
+      // Keep merge logic as fallback for backwards compatibility
       setClearances((prevClearances) => {
         const clearanceMap = new Map(prevClearances.map((c) => [c._id, c]));
         return sortedClearances.map((c) => {
           const existing = clearanceMap.get(c._id);
           return {
             ...c,
-            // Preserve reportApprovedBy and reportIssueDate if they exist in the previous state
-            ...(existing?.reportApprovedBy && {
-              reportApprovedBy: existing.reportApprovedBy,
-            }),
-            ...(existing?.reportIssueDate && {
-              reportIssueDate: existing.reportIssueDate,
-            }),
+            // API should return these fields, but preserve from existing state as fallback if missing
+            reportApprovedBy: c.reportApprovedBy || existing?.reportApprovedBy,
+            reportIssueDate: c.reportIssueDate || existing?.reportIssueDate,
           };
         });
       });
@@ -1728,6 +1724,7 @@ const AsbestosRemovalJobDetails = () => {
     try {
       const newClearanceData = {
         projectId: clearanceForm.projectId,
+        asbestosRemovalJobId: jobId, // Link clearance directly to the asbestos removal job
         clearanceDate: clearanceForm.clearanceDate,
         inspectionTime: clearanceForm.inspectionTime,
         clearanceType: clearanceForm.clearanceType,

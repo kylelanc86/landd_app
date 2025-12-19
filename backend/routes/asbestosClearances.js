@@ -91,6 +91,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
     const {
       projectId,
+      asbestosRemovalJobId,
       clearanceDate,
       inspectionTime,
       status,
@@ -114,6 +115,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 
     const clearance = new AsbestosClearance({
       projectId,
+      ...(asbestosRemovalJobId && { asbestosRemovalJobId }),
       clearanceDate,
       inspectionTime,
       status: status || "in progress",
@@ -173,6 +175,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
     const {
       projectId,
+      asbestosRemovalJobId,
       clearanceDate,
       inspectionTime,
       status,
@@ -206,6 +209,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       : null;
 
     clearance.projectId = projectId || clearance.projectId;
+    if (asbestosRemovalJobId !== undefined) {
+      clearance.asbestosRemovalJobId = asbestosRemovalJobId || null;
+    }
     clearance.clearanceDate = clearanceDate || clearance.clearanceDate;
     clearance.inspectionTime = inspectionTime || clearance.inspectionTime;
     clearance.status = status || clearance.status;
@@ -903,43 +909,49 @@ router.post("/:id/send-for-authorisation", auth, checkPermission("asbestos.edit"
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     
-    // Find the asbestos removal job for this clearance
-    // Since clearances are linked to projects, not directly to jobs, we need to find the right job
-    const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
-    const projectId = clearance.projectId?._id?.toString() || clearance.projectId?.toString();
-    
+    // Use direct link if available, otherwise fall back to finding the job
     let jobId = null;
-    if (projectId) {
-      // Find all asbestos removal jobs for this project that have clearance enabled
-      const jobs = await AsbestosRemovalJob.find({ 
-        projectId,
-        $or: [
-          { clearance: true },
-          { jobType: { $in: ["clearance", "air_monitoring_and_clearance"] } }
-        ]
-      })
-      .select("_id asbestosRemovalist createdAt")
-      .sort({ createdAt: -1 }) // Most recent first
-      .lean();
+    if (clearance.asbestosRemovalJobId) {
+      // Use the direct link
+      jobId = clearance.asbestosRemovalJobId.toString();
+    } else {
+      // Fallback for existing clearances that don't have the direct link
+      // Find the asbestos removal job for this clearance
+      const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+      const projectId = clearance.projectId?._id?.toString() || clearance.projectId?.toString();
       
-      if (jobs.length === 1) {
-        // Only one job with clearance - use it
-        jobId = jobs[0]._id.toString();
-      } else if (jobs.length > 1) {
-        // Multiple jobs - try to match by asbestosRemovalist name
-        const matchingJob = jobs.find(job => 
-          job.asbestosRemovalist === clearance.asbestosRemovalist
-        );
-        jobId = matchingJob 
-          ? matchingJob._id.toString() 
-          : jobs[0]._id.toString(); // Fallback to most recent
-      } else {
-        // No jobs with clearance flag - try finding any job for this project
-        const anyJob = await AsbestosRemovalJob.findOne({ projectId })
-          .select("_id")
-          .sort({ createdAt: -1 })
-          .lean();
-        jobId = anyJob?._id?.toString();
+      if (projectId) {
+        // Find all asbestos removal jobs for this project that have clearance enabled
+        const jobs = await AsbestosRemovalJob.find({ 
+          projectId,
+          $or: [
+            { clearance: true },
+            { jobType: { $in: ["clearance", "air_monitoring_and_clearance"] } }
+          ]
+        })
+        .select("_id asbestosRemovalist createdAt")
+        .sort({ createdAt: -1 }) // Most recent first
+        .lean();
+        
+        if (jobs.length === 1) {
+          // Only one job with clearance - use it
+          jobId = jobs[0]._id.toString();
+        } else if (jobs.length > 1) {
+          // Multiple jobs - try to match by asbestosRemovalist name
+          const matchingJob = jobs.find(job => 
+            job.asbestosRemovalist === clearance.asbestosRemovalist
+          );
+          jobId = matchingJob 
+            ? matchingJob._id.toString() 
+            : jobs[0]._id.toString(); // Fallback to most recent
+        } else {
+          // No jobs with clearance flag - try finding any job for this project
+          const anyJob = await AsbestosRemovalJob.findOne({ projectId })
+            .select("_id")
+            .sort({ createdAt: -1 })
+            .lean();
+          jobId = anyJob?._id?.toString();
+        }
       }
     }
     
