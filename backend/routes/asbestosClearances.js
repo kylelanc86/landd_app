@@ -902,9 +902,49 @@ router.post("/:id/send-for-authorisation", auth, checkPermission("asbestos.edit"
     const clearanceType = clearance.clearanceType || "Asbestos Clearance";
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    const jobId = clearance.projectId?._id?.toString();
+    
+    // Find the asbestos removal job for this clearance
+    // Since clearances are linked to projects, not directly to jobs, we need to find the right job
+    const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+    const projectId = clearance.projectId?._id?.toString() || clearance.projectId?.toString();
+    
+    let jobId = null;
+    if (projectId) {
+      // Find all asbestos removal jobs for this project that have clearance enabled
+      const jobs = await AsbestosRemovalJob.find({ 
+        projectId,
+        $or: [
+          { clearance: true },
+          { jobType: { $in: ["clearance", "air_monitoring_and_clearance"] } }
+        ]
+      })
+      .select("_id asbestosRemovalist createdAt")
+      .sort({ createdAt: -1 }) // Most recent first
+      .lean();
+      
+      if (jobs.length === 1) {
+        // Only one job with clearance - use it
+        jobId = jobs[0]._id.toString();
+      } else if (jobs.length > 1) {
+        // Multiple jobs - try to match by asbestosRemovalist name
+        const matchingJob = jobs.find(job => 
+          job.asbestosRemovalist === clearance.asbestosRemovalist
+        );
+        jobId = matchingJob 
+          ? matchingJob._id.toString() 
+          : jobs[0]._id.toString(); // Fallback to most recent
+      } else {
+        // No jobs with clearance flag - try finding any job for this project
+        const anyJob = await AsbestosRemovalJob.findOne({ projectId })
+          .select("_id")
+          .sort({ createdAt: -1 })
+          .lean();
+        jobId = anyJob?._id?.toString();
+      }
+    }
+    
     const clearanceUrl = jobId
-      ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details?tab=clearances`
+      ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`
       : `${frontendUrl}/projects`;
 
     await Promise.all(
