@@ -66,4 +66,9 @@ clientSchema.pre('save', function(next) {
   next();
 });
 
+// Create indexes for performance
+clientSchema.index({ name: 1 }); // Index for sorting and search
+clientSchema.index({ isActive: 1 }); // Index for filtering active/inactive clients
+clientSchema.index({ isActive: 1, name: 1 }); // Compound index for filtered searches and sorting
+
 module.exports = mongoose.model('Client', clientSchema); 

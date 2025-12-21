@@ -1,15 +1,24 @@
 import React from "react";
-import { Box, Typography, Paper, Container, Breadcrumbs, Link } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import {
+  Box,
+  Typography,
+  Paper,
+  Container,
+  Breadcrumbs,
+  Link,
+} from "@mui/material";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
 const Blanks = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "laboratory";
 
   const handleBackToHome = () => {
-    navigate("/records");
+    navigate(`/records?view=${view}`);
   };
-  
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -24,7 +33,7 @@ const Blanks = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
+            Laboratory Records
           </Link>
           <Typography color="text.primary">Laboratory Blanks</Typography>
         </Breadcrumbs>

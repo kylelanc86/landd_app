@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Grid,
@@ -6,13 +6,13 @@ import {
   CardContent,
   Typography,
   CardActionArea,
-  Tabs,
-  Tab,
   useTheme,
-  Paper,
+  useMediaQuery,
+  IconButton,
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { useNavigate } from "react-router-dom";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import SchoolIcon from "@mui/icons-material/School";
 import GroupIcon from "@mui/icons-material/Group";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -28,13 +28,7 @@ import AirIcon from "@mui/icons-material/Air";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 
-const RecordWidget = ({
-  title,
-  icon,
-  onClick,
-  color = "primary",
-  showComingSoon = false,
-}) => (
+const RecordWidget = ({ title, icon, onClick, color = "primary" }) => (
   <Card
     sx={{
       height: "100%",
@@ -49,13 +43,13 @@ const RecordWidget = ({
     }}
   >
     <CardActionArea
-      onClick={showComingSoon ? undefined : onClick}
+      onClick={onClick}
       sx={{
         height: "100%",
         display: "flex",
         flexDirection: "column",
         alignItems: "stretch",
-        cursor: showComingSoon ? "default" : "pointer",
+        cursor: "pointer",
       }}
     >
       <CardContent sx={{ flexGrow: 1, textAlign: "center", p: 3 }}>
@@ -63,152 +57,92 @@ const RecordWidget = ({
           {React.cloneElement(icon, {
             sx: {
               fontSize: 48,
-              color: showComingSoon ? "grey.400" : `${color}.main`,
+              color: `${color}.main`,
             },
           })}
         </Box>
-        <Typography
-          variant="h6"
-          component="h2"
-          gutterBottom
-          sx={{ color: showComingSoon ? "grey.500" : "inherit" }}
-        >
+        <Typography variant="h6" component="h2" gutterBottom>
           {title}
         </Typography>
       </CardContent>
     </CardActionArea>
-
-    {/* Coming Soon Overlay */}
-    {showComingSoon && (
-      <Box
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.7)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          borderRadius: 1,
-          zIndex: 1,
-        }}
-      >
-        <Typography
-          variant="h6"
-          sx={{
-            color: "white",
-            fontWeight: "bold",
-            textAlign: "center",
-            mb: 1,
-          }}
-        >
-          Coming Soon
-        </Typography>
-        <Typography
-          variant="body2"
-          sx={{
-            color: "white",
-            textAlign: "center",
-            opacity: 0.9,
-          }}
-        >
-          This feature is under development
-        </Typography>
-      </Box>
-    )}
   </Card>
-);
-
-// Tab panel component
-const TabPanel = ({ children, value, index, ...other }) => (
-  <div
-    role="tabpanel"
-    hidden={value !== index}
-    id={`records-tabpanel-${index}`}
-    aria-labelledby={`records-tab-${index}`}
-    {...other}
-  >
-    {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-  </div>
 );
 
 const Records = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0);
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const containerRef = useRef(null);
+  const isTablet = useMediaQuery(theme.breakpoints.down("md"));
 
-  // Minimum swipe distance (in px)
-  const minSwipeDistance = 50;
+  // Initialize view from URL parameter or default to "home"
+  const urlView = searchParams.get("view");
+  const [view, setView] = useState(urlView || "home"); // "home", "general", "laboratory"
+
+  // Update view when URL parameter changes
+  useEffect(() => {
+    const urlView = searchParams.get("view");
+    if (urlView && (urlView === "general" || urlView === "laboratory")) {
+      setView(urlView);
+    } else if (!urlView) {
+      setView("home");
+    }
+  }, [searchParams]);
 
   const generalRecordWidgets = [
     {
       title: "Training Records",
       icon: <SchoolIcon />,
       color: "primary",
-      onClick: () => navigate("/records/training"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/training?view=general"),
     },
     {
       title: "Staff Meetings",
       icon: <GroupIcon />,
       color: "secondary",
-      onClick: () => navigate("/records/staff-meetings"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/staff-meetings?view=general"),
     },
     {
       title: "Document Register",
       icon: <DescriptionIcon />,
       color: "success",
-      onClick: () => navigate("/records/document-register"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/document-register?view=general"),
     },
     {
       title: "Approved Suppliers",
       icon: <BusinessIcon />,
       color: "info",
-      onClick: () => navigate("/records/approved-suppliers"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/approved-suppliers?view=general"),
     },
     {
       title: "Asset Register",
       icon: <InventoryIcon />,
       color: "warning",
-      onClick: () => navigate("/records/asset-register"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/asset-register?view=general"),
     },
     {
       title: "Incidents & Non-conformances",
       icon: <ReportProblemIcon />,
       color: "error",
-      onClick: () => navigate("/records/incidents"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/incidents?view=general"),
     },
     {
       title: "OHS & Environmental Targets & Risks",
       icon: <SecurityIcon />,
       color: "primary",
-      onClick: () => navigate("/records/ohs-environmental"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/ohs-environmental?view=general"),
     },
     {
       title: "Impartiality Risks",
       icon: <GavelIcon />,
       color: "secondary",
-      onClick: () => navigate("/records/impartiality-risks"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/impartiality-risks?view=general"),
     },
     {
       title: "Client Feedback",
       icon: <FeedbackIcon />,
       color: "success",
-      onClick: () => navigate("/records/feedback"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/feedback?view=general"),
     },
   ];
 
@@ -217,251 +151,259 @@ const Records = () => {
       title: "Equipment List",
       icon: <ScienceIcon />,
       color: "primary",
-      onClick: () => navigate("/records/laboratory/equipment"),
-      showComingSoon: false,
+      onClick: () => navigate("/records/laboratory/equipment?view=laboratory"),
     },
     {
       title: "Calibrations",
       icon: <TrendingUpIcon />,
       color: "secondary",
-      onClick: () => navigate("/records/laboratory/calibrations"),
-      showComingSoon: true,
+      onClick: () =>
+        navigate("/records/laboratory/calibrations?view=laboratory"),
     },
     {
       title: "Quality Control",
       icon: <AssignmentIcon />,
       color: "success",
-      onClick: () => navigate("/records/quality-control"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/quality-control?view=laboratory"),
     },
     {
       title: "Indoor Air Quality",
       icon: <AirIcon />,
       color: "info",
-      onClick: () => navigate("/records/indoor-air-quality"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/indoor-air-quality?view=laboratory"),
     },
     {
       title: "Blanks",
       icon: <FilterAltIcon />,
       color: "warning",
-      onClick: () => navigate("/records/blanks"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/blanks?view=laboratory"),
     },
     {
       title: "Audits",
       icon: <AssignmentIcon />,
       color: "error",
-      onClick: () => navigate("/records/audits"),
-      showComingSoon: true,
+      onClick: () => navigate("/records/audits?view=laboratory"),
     },
   ];
 
-  // Touch event handlers for swipe functionality
-  const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+  const recordModules = [
+    {
+      id: "general",
+      title: "General Records",
+      description:
+        "Access training records, staff meetings, document register, and more",
+      icon: <DescriptionIcon />,
+      color: "#1976d2",
+      view: "general",
+    },
+    {
+      id: "laboratory",
+      title: "Laboratory Records",
+      description:
+        "Access equipment lists, calibrations, quality control, and more",
+      icon: <ScienceIcon />,
+      color: "#2e7d32",
+      view: "laboratory",
+    },
+  ];
+
+  const handleModuleClick = (module) => {
+    setView(module.view);
+    setSearchParams({ view: module.view });
   };
 
-  const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+  const handleBackClick = () => {
+    setView("home");
+    setSearchParams({});
   };
 
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-
-    if (isLeftSwipe && activeTab < 1) {
-      setActiveTab(1); // Swipe to Laboratory Records
-    } else if (isRightSwipe && activeTab > 0) {
-      setActiveTab(0); // Swipe to General Records
-    }
+  const getHeaderTitle = () => {
+    if (view === "general") return "General Records";
+    if (view === "laboratory") return "Laboratory Records";
+    return "Records";
   };
-
-  // Handle tab change
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
-  };
-
-  // Handle tab change
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Records
-      </Typography>
-
-      {/* Tab Navigation */}
-      <Paper
-        elevation={0}
-        sx={{
-          mb: 3,
-          borderRadius: 2,
-          position: "relative",
-          overflow: "visible",
-        }}
-      >
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="fullWidth"
-          sx={{
-            position: "relative",
-            "& .MuiTab-root": {
-              textTransform: "none",
-              fontSize: "1rem",
-              fontWeight: 600,
-              py: 2,
-              color: theme.palette.text.secondary,
-              transition: "all 0.3s",
-              "&.Mui-selected": {
-                backgroundColor: "#4caf50",
-                color: "white !important",
-              },
-            },
-            "& .MuiTabs-indicator": {
-              backgroundColor: "#4caf50",
-              height: 3,
-            },
-          }}
+    <Box m="20px">
+      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+        {view !== "home" && (
+          <IconButton
+            onClick={handleBackClick}
+            sx={{ mr: 2 }}
+            aria-label="back"
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        )}
+        <Typography
+          variant="h3"
+          component="h1"
+          gutterBottom
+          sx={{ mt: 3, mb: 4, fontWeight: 600 }}
         >
-          <Tab
-            label={
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <span>General Records</span>
-                {activeTab === 0 && (
-                  <ArrowForwardIcon
-                    sx={{
-                      display: { xs: "none", sm: "block" },
-                      position: "absolute",
-                      right: 16,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: "white",
-                      fontSize: "30px",
-                      fontWeight: "bold",
-                      animation: "arrowBounce 1.5s infinite",
-                      "@keyframes arrowBounce": {
-                        "0%, 100%": {
-                          transform: "translateY(-50%) translateX(0)",
-                        },
-                        "50%": {
-                          transform: "translateY(-50%) translateX(5px)",
-                        },
-                      },
-                    }}
-                  />
-                )}
-              </Box>
-            }
-            id="records-tab-0"
-            aria-controls="records-tabpanel-0"
-          />
-          <Tab
-            label={
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                {activeTab === 1 && (
-                  <Box
-                    component="span"
-                    sx={{
-                      display: { xs: "none", sm: "block" },
-                      position: "absolute",
-                      left: 16,
-                      top: "50%",
-                      transform: "translateY(-50%) scaleX(-1)",
-                      color: "white",
-                    }}
-                  >
-                    <ArrowForwardIcon
-                      sx={{
-                        fontSize: "30px",
-                        fontWeight: "bold",
-                        animation: "arrowBounceLeft 1.5s infinite",
-                        "@keyframes arrowBounceLeft": {
-                          "0%, 100%": {
-                            transform: "translateX(0)",
-                          },
-                          "50%": {
-                            transform: "translateX(-5px)",
-                          },
-                        },
-                      }}
-                    />
-                  </Box>
-                )}
-                <span>Laboratory Records</span>
-              </Box>
-            }
-            id="records-tab-1"
-            aria-controls="records-tabpanel-1"
-          />
-        </Tabs>
-      </Paper>
-
-      {/* Swipeable Content Container */}
-      <Box
-        ref={containerRef}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        sx={{
-          position: "relative",
-          overflow: "hidden",
-          minHeight: "60vh",
-        }}
-      >
-        {/* General Records Tab */}
-        <TabPanel value={activeTab} index={0}>
-          <Box
-            sx={{
-              transform:
-                activeTab === 0 ? "translateX(0)" : "translateX(-100%)",
-              transition: "transform 0.3s ease-in-out",
-              position: "relative",
-            }}
-          >
-            <Grid container spacing={3}>
-              {generalRecordWidgets.map((widget, index) => (
-                <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
-                  <RecordWidget {...widget} />
-                </Grid>
-              ))}
-            </Grid>
-          </Box>
-        </TabPanel>
-
-        {/* Laboratory Records Tab */}
-        <TabPanel value={activeTab} index={1}>
-          <Box
-            sx={{
-              transform: activeTab === 1 ? "translateX(0)" : "translateX(100%)",
-              transition: "transform 0.3s ease-in-out",
-              position: "relative",
-            }}
-          >
-            <Grid container spacing={3}>
-              {laboratoryRecordWidgets.map((widget, index) => (
-                <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
-                  <RecordWidget {...widget} />
-                </Grid>
-              ))}
-            </Grid>
-          </Box>
-        </TabPanel>
+          {getHeaderTitle()}
+        </Typography>
       </Box>
 
-      {/* Swipe Instructions */}
-      <Box
-        sx={{
-          mt: 3,
-          textAlign: "center",
-          color: theme.palette.text.secondary,
-          fontSize: "0.875rem",
-        }}
-      ></Box>
+      {view === "home" ? (
+        <Box sx={{ mt: 4 }}>
+          <Grid container spacing={isTablet ? 3 : 4}>
+            {recordModules.map((module) => (
+              <Grid item xs={12} sm={6} md={6} lg={6} key={module.id}>
+                <Card
+                  sx={{
+                    height: "100%",
+                    minHeight: isTablet ? "280px" : "320px",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    overflow: "hidden",
+                    borderRadius: "16px",
+                    boxShadow:
+                      "0 4px 20px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06)",
+                    border: "1px solid rgba(0,0,0,0.05)",
+                    "&:hover": {
+                      transform: "translateY(-4px)",
+                      boxShadow:
+                        "0 8px 25px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08)",
+                    },
+                  }}
+                >
+                  <CardActionArea
+                    onClick={() => handleModuleClick(module)}
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <Box
+                      component="div"
+                      sx={{
+                        height: isTablet ? 140 : 180,
+                        background: `linear-gradient(135deg, ${module.color}15 0%, ${module.color}08 100%)`,
+                        borderBottom: `2px solid ${module.color}30`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        position: "relative",
+                        padding: isTablet ? "20px" : "24px",
+                        transition: "all 0.3s ease-in-out",
+                        "&:hover": {
+                          background: `linear-gradient(135deg, ${module.color}20 0%, ${module.color}12 100%)`,
+                          borderBottom: `2px solid ${module.color}40`,
+                        },
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: isTablet ? 80 : 100,
+                          height: isTablet ? 80 : 100,
+                          borderRadius: "50%",
+                          background: `linear-gradient(135deg, ${module.color}20 0%, ${module.color}10 100%)`,
+                          border: `2px solid ${module.color}30`,
+                          boxShadow: `0 4px 20px ${module.color}20, 0 2px 8px ${module.color}15`,
+                          transition: "all 0.3s ease-in-out",
+                        }}
+                      >
+                        {React.cloneElement(module.icon, {
+                          sx: {
+                            fontSize: isTablet ? 48 : 60,
+                            color: module.color,
+                            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.1))",
+                          },
+                        })}
+                      </Box>
+                    </Box>
+                    <CardContent
+                      sx={{
+                        flexGrow: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        padding: isTablet ? "16px" : "20px",
+                        "&:last-child": {
+                          paddingBottom: isTablet ? "16px" : "20px",
+                        },
+                      }}
+                    >
+                      <Typography
+                        variant="h5"
+                        component="h2"
+                        gutterBottom
+                        sx={{
+                          fontSize: isTablet ? "1.25rem" : "1.5rem",
+                          marginBottom: isTablet ? "10px" : "12px",
+                          fontWeight: 600,
+                          color: "#1a1a1a",
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        {module.title}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          mb: isTablet ? 2 : 2.5,
+                          fontSize: isTablet ? "0.875rem" : "0.9375rem",
+                          lineHeight: 1.6,
+                          flexGrow: 1,
+                        }}
+                      >
+                        {module.description}
+                      </Typography>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: "auto",
+                          paddingTop: isTablet ? "8px" : "12px",
+                          borderTop: "1px solid rgba(0,0,0,0.08)",
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 600,
+                            fontSize: isTablet ? "0.8125rem" : "0.875rem",
+                            color: module.color,
+                            transition: "all 0.2s ease-in-out",
+                          }}
+                        >
+                          View {module.title}
+                        </Typography>
+                        <ArrowForwardIcon
+                          sx={{
+                            fontSize: isTablet ? "18px" : "20px",
+                            color: module.color,
+                            transition: "transform 0.2s ease-in-out",
+                          }}
+                        />
+                      </Box>
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      ) : (
+        <Box sx={{ mt: 4 }}>
+          <Grid container spacing={3}>
+            {(view === "general"
+              ? generalRecordWidgets
+              : laboratoryRecordWidgets
+            ).map((widget, index) => (
+              <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
+                <RecordWidget {...widget} />
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
     </Box>
   );
 };

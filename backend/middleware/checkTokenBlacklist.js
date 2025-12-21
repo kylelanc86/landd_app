@@ -6,10 +6,12 @@ const TokenBlacklist = require('../models/TokenBlacklist');
  */
 const checkTokenBlacklist = async (req, res, next) => {
   try {
+    console.log('CheckTokenBlacklist middleware hit for:', req.path);
     // Get the token from the request (should be set by auth middleware)
     const token = req.token;
     
     if (!token) {
+      console.log('No token in checkTokenBlacklist for:', req.path);
       return res.status(401).json({ 
         message: 'No token provided',
         code: 'NO_TOKEN'

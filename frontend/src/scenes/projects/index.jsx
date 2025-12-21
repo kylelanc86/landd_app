@@ -21,12 +21,12 @@ import {
   DialogActions,
   TextField,
   Menu,
+  Alert,
   Divider,
   Checkbox,
   ListItemButton,
   ListItemText,
   InputAdornment,
-  Alert,
   LinearProgress,
   Popover,
   List,
@@ -40,12 +40,15 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
+import InfoIcon from "@mui/icons-material/Info";
+import ClearIcon from "@mui/icons-material/Clear";
 
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
+import { useSnackbar } from "../../context/SnackbarContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
-import { useTheme } from "@mui/material";
+import { useTheme, useMediaQuery } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   projectService,
@@ -62,6 +65,7 @@ import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import AddIcon from "@mui/icons-material/Add";
 
 import { debounce } from "lodash";
+import { removeProjectFromCache } from "../../utils/reportsCache";
 
 const DEPARTMENTS = [
   "Asbestos & HAZMAT",
@@ -164,11 +168,17 @@ const Projects = ({ initialFilters = {} }) => {
     useJobStatus() || {};
   const { isAdmin, isManager, can } = usePermissions();
   const { currentUser } = useAuth();
+
+  // Detect tablet screens for responsive table adjustments (600px - 1024px)
+  const isTablet = useMediaQuery("(min-width: 600px) and (max-width: 1024px)");
+  // Detect desktop and tablet (>= 600px) for showing Details button
+  const isDesktopOrTablet = useMediaQuery("(min-width: 600px)");
   const [projects, setProjects] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { showSnackbar } = useSnackbar();
 
   // Get project statuses from custom data fields
   const {
@@ -200,41 +210,16 @@ const Projects = ({ initialFilters = {} }) => {
     }
   }, [projects, statusColors, uniqueStatuses]);
 
-  // Helper to get a color for a given status - memoized to prevent recreation
+  // Helper to get a color for a given status - uses hardcoded colors for fast loading
   const getStatusColor = useCallback(
     (status) => {
-      // Use custom colors from the database if available
+      // Use hardcoded colors (these are synced with database)
       if (statusColors && statusColors[status]) {
         return statusColors[status];
       }
 
-      // Fallback to hardcoded colors for backward compatibility
-      switch (status) {
-        case "Assigned":
-          return "#1976d2"; // Blue
-        case "In progress":
-          return "#ed6c02"; // Orange
-        case "Samples submitted":
-          return "#9c27b0"; // Purple
-        case "Lab Analysis Complete":
-          return "#2e7d32"; // Green
-        case "Report sent for review":
-          return "#d32f2f"; // Red
-        case "Ready for invoicing":
-          return "#7b1fa2"; // Deep Purple
-        case "Invoice sent":
-          return "#388e3c"; // Dark Green
-        case "Job complete":
-          return "#424242"; // Grey
-        case "On hold":
-          return "#f57c00"; // Dark Orange
-        case "Quote sent":
-          return "#1976d2"; // Blue
-        case "Cancelled":
-          return "#d32f2f"; // Red
-        default:
-          return "#1976d2"; // Default Material-UI primary blue
-      }
+      // Fallback to default color if status not found
+      return "#1976d2"; // Default Material-UI primary blue
     },
     [statusColors]
   );
@@ -279,6 +264,9 @@ const Projects = ({ initialFilters = {} }) => {
     updatedAt: false,
   });
 
+  // Column width model for resizing
+  const [columnWidthModel, setColumnWidthModel] = useState({});
+
   // Memoize column visibility model to prevent unnecessary re-renders
   const memoizedColumnVisibilityModel = useMemo(
     () => columnVisibilityModel,
@@ -314,7 +302,7 @@ const Projects = ({ initialFilters = {} }) => {
     const defaultFilters = {
       searchTerm: "",
       departmentFilter: "all",
-      statusFilter: "all",
+      statusFilter: "all_active", // Default to active projects
       sortModel: [{ field: "projectID", sort: "desc" }],
     };
 
@@ -352,7 +340,7 @@ const Projects = ({ initialFilters = {} }) => {
             urlParams.get("status") ||
             initialFilters.status ||
             parsedFilters.statusFilter ||
-            "all",
+            "all_active",
         };
       } catch (error) {
         return {
@@ -391,6 +379,9 @@ const Projects = ({ initialFilters = {} }) => {
   const searchInputRef = useRef(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
+  // Add ref to track request ID to prevent stale responses from updating state
+  const requestIdRef = useRef(0);
+
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [isClientSearching, setIsClientSearching] = useState(false);
@@ -418,7 +409,8 @@ const Projects = ({ initialFilters = {} }) => {
     } else {
       urlParams.delete("department");
     }
-    if (newFilters.statusFilter !== "all") {
+    if (newFilters.statusFilter !== "all_active") {
+      // Only set status in URL if it's not the default (all_active)
       urlParams.set("status", newFilters.statusFilter);
     } else {
       urlParams.delete("status");
@@ -459,6 +451,9 @@ const Projects = ({ initialFilters = {} }) => {
     ) => {
       const fetchStartTime = performance.now();
 
+      // Increment request ID to track the latest request
+      const currentRequestId = ++requestIdRef.current;
+
       // Use current filters state if currentFilters is null (for search operations)
       const filtersToUse = currentFilters || filtersRef.current;
       try {
@@ -485,36 +480,69 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = filtersToUse.departmentFilter;
         }
 
-        // Note: Status filtering is handled client-side, not on the backend
+        // Load projects based on status filter
+        if (filtersToUse.statusFilter === "all") {
+          // Show all projects (both active and inactive)
+          params.status = "all";
+        } else if (filtersToUse.statusFilter === "all_active") {
+          params.status = "all_active";
+        } else if (
+          filtersToUse.statusFilter === "Cancelled" ||
+          filtersToUse.statusFilter === "Job Complete" ||
+          filtersToUse.statusFilter === "Job complete" ||
+          inactiveStatuses.includes(filtersToUse.statusFilter)
+        ) {
+          // If filtering by a specific inactive status (Cancelled, Job Complete, or others), load all inactive projects
+          // Client-side filtering will handle the specific status
+          params.status = "all_inactive";
+        } else {
+          // Default to active projects for specific active statuses or any other case
+          params.status = "all_active";
+        }
 
-        const apiStartTime = performance.now();
         const response = await projectService.getAll(params);
-        const apiEndTime = performance.now();
+
+        // Check if a newer request has started - if so, ignore this response
+        if (currentRequestId !== requestIdRef.current) {
+          return; // Don't update state if this request is stale
+        }
 
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
 
-        const processingEndTime = performance.now();
-
-        setProjects(projectsData);
-        setPagination({
-          total: projectsData.length,
-          pages: Math.ceil(projectsData.length / paginationModel.pageSize),
-          page: 0,
-          limit: paginationModel.pageSize,
-        });
+        // Double-check that this is still the latest request before updating state
+        if (currentRequestId === requestIdRef.current) {
+          setProjects(projectsData);
+          setPagination((prev) => ({
+            total: projectsData.length,
+            pages: Math.ceil(projectsData.length / prev.pageSize),
+            page: 0,
+            limit: prev.pageSize,
+          }));
+        }
 
         // Status counts will be updated when the component re-renders with new projects
       } catch (err) {
-        setError(err.message);
-        setProjects([]);
+        // Don't update state if a newer request has started
+        if (currentRequestId !== requestIdRef.current) {
+          return;
+        }
+
+        // Only set error if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setError(err.message);
+          setProjects([]);
+        }
       } finally {
-        setLoading(false);
-        setSearchLoading(false);
+        // Only update loading state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setLoading(false);
+          setSearchLoading(false);
+        }
       }
     },
-    [] // Remove filters dependency since we now use ref to get current state
+    [activeStatuses, inactiveStatuses] // Depend on both active and inactive statuses
   );
 
   // Move fetchProjects here so it is defined after fetchAllProjects
@@ -549,6 +577,9 @@ const Projects = ({ initialFilters = {} }) => {
     (filterType, value) => {
       // Create a new function to fetch with updated filter values
       const fetchWithUpdatedFilters = async () => {
+        // Increment request ID to track the latest request
+        const currentRequestId = ++requestIdRef.current;
+
         try {
           setSearchLoading(true);
 
@@ -582,27 +613,64 @@ const Projects = ({ initialFilters = {} }) => {
             params.department = updatedFilters.departmentFilter;
           }
 
-          // Note: Status filtering is handled client-side, not on the backend
+          // Load projects based on status filter
+          if (updatedFilters.statusFilter === "all") {
+            // Show all projects (both active and inactive)
+            params.status = "all";
+          } else if (updatedFilters.statusFilter === "all_active") {
+            params.status = "all_active";
+          } else if (
+            updatedFilters.statusFilter === "Cancelled" ||
+            updatedFilters.statusFilter === "Job Complete" ||
+            updatedFilters.statusFilter === "Job complete" ||
+            inactiveStatuses.includes(updatedFilters.statusFilter)
+          ) {
+            // If filtering by a specific inactive status (Cancelled, Job Complete, or others), load all inactive projects
+            // Client-side filtering will handle the specific status
+            params.status = "all_inactive";
+          } else {
+            // Default to active projects for specific active statuses or any other case
+            params.status = "all_active";
+          }
 
           const response = await projectService.getAll(params);
+
+          // Check if a newer request has started - if so, ignore this response
+          if (currentRequestId !== requestIdRef.current) {
+            return; // Don't update state if this request is stale
+          }
 
           const projectsData = Array.isArray(response.data)
             ? response.data
             : response.data?.data || [];
 
-          setProjects(projectsData);
-          setPagination((prev) => ({
-            ...prev,
-            total: response.data.pagination?.total || 0,
-            pages: response.data.pagination?.pages || 0,
-          }));
+          // Double-check that this is still the latest request before updating state
+          if (currentRequestId === requestIdRef.current) {
+            setProjects(projectsData);
+            setPagination((prev) => ({
+              ...prev,
+              total: response.data.pagination?.total || 0,
+              pages: response.data.pagination?.pages || 0,
+            }));
+          }
 
           // Status counts will be updated when the component re-renders with new projects
         } catch (err) {
-          setError(err.message);
-          setProjects([]);
+          // Don't update state if a newer request has started
+          if (currentRequestId !== requestIdRef.current) {
+            return;
+          }
+
+          // Only set error if this is still the latest request
+          if (currentRequestId === requestIdRef.current) {
+            setError(err.message);
+            setProjects([]);
+          }
         } finally {
-          setSearchLoading(false);
+          // Only update loading state if this is still the latest request
+          if (currentRequestId === requestIdRef.current) {
+            setSearchLoading(false);
+          }
         }
       };
 
@@ -623,7 +691,7 @@ const Projects = ({ initialFilters = {} }) => {
       // Use the new function with updated filters
       fetchWithUpdatedFilters();
     },
-    [updateFilter, memoizedFilters, paginationModel.pageSize]
+    [updateFilter, memoizedFilters, paginationModel.pageSize, inactiveStatuses]
   );
 
   // Function to fetch status counts for ALL projects (not just current page)
@@ -654,31 +722,21 @@ const Projects = ({ initialFilters = {} }) => {
       setStatusCounts(counts);
     } catch (err) {
       // Fallback to local calculation if backend fails
-      const counts = {
-        all: projects.length,
-        all_active: projects.filter((project) =>
-          activeStatuses.includes(project.status)
-        ).length,
-        all_inactive: projects.filter((project) =>
-          inactiveStatuses.includes(project.status)
-        ).length,
-      };
+      // Use current projects state via functional update to avoid dependency
+      setStatusCounts((prevCounts) => {
+        // Get current projects from state (we'll use a ref to access it)
+        // Actually, since we can't access projects here, just use prevCounts as fallback
+        // or return empty counts
+        return prevCounts; // Keep previous counts on error
+      });
 
-      for (const status of activeStatuses) {
-        counts[status] = projects.filter(
-          (project) => project.status === status
-        ).length;
-      }
-
-      for (const status of inactiveStatuses) {
-        counts[status] = projects.filter(
-          (project) => project.status === status
-        ).length;
-      }
-
-      setStatusCounts(counts);
+      // Log error but don't break the UI
+      console.error(
+        "Error fetching status counts, keeping previous values:",
+        err
+      );
     }
-  }, [activeStatuses, inactiveStatuses, projects]);
+  }, [activeStatuses, inactiveStatuses]); // Removed 'projects' dependency to prevent infinite loop
 
   // Memoize the status counts calculation to prevent unnecessary recalculations
   const memoizedStatusCounts = useMemo(() => {
@@ -708,6 +766,17 @@ const Projects = ({ initialFilters = {} }) => {
     [debouncedSearch, updateFilter]
   );
 
+  // Handle search clear
+  const handleSearchClear = useCallback(() => {
+    updateFilter("searchTerm", "");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    // Trigger search with empty value immediately (no debounce needed)
+    fetchAllProjects("", false, {
+      ...filtersRef.current,
+      searchTerm: "",
+    });
+  }, [updateFilter, fetchAllProjects]);
+
   // Memoize pagination model to prevent unnecessary re-renders
   const memoizedPaginationModel = useMemo(
     () => paginationModel,
@@ -720,48 +789,8 @@ const Projects = ({ initialFilters = {} }) => {
     // All fetches are now triggered manually in search and filter handlers
   }, [memoizedPaginationModel]);
 
-  // Clear search term when component unmounts or when navigating away
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Clear search term from localStorage when leaving the page
-      const currentFilters = localStorage.getItem("projects-filters");
-      if (currentFilters) {
-        try {
-          const parsedFilters = JSON.parse(currentFilters);
-          if (parsedFilters.searchTerm) {
-            parsedFilters.searchTerm = "";
-            localStorage.setItem(
-              "projects-filters",
-              JSON.stringify(parsedFilters)
-            );
-          }
-        } catch (error) {}
-      }
-    };
-
-    // Listen for page unload/refresh
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    // Cleanup function to clear search term when component unmounts
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-
-      // Clear search term from state and localStorage
-      const currentFilters = localStorage.getItem("projects-filters");
-      if (currentFilters) {
-        try {
-          const parsedFilters = JSON.parse(currentFilters);
-          if (parsedFilters.searchTerm) {
-            parsedFilters.searchTerm = "";
-            localStorage.setItem(
-              "projects-filters",
-              JSON.stringify(parsedFilters)
-            );
-          }
-        } catch (error) {}
-      }
-    };
-  }, []);
+  // Note: Search term is now persisted in localStorage and will be restored
+  // when the component mounts again. No need to clear it on unmount.
 
   // Restore focus to search input when search loading completes
   useEffect(() => {
@@ -819,17 +848,25 @@ const Projects = ({ initialFilters = {} }) => {
     fetchUsers();
   }, []);
 
-  // Initial fetch for projects when component mounts
-  useEffect(() => {
-    fetchProjects(false);
-  }, []); // Empty dependency array for initial load only
+  // Track if initial fetch has been done to prevent infinite loops
+  const hasInitialFetchRef = useRef(false);
 
-  // Fetch status counts when component mounts and when statuses change
+  // Initial fetch for projects and status counts when component mounts and statuses are loaded
+  // Fetch them in parallel for faster data loading
   useEffect(() => {
-    if (activeStatuses.length > 0 || inactiveStatuses.length > 0) {
-      fetchStatusCounts();
+    // Only fetch if we have active statuses loaded and haven't fetched yet
+    if (activeStatuses.length > 0 && !hasInitialFetchRef.current) {
+      hasInitialFetchRef.current = true;
+      // Fetch projects and status counts in parallel (they're independent)
+      Promise.all([fetchAllProjects(), fetchStatusCounts()]).catch((err) => {
+        console.error("Error loading initial data:", err);
+        hasInitialFetchRef.current = false; // Reset on error so we can retry
+      });
     }
-  }, [fetchStatusCounts]);
+    // Only depend on activeStatuses to prevent infinite loops
+    // The fetch functions are stable (useCallback) and don't need to be in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStatuses.length]); // Only depend on activeStatuses length to prevent infinite loops
 
   const searchClients = async (searchTerm) => {
     if (!searchTerm || searchTerm.trim().length === 0) {
@@ -909,6 +946,15 @@ const Projects = ({ initialFilters = {} }) => {
         (p) => (p._id || p.id) !== projectId
       );
       setProjects(updatedProjects);
+
+      // Update reports cache - remove deleted project
+      if (deletedProject?.projectID) {
+        try {
+          removeProjectFromCache(deletedProject.projectID);
+        } catch (cacheError) {
+          console.error("Error updating cache after delete:", cacheError);
+        }
+      }
 
       // Update status counts locally instead of making API call
       if (deletedProject && deletedProject.status) {
@@ -1154,6 +1200,33 @@ const Projects = ({ initialFilters = {} }) => {
     }
   };
 
+  // Handle column width changes with debouncing for performance
+  const debouncedSaveWidths = useCallback(
+    debounce((widthModel) => {
+      // Save to localStorage
+      localStorage.setItem("projects-column-width", JSON.stringify(widthModel));
+      // Optionally save to database
+      userPreferencesService
+        .updatePreferences({
+          columnWidth: {
+            projects: widthModel,
+          },
+        })
+        .catch(() => {
+          // Silently fail if API call fails
+        });
+    }, 300),
+    []
+  );
+
+  const handleColumnWidthChange = useCallback(
+    (newModel) => {
+      setColumnWidthModel(newModel);
+      debouncedSaveWidths(newModel);
+    },
+    [debouncedSaveWidths]
+  );
+
   const handleDepartmentClick = (department) => {
     setSelectedDepartment(department);
 
@@ -1173,6 +1246,9 @@ const Projects = ({ initialFilters = {} }) => {
 
     // Create a temporary fetch function that uses the updated department
     const fetchWithUpdatedDepartment = async () => {
+      // Increment request ID to track the latest request
+      const currentRequestId = ++requestIdRef.current;
+
       try {
         setSearchLoading(true);
 
@@ -1193,25 +1269,62 @@ const Projects = ({ initialFilters = {} }) => {
           params.department = departmentValue;
         }
 
-        // Note: Status filtering is handled client-side, not on the backend
+        // Load projects based on status filter
+        if (tempFilters.statusFilter === "all") {
+          // Show all projects (both active and inactive)
+          params.status = "all";
+        } else if (tempFilters.statusFilter === "all_active") {
+          params.status = "all_active";
+        } else if (
+          tempFilters.statusFilter === "Cancelled" ||
+          tempFilters.statusFilter === "Job Complete" ||
+          tempFilters.statusFilter === "Job complete" ||
+          inactiveStatuses.includes(tempFilters.statusFilter)
+        ) {
+          // If filtering by a specific inactive status (Cancelled, Job Complete, or others), load all inactive projects
+          // Client-side filtering will handle the specific status
+          params.status = "all_inactive";
+        } else {
+          // Default to active projects for specific active statuses or any other case
+          params.status = "all_active";
+        }
 
         const response = await projectService.getAll(params);
+
+        // Check if a newer request has started - if so, ignore this response
+        if (currentRequestId !== requestIdRef.current) {
+          return; // Don't update state if this request is stale
+        }
 
         const projectsData = Array.isArray(response.data)
           ? response.data
           : response.data?.data || [];
 
-        setProjects(projectsData);
-        setPagination((prev) => ({
-          ...prev,
-          total: response.data?.pagination?.total || 0,
-          pages: response.data?.pagination?.pages || 0,
-        }));
+        // Double-check that this is still the latest request before updating state
+        if (currentRequestId === requestIdRef.current) {
+          setProjects(projectsData);
+          setPagination((prev) => ({
+            ...prev,
+            total: response.data?.pagination?.total || 0,
+            pages: response.data?.pagination?.pages || 0,
+          }));
+        }
       } catch (err) {
-        setError(err.message);
-        setProjects([]);
+        // Don't update state if a newer request has started
+        if (currentRequestId !== requestIdRef.current) {
+          return;
+        }
+
+        // Only set error if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setError(err.message);
+          setProjects([]);
+        }
       } finally {
-        setSearchLoading(false);
+        // Only update loading state if this is still the latest request
+        if (currentRequestId === requestIdRef.current) {
+          setSearchLoading(false);
+        }
       }
     };
 
@@ -1285,9 +1398,16 @@ const Projects = ({ initialFilters = {} }) => {
         users: currentProject?.users || [],
       };
 
+      // Get old status before making the API call
+      const oldProject = projects.find((p) => p._id === projectId);
+      const oldStatus = oldProject?.status;
+
       const apiStartTime = performance.now();
       const response = await projectService.update(projectId, updatePayload);
       const apiEndTime = performance.now();
+
+      // Get new status from response (use updatePayload.status as fallback)
+      const updatedStatus = response.data?.status || updatePayload.status;
 
       // Update the local state with the full updated project data from the API response
       const stateUpdateStartTime = performance.now();
@@ -1300,10 +1420,47 @@ const Projects = ({ initialFilters = {} }) => {
       );
       const stateUpdateTime = performance.now() - stateUpdateStartTime;
 
-      // Refresh status counts after updating project status
-      const statusCountsStartTime = performance.now();
-      fetchStatusCounts();
-      const statusCountsTime = performance.now() - statusCountsStartTime;
+      // Update status counts locally instead of refetching (much faster)
+      if (oldStatus && updatedStatus && oldStatus !== updatedStatus) {
+        setStatusCounts((prevCounts) => {
+          const newCounts = { ...prevCounts };
+
+          // Decrement old status
+          if (newCounts[oldStatus] > 0) {
+            newCounts[oldStatus] = (newCounts[oldStatus] || 0) - 1;
+          }
+
+          // Increment new status
+          newCounts[updatedStatus] = (newCounts[updatedStatus] || 0) + 1;
+
+          // Update active/inactive totals if needed
+          if (
+            activeStatuses.includes(oldStatus) &&
+            !activeStatuses.includes(updatedStatus)
+          ) {
+            // Moved from active to inactive
+            newCounts.all_active = Math.max(0, (newCounts.all_active || 0) - 1);
+            newCounts.all_inactive = (newCounts.all_inactive || 0) + 1;
+          } else if (
+            !activeStatuses.includes(oldStatus) &&
+            activeStatuses.includes(updatedStatus)
+          ) {
+            // Moved from inactive to active
+            newCounts.all_active = (newCounts.all_active || 0) + 1;
+            newCounts.all_inactive = Math.max(
+              0,
+              (newCounts.all_inactive || 0) - 1
+            );
+          } else if (
+            activeStatuses.includes(oldStatus) &&
+            activeStatuses.includes(updatedStatus)
+          ) {
+            // Both active - totals stay the same, just status counts change
+          }
+
+          return newCounts;
+        });
+      }
 
       // Close the dropdown
       setStatusDropdownAnchor(null);
@@ -1332,6 +1489,9 @@ const Projects = ({ initialFilters = {} }) => {
         if (response.data?.columnVisibility?.projects) {
           setColumnVisibilityModel(response.data.columnVisibility.projects);
         }
+        if (response.data?.columnWidth?.projects) {
+          setColumnWidthModel(response.data.columnWidth.projects);
+        }
       } catch (error) {
         // Fallback to localStorage if API fails
         const savedColumnVisibility = localStorage.getItem(
@@ -1343,36 +1503,41 @@ const Projects = ({ initialFilters = {} }) => {
             setColumnVisibilityModel(parsed);
           } catch (parseError) {}
         }
+        const savedColumnWidth = localStorage.getItem("projects-column-width");
+        if (savedColumnWidth) {
+          try {
+            const parsed = JSON.parse(savedColumnWidth);
+            setColumnWidthModel(parsed);
+          } catch (parseError) {}
+        }
       }
     };
 
     loadUserPreferences();
   }, []);
 
-  // Memoize columns configuration
+  // Memoize columns configuration with responsive widths for tablets
   const columns = useMemo(
     () => [
       {
         field: "projectID",
         headerName: "Project ID",
-        flex: 0,
-        width: 105,
-        minWidth: 105,
-        maxWidth: 105,
+        width: isTablet ? 90 : 105,
+        minWidth: isTablet ? 80 : 80,
+        maxWidth: 300,
+        sortable: true,
         renderCell: (params) => <Box>{params.value}</Box>,
       },
       {
         field: "name",
         headerName: "Project",
-        flex: 3,
-        minWidth: 250,
-        maxWidth: 500,
+        width: isTablet ? 280 : 350,
+        minWidth: isTablet ? 160 : 220,
+        maxWidth: 800,
+        sortable: true,
         renderCell: ({ row }) => {
           const clientName = row.client?.name || row.client || "";
           const projectName = row.name || "";
-          const displayText = clientName
-            ? `${clientName} - ${projectName}`
-            : projectName;
 
           return (
             <Box
@@ -1382,27 +1547,65 @@ const Projects = ({ initialFilters = {} }) => {
                 lineHeight: 1.2,
                 height: "100%",
                 display: "flex",
-                alignItems: "center",
-                maxHeight: "2.4em", // 2 lines * 1.2 line height
-                overflow: "hidden",
+                flexDirection: "column",
+                justifyContent: "center",
                 width: "100%",
+                py: 0.5,
               }}
             >
               <Typography
                 variant="body2"
                 sx={{
-                  whiteSpace: "normal",
-                  wordWrap: "break-word",
-                  lineHeight: 1.2,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                   width: "100%",
                   color: "black",
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
                 }}
               >
-                {displayText}
+                {projectName}
               </Typography>
+              {clientName && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "inline-block",
+                    maxWidth: "fit-content",
+                    mt: 0.25,
+                    cursor: "pointer",
+                    "&:hover": {
+                      color: "primary.main",
+                      textDecoration: "underline",
+                    },
+                  }}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      // Search for client by name to get the ID
+                      const response = await clientService.getAll({
+                        search: clientName,
+                        limit: 1,
+                      });
+                      const clients = response.data.clients || response.data;
+                      const client = clients.find((c) => c.name === clientName);
+                      if (client && client._id) {
+                        navigate(`/clients/${client._id}`);
+                      } else {
+                        showSnackbar("Client not found", "warning");
+                      }
+                    } catch (error) {
+                      console.error("Error finding client:", error);
+                      showSnackbar("Failed to find client", "error");
+                    }
+                  }}
+                >
+                  Client: {clientName}
+                </Typography>
+              )}
             </Box>
           );
         },
@@ -1410,9 +1613,10 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "d_Date",
         headerName: "Due Date",
-        flex: 1,
-        minWidth: 100,
-        maxWidth: 120,
+        width: isTablet ? 90 : 110,
+        minWidth: isTablet ? 80 : 80,
+        maxWidth: 200,
+        sortable: true,
         renderCell: ({ row }) => {
           const daysDiff = calculateDaysDifference(row.d_Date);
 
@@ -1433,7 +1637,7 @@ const Projects = ({ initialFilters = {} }) => {
                   width: "100%",
                 }}
               >
-                No due date
+                -
               </Typography>
             );
           }
@@ -1477,7 +1681,7 @@ const Projects = ({ initialFilters = {} }) => {
                   width: "100%",
                 }}
               >
-                {Math.abs(daysDiff)} days overdue
+                {Math.abs(daysDiff)} days
               </Typography>
             );
           } else {
@@ -1498,29 +1702,32 @@ const Projects = ({ initialFilters = {} }) => {
                   width: "100%",
                 }}
               >
-                {daysDiff} days left
+                {daysDiff} days
               </Typography>
             );
           }
         },
       },
-      {
-        field: "department",
-        headerName: "Department",
-        flex: 1,
-      },
+      // {
+      //   field: "department",
+      //   headerName: "Department",
+      //   flex: 1,
+      // },
       {
         field: "workOrder",
         headerName: "Work Order/Job Reference",
-        flex: 1,
-        minWidth: 150,
+        width: isTablet ? 120 : 150,
+        minWidth: isTablet ? 100 : 100,
+        maxWidth: 400,
+        sortable: true,
       },
       {
         field: "status",
         headerName: "Status",
-        flex: 1,
-        minWidth: 60,
-        maxWidth: 165,
+        width: isTablet ? 110 : 180,
+        minWidth: isTablet ? 100 : 100,
+        maxWidth: 300,
+        sortable: true,
         renderCell: (params) => (
           <Box sx={{ position: "relative", width: "100%", zIndex: 5 }}>
             {/* Status display - no click functionality */}
@@ -1533,6 +1740,16 @@ const Projects = ({ initialFilters = {} }) => {
                 fontSize: "0.75rem",
                 userSelect: "none",
                 position: "relative",
+                whiteSpace: "normal",
+                wordBreak: "break-word",
+                lineHeight: 1.2,
+                textAlign: "left",
+                width: "100%",
+                boxSizing: "border-box",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
               }}
             >
               {params.value}
@@ -1543,9 +1760,10 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "users",
         headerName: "Users",
-        flex: 1,
-        minWidth: 60,
-        maxWidth: 120,
+        width: isTablet ? 70 : 100,
+        minWidth: isTablet ? 60 : 60,
+        maxWidth: 200,
+        sortable: false,
         renderCell: (params) => {
           // Debug logging to see what data we're getting
 
@@ -1558,12 +1776,46 @@ const Projects = ({ initialFilters = {} }) => {
       },
       {
         field: "actions",
-        headerName: "Actions & Status",
-        flex: 1,
-        minWidth: 120,
-        maxWidth: 160,
+        headerName: "Actions",
+        width: isTablet ? 140 : 200,
+        minWidth: isTablet ? 130 : 130,
+        maxWidth: 300,
+        sortable: false,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
+            {/* Project Details button */}
+            {isDesktopOrTablet ? (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/projects/${params.row._id}`);
+                }}
+                size="small"
+                variant="outlined"
+                color="primary"
+                sx={{
+                  minWidth: "auto",
+                  px: 1.5,
+                  fontSize: "0.75rem",
+                }}
+              >
+                Details
+              </Button>
+            ) : (
+              <Tooltip title="View Project Details">
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/projects/${params.row._id}`);
+                  }}
+                  size="small"
+                  color="primary"
+                >
+                  <InfoIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+
             {/* Delete button - only show for admin and manager users */}
             {(isAdmin || isManager) && (
               <Tooltip title="Delete Project">
@@ -1604,47 +1856,38 @@ const Projects = ({ initialFilters = {} }) => {
         ),
       },
     ],
-    [navigate]
+    [
+      navigate,
+      isAdmin,
+      isManager,
+      can,
+      handleDeleteClick,
+      handleStatusClick,
+      isTablet,
+      isDesktopOrTablet,
+    ]
   );
 
   // Client-side filtering for live status updates
   const filteredProjects = useMemo(() => {
-    console.log("Filtering projects:", {
-      totalProjects: projects.length,
-      statusFilter: filters.statusFilter,
-      activeStatuses: activeStatuses,
-      inactiveStatuses: inactiveStatuses,
-    });
-
+    // "all" shows all projects (both active and inactive)
     if (filters.statusFilter === "all") {
-      console.log("Showing all projects:", projects.length);
       return projects;
     }
 
+    // "all_active" shows all active projects
+    if (filters.statusFilter === "all_active") {
+      return projects;
+    }
+
+    // Handle specific status filters (including Cancelled and Job Complete)
     const filtered = projects.filter((project) => {
       const projectStatus = project.status;
-
-      // Handle active/inactive filter categories
-      if (filters.statusFilter === "all_active") {
-        return activeStatuses.includes(projectStatus);
-      }
-
-      if (filters.statusFilter === "all_inactive") {
-        return inactiveStatuses.includes(projectStatus);
-      }
-
-      // Handle specific status filters
       return projectStatus === filters.statusFilter;
     });
 
-    console.log("Filtered projects:", {
-      statusFilter: filters.statusFilter,
-      filteredCount: filtered.length,
-      totalCount: projects.length,
-    });
-
     return filtered;
-  }, [projects, filters.statusFilter, activeStatuses, inactiveStatuses]);
+  }, [projects, filters.statusFilter]);
 
   // Show UI immediately, data will load in background
   if (error) return <Typography color="error">{error}</Typography>;
@@ -1656,7 +1899,12 @@ const Projects = ({ initialFilters = {} }) => {
 
   return (
     <Box m="5px 0px 20px 20px">
-      <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
+      <Typography
+        variant="h3"
+        component="h1"
+        marginTop="20px"
+        marginBottom="20px"
+      >
         Projects
       </Typography>
       {/* Search Loading Animation - Only shows during searches */}
@@ -1733,6 +1981,23 @@ const Projects = ({ initialFilters = {} }) => {
                     <SearchIcon />
                   </InputAdornment>
                 ),
+                endAdornment: filters.searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={handleSearchClear}
+                      sx={{
+                        padding: "4px",
+                        "&:hover": {
+                          backgroundColor: "rgba(0, 0, 0, 0.04)",
+                        },
+                      }}
+                      aria-label="Clear search"
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
               }}
               ref={searchInputRef}
               onFocus={() => {
@@ -1768,11 +2033,11 @@ const Projects = ({ initialFilters = {} }) => {
                         marginRight: "8px",
                       }}
                     >
-                      All Statuses
+                      All Reports
                     </span>
                     <Box
                       sx={{
-                        backgroundColor: "#666",
+                        backgroundColor: "#1976d2",
                         color: "white",
                         padding: "2px 8px",
                         borderRadius: "12px",
@@ -1783,7 +2048,8 @@ const Projects = ({ initialFilters = {} }) => {
                         flexShrink: 0,
                       }}
                     >
-                      {statusCounts.all || 0}
+                      {(statusCounts.all_active || 0) +
+                        (statusCounts.all_inactive || 0)}
                     </Box>
                   </Box>
                 </MenuItem>
@@ -1805,7 +2071,7 @@ const Projects = ({ initialFilters = {} }) => {
                         marginRight: "8px",
                       }}
                     >
-                      Active
+                      Active Projects
                     </span>
                     <Box
                       sx={{
@@ -1824,53 +2090,8 @@ const Projects = ({ initialFilters = {} }) => {
                     </Box>
                   </Box>
                 </MenuItem>
-                <MenuItem value="all_inactive" sx={{ fontSize: "0.88rem" }}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "100%",
-                    }}
-                  >
-                    <span
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                        marginRight: "8px",
-                      }}
-                    >
-                      Inactive
-                    </span>
-                    <Box
-                      sx={{
-                        backgroundColor: "#666",
-                        color: "white",
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        fontSize: "0.77rem",
-                        fontWeight: "bold",
-                        minWidth: "20px",
-                        textAlign: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {statusCounts.all_inactive || 0}
-                    </Box>
-                  </Box>
-                </MenuItem>
                 <Divider />
-                <MenuItem disabled>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ fontSize: "0.88rem" }}
-                  >
-                    Active Statuses
-                  </Typography>
-                </MenuItem>
+                <MenuItem disabled></MenuItem>
                 {activeStatuses.map((status) => {
                   const count = statusCounts[status] || 0;
                   return (
@@ -1918,61 +2139,62 @@ const Projects = ({ initialFilters = {} }) => {
                   );
                 })}
                 <Divider />
-                <MenuItem disabled>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ fontSize: "0.88rem" }}
-                  >
-                    Inactive Statuses
-                  </Typography>
-                </MenuItem>
-                {inactiveStatuses.map((status) => {
-                  const count = statusCounts[status] || 0;
-                  return (
-                    <MenuItem
-                      key={status}
-                      value={status}
-                      sx={{ fontSize: "0.88rem" }}
-                    >
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          width: "100%",
-                        }}
+                <MenuItem disabled></MenuItem>
+                {/* Add Cancelled and Job Complete filters - check both active and inactive statuses */}
+                {[...activeStatuses, ...inactiveStatuses]
+                  .filter(
+                    (status) =>
+                      status === "Cancelled" ||
+                      status === "Job Complete" ||
+                      status === "Job complete"
+                  )
+                  .map((status) => {
+                    const count = statusCounts[status] || 0;
+                    return (
+                      <MenuItem
+                        key={status}
+                        value={status}
+                        sx={{ fontSize: "0.88rem" }}
                       >
-                        <span
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            flex: 1,
-                            marginRight: "8px",
-                          }}
-                        >
-                          {status}
-                        </span>
                         <Box
                           sx={{
-                            backgroundColor: statusColors[status] || "#1976d2",
-                            color: "white",
-                            padding: "2px 8px",
-                            borderRadius: "12px",
-                            fontSize: "0.77rem",
-                            fontWeight: "bold",
-                            minWidth: "20px",
-                            textAlign: "center",
-                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            width: "100%",
                           }}
                         >
-                          {count}
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                              marginRight: "8px",
+                            }}
+                          >
+                            {status}
+                          </span>
+                          <Box
+                            sx={{
+                              backgroundColor:
+                                statusColors[status] || "#757575",
+                              color: "white",
+                              padding: "2px 8px",
+                              borderRadius: "12px",
+                              fontSize: "0.77rem",
+                              fontWeight: "bold",
+                              minWidth: "20px",
+                              textAlign: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {count}
+                          </Box>
                         </Box>
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
+                      </MenuItem>
+                    );
+                  })}
               </Select>
             </FormControl>
 
@@ -2149,8 +2371,20 @@ const Projects = ({ initialFilters = {} }) => {
       <Box
         m="40px 0 0 0"
         sx={{
+          width: "100%",
+          minWidth: 0,
+          overflowX: "auto",
+          maxWidth: "100%",
           "& .MuiDataGrid-root": {
             border: "none",
+            width: "100%",
+            minWidth: 0,
+            maxWidth: "100%",
+          },
+          "& .MuiDataGrid-main": {
+            width: "100%",
+            minWidth: 0,
+            maxWidth: "100%",
           },
           "& .MuiDataGrid-cell": {
             borderBottom: `1px solid ${theme.palette.divider}`,
@@ -2164,9 +2398,23 @@ const Projects = ({ initialFilters = {} }) => {
           "& .MuiDataGrid-columnHeader": {
             color: "#FFFFFF",
             fontWeight: 600,
+            "& .MuiDataGrid-menuIcon": {
+              display: "none !important",
+            },
+            "& .MuiDataGrid-sortIcon": {
+              color: "#FFFFFF",
+            },
+            "& .MuiDataGrid-iconButtonContainer": {
+              "& .MuiIconButton-root": {
+                color: "#FFFFFF",
+              },
+            },
           },
           "& .MuiDataGrid-virtualScroller": {
             backgroundColor: "#FFFFFF",
+            overflowX: "auto",
+            width: "100%",
+            maxWidth: "100%",
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
@@ -2198,28 +2446,38 @@ const Projects = ({ initialFilters = {} }) => {
       >
         <DataGrid
           rows={filteredProjects}
-          sortingOrder={["desc", "asc"]}
           columns={columns}
-          disableColumnUnsort={true}
           getRowId={(row) => row._id || row.id}
           loading={loading && !searchLoading}
           error={error}
           // checkboxSelection
-          onRowClick={(params) => navigate(`/projects/${params.row._id}`)}
+          onRowClick={(params) =>
+            navigate(`/reports/project/${params.row._id}`, {
+              state: { from: "projects" },
+            })
+          }
           columnVisibilityModel={memoizedColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
+          columnWidthModel={columnWidthModel}
+          onColumnWidthChange={handleColumnWidthChange}
           paginationMode="client"
-          sortingMode="client"
           paginationModel={paginationModel}
           onPaginationModelChange={(newModel) => {
             setPaginationModel(newModel);
           }}
           pageSizeOptions={[25, 50, 100]}
           autoHeight
-          disableColumnMenu={false}
+          disableColumnMenu={true}
           disableSelectionOnClick
-          disableColumnFilter={false}
-          disableMultipleColumnsFiltering={true}
+          disableColumnFilter={true}
+          disableSorting={false}
+          disableColumnResize={false}
+          columnResizeMode="onChange"
+          slotProps={{
+            columnResize: {
+              minWidth: 50,
+            },
+          }}
           disableColumnSelector={false}
           disableDensitySelector={false}
           // disableColumnReorder={false}
@@ -2228,17 +2486,13 @@ const Projects = ({ initialFilters = {} }) => {
             pagination: {
               paginationModel: { pageSize: 50, page: 0 },
             },
-            sorting: {
-              sortModel: [
-                {
-                  field: "projectID",
-                  sort: "desc",
-                },
-              ],
-            },
           }}
           sx={{
             cursor: "pointer",
+            width: "100%",
+            minWidth: 0,
+            maxWidth: "100%",
+            overflowX: "auto",
             "& .MuiDataGrid-row:nth-of-type(even)": {
               backgroundColor: "#f8f9fa",
             },
@@ -2247,6 +2501,29 @@ const Projects = ({ initialFilters = {} }) => {
             },
             "& .MuiDataGrid-row:hover": {
               backgroundColor: "#e3f2fd",
+            },
+            "& .MuiDataGrid-row": {
+              minHeight: "44px !important",
+            },
+            "& .MuiDataGrid-cell": {
+              display: "flex",
+              alignItems: "center",
+              padding: isTablet ? "4px 8px" : "4px 16px",
+            },
+            "& .MuiDataGrid-columnHeader": {
+              padding: isTablet ? "8px" : "16px",
+              "& .MuiDataGrid-sortIcon": {
+                color: "#FFFFFF",
+              },
+            },
+            "& .MuiDataGrid-virtualScroller": {
+              overflowX: "auto",
+            },
+            "& .MuiDataGrid-container--top": {
+              overflowX: "auto",
+            },
+            "& .MuiDataGrid-container--bottom": {
+              overflowX: "auto",
             },
           }}
         />

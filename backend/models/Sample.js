@@ -8,7 +8,12 @@ const sampleSchema = new mongoose.Schema({
   },
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AirMonitoringJob',
+    refPath: 'jobModel',
+    required: true
+  },
+  jobModel: {
+    type: String,
+    enum: ['AirMonitoringJob', 'AsbestosRemovalJob'],
     required: true
   },
   sampleNumber: {
@@ -23,7 +28,7 @@ const sampleSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['Background', 'Clearance', 'Exposure'],
+    enum: ['Background', 'Clearance', 'Exposure', '-'],
     required: false
   },
   location: {
@@ -58,6 +63,10 @@ const sampleSchema = new mongoose.Schema({
   endTime: {
     type: String,
     required: false
+  },
+  nextDay: {
+    type: Boolean,
+    default: false
   },
   initialFlowrate: {
     type: Number,
@@ -112,5 +121,8 @@ sampleSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
+
+// Indexes for better query performance
+sampleSchema.index({ shift: 1, fullSampleID: 1 }); // Compound index for queries filtering by shift and fullSampleID
 
 module.exports = mongoose.model('Sample', sampleSchema); 

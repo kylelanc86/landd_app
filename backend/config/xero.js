@@ -10,8 +10,39 @@ dotenv.config();
 const requiredEnvVars = ['XERO_CLIENT_ID', 'XERO_CLIENT_SECRET', 'XERO_REDIRECT_URI'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
+// Make Xero optional - only initialize if all env vars are present
 if (missingEnvVars.length > 0) {
-  throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  console.warn(`Xero integration disabled: Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  console.warn('Xero features will not be available. To enable Xero, set: XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_REDIRECT_URI');
+  
+  // Export a stub object that will fail gracefully when used
+  const stubXero = {
+    isInitialized: () => false,
+    readTokenSet: async () => {
+      throw new Error('Xero is not configured. Please set XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI environment variables.');
+    },
+    buildConsentUrl: async () => {
+      throw new Error('Xero is not configured. Please set XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI environment variables.');
+    },
+    apiCallback: async () => {
+      throw new Error('Xero is not configured. Please set XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI environment variables.');
+    },
+    setTokenSet: async () => {
+      throw new Error('Xero is not configured. Please set XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI environment variables.');
+    },
+    getTenantId: async () => null,
+    setTenantId: async () => {},
+    updateTenants: async () => {
+      throw new Error('Xero is not configured. Please set XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_REDIRECT_URI environment variables.');
+    },
+    generateState: () => null,
+    verifyState: () => false,
+    reset: async () => {},
+    clearInvalidToken: async () => {}
+  };
+  
+  module.exports = stubXero;
+  return;
 }
 
 // Add tenant storage

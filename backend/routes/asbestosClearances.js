@@ -3,6 +3,9 @@ const router = express.Router();
 const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
+const {
+  syncClearanceForProject,
+} = require("../services/asbestosRemovalJobSyncService");
 
 // Get all asbestos clearances with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
@@ -69,7 +72,8 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
         }
       })
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
+      .populate("updatedBy", "firstName lastName")
+      .populate("revisionReasons.revisedBy", "firstName lastName");
 
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
@@ -85,22 +89,53 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 // Create new asbestos clearance
 router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes } = req.body;
+    const {
+      projectId,
+      asbestosRemovalJobId,
+      clearanceDate,
+      inspectionTime,
+      status,
+      clearanceType,
+      jurisdiction,
+      secondaryHeader,
+      LAA,
+      asbestosRemovalist,
+      airMonitoring,
+      airMonitoringReport,
+      sitePlan,
+      sitePlanFile,
+      sitePlanSource,
+      sitePlanLegend,
+      sitePlanLegendTitle,
+      sitePlanFigureTitle,
+      jobSpecificExclusions,
+      notes,
+      vehicleEquipmentDescription,
+    } = req.body;
 
     const clearance = new AsbestosClearance({
       projectId,
+      ...(asbestosRemovalJobId && { asbestosRemovalJobId }),
       clearanceDate,
       inspectionTime,
       status: status || "in progress",
       clearanceType,
+      jurisdiction: jurisdiction || "ACT",
+      secondaryHeader: secondaryHeader || "",
       LAA,
       asbestosRemovalist,
       airMonitoring: airMonitoring || false,
       airMonitoringReport: airMonitoringReport || null,
       sitePlan: sitePlan || false,
       sitePlanFile: sitePlanFile || null,
+      ...(sitePlanSource && { sitePlanSource }),
+      sitePlanLegend: sitePlanLegend || [],
+      sitePlanLegendTitle: sitePlanLegendTitle || undefined,
+      sitePlanFigureTitle: sitePlanFigureTitle || undefined,
+      sitePlanFigureTitle: sitePlanFigureTitle || undefined,
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
+      vehicleEquipmentDescription,
       createdBy: req.user.id,
     });
 
@@ -117,6 +152,17 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       })
       .populate("createdBy", "firstName lastName");
 
+    const projectIdForSync =
+      populatedClearance.projectId?._id || populatedClearance.projectId;
+    try {
+      await syncClearanceForProject(projectIdForSync);
+    } catch (syncError) {
+      console.error(
+        "Error syncing asbestos removal job clearance flags after creation:",
+        syncError
+      );
+    }
+
     res.status(201).json(populatedClearance);
   } catch (error) {
     console.error("Error creating asbestos clearance:", error);
@@ -127,27 +173,89 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
 // Update asbestos clearance
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, clearanceDate, inspectionTime, status, clearanceType, LAA, asbestosRemovalist, airMonitoring, airMonitoringReport, sitePlan, sitePlanFile, jobSpecificExclusions, notes } = req.body;
+    const {
+      projectId,
+      asbestosRemovalJobId,
+      clearanceDate,
+      inspectionTime,
+      status,
+      clearanceType,
+      jurisdiction,
+      secondaryHeader,
+      LAA,
+      asbestosRemovalist,
+      airMonitoring,
+      airMonitoringReport,
+      sitePlan,
+      sitePlanFile,
+      sitePlanSource,
+      sitePlanLegend,
+      sitePlanLegendTitle,
+      sitePlanFigureTitle,
+      jobSpecificExclusions,
+      notes,
+      revision,
+      revisionReasons,
+      vehicleEquipmentDescription,
+    } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
+    const previousProjectId = clearance.projectId
+      ? clearance.projectId.toString()
+      : null;
+
     clearance.projectId = projectId || clearance.projectId;
+    if (asbestosRemovalJobId !== undefined) {
+      clearance.asbestosRemovalJobId = asbestosRemovalJobId || null;
+    }
     clearance.clearanceDate = clearanceDate || clearance.clearanceDate;
     clearance.inspectionTime = inspectionTime || clearance.inspectionTime;
     clearance.status = status || clearance.status;
     clearance.clearanceType = clearanceType || clearance.clearanceType;
+    clearance.jurisdiction = jurisdiction || clearance.jurisdiction;
+    clearance.secondaryHeader = secondaryHeader !== undefined ? secondaryHeader : clearance.secondaryHeader;
     clearance.LAA = LAA || clearance.LAA;
     clearance.asbestosRemovalist = asbestosRemovalist || clearance.asbestosRemovalist;
     clearance.airMonitoring = airMonitoring !== undefined ? airMonitoring : clearance.airMonitoring;
     clearance.airMonitoringReport = airMonitoringReport !== undefined ? airMonitoringReport : clearance.airMonitoringReport;
     clearance.sitePlan = sitePlan !== undefined ? sitePlan : clearance.sitePlan;
     clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
+    if (sitePlanLegend !== undefined) {
+      clearance.sitePlanLegend = sitePlanLegend;
+    }
+    if (sitePlanLegendTitle !== undefined) {
+      clearance.sitePlanLegendTitle = sitePlanLegendTitle;
+    }
+    // Handle sitePlanFigureTitle - default to 'Asbestos Removal Site Plan' if site plan exists but title not provided
+    if (sitePlanFigureTitle !== undefined) {
+      clearance.sitePlanFigureTitle = sitePlanFigureTitle;
+    } else if ((sitePlan !== undefined && sitePlan) || (sitePlanFile !== undefined && sitePlanFile)) {
+      // If site plan is being set/updated but no title provided, use default
+      if (!clearance.sitePlanFigureTitle) {
+        clearance.sitePlanFigureTitle = 'Asbestos Removal Site Plan';
+      }
+    }
+    if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
+      clearance.sitePlanSource = sitePlanSource;
+    } else if (sitePlanSource === null) {
+      clearance.sitePlanSource = undefined; // Remove the field instead of setting to null
+    }
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
+    clearance.vehicleEquipmentDescription = vehicleEquipmentDescription !== undefined ? vehicleEquipmentDescription : clearance.vehicleEquipmentDescription;
     clearance.updatedBy = req.user.id;
+    
+    // Handle revision fields
+    if (revision !== undefined) {
+      clearance.revision = revision;
+    }
+    if (revisionReasons !== undefined) {
+      clearance.revisionReasons = revisionReasons;
+    }
 
     const updatedClearance = await clearance.save();
     
@@ -161,7 +269,31 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
         }
       })
       .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
+      .populate("updatedBy", "firstName lastName")
+      .populate("revisionReasons.revisedBy", "firstName lastName");
+
+    const newProjectId = populatedClearance.projectId?._id
+      ? populatedClearance.projectId._id.toString()
+      : populatedClearance.projectId?.toString();
+
+    const projectsToSync = new Set();
+    if (previousProjectId) {
+      projectsToSync.add(previousProjectId);
+    }
+    if (newProjectId) {
+      projectsToSync.add(newProjectId);
+    }
+
+    for (const id of projectsToSync) {
+      try {
+        await syncClearanceForProject(id);
+      } catch (syncError) {
+        console.error(
+          "Error syncing asbestos removal job clearance flags after update:",
+          { projectId: id, error: syncError }
+        );
+      }
+    }
 
     res.json(populatedClearance);
   } catch (error) {
@@ -207,19 +339,21 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
 // Upload air monitoring report
 router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { reportData } = req.body; // Expecting base64 data
+    const { reportData, shiftDate, shiftId, airMonitoring } = req.body; // Expecting base64 data and metadata
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
-    // Validate that air monitoring is enabled
-    if (!clearance.airMonitoring) {
-      return res.status(400).json({ message: "Air monitoring must be enabled to upload a report" });
+    // Enable air monitoring when uploading a report (new approach)
+    if (airMonitoring !== undefined) {
+      clearance.airMonitoring = airMonitoring;
     }
 
     clearance.airMonitoringReport = reportData;
+    clearance.airMonitoringShiftDate = shiftDate;
+    clearance.airMonitoringShiftId = shiftId;
     clearance.updatedBy = req.user.id;
 
     const updatedClearance = await clearance.save();
@@ -248,24 +382,42 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
   try {
     const { projectId } = req.params;
     
-    // Get all jobs for this project
+    // Get all jobs for this project - check both regular Job and AsbestosRemovalJob
     const Job = require('../models/Job');
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
     const Shift = require('../models/Shift');
     
-    const jobs = await Job.find({ projectId: projectId }).populate('projectId', 'name projectID');
+    // Get regular jobs
+    const regularJobs = await Job.find({ projectId: projectId }).populate('projectId', 'name projectID');
+    
+    // Get asbestos removal jobs - only completed ones
+    const asbestosJobs = await AsbestosRemovalJob.find({ 
+      projectId: projectId,
+      status: "completed"
+    }).populate('projectId', 'name projectID');
+    
+    // Combine both job types
+    const allJobs = [...regularJobs, ...asbestosJobs];
+    
+    console.log(`Found ${allJobs.length} jobs for project ${projectId}:`, allJobs.map(job => ({ id: job._id, name: job.name, type: job.constructor.modelName })));
     
     const airMonitoringReports = [];
     
     // Get shifts for each job
-    for (const job of jobs) {
+    for (const job of allJobs) {
       const shifts = await Shift.find({ 
         job: job._id,
         $or: [
           { status: "analysis_complete" },
           { status: "shift_complete" },
+          { status: "complete" },
           { reportApprovedBy: { $exists: true, $ne: null } }
         ]
-      }).populate('job', 'name');
+      }).populate('job', 'name')
+        .populate('supervisor', 'firstName lastName')
+        .populate('defaultSampler', 'firstName lastName');
+      
+      console.log(`Found ${shifts.length} shifts for job ${job._id} (${job.name})`);
       
       shifts.forEach(shift => {
         airMonitoringReports.push({
@@ -275,10 +427,14 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
           status: shift.status,
           reportApprovedBy: shift.reportApprovedBy,
           reportIssueDate: shift.reportIssueDate,
+          supervisor: shift.supervisor,
+          defaultSampler: shift.defaultSampler,
+          revision: shift.revision || 0,
           jobName: job.name,
           jobId: job._id,
           projectName: job.projectId?.name,
-          projectId: job.projectId?._id
+          projectId: job.projectId?._id,
+          asbestosRemovalist: job.asbestosRemovalist || null
         });
       });
     }
@@ -286,9 +442,65 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
     // Sort by date (newest first)
     airMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
     
+    console.log(`Returning ${airMonitoringReports.length} air monitoring reports`);
     res.json(airMonitoringReports);
   } catch (error) {
     console.error("Error fetching air monitoring reports:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Get air monitoring reports for a specific asbestos removal job
+router.get("/air-monitoring-reports-by-job/:jobId", auth, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    
+    const Shift = require('../models/Shift');
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+    
+    console.log(`Searching for air monitoring reports for job ${jobId}`);
+    
+    // Get the asbestos removal job to access the asbestosRemovalist field
+    const asbestosRemovalJob = await AsbestosRemovalJob.findById(jobId);
+    if (!asbestosRemovalJob) {
+      return res.status(404).json({ message: "Asbestos removal job not found" });
+    }
+    
+    // Get shifts for this specific job
+    const shifts = await Shift.find({ 
+      job: jobId,
+      $or: [
+        { status: "analysis_complete" },
+        { status: "shift_complete" },
+        { status: "complete" },
+        { reportApprovedBy: { $exists: true, $ne: null } }
+      ]
+    })
+    .populate('defaultSampler', 'firstName lastName');
+    
+    console.log(`Found ${shifts.length} shifts for job ${jobId}`);
+    
+    const airMonitoringReports = shifts.map(shift => ({
+      _id: shift._id,
+      name: shift.name,
+      date: shift.date,
+      status: shift.status,
+      reportApprovedBy: shift.reportApprovedBy,
+      reportIssueDate: shift.reportIssueDate,
+      asbestosRemovalist: asbestosRemovalJob.asbestosRemovalist,
+      defaultSampler: shift.defaultSampler,
+      descriptionOfWorks: shift.descriptionOfWorks,
+      revision: shift.revision || 0,
+      jobId: jobId
+    }));
+    
+    // Sort by date (newest first)
+    airMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    console.log(`Returning ${airMonitoringReports.length} air monitoring reports for job ${jobId}`);
+    res.json(airMonitoringReports);
+  } catch (error) {
+    console.error("Error fetching air monitoring reports by job:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -299,6 +511,21 @@ router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res)
     const clearance = await AsbestosClearance.findByIdAndDelete(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const projectIdForSync = clearance.projectId
+      ? clearance.projectId.toString()
+      : null;
+
+    if (projectIdForSync) {
+      try {
+        await syncClearanceForProject(projectIdForSync);
+      } catch (syncError) {
+        console.error(
+          "Error syncing asbestos removal job clearance flags after deletion:",
+          { projectId: projectIdForSync, error: syncError }
+        );
+      }
     }
 
     res.json({ message: "Asbestos clearance deleted successfully" });
@@ -382,16 +609,17 @@ router.put("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), async (
       return res.status(404).json({ message: "Clearance item not found" });
     }
 
-    clearance.items[itemIndex] = {
-      ...clearance.items[itemIndex],
-      locationDescription,
-      levelFloor,
-      roomArea,
-      materialDescription,
-      asbestosType,
-      photograph,
-      notes,
-    };
+    // Preserve existing fields like photographs when updating
+    const existingItem = clearance.items[itemIndex];
+    // Only update fields that are explicitly provided in the request
+    if (locationDescription !== undefined) existingItem.locationDescription = locationDescription;
+    if (levelFloor !== undefined) existingItem.levelFloor = levelFloor;
+    if (roomArea !== undefined) existingItem.roomArea = roomArea;
+    if (materialDescription !== undefined) existingItem.materialDescription = materialDescription;
+    if (asbestosType !== undefined) existingItem.asbestosType = asbestosType;
+    if (photograph !== undefined) existingItem.photograph = photograph;
+    if (notes !== undefined) existingItem.notes = notes;
+    // Photographs array is preserved automatically since we're modifying the existing item in place
 
     clearance.updatedBy = req.user.id;
 
@@ -450,6 +678,347 @@ router.delete("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), asyn
   } catch (error) {
     console.error("Error deleting clearance item:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Add photo to clearance item
+router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { photoData, includeInReport = true } = req.body;
+
+    if (!photoData) {
+      return res.status(400).json({ message: "Photo data is required" });
+    }
+
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    // Initialize photographs array if it doesn't exist
+    if (!item.photographs) {
+      item.photographs = [];
+    }
+
+    // Calculate next photo number for this item
+    const existingPhotoNumbers = item.photographs.map(p => p.photoNumber || 0);
+    const nextPhotoNumber = existingPhotoNumbers.length > 0 ? Math.max(...existingPhotoNumbers) + 1 : 1;
+    
+    // If this is the first photo and no photo numbers exist, start from 1
+    const actualPhotoNumber = item.photographs.length === 0 ? 1 : nextPhotoNumber;
+
+    // Add new photo
+    item.photographs.push({
+      data: photoData,
+      includeInReport: includeInReport,
+      uploadedAt: new Date(),
+      photoNumber: actualPhotoNumber,
+    });
+
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.status(201).json(item);
+  } catch (error) {
+    console.error("Error adding photo to clearance item:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Delete photo from clearance item
+router.delete("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photoIndex = item.photographs.findIndex(photo => photo._id.toString() === req.params.photoId);
+    if (photoIndex === -1) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    item.photographs.splice(photoIndex, 1);
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.json({ message: "Photo deleted successfully", item });
+  } catch (error) {
+    console.error("Error deleting photo from clearance item:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Toggle photo inclusion in report
+router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    photo.includeInReport = !photo.includeInReport;
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.json({ message: "Photo inclusion toggled successfully", item });
+  } catch (error) {
+    console.error("Error toggling photo inclusion:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Authorise clearance report
+router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      });
+
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (clearance.status !== "complete") {
+      return res.status(400).json({
+        message: "Clearance must be complete before authorising the report"
+      });
+    }
+
+    if (clearance.reportApprovedBy) {
+      return res.status(400).json({
+        message: "Report has already been authorised"
+      });
+    }
+
+    const approver =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "Unknown";
+
+    clearance.reportApprovedBy = approver;
+    clearance.reportIssueDate = new Date();
+    clearance.updatedBy = req.user.id;
+
+    const updatedClearance = await clearance.save();
+
+    const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName");
+
+    res.json(populatedClearance);
+  } catch (error) {
+    console.error("Error authorising clearance report:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Send clearance report for authorisation
+router.post("/:id/send-for-authorisation", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { sendMail } = require("../services/mailer");
+    const User = require("../models/User");
+    const Project = require("../models/Project");
+    const Client = require("../models/Client");
+
+    const clearance = await AsbestosClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: {
+          path: "client",
+          select: "name"
+        }
+      })
+      .populate("createdBy", "firstName lastName");
+
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (clearance.status !== "complete") {
+      return res.status(400).json({
+        message: "Clearance must be complete before sending for authorisation"
+      });
+    }
+
+    if (clearance.reportApprovedBy) {
+      return res.status(400).json({
+        message: "Report has already been authorised"
+      });
+    }
+
+    const reportProoferUsers = await User.find({
+      reportProofer: true,
+      isActive: true,
+    }).select("firstName lastName email");
+
+    if (reportProoferUsers.length === 0) {
+      return res.status(400).json({
+        message: "No report proofer users found"
+      });
+    }
+
+    const projectName = clearance.projectId?.name || "Unknown Project";
+    const projectID = clearance.projectId?.projectID || "N/A";
+    const clientName = clearance.projectId?.client?.name || "the client";
+
+    const requesterName =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "A user";
+
+    const clearanceDate = clearance.clearanceDate
+      ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
+      : "N/A";
+    const clearanceType = clearance.clearanceType || "Asbestos Clearance";
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    
+    // Use direct link if available, otherwise fall back to finding the job
+    let jobId = null;
+    if (clearance.asbestosRemovalJobId) {
+      // Use the direct link
+      jobId = clearance.asbestosRemovalJobId.toString();
+    } else {
+      // Fallback for existing clearances that don't have the direct link
+      // Find the asbestos removal job for this clearance
+      const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+      const projectId = clearance.projectId?._id?.toString() || clearance.projectId?.toString();
+      
+      if (projectId) {
+        // Find all asbestos removal jobs for this project that have clearance enabled
+        const jobs = await AsbestosRemovalJob.find({ 
+          projectId,
+          $or: [
+            { clearance: true },
+            { jobType: { $in: ["clearance", "air_monitoring_and_clearance"] } }
+          ]
+        })
+        .select("_id asbestosRemovalist createdAt")
+        .sort({ createdAt: -1 }) // Most recent first
+        .lean();
+        
+        if (jobs.length === 1) {
+          // Only one job with clearance - use it
+          jobId = jobs[0]._id.toString();
+        } else if (jobs.length > 1) {
+          // Multiple jobs - try to match by asbestosRemovalist name
+          const matchingJob = jobs.find(job => 
+            job.asbestosRemovalist === clearance.asbestosRemovalist
+          );
+          jobId = matchingJob 
+            ? matchingJob._id.toString() 
+            : jobs[0]._id.toString(); // Fallback to most recent
+        } else {
+          // No jobs with clearance flag - try finding any job for this project
+          const anyJob = await AsbestosRemovalJob.findOne({ projectId })
+            .select("_id")
+            .sort({ createdAt: -1 })
+            .lean();
+          jobId = anyJob?._id?.toString();
+        }
+      }
+    }
+    
+    const clearanceUrl = jobId
+      ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`
+      : `${frontendUrl}/projects`;
+
+    await Promise.all(
+      reportProoferUsers.map(async (user) => {
+        await sendMail({
+          to: user.email,
+          subject: `Report Authorisation Required - ${projectID}: ${clearanceType}`,
+          text: `
+An asbestos clearance report is ready for authorisation.
+
+Project: ${projectName} (${projectID})
+Client: ${clientName}
+Clearance Type: ${clearanceType}
+Clearance Date: ${clearanceDate}
+Requested by: ${requesterName}
+
+Review the report at: ${clearanceUrl}
+          `.trim(),
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="margin-bottom: 30px;">
+                <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+              </div>
+              <div style="color: #333; line-height: 1.6;">
+                <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>An asbestos clearance report is ready for your authorisation:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                  <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                  <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
+                  <p style="margin: 5px 0;"><strong>Clearance Type:</strong> ${clearanceType}</p>
+                  <p style="margin: 5px 0;"><strong>Clearance Date:</strong> ${clearanceDate}</p>
+                  <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${clearanceUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                </div>
+                <p>Please review and authorise the report at your earliest convenience.</p>
+                <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          `,
+        });
+      })
+    );
+
+    return res.json({
+      message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
+      recipients: reportProoferUsers.map((user) => ({
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`,
+      })),
+    });
+  } catch (error) {
+    console.error("Error sending authorisation request emails:", error);
+    return res.status(500).json({
+      message: "Failed to send authorisation request emails",
+      error: error.message,
+    });
   }
 });
 

@@ -21,13 +21,16 @@ import {
   Alert,
   Divider,
   useTheme,
+  Checkbox,
+  ListItemText,
+  OutlinedInput,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import {
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
-  Add as AddIcon,
-  Delete as DeleteIcon,
   Preview as PreviewIcon,
   Download as DownloadIcon,
 } from "@mui/icons-material";
@@ -35,6 +38,7 @@ import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
 import reportTemplateService from "../../services/reportTemplateService";
+import customDataFieldService from "../../services/customDataFieldService";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
 
 const ReportTemplates = () => {
@@ -61,27 +65,38 @@ const ReportTemplates = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
 
+  // Legislation selection state
+  const [legislationItems, setLegislationItems] = useState([]);
+  const [selectedACTLegislation, setSelectedACTLegislation] = useState([]);
+  const [selectedNSWLegislation, setSelectedNSWLegislation] = useState([]);
+  const [legislationLoading, setLegislationLoading] = useState(false);
+
   const reportTypes = [
     {
       id: "asbestosClearanceNonFriable",
-      name: "Non-Friable Asbestos Clearance Report",
+      name: "Non-Friable Asbestos Clearance",
       color: "#FF6B6B",
     },
     {
       id: "asbestosClearanceFriable",
-      name: "Friable Asbestos Clearance Report",
+      name: "Friable Asbestos Clearance",
       color: "#FF6B6B",
     },
     {
-      id: "asbestosClearanceMixed",
-      name: "Mixed Asbestos Clearance Report",
+      id: "asbestosClearanceFriableNonFriableConditions",
+      name: "Friable (Non-Friable Conditions)",
       color: "#FF6B6B",
     },
     {
-      id: "asbestosAssessment",
-      name: "Asbestos Assessment Report",
+      id: "asbestosClearanceVehicle",
+      name: "Vehicle/Equipment",
       color: "#FF6B6B",
     },
+    // {
+    //   id: "asbestosAssessment",
+    //   name: "Asbestos Assessment Report",
+    //   color: "#FF6B6B",
+    // },
     // {
     //   id: "leadAssessment",
     //   name: "Lead Assessment Report",
@@ -126,52 +141,40 @@ const ReportTemplates = () => {
 
   // Template sections organized by page for detailed editing
   const getTemplateSections = (templateType) => {
-    // Asbestos clearance templates (non-friable, friable, and mixed)
+    // Asbestos clearance templates (non-friable, friable, friable non-friable conditions, vehicle)
     if (
       templateType === "asbestosClearanceNonFriable" ||
       templateType === "asbestosClearanceFriable" ||
-      templateType === "asbestosClearanceMixed"
+      templateType === "asbestosClearanceFriableNonFriableConditions" ||
+      templateType === "asbestosClearanceVehicle"
     ) {
       const baseSections = {
-        "Background Information": [
-          "backgroundInformationTitle",
-          "backgroundInformationContent",
-        ],
-        "Legislative Requirements": [
-          "legislativeRequirementsTitle",
-          "legislativeRequirementsContent",
-        ],
-        "Inspection Details": [
-          "inspectionDetailsTitle",
-          "inspectionDetailsContent",
-        ],
-        "Inspection Exclusions": [
-          "inspectionExclusionsTitle",
-          "inspectionExclusionsContent",
-        ],
-        "Clearance Certification": [
-          "clearanceCertificationTitle",
-          "clearanceCertificationContent",
-        ],
+        "Background Information": ["backgroundInformationContent"],
+        "Legislative Requirements": ["legislativeRequirementsContent"],
+        "Inspection Details": ["inspectionDetailsContent"],
+        "Inspection Exclusions": ["inspectionExclusionsContent"],
+        "Clearance Certification": ["clearanceCertificationContent"],
         "Sign-off": ["signOffContent"],
-        Footer: ["footerText"],
       };
 
       // Add template-specific limitations sections
       if (templateType === "asbestosClearanceNonFriable") {
         baseSections["Non-Friable Clearance Certificate Limitations"] = [
-          "nonFriableClearanceCertificateLimitationsTitle",
           "nonFriableClearanceCertificateLimitationsContent",
         ];
       } else if (templateType === "asbestosClearanceFriable") {
         baseSections["Friable Clearance Certificate Limitations"] = [
-          "friableClearanceCertificateLimitationsTitle",
           "friableClearanceCertificateLimitationsContent",
         ];
-      } else if (templateType === "asbestosClearanceMixed") {
-        baseSections["Mixed Clearance Certificate Limitations"] = [
-          "mixedClearanceCertificateLimitationsTitle",
-          "mixedClearanceCertificateLimitationsContent",
+      } else if (
+        templateType === "asbestosClearanceFriableNonFriableConditions"
+      ) {
+        baseSections[
+          "Friable (Non-Friable Conditions) Clearance Certificate Limitations"
+        ] = ["friableNonFriableConditionsCertificateLimitationsContent"];
+      } else if (templateType === "asbestosClearanceVehicle") {
+        baseSections["Vehicle/Equipment Certificate Limitations"] = [
+          "vehicleCertificateLimitationsContent",
         ];
       }
 
@@ -181,46 +184,31 @@ const ReportTemplates = () => {
     // Lead assessment template
     if (templateType === "leadAssessment") {
       return {
-        "Executive Summary": [
-          "executiveSummaryTitle",
-          "executiveSummaryContent",
-        ],
-        "Site Description": ["siteDescriptionTitle", "siteDescriptionContent"],
-        "Assessment Methodology": [
-          "assessmentMethodologyTitle",
-          "assessmentMethodologyContent",
-        ],
-        "Sampling Results": ["samplingResultsTitle", "samplingResultsContent"],
-        "Risk Assessment": ["riskAssessmentTitle", "riskAssessmentContent"],
-        Recommendations: ["recommendationsTitle", "recommendationsContent"],
-        Conclusion: ["conclusionTitle", "conclusionContent"],
-        Footer: ["footerText"],
+        "Executive Summary": ["executiveSummaryContent"],
+        "Site Description": ["siteDescriptionContent"],
+        "Assessment Methodology": ["assessmentMethodologyContent"],
+        "Sampling Results": ["samplingResultsContent"],
+        "Risk Assessment": ["riskAssessmentContent"],
+        Recommendations: ["recommendationsContent"],
+        Conclusion: ["conclusionContent"],
       };
     }
 
     // Asbestos assessment template
     if (templateType === "asbestosAssessment") {
       return {
-        Introduction: ["introductionTitle", "introductionContent"],
-        "Survey Findings": ["surveyFindingsTitle", "surveyFindingsContent"],
-        "Discussion and Conclusions": ["discussionTitle", "discussionContent"],
-        "Risk Assessment": ["riskAssessmentTitle", "riskAssessmentContent"],
-        "Determining Suitable Control Measures": [
-          "controlMeasuresTitle",
-          "controlMeasuresContent",
-        ],
+        Introduction: ["introductionContent"],
+        "Survey Findings": ["surveyFindingsContent"],
+        "Discussion and Conclusions": ["discussionContent"],
+        "Risk Assessment": ["riskAssessmentContent"],
+        "Determining Suitable Control Measures": ["controlMeasuresContent"],
         "Requirements for Remediation/Removal Works Involving ACM": [
-          "remediationRequirementsTitle",
           "remediationRequirementsContent",
         ],
-        Legislation: ["legislationTitle", "legislationContent"],
-        "Assessment Limitations/Caveats": [
-          "assessmentLimitationsTitle",
-          "assessmentLimitationsContent",
-        ],
+        Legislation: ["legislationContent"],
+        "Assessment Limitations/Caveats": ["assessmentLimitationsContent"],
         "Sign-off": ["signOffContent"],
         Signature: ["signaturePlaceholder"],
-        Footer: ["footerText"],
       };
     }
 
@@ -230,6 +218,29 @@ const ReportTemplates = () => {
 
   // State for template sections
   const [templateSections, setTemplateSections] = useState({});
+
+  // Load legislation items
+  const loadLegislationItems = async () => {
+    try {
+      setLegislationLoading(true);
+      const items = await customDataFieldService.getByType("legislation");
+      console.log("DEBUG: Loaded legislation items:", items);
+      console.log("DEBUG: First item structure:", items[0]);
+      setLegislationItems(items);
+    } catch (error) {
+      console.error("Error loading legislation items:", error);
+      // Show user-friendly error message
+      setSaveStatus({
+        show: true,
+        message: `Error loading legislation items: ${
+          error.response?.data?.message || error.message
+        }`,
+        severity: "error",
+      });
+    } finally {
+      setLegislationLoading(false);
+    }
+  };
 
   // Load templates on component mount
   useEffect(() => {
@@ -270,17 +281,71 @@ const ReportTemplates = () => {
     };
 
     loadTemplates();
+    loadLegislationItems();
   }, []);
 
   // Update template sections when selected template changes
   useEffect(() => {
     const sections = getTemplateSections(selectedTemplate);
-    console.log("Setting template sections for:", selectedTemplate, sections);
     setTemplateSections(sections);
-  }, [selectedTemplate]);
 
-  const handleTemplateChange = async (event) => {
-    const newTemplateType = event.target.value;
+    // Load selected legislation for the current template
+    const currentTemplate = templates[selectedTemplate];
+    if (currentTemplate && currentTemplate.selectedLegislation) {
+      // Separate ACT and NSW legislation
+      const actLegislation = currentTemplate.selectedLegislation.filter(
+        (item) => item.jurisdiction === "ACT"
+      );
+      const nswLegislation = currentTemplate.selectedLegislation.filter(
+        (item) => item.jurisdiction === "NSW"
+      );
+
+      setSelectedACTLegislation(actLegislation);
+      setSelectedNSWLegislation(nswLegislation);
+
+      // Update preview data with selected legislation
+      const actText =
+        actLegislation.length > 0
+          ? actLegislation
+              .map((item) => {
+                const title =
+                  item.legislationTitle || item.text || "Unknown Legislation";
+                return `• ${title}`;
+              })
+              .join("\n")
+          : "";
+
+      const nswText =
+        nswLegislation.length > 0
+          ? nswLegislation
+              .map((item) => {
+                const title =
+                  item.legislationTitle || item.text || "Unknown Legislation";
+                return `• ${title}`;
+              })
+              .join("\n")
+          : "";
+
+      const legislationText =
+        [actText, nswText].filter((text) => text.length > 0).join("\n") ||
+        "• No legislation items selected";
+
+      setPreviewData((prev) => ({
+        ...prev,
+        LEGISLATION: legislationText,
+      }));
+    } else {
+      setSelectedACTLegislation([]);
+      setSelectedNSWLegislation([]);
+      setPreviewData((prev) => ({
+        ...prev,
+        LEGISLATION: "• No legislation items selected",
+      }));
+    }
+  }, [selectedTemplate, templates]);
+
+  const handleTabChange = async (event, newValue) => {
+    const newTemplateType = newValue;
     setSelectedTemplate(newTemplateType);
     setPreviewData({});
 
@@ -388,8 +453,20 @@ const ReportTemplates = () => {
   };
 
   const handleDetailedEdit = (field, data) => {
+    console.log("handleDetailedEdit called with:", {
+      field,
+      data,
+      dataType: typeof data,
+    });
     setEditingSection(field);
-    setEditData(data);
+    // Ensure we always have a string value, even if data is undefined, null, or empty
+    setEditData(data || "");
+    console.log(
+      "Set editingSection to:",
+      field,
+      "and editData to:",
+      data || ""
+    );
   };
 
   const handleDetailedSave = async () => {
@@ -397,29 +474,56 @@ const ReportTemplates = () => {
       const currentTemplate = selectedTemplate;
       const template = templates[currentTemplate];
 
-      // Determine which section key to use based on template type
-      const sectionKey = template.standardSections
-        ? "standardSections"
-        : "leadAssessmentSections";
-
-      // Update template via API
-      await reportTemplateService.updateTemplate(currentTemplate, {
-        [sectionKey]: {
-          [editingSection]: editData,
-        },
-      });
-
-      // Update local state
-      setTemplates((prev) => ({
-        ...prev,
-        [currentTemplate]: {
-          ...prev[currentTemplate],
-          [sectionKey]: {
-            ...prev[currentTemplate]?.[sectionKey],
+      // Check if this is a section title edit
+      if (editingSection.endsWith("SectionTitle")) {
+        // Handle section title updates
+        const updateData = {
+          sectionTitles: {
+            ...template.sectionTitles,
             [editingSection]: editData,
           },
-        },
-      }));
+        };
+
+        // Update template via API
+        await reportTemplateService.updateTemplate(currentTemplate, updateData);
+
+        // Update local state
+        setTemplates((prev) => ({
+          ...prev,
+          [currentTemplate]: {
+            ...prev[currentTemplate],
+            sectionTitles: {
+              ...prev[currentTemplate]?.sectionTitles,
+              [editingSection]: editData,
+            },
+          },
+        }));
+      } else {
+        // Handle regular field updates
+        // Determine which section key to use based on template type
+        const sectionKey = template.standardSections
+          ? "standardSections"
+          : "leadAssessmentSections";
+
+        // Update template via API
+        const updatePayload = {
+          [sectionKey]: {
+            [editingSection]: editData,
+          },
+        };
+        console.log("Sending update payload:", updatePayload);
+        const updatedTemplate = await reportTemplateService.updateTemplate(
+          currentTemplate,
+          updatePayload
+        );
+        console.log("Updated template received:", updatedTemplate);
+
+        // Update local state with the updated template from server
+        setTemplates((prev) => ({
+          ...prev,
+          [currentTemplate]: updatedTemplate,
+        }));
+      }
 
       setSaveStatus({
         show: true,
@@ -442,6 +546,154 @@ const ReportTemplates = () => {
         severity: "error",
       });
     }
+  };
+
+  // Handle ACT legislation selection
+  const handleACTLegislationChange = async (event) => {
+    const selectedIds = event.target.value;
+    console.log("DEBUG: Selected ACT IDs:", selectedIds);
+
+    // Convert selected IDs to full legislation objects (ACT only)
+    const selectedItems = legislationItems.filter(
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "ACT"
+    );
+    console.log("DEBUG: Selected ACT items:", selectedItems);
+
+    setSelectedACTLegislation(selectedItems);
+
+    // Update preview data with all selected legislation
+    updateLegislationPreview();
+
+    try {
+      // Combine all selected legislation for saving
+      const allSelectedLegislation = [
+        ...selectedItems,
+        ...selectedNSWLegislation,
+      ];
+
+      // Update the template with selected legislation
+      await reportTemplateService.updateTemplate(selectedTemplate, {
+        selectedLegislation: allSelectedLegislation,
+      });
+
+      // Update local state
+      setTemplates((prev) => ({
+        ...prev,
+        [selectedTemplate]: {
+          ...prev[selectedTemplate],
+          selectedLegislation: allSelectedLegislation,
+        },
+      }));
+
+      setSaveStatus({
+        show: true,
+        message: "ACT Legislation selection updated successfully!",
+        severity: "success",
+      });
+
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setSaveStatus({ show: false, message: "", severity: "success" });
+      }, 3000);
+    } catch (error) {
+      console.error("Error updating ACT legislation selection:", error);
+      setSaveStatus({
+        show: true,
+        message: "Error updating ACT legislation selection. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  // Handle NSW legislation selection
+  const handleNSWLegislationChange = async (event) => {
+    const selectedIds = event.target.value;
+    console.log("DEBUG: Selected NSW IDs:", selectedIds);
+
+    // Convert selected IDs to full legislation objects (NSW only)
+    const selectedItems = legislationItems.filter(
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "NSW"
+    );
+    console.log("DEBUG: Selected NSW items:", selectedItems);
+
+    setSelectedNSWLegislation(selectedItems);
+
+    // Update preview data with all selected legislation
+    updateLegislationPreview();
+
+    try {
+      // Combine all selected legislation for saving
+      const allSelectedLegislation = [
+        ...selectedACTLegislation,
+        ...selectedItems,
+      ];
+
+      // Update the template with selected legislation
+      await reportTemplateService.updateTemplate(selectedTemplate, {
+        selectedLegislation: allSelectedLegislation,
+      });
+
+      // Update local state
+      setTemplates((prev) => ({
+        ...prev,
+        [selectedTemplate]: {
+          ...prev[selectedTemplate],
+          selectedLegislation: allSelectedLegislation,
+        },
+      }));
+
+      setSaveStatus({
+        show: true,
+        message: "NSW Legislation selection updated successfully!",
+        severity: "success",
+      });
+
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setSaveStatus({ show: false, message: "", severity: "success" });
+      }, 3000);
+    } catch (error) {
+      console.error("Error updating NSW legislation selection:", error);
+      setSaveStatus({
+        show: true,
+        message: "Error updating NSW legislation selection. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  // Update legislation preview text
+  const updateLegislationPreview = () => {
+    const actText =
+      selectedACTLegislation.length > 0
+        ? selectedACTLegislation
+            .map((item) => {
+              const title =
+                item.legislationTitle || item.text || "Unknown Legislation";
+              return `• ${title}`;
+            })
+            .join("\n")
+        : "";
+
+    const nswText =
+      selectedNSWLegislation.length > 0
+        ? selectedNSWLegislation
+            .map((item) => {
+              const title =
+                item.legislationTitle || item.text || "Unknown Legislation";
+              return `• ${title}`;
+            })
+            .join("\n")
+        : "";
+
+    const legislationText =
+      [actText, nswText].filter((text) => text.length > 0).join("\n") ||
+      "• No legislation items selected";
+
+    setPreviewData((prev) => ({
+      ...prev,
+      LEGISLATION: legislationText,
+    }));
   };
 
   const generatePDFPreview = async () => {
@@ -558,9 +810,26 @@ const ReportTemplates = () => {
     }
 
     if (editingSection === "reportHeaders") {
+      // Default header fields if none exist
+      const defaultHeaders = {
+        reportTitle: "",
+        reportSubtitle: "",
+        reportNumber: "",
+        reportDate: "",
+        clientName: "",
+        projectName: "",
+        siteAddress: "",
+        inspectorName: "",
+        inspectorLicense: "",
+      };
+
+      // Use existing headers or default headers
+      const headersToEdit =
+        Object.keys(sectionData).length > 0 ? sectionData : defaultHeaders;
+
       return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {Object.keys(sectionData).map((key) => (
+          {Object.keys(headersToEdit).map((key) => (
             <TextField
               key={key}
               label={
@@ -582,6 +851,21 @@ const ReportTemplates = () => {
     return null;
   };
 
+  // TabPanel component for better tab content organization
+  const TabPanel = ({ children, value, index, ...other }) => {
+    return (
+      <div
+        role="tabpanel"
+        hidden={value !== index}
+        id={`template-tabpanel-${index}`}
+        aria-labelledby={`template-tab-${index}`}
+        {...other}
+      >
+        {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+      </div>
+    );
+  };
+
   const renderDetailedTemplateSection = (sectionName, fields) => {
     const currentTemplate = selectedTemplate;
     const template = templates[currentTemplate];
@@ -590,6 +874,7 @@ const ReportTemplates = () => {
       fields,
       currentTemplate,
       template: !!template,
+      standardSections: template?.standardSections,
     });
     if (!template) return null;
 
@@ -636,7 +921,7 @@ const ReportTemplates = () => {
                         onClick={() =>
                           handleDetailedEdit(
                             field,
-                            template.standardSections[field] || ""
+                            template.standardSections?.[field] || ""
                           )
                         }
                         size="small"
@@ -649,7 +934,8 @@ const ReportTemplates = () => {
                       color="black"
                       sx={{ whiteSpace: "pre-line" }}
                     >
-                      {template.standardSections[field] || ""}
+                      {template.standardSections?.[field] ||
+                        "No content - click edit to add content"}
                     </Typography>
                   </Box>
                 </Grid>
@@ -662,7 +948,7 @@ const ReportTemplates = () => {
   };
 
   const renderDetailedEditor = () => {
-    if (!editingSection || !editData) return null;
+    if (!editingSection) return null;
 
     // Available placeholders for reference
     const availablePlaceholders = [
@@ -686,6 +972,16 @@ const ReportTemplates = () => {
       "CLEARANCE_DATE",
       "CLEARANCE_TIME",
       "SIGNATURE_IMAGE",
+      "LEGISLATION",
+    ];
+
+    // Available formatting placeholders
+    const availableFormatting = [
+      "[BR] - Full line break",
+      "[HALF_BR] - Half-height line break",
+      "{HALF_BR} - Half-height line break (alternative)",
+      "**text** - Bold text",
+      "[UNDERLINE]text[/UNDERLINE] - Underlined text",
     ];
 
     return (
@@ -709,7 +1005,7 @@ const ReportTemplates = () => {
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
             Available Placeholders:
           </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 2 }}>
             {availablePlaceholders.map((placeholder) => (
               <Chip
                 key={placeholder}
@@ -730,6 +1026,41 @@ const ReportTemplates = () => {
                     const newValue =
                       editData.substring(0, start) +
                       `{${placeholder}}` +
+                      editData.substring(end);
+                    setEditData(newValue);
+                    // Focus back to text field
+                    setTimeout(() => textField.focus(), 0);
+                  }
+                }}
+              />
+            ))}
+          </Box>
+
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+            Available Formatting:
+          </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+            {availableFormatting.map((format) => (
+              <Chip
+                key={format}
+                label={format}
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: "0.7rem", cursor: "pointer" }}
+                onClick={() => {
+                  const textField = document.querySelector(
+                    'textarea[aria-label*="' +
+                      editingSection.charAt(0).toUpperCase() +
+                      editingSection.slice(1).replace(/([A-Z])/g, " $1") +
+                      '"]'
+                  );
+                  if (textField) {
+                    const start = textField.selectionStart;
+                    const end = textField.selectionEnd;
+                    const formatCode = format.split(" - ")[0]; // Get just the format code
+                    const newValue =
+                      editData.substring(0, start) +
+                      formatCode +
                       editData.substring(end);
                     setEditData(newValue);
                     // Focus back to text field
@@ -861,13 +1192,23 @@ const ReportTemplates = () => {
                   limitationsContent =
                     template.standardSections
                       .friableClearanceCertificateLimitationsContent;
-                } else if (selectedTemplate === "asbestosClearanceMixed") {
+                } else if (
+                  selectedTemplate ===
+                  "asbestosClearanceFriableNonFriableConditions"
+                ) {
                   limitationsTitle =
                     template.standardSections
-                      .mixedClearanceCertificateLimitationsTitle;
+                      .friableNonFriableConditionsCertificateLimitationsTitle;
                   limitationsContent =
                     template.standardSections
-                      .mixedClearanceCertificateLimitationsContent;
+                      .friableNonFriableConditionsCertificateLimitationsContent;
+                } else if (selectedTemplate === "asbestosClearanceVehicle") {
+                  limitationsTitle =
+                    template.standardSections
+                      .vehicleCertificateLimitationsTitle;
+                  limitationsContent =
+                    template.standardSections
+                      .vehicleCertificateLimitationsContent;
                 }
 
                 if (limitationsTitle && limitationsContent) {
@@ -1034,6 +1375,15 @@ const ReportTemplates = () => {
     // Available placeholders for reference
     const basePlaceholders = ["CLIENT_NAME", "SITE_NAME", "SITE_ADDRESS"];
 
+    // Available formatting options
+    const availableFormatting = [
+      "[BR] - Full line break",
+      "[HALF_BR] - Half-height line break",
+      "{HALF_BR} - Half-height line break (alternative)",
+      "**text** - Bold text",
+      "[UNDERLINE]text[/UNDERLINE] - Underlined text",
+    ];
+
     const asbestosPlaceholders = [
       "ASBESTOS_TYPE",
       "ASBESTOS_REMOVALIST",
@@ -1075,7 +1425,8 @@ const ReportTemplates = () => {
     if (
       selectedTemplate === "asbestosClearanceNonFriable" ||
       selectedTemplate === "asbestosClearanceFriable" ||
-      selectedTemplate === "asbestosClearanceMixed"
+      selectedTemplate === "asbestosClearanceFriableNonFriableConditions" ||
+      selectedTemplate === "asbestosClearanceVehicle"
     ) {
       availablePlaceholders = [...basePlaceholders, ...asbestosPlaceholders];
     } else if (selectedTemplate === "leadAssessment") {
@@ -1098,11 +1449,38 @@ const ReportTemplates = () => {
               Use these placeholders in your template content. They will be
               automatically replaced with actual data when generating reports.
             </Typography>
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+
+            <Typography
+              variant="subtitle2"
+              color="text.secondary"
+              sx={{ mb: 1 }}
+            >
+              Data Placeholders:
+            </Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
               {availablePlaceholders.map((placeholder) => (
                 <Chip
                   key={placeholder}
                   label={`{${placeholder}}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontSize: "0.8rem" }}
+                />
+              ))}
+            </Box>
+
+            <Typography
+              variant="subtitle2"
+              color="text.secondary"
+              sx={{ mb: 1 }}
+            >
+              Formatting Options:
+            </Typography>
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+              {availableFormatting.map((format) => (
+                <Chip
+                  key={format}
+                  label={format}
                   size="small"
                   variant="outlined"
                   sx={{ fontSize: "0.8rem" }}
@@ -1154,16 +1532,35 @@ const ReportTemplates = () => {
                   Report Headers
                 </Typography>
                 <IconButton
-                  onClick={() =>
-                    handleEdit("reportHeaders", template.reportHeaders || {})
-                  }
+                  onClick={() => {
+                    // Default header fields if none exist
+                    const defaultHeaders = {
+                      reportTitle: "",
+                      reportSubtitle: "",
+                      reportNumber: "",
+                      reportDate: "",
+                      clientName: "",
+                      projectName: "",
+                      siteAddress: "",
+                      inspectorName: "",
+                      inspectorLicense: "",
+                    };
+                    const headersToEdit =
+                      template.reportHeaders &&
+                      Object.keys(template.reportHeaders).length > 0
+                        ? template.reportHeaders
+                        : defaultHeaders;
+                    handleEdit("reportHeaders", headersToEdit);
+                  }}
                   size="small"
                 >
                   <EditIcon />
                 </IconButton>
               </Box>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {console.log("Template reportHeaders:", template.reportHeaders)}
                 {template.reportHeaders &&
+                Object.keys(template.reportHeaders).length > 0 ? (
                   Object.entries(template.reportHeaders).map(([key, value]) => (
                     <Box
                       key={key}
@@ -1175,10 +1572,19 @@ const ReportTemplates = () => {
                         :
                       </Typography>
                       <Typography variant="body2" color="black">
-                        {value}
+                        {value || "No content - click edit to add"}
                       </Typography>
                     </Box>
-                  ))}
+                  ))
+                ) : (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ fontStyle: "italic" }}
+                  >
+                    No headers configured - click edit to add report headers
+                  </Typography>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -1265,18 +1671,9 @@ const ReportTemplates = () => {
           >
             Report Templates
           </Typography>
-          <Box sx={{ display: "flex", gap: 2 }}>
-            <Button
-              onClick={handlePreviewToggle}
-              startIcon={<PreviewIcon />}
-              variant="outlined"
-            >
-              {showPreview ? "Hide Preview" : "Show Preview"}
-            </Button>
-          </Box>
         </Box>
         <Typography variant="h5" color="black">
-          Manage standardized content for different report types
+          Manage standardised content for different report types
         </Typography>
 
         {saveStatus.show && (
@@ -1307,39 +1704,45 @@ const ReportTemplates = () => {
           )}
         </Box>
 
-        {/* Available Placeholders - Beneath company details */}
-        <Box sx={{ mt: 3 }}>
-          {!loading && (
-            <Grid container spacing={3}>
-              {renderAvailablePlaceholders()}
-            </Grid>
-          )}
-        </Box>
-
-        {/* Report Template Selection Dropdown */}
+        {/* Report Template Selection Tabs */}
         <Box sx={{ mt: 3, mb: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel id="template-select-label">
-              Select Report Template
-            </InputLabel>
-            <Select
-              labelId="template-select-label"
-              value={selectedTemplate}
-              label="Select Report Template"
-              onChange={handleTemplateChange}
-              sx={{
-                "& .MuiSelect-select": {
-                  color: "black",
+          <Tabs
+            value={selectedTemplate}
+            onChange={handleTabChange}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              borderBottom: 1,
+              borderColor: "divider",
+              "& .MuiTab-root": {
+                color: colors.grey[600],
+                fontWeight: 500,
+                textTransform: "none",
+                fontSize: "0.95rem",
+                minHeight: 48,
+                "&.Mui-selected": {
+                  color: colors.primary[500],
+                  fontWeight: 600,
                 },
-              }}
-            >
-              {reportTypes.map((type) => (
-                <MenuItem key={type.id} value={type.id}>
-                  {type.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              },
+              "& .MuiTabs-indicator": {
+                backgroundColor: colors.primary[500],
+                height: 3,
+              },
+            }}
+          >
+            {reportTypes.map((type) => (
+              <Tab
+                key={type.id}
+                value={type.id}
+                label={type.name}
+                sx={{
+                  minWidth: { xs: "auto", sm: 200 },
+                  maxWidth: { xs: 200, sm: 300 },
+                }}
+              />
+            ))}
+          </Tabs>
         </Box>
 
         {/* Template Content */}
@@ -1358,25 +1761,259 @@ const ReportTemplates = () => {
               </Typography>
             </Box>
           ) : (
-            <Grid container spacing={3}>
-              {/* Preview Section */}
-              {showPreview && renderPreview()}
+            <>
+              {reportTypes.map((type) => (
+                <TabPanel
+                  key={type.id}
+                  value={selectedTemplate}
+                  index={type.id}
+                >
+                  <Grid container spacing={3}>
+                    {/* Preview Section */}
+                    {showPreview && renderPreview()}
 
-              {/* Detailed Template Sections */}
-              {console.log(
-                "Rendering template sections:",
-                Object.entries(templateSections)
-              )}
-              {Object.entries(templateSections).map(([sectionName, fields]) => {
-                console.log(
-                  "Rendering section:",
-                  sectionName,
-                  "with fields:",
-                  fields
-                );
-                return renderDetailedTemplateSection(sectionName, fields);
-              })}
-            </Grid>
+                    {/* Legislation Selection */}
+                    <Grid item xs={12}>
+                      <Card>
+                        <CardContent>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              mb: 2,
+                            }}
+                          >
+                            <Typography variant="h6" color="black">
+                              Selected Legislation
+                            </Typography>
+                          </Box>
+
+                          {/* ACT Legislation Selection */}
+                          <FormControl fullWidth sx={{ mb: 2 }}>
+                            <InputLabel>Selected ACT Legislation</InputLabel>
+                            <Select
+                              multiple
+                              value={selectedACTLegislation.map(
+                                (item) => item._id
+                              )}
+                              onChange={handleACTLegislationChange}
+                              input={
+                                <OutlinedInput label="Selected ACT Legislation" />
+                              }
+                              renderValue={(selected) => (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  {selected.map((value) => {
+                                    const item = legislationItems.find(
+                                      (item) => item._id === value
+                                    );
+                                    return (
+                                      <Chip
+                                        key={value}
+                                        label={
+                                          item
+                                            ? item.legislationTitle || item.text
+                                            : value
+                                        }
+                                        size="small"
+                                        sx={{ backgroundColor: "#e3f2fd" }}
+                                      />
+                                    );
+                                  })}
+                                </Box>
+                              )}
+                              disabled={legislationLoading}
+                            >
+                              {legislationItems.filter(
+                                (item) => item.jurisdiction === "ACT"
+                              ).length > 0 ? (
+                                legislationItems
+                                  .filter((item) => item.jurisdiction === "ACT")
+                                  .map((item) => (
+                                    <MenuItem key={item._id} value={item._id}>
+                                      <Checkbox
+                                        checked={selectedACTLegislation.some(
+                                          (selected) =>
+                                            selected._id === item._id
+                                        )}
+                                      />
+                                      <ListItemText
+                                        primary={
+                                          item.legislationTitle || item.text
+                                        }
+                                        secondary="ACT"
+                                      />
+                                    </MenuItem>
+                                  ))
+                              ) : (
+                                <MenuItem disabled>
+                                  <ListItemText primary="No ACT legislation items found" />
+                                </MenuItem>
+                              )}
+                            </Select>
+                          </FormControl>
+
+                          {/* NSW Legislation Selection */}
+                          <FormControl fullWidth>
+                            <InputLabel>Selected NSW Legislation</InputLabel>
+                            <Select
+                              multiple
+                              value={selectedNSWLegislation.map(
+                                (item) => item._id
+                              )}
+                              onChange={handleNSWLegislationChange}
+                              input={
+                                <OutlinedInput label="Selected NSW Legislation" />
+                              }
+                              renderValue={(selected) => (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 0.5,
+                                  }}
+                                >
+                                  {selected.map((value) => {
+                                    const item = legislationItems.find(
+                                      (item) => item._id === value
+                                    );
+                                    return (
+                                      <Chip
+                                        key={value}
+                                        label={
+                                          item
+                                            ? item.legislationTitle || item.text
+                                            : value
+                                        }
+                                        size="small"
+                                        sx={{ backgroundColor: "#f3e5f5" }}
+                                      />
+                                    );
+                                  })}
+                                </Box>
+                              )}
+                              disabled={legislationLoading}
+                            >
+                              {legislationItems.filter(
+                                (item) => item.jurisdiction === "NSW"
+                              ).length > 0 ? (
+                                legislationItems
+                                  .filter((item) => item.jurisdiction === "NSW")
+                                  .map((item) => (
+                                    <MenuItem key={item._id} value={item._id}>
+                                      <Checkbox
+                                        checked={selectedNSWLegislation.some(
+                                          (selected) =>
+                                            selected._id === item._id
+                                        )}
+                                      />
+                                      <ListItemText
+                                        primary={
+                                          item.legislationTitle || item.text
+                                        }
+                                        secondary="NSW"
+                                      />
+                                    </MenuItem>
+                                  ))
+                              ) : (
+                                <MenuItem disabled>
+                                  <ListItemText primary="No NSW legislation items found" />
+                                </MenuItem>
+                              )}
+                            </Select>
+                          </FormControl>
+
+                          {legislationLoading && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ mt: 1 }}
+                            >
+                              Loading legislation items...
+                            </Typography>
+                          )}
+                          {!legislationLoading &&
+                            legislationItems.length === 0 && (
+                              <Box
+                                sx={{
+                                  mt: 2,
+                                  p: 2,
+                                  bgcolor: "grey.50",
+                                  borderRadius: 1,
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  sx={{ mb: 1 }}
+                                >
+                                  No legislation items found in the database.
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  component="div"
+                                >
+                                  To use this feature, you need to create
+                                  legislation items first:
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  component="div"
+                                  sx={{ mt: 1, fontWeight: "medium" }}
+                                >
+                                  1. Go to Admin → Custom Data Fields
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  component="div"
+                                >
+                                  2. Create new legislation items with Title and
+                                  Jurisdiction (ACT or NSW)
+                                </Typography>
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  component="div"
+                                >
+                                  3. Return here to select them for your
+                                  templates
+                                </Typography>
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={loadLegislationItems}
+                                  sx={{ mt: 1 }}
+                                >
+                                  Retry Loading
+                                </Button>
+                              </Box>
+                            )}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+
+                    {/* Detailed Template Sections */}
+                    {Object.entries(templateSections).map(
+                      ([sectionName, fields]) => {
+                        return renderDetailedTemplateSection(
+                          sectionName,
+                          fields
+                        );
+                      }
+                    )}
+                  </Grid>
+                </TabPanel>
+              ))}
+            </>
           )}
         </Box>
 

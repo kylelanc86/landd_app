@@ -9,9 +9,37 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
 
-// Helper function to get active and inactive statuses from custom data field groups
-const getProjectStatuses = async () => {
+// Cache for project statuses
+const statusCache = {
+  data: null,
+  timestamp: null,
+  TTL: 10 * 60 * 1000, // 10 minutes in milliseconds
+};
+
+// Helper function to invalidate the status cache
+const invalidateStatusCache = () => {
+  statusCache.data = null;
+  statusCache.timestamp = null;
+};
+
+// Helper function to get active and inactive statuses from custom data field groups (with caching)
+const getProjectStatuses = async (forceRefresh = false) => {
   try {
+    // Check cache first
+    const now = Date.now();
+    if (!forceRefresh && statusCache.data && statusCache.timestamp) {
+      const cacheAge = now - statusCache.timestamp;
+      if (cacheAge < statusCache.TTL) {
+        console.log(`[PROJECTS] Using cached statuses (age: ${Math.round(cacheAge / 1000)}s)`);
+        return statusCache.data;
+      } else {
+        console.log(`[PROJECTS] Cache expired (age: ${Math.round(cacheAge / 1000)}s), refreshing...`);
+      }
+    }
+
+    // Fetch from database
+    console.log(`[PROJECTS] Fetching statuses from database...`);
+    const fetchStartTime = Date.now();
     const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
     const group = await CustomDataFieldGroup.findOne({ 
       type: 'project_status', 
@@ -19,7 +47,11 @@ const getProjectStatuses = async () => {
     });
     
     if (!group) {
-      return { activeStatuses: [], inactiveStatuses: [] };
+      const result = { activeStatuses: [], inactiveStatuses: [] };
+      // Cache even empty result
+      statusCache.data = result;
+      statusCache.timestamp = Date.now();
+      return result;
     }
     
     const activeStatuses = group.fields
@@ -32,18 +64,48 @@ const getProjectStatuses = async () => {
       .sort((a, b) => a.order - b.order)
       .map(field => field.text);
     
-    return { activeStatuses, inactiveStatuses };
+    const result = { activeStatuses, inactiveStatuses };
+    const fetchTime = Date.now() - fetchStartTime;
+    console.log(`[PROJECTS] Statuses fetched from database in ${fetchTime}ms`);
+    
+    // Update cache
+    statusCache.data = result;
+    statusCache.timestamp = Date.now();
+    
+    return result;
   } catch (error) {
     console.error('Error fetching project statuses from custom data field groups:', error);
-    // Return empty arrays if database query fails
+    // Return cached data if available, even if expired, as fallback
+    if (statusCache.data) {
+      console.log('[PROJECTS] Database error, returning stale cache as fallback');
+      return statusCache.data;
+    }
+    // Return empty arrays if database query fails and no cache
     return { activeStatuses: [], inactiveStatuses: [] };
   }
 };
 
-// Get status counts for all projects
+// Cache invalidation function will be exported at the end of the file
+
+// Get status counts for all projects (optimized to only count active projects by default)
 router.get('/status-counts', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const counts = await Project.aggregate([
+    const startTime = Date.now();
+    
+    // Get active/inactive statuses for filtering
+    const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+    
+    // Build query - only count active projects for better performance
+    // This matches the projects page behavior (only shows active projects)
+    const activeQuery = activeStatuses.length > 0 
+      ? { status: { $in: activeStatuses } }
+      : {};
+    
+    // Aggregate counts for active projects only (much faster with ~200 vs 5000+)
+    const activeCounts = await Project.aggregate([
+      {
+        $match: activeQuery
+      },
       {
         $group: {
           _id: '$status',
@@ -51,21 +113,48 @@ router.get('/status-counts', auth, checkPermission(['projects.view']), async (re
         }
       }
     ]);
+    
+    // Also get inactive counts if needed (but make it optional/fast)
+    const inactiveCounts = inactiveStatuses.length > 0 
+      ? await Project.aggregate([
+          {
+            $match: { status: { $in: inactiveStatuses } }
+          },
+          {
+            $group: {
+              _id: '$status',
+              count: { $sum: 1 }
+            }
+          }
+        ])
+      : [];
 
     // Transform the results into a more usable format
     const statusCounts = {};
-    let totalActive = 0;
-    let totalInactive = 0;
-
-    counts.forEach(item => {
+    
+    // Process active counts
+    activeCounts.forEach(item => {
+      const status = item._id || 'Unknown';
+      const count = item.count;
+      statusCounts[status] = count;
+    });
+    
+    // Process inactive counts
+    inactiveCounts.forEach(item => {
       const status = item._id || 'Unknown';
       const count = item.count;
       statusCounts[status] = count;
     });
 
-    // Get total count
-    const totalCount = await Project.countDocuments();
-    statusCounts.all = totalCount;
+    // Calculate totals
+    const totalActive = activeCounts.reduce((sum, item) => sum + item.count, 0);
+    const totalInactive = inactiveCounts.reduce((sum, item) => sum + item.count, 0);
+    statusCounts.all = totalActive + totalInactive;
+    statusCounts.all_active = totalActive;
+    statusCounts.all_inactive = totalInactive;
+
+    const queryTime = Date.now() - startTime;
+    console.log(`[PROJECTS] Status counts completed in ${queryTime}ms (active: ${totalActive}, inactive: ${totalInactive})`);
 
     res.json({ statusCounts });
   } catch (error) {
@@ -77,7 +166,8 @@ router.get('/status-counts', auth, checkPermission(['projects.view']), async (re
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   const requestStartTime = Date.now();
-  console.log(`[PROJECTS] Starting getAll request - Page: ${req.query.page}, Limit: ${req.query.limit}, Search: ${req.query.search}`);
+  console.log(`[PROJECTS] Starting getAll request - Page: ${req.query.page}, Limit: ${req.query.limit}, Search: ${req.query.search}, Status: ${req.query.status}`);
+  console.log(`[PROJECTS] Full query object:`, req.query);
   
   try {
     const {
@@ -95,6 +185,8 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
     const statusTime = Date.now() - statusStartTime;
     console.log(`[PROJECTS] Status fetching completed in ${statusTime}ms`);
+    console.log(`[PROJECTS] Active statuses:`, activeStatuses);
+    console.log(`[PROJECTS] Inactive statuses:`, inactiveStatuses);
 
     // Build query
     const query = {};
@@ -105,14 +197,33 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     }
 
     // Handle status filtering
-    if (status && status !== 'all') {
+    // DEFAULT: Only show active projects unless explicitly requested otherwise
+    // This prevents inactive projects from being loaded when no status filter is provided
+    if (status) {
       try {
-        if (status === 'all_active') {
+        console.log(`[PROJECTS] Processing status filter: ${status}`);
+        if (status === 'all') {
+          // Show ALL projects (both active and inactive) - no status filter applied
+          console.log(`[PROJECTS] Showing all projects (active and inactive)`);
+          // Don't add any status filter to the query
+        } else if (status === 'all_active') {
           // Filter for all active statuses from custom data fields
-          query.status = { $in: activeStatuses };
+          if (activeStatuses.length > 0) {
+            query.status = { $in: activeStatuses };
+            console.log(`[PROJECTS] Applied active status filter:`, query.status);
+          } else {
+            console.log(`[PROJECTS] No active statuses available, returning empty result`);
+            query.status = { $in: [] }; // Return no results if no active statuses defined
+          }
         } else if (status === 'all_inactive') {
           // Filter for all inactive statuses from custom data fields
-          query.status = { $in: inactiveStatuses };
+          if (inactiveStatuses.length > 0) {
+            query.status = { $in: inactiveStatuses };
+            console.log(`[PROJECTS] Applied inactive status filter:`, query.status);
+          } else {
+            console.log(`[PROJECTS] No inactive statuses available, returning empty result`);
+            query.status = { $in: [] }; // Return no results if no inactive statuses defined
+          }
         } else {
           // Handle specific status or comma-separated list
           const statusArray = status.includes(',') ? status.split(',') : [status];
@@ -123,9 +234,20 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           } else {
             query.status = { $in: statusArray };
           }
+          console.log(`[PROJECTS] Applied specific status filter:`, query.status);
         }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
+      }
+    } else {
+      // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
+      // This prevents inactive projects from appearing when statuses aren't loaded yet
+      if (activeStatuses.length > 0) {
+        query.status = { $in: activeStatuses };
+        console.log(`[PROJECTS] No status filter provided, defaulting to active projects only`);
+      } else {
+        console.log(`[PROJECTS] No active statuses available and no filter provided, returning empty result`);
+        query.status = { $in: [] }; // Return no results if no active statuses defined
       }
     }
 
@@ -134,71 +256,159 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     
     const queryBuildTime = Date.now() - requestStartTime;
     console.log(`[PROJECTS] Query building completed in ${queryBuildTime}ms`);
+    console.log(`[PROJECTS] Final query:`, JSON.stringify(query, null, 2));
     
     try {
       let projects, total;
 
       if (search) {
-        // Use aggregation for search to properly search through client names
-        const aggregationPipeline = [
+        console.log(`[PROJECTS] Starting optimized search for: "${search}"`);
+        console.log(`[PROJECTS] Base query:`, JSON.stringify(query, null, 2));
+        
+        const searchStartTime = Date.now();
+        
+        // Use MongoDB aggregation pipeline for efficient single-query search
+        // This searches both project fields AND client names in one database operation
+        const searchRegex = new RegExp(search, 'i'); // Case-insensitive regex
+        
+        // Collection names (Mongoose automatically pluralizes model names)
+        // 'clients' and 'users' are the standard MongoDB collection names
+        const clientsCollection = 'clients';
+        const usersCollection = 'users';
+        
+        // Build aggregation pipeline
+        const pipeline = [
+          // Stage 1: Match base filters (status, department, etc.)
+          {
+            $match: query
+          },
+          
+          // Stage 2: Lookup client information
           {
             $lookup: {
-              from: 'clients',
+              from: clientsCollection,
               localField: 'client',
               foreignField: '_id',
               as: 'clientData'
             }
           },
+          
+          // Stage 3: Unwind client data (we expect one client per project)
           {
-            $lookup: {
-              from: 'users',
-              localField: 'users',
-              foreignField: '_id',
-              as: 'userData'
+            $unwind: {
+              path: '$clientData',
+              preserveNullAndEmptyArrays: true // Keep projects even if client lookup fails
             }
           },
+          
+          // Stage 4: Match search criteria - project fields, client name, or address
           {
             $match: {
-              $and: [
-                // Apply other filters first
-                ...(query.department ? [{ department: query.department }] : []),
-                ...(query.status ? [{ status: query.status }] : []),
-                // Then apply search filter
+              $or: [
+                { name: searchRegex },
+                { projectID: searchRegex },
+                { address: searchRegex },
+                { 'clientData.name': searchRegex }
+              ]
+            }
+          },
+          
+          // Stage 5: Lookup user information
+          {
+            $lookup: {
+              from: usersCollection,
+              localField: 'users',
+              foreignField: '_id',
+              as: 'usersData',
+              pipeline: [
                 {
-                  $or: [
-                    { name: { $regex: search, $options: 'i' } },
-                    { projectID: { $regex: search, $options: 'i' } },
-                    { 'clientData.name': { $regex: search, $options: 'i' } }
-                  ]
+                  $project: {
+                    firstName: 1,
+                    lastName: 1,
+                    _id: 1
+                  }
                 }
               ]
             }
           },
+          
+          // Stage 6: Sort in database (more efficient than JavaScript sorting)
           {
-            $sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 }
+            $sort: {
+              [sortBy]: sortOrder === 'desc' ? -1 : 1
+            }
+          },
+          
+          // Stage 7: Project/reshape the output to match expected format
+          {
+            $project: {
+              _id: 1,
+              projectID: 1,
+              name: 1,
+              client: {
+                _id: '$clientData._id',
+                name: '$clientData.name'
+              },
+              users: {
+                $map: {
+                  input: '$usersData',
+                  as: 'user',
+                  in: {
+                    _id: '$$user._id',
+                    firstName: '$$user.firstName',
+                    lastName: '$$user.lastName'
+                  }
+                }
+              },
+              department: 1,
+              status: 1,
+              address: 1,
+              d_Date: 1,
+              workOrder: 1,
+              categories: 1,
+              description: 1,
+              notes: 1,
+              projectContact: 1,
+              budget: 1,
+              isLargeProject: 1,
+              reports_present: 1,
+              createdAt: 1,
+              updatedAt: 1,
+              startDate: 1,
+              endDate: 1
+            }
           }
         ];
-
-        // Get total count for pagination
-        const countPipeline = [...aggregationPipeline, { $count: "total" }];
-        const countResult = await Project.aggregate(countPipeline);
-        total = countResult.length > 0 ? countResult[0].total : 0;
-
-        // Get paginated results
-        const dataPipeline = [
-          ...aggregationPipeline,
-          { $skip: skip },
-          { $limit: parseInt(limit) }
-        ];
         
-        const aggregationResult = await Project.aggregate(dataPipeline);
+        // Execute aggregation
+        const aggregationResult = await Project.aggregate(pipeline);
+        const searchTime = Date.now() - searchStartTime;
         
-        // Transform aggregation result to match expected format
-        projects = aggregationResult.map(project => ({
-          ...project,
-          client: project.clientData?.[0] || null,
-          users: project.userData || []
-        }));
+        console.log(`[PROJECTS] Aggregation search completed in ${searchTime}ms`);
+        console.log(`[PROJECTS] Found ${aggregationResult.length} matching projects`);
+        
+        // Convert aggregation results to Mongoose documents (for consistency with non-search queries)
+        // This allows us to use .toObject() and other Mongoose methods if needed
+        projects = aggregationResult.map(item => {
+          // Convert to plain object format that matches what find() returns
+          const project = {
+            ...item,
+            // Ensure client is properly formatted (null if no client)
+            client: item.client && item.client._id ? item.client : null,
+            // Ensure users array is properly formatted
+            users: item.users || []
+          };
+          return project;
+        });
+        
+        // Get total count (for pagination info)
+        total = projects.length;
+        
+        // Note: We're returning all results for client-side pagination
+        // This is fine since we only have ~200 active projects
+        // If needed later, we can add server-side pagination here with $skip and $limit
+        
+        console.log(`[PROJECTS] Returning ${projects.length} projects from optimized search`);
       } else {
         // Use regular find for non-search queries
         const countStartTime = Date.now();
@@ -208,6 +418,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         
         const dataStartTime = Date.now();
         projects = await Project.find(query)
+          .select('projectID name department status client users d_Date workOrder categories description notes projectContact budget isLargeProject reports_present createdAt updatedAt startDate endDate address')
           .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
           .skip(skip)
           .limit(parseInt(limit))
@@ -227,7 +438,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           
           return {
             ...projectObj,
-            client: project.client?.name || projectObj.client?.name || '',
+            client: project.client || projectObj.client || null,
             department: projectObj.department || '',
             assignedTo: project.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || 
                        projectObj.users?.map(user => `${user.firstName} ${user.lastName}`).join(', ') || '',
@@ -333,7 +544,8 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
         number: "",
         email: ""
       },
-      notes: req.body.notes || ""
+      notes: req.body.notes || "",
+      budget: parseFloat(req.body.budget) || 0
     });
     
     console.log('Project instance created:', project);
@@ -344,17 +556,20 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
     // If this is a client supplied project, automatically create a job
     if (newProject.department === 'Client Supplied') {
       try {
-        const jobCount = await ClientSuppliedJob.countDocuments();
-        const jobNumber = `CSJ-${String(jobCount + 1).padStart(4, '0')}`;
-        
         const job = new ClientSuppliedJob({
           projectId: newProject._id,
-          jobNumber,
           status: 'Pending'
         });
         
         await job.save();
-        console.log(`Automatically created client supplied job ${jobNumber} for project ${newProject.projectID}`);
+        console.log(`Automatically created client supplied job for project ${newProject.projectID}`);
+        
+        // Update the project's reports_present field to true
+        await Project.findByIdAndUpdate(
+          newProject._id,
+          { reports_present: true }
+        );
+        console.log(`Updated project ${newProject._id} reports_present to true due to automatic client supplied job creation`);
       } catch (jobError) {
         console.error('Error creating automatic client supplied job:', jobError);
         // Don't fail the project creation if job creation fails
@@ -373,6 +588,20 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
     } catch (statsError) {
       console.error('Error updating dashboard stats on project creation:', statsError);
       // Don't fail the project creation if stats update fails
+    }
+
+    // Update allocated projects cache if project is active and has users
+    try {
+      const allocatedProjectsService = require('../services/allocatedProjectsService');
+      if (newProject.users && newProject.users.length > 0) {
+        const isActive = await allocatedProjectsService.isActiveStatus(newProject.status);
+        if (isActive) {
+          await allocatedProjectsService.addProjectToUsers(newProject.users, newProject._id);
+        }
+      }
+    } catch (cacheError) {
+      console.error('Error updating allocated projects cache on project creation:', cacheError);
+      // Don't fail the project creation if cache update fails
     }
 
     // Log project creation to audit trail
@@ -465,8 +694,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       allFields: Object.keys(project.toObject())
     });
 
-    // Store old status before updating
+    // Store old status and users before updating
     const oldStatus = project.status;
+    const oldUserIds = (project.users || []).map(u => u.toString());
     
     // Check if user is trying to set status to "Job complete" and if they have permission
     if (req.body.status === "Job complete") {
@@ -483,6 +713,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
           requiredPermission: 'canSetJobComplete'
         });
       }
+      
+      // When status is set to "Job complete", clear the end date
+      req.body.endDate = null;
     }
     
     // Update project fields
@@ -602,6 +835,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     project.isLargeProject = req.body.isLargeProject !== undefined ? req.body.isLargeProject : project.isLargeProject;
     project.projectContact = req.body.projectContact || project.projectContact;
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
+    project.budget = req.body.budget !== undefined ? parseFloat(req.body.budget) || 0 : project.budget;
 
     // Fix any string dates that might have been sent from frontend
     if (req.body.updatedAt && typeof req.body.updatedAt === 'string') {
@@ -674,6 +908,42 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       } catch (auditError) {
         console.error('Error logging status change to audit trail:', auditError);
         // Don't fail the project update if audit logging fails
+      }
+
+      // Update allocated projects cache on status change
+      try {
+        const allocatedProjectsService = require('../services/allocatedProjectsService');
+        const currentUserIds = updatedProject.users || [];
+        await allocatedProjectsService.updateUsersOnStatusChange(
+          updatedProject._id,
+          oldStatus,
+          req.body.status,
+          currentUserIds
+        );
+      } catch (cacheError) {
+        console.error('Error updating allocated projects cache on status change:', cacheError);
+        // Don't fail the project update if cache update fails
+      }
+    }
+
+    // Update allocated projects cache on user changes (if status didn't change or wasn't updated)
+    const usersChanged = req.body.users !== undefined && 
+      JSON.stringify((req.body.users || []).map(u => (typeof u === 'object' ? u._id || u : u).toString())) !== 
+      JSON.stringify(oldUserIds);
+    
+    if (usersChanged && (!req.body.status || req.body.status === oldStatus)) {
+      try {
+        const allocatedProjectsService = require('../services/allocatedProjectsService');
+        const newUserIds = (updatedProject.users || []).map(u => u.toString());
+        await allocatedProjectsService.updateUsersOnProjectUserChange(
+          updatedProject._id,
+          oldUserIds,
+          newUserIds,
+          updatedProject.status
+        );
+      } catch (cacheError) {
+        console.error('Error updating allocated projects cache on user change:', cacheError);
+        // Don't fail the project update if cache update fails
       }
     }
     
@@ -858,8 +1128,9 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
       });
     }
 
-    // Store project status for dashboard stats update
+    // Store project status and users for dashboard stats and cache updates
     const projectStatus = project.status;
+    const projectUsers = project.users || [];
     
     await project.deleteOne();
     
@@ -870,6 +1141,15 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
     } catch (statsError) {
       console.error('Error updating dashboard stats on project deletion:', statsError);
       // Don't fail the project deletion if stats update fails
+    }
+
+    // Remove project from all users' allocatedProjectIds cache
+    try {
+      const allocatedProjectsService = require('../services/allocatedProjectsService');
+      await allocatedProjectsService.removeProjectFromUsers(projectUsers, project._id);
+    } catch (cacheError) {
+      console.error('Error updating allocated projects cache on project deletion:', cacheError);
+      // Don't fail the project deletion if cache update fails
     }
     
     res.json({ message: 'Project deleted successfully' });
@@ -897,7 +1177,9 @@ router.get('/:id/timelogs', auth, checkPermission(['projects.view']), async (req
 router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const startTime = Date.now();
-    console.log(`[${req.user.id}] Starting getAssignedToMe request`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[ASSIGNED-TO-ME] Starting request for user: ${req.user.id}`);
+    console.log(`[ASSIGNED-TO-ME] Params:`, req.query);
     
     const {
       page = 1,
@@ -911,63 +1193,184 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
     // Build query for user's assigned projects
     const queryStartTime = Date.now();
-    const query = {
-      users: userId
-    };
+    const mongoose = require('mongoose');
+    
+    // OPTIMIZATION: Use cached allocatedProjectIds for faster queries when filtering active projects
+    const useCachedIds = !status || status === 'all_active';
+    
+    let usingCachedIds = false;
+    let cachedProjectIds = [];
+    let statusFetchTime = 0; // Initialize for logging
+    let query = {}; // Initialize query
 
-    // Add status filter if specified
-    if (status) {
-      try {
-        const statusArray = status.includes(',') ? status.split(',') : [status];
-        query.status = { $in: statusArray };
-      } catch (error) {
-        throw new Error(`Invalid status filter: ${error.message}`);
+    if (useCachedIds) {
+      // Get user's cached allocated project IDs (skip status fetch since cache only has active projects)
+      const userStartTime = Date.now();
+      const user = await User.findById(userId).select('allocatedProjectIds').lean(); // Use lean() for faster query
+      const userFetchTime = Date.now() - userStartTime;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  User cache fetch: ${userFetchTime}ms`);
+      
+      if (user && user.allocatedProjectIds && user.allocatedProjectIds.length > 0) {
+        // Use cached IDs - much faster than querying by users array
+        // Cache already contains only active projects, so no need for status filter
+        cachedProjectIds = user.allocatedProjectIds;
+        query = { _id: { $in: cachedProjectIds } }; // Build query directly
+        usingCachedIds = true;
+        console.log(`[ASSIGNED-TO-ME] ✅ Using cached project IDs (${cachedProjectIds.length} active projects)`);
+      } else {
+        // Cache is empty - return empty results
+        // This is intentional: cache may be correctly empty (no active projects) or not yet populated
+        query = { _id: { $in: [] } }; // Empty array ensures no results
+        usingCachedIds = true; // Still mark as using cache (empty cache)
+        console.log(`[ASSIGNED-TO-ME] ℹ️  Cache empty - returning no projects (cache may be correctly empty or not yet populated)`);
       }
+    } else {
+      // For inactive or specific status queries, use users array (need status fetch)
+      const statusFetchStart = Date.now();
+      const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
+      statusFetchTime = Date.now() - statusFetchStart;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
+      query = { users: new mongoose.Types.ObjectId(userId) }; // Build query directly
+    }
+
+    // Handle status filtering (only needed if not using cached IDs)
+    // DEFAULT: Only show active projects unless explicitly requested otherwise
+    if (!usingCachedIds) {
+      if (status && status !== 'all') {
+        try {
+          if (status === 'all_active') {
+            // Filter for all active statuses
+            if (activeStatuses.length > 0) {
+              query.status = { $in: activeStatuses };
+              console.log(`[ASSIGNED-TO-ME] Applied active status filter (${activeStatuses.length} statuses)`);
+            } else {
+              query.status = { $in: [] }; // Return no results if no active statuses defined
+            }
+          } else if (status === 'all_inactive') {
+            // Filter for all inactive statuses
+            if (inactiveStatuses.length > 0) {
+              query.status = { $in: inactiveStatuses };
+              console.log(`[ASSIGNED-TO-ME] Applied inactive status filter (${inactiveStatuses.length} statuses)`);
+            } else {
+              query.status = { $in: [] }; // Return no results if no inactive statuses defined
+            }
+          } else {
+            // Handle specific status or comma-separated list
+            const statusArray = status.includes(',') ? status.split(',') : [status];
+            query.status = { $in: statusArray };
+            console.log(`[ASSIGNED-TO-ME] Applied specific status filter:`, query.status);
+          }
+        } catch (error) {
+          throw new Error(`Invalid status filter: ${error.message}`);
+        }
+      } else {
+        // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
+        if (activeStatuses.length > 0) {
+          query.status = { $in: activeStatuses };
+          console.log(`[ASSIGNED-TO-ME] No status filter provided, defaulting to active projects (${activeStatuses.length} statuses)`);
+        } else {
+          console.log(`[ASSIGNED-TO-ME] No active statuses available and no filter provided, returning empty result`);
+          query.status = { $in: [] }; // Return no results if no active statuses defined
+        }
+      }
+    } else {
+      // Using cached IDs - cache already contains only active projects
+      // No status filter needed, but log for clarity
+      console.log(`[ASSIGNED-TO-ME] Using cached IDs (already filtered to active projects)`);
     }
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const queryBuildTime = Date.now() - queryStartTime;
-    console.log(`[${userId}] Query building completed in ${queryBuildTime}ms`);
+    console.log(`[ASSIGNED-TO-ME] ⏱️  Query building: ${queryBuildTime}ms`);
+    console.log(`[ASSIGNED-TO-ME] 🔍 Query:`, JSON.stringify(query, null, 2));
     
     try {
       const dbStartTime = Date.now();
+      const sortField = sortBy;
+      const sortDirection = sortOrder === 'desc' ? -1 : 1;
       
-      // Count query timing
-      const countStartTime = Date.now();
-      const total = await Project.countDocuments(query);
-      const countTime = Date.now() - countStartTime;
-      console.log(`[${userId}] Count query completed in ${countTime}ms`);
+      let total;
+      let projects;
+      
+      // OPTIMIZATION: When using cached IDs, use simpler find() query instead of aggregation
+      // This is faster because MongoDB can use indexes more efficiently
+      if (usingCachedIds) {
+        // For cached IDs, we already know the total (cache length)
+        total = cachedProjectIds.length;
+        
+        const findStartTime = Date.now();
+        projects = await Project.find(query)
+          .select('_id projectID name status d_Date')
+          .sort({ [sortField]: sortDirection })
+          .skip(skip)
+          .limit(parseInt(limit))
+          .lean(); // Use lean() for plain JS objects (faster, no Mongoose overhead)
+        
+        const findTime = Date.now() - findStartTime;
+        console.log(`[ASSIGNED-TO-ME] ⏱️  Find query (cached IDs): ${findTime}ms`);
+        console.log(`[ASSIGNED-TO-ME] Using cached total: ${total} (skipped count query)`);
+      } else {
+        // For non-cached queries, use aggregation (needs status filtering)
+        const aggregateStartTime = Date.now();
+        
+        const results = await Project.aggregate([
+          // Match stage - filter documents
+          { $match: query },
+          
+          // Facet stage - run count and data queries in parallel
+          {
+            $facet: {
+              // Count total matching documents
+              metadata: [
+                { $count: 'total' }
+              ],
+              // Get paginated data
+              data: [
+                { $sort: { [sortField]: sortDirection } },
+                { $skip: skip },
+                { $limit: parseInt(limit) },
+                // Only select fields needed for the table display
+                {
+                  $project: {
+                    _id: 1,
+                    projectID: 1,
+                    name: 1,
+                    status: 1,
+                    d_Date: 1
+                  }
+                }
+              ]
+            }
+          }
+        ]);
+        
+        const aggregateTime = Date.now() - aggregateStartTime;
+        console.log(`[ASSIGNED-TO-ME] ⏱️  Combined aggregate query (count + data): ${aggregateTime}ms`);
+        
+        // Extract results
+        total = results[0].metadata[0]?.total || 0;
+        projects = results[0].data || [];
+      }
       
       const pages = Math.ceil(total / parseInt(limit));
-
-      // Data query timing
-      const dataStartTime = Date.now();
-      const projects = await Project.find(query)
-        .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('client', 'name')
-        .select('projectID name department status client users createdAt d_Date');
-      const dataTime = Date.now() - dataStartTime;
-      console.log(`[${userId}] Data query completed in ${dataTime}ms`);
+      
+      console.log(`[ASSIGNED-TO-ME] 📊 Results: ${projects.length} projects (${total} total)`);
       
       const dbTime = Date.now() - dbStartTime;
-      console.log(`[${userId}] Total database operations completed in ${dbTime}ms (Count: ${countTime}ms, Data: ${dataTime}ms)`);
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Total database time: ${dbTime}ms`);
 
-      // Invoice processing removed for performance
-
-      // Transform the response
+      // OPTIMIZATION 2 & 3: No .populate() needed, no client lookup
+      // Data is already lean from aggregation (plain JS objects, not Mongoose documents)
+      
+      // Transform the response (minimal transformation needed)
+      const transformStart = Date.now();
       const response = {
         data: projects.map(project => ({
           _id: project._id,
           projectID: project.projectID,
           name: project.name,
-          department: project.department || '',
           status: project.status,
-          client: project.client?.name || '',
-          users: project.users,
-          createdAt: project.createdAt,
           d_Date: project.d_Date
         })),
         pagination: {
@@ -977,15 +1380,43 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           limit: parseInt(limit),
         }
       };
+      const transformTime = Date.now() - transformStart;
+      console.log(`[ASSIGNED-TO-ME] ⏱️  Response transformation: ${transformTime}ms`);
 
       const totalTime = Date.now() - startTime;
-      console.log(`[${userId}] getAssignedToMe completed in ${totalTime}ms (DB: ${dbTime}ms)`);
+      const breakdown = {
+        queryBuild: queryBuildTime,
+        database: dbTime,
+        transform: transformTime,
+        total: totalTime
+      };
+      
+      // Only include statusFetch if we actually fetched statuses
+      if (statusFetchTime > 0) {
+        breakdown.statusFetch = statusFetchTime;
+      }
+      
+      console.log(`[ASSIGNED-TO-ME] ⏱️  TOTAL REQUEST TIME: ${totalTime}ms`);
+      console.log(`[ASSIGNED-TO-ME] 📈 Performance breakdown:`, breakdown);
+      console.log(`[ASSIGNED-TO-ME] ✅ Request completed successfully`);
+      console.log(`${'='.repeat(80)}\n`);
+
+      // Include backend timing in response for frontend debugging
+      response._timing = {
+        backend: {
+          total: totalTime,
+          breakdown: breakdown
+        }
+      };
 
       res.json(response);
     } catch (error) {
+      const errorTime = Date.now() - startTime;
+      console.error(`[ASSIGNED-TO-ME] ❌ Database error after ${errorTime}ms:`, error.message);
       throw new Error(`Database error: ${error.message}`);
     }
   } catch (error) {
+    console.error(`[ASSIGNED-TO-ME] ❌ Request failed:`, error.message);
     res.status(500).json({ message: error.message });
   }
 });
@@ -1005,4 +1436,281 @@ router.get('/stats/dashboard', auth, checkPermission(['projects.view']), async (
   }
 });
 
-module.exports = router; 
+// Get project IDs that have active jobs or reports (optimized for reports page)
+router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view']), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const projectIdsSet = new Set();
+    // Track which conditions matched each project ID for debugging
+    const projectIdReasons = new Map(); // Map<projectId, Set<reason>>
+
+    // Use parallel queries for better performance
+    const promises = [];
+    const Job = require('../models/Job');
+    const Shift = require('../models/Shift');
+
+    // Helper function to add project ID with reason
+    const addProjectId = (projectId, reason) => {
+      if (!projectId) return;
+      const id = projectId.toString();
+      projectIdsSet.add(id);
+      if (!projectIdReasons.has(id)) {
+        projectIdReasons.set(id, new Set());
+      }
+      projectIdReasons.get(id).add(reason);
+    };
+
+    // 1. Active air monitoring jobs (status "in_progress")
+    promises.push(
+      Job.find({ status: 'in_progress' })
+        .select('projectId')
+        .lean()
+        .then((jobs) => {
+          const count = jobs.length;
+          jobs.forEach((job) => {
+            addProjectId(job.projectId, 'active_air_monitoring_jobs');
+          });
+          console.log(`[REPORTS-FILTER] Condition 1: Found ${count} active air monitoring jobs`);
+        })
+        .catch((err) => {
+          console.error('Error fetching active air monitoring jobs:', err);
+        })
+    );
+
+    // 2. Air monitoring jobs with shifts that have reports (analysis_complete or shift_complete)
+    promises.push(
+      (async () => {
+        try {
+          // First, get distinct job IDs from shifts with reports
+          const shiftsWithReports = await Shift.find({ 
+            status: { $in: ['analysis_complete', 'shift_complete'] } 
+          })
+            .select('job')
+            .lean();
+          
+          const jobIds = [...new Set(shiftsWithReports.map(s => s.job?.toString()).filter(Boolean))];
+          
+          if (jobIds.length > 0) {
+            // Then get projectIds from those jobs
+            const jobs = await Job.find({ _id: { $in: jobIds } })
+              .select('projectId')
+              .lean();
+            
+            const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
+            jobs.forEach((job) => {
+              addProjectId(job.projectId, 'shifts_with_reports');
+            });
+            console.log(`[REPORTS-FILTER] Condition 2: Found ${projectCount} projects with shifts that have reports (${jobIds.length} jobs, ${shiftsWithReports.length} shifts)`);
+          } else {
+            console.log(`[REPORTS-FILTER] Condition 2: No shifts with reports found`);
+          }
+        } catch (err) {
+          console.error('Error fetching shifts with reports:', err);
+        }
+      })()
+    );
+
+    // 3. Active asbestos removal jobs
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+          const jobs = await AsbestosRemovalJob.find({ status: 'in_progress' })
+            .select('projectId')
+            .lean();
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
+          jobs.forEach((job) => {
+            addProjectId(job.projectId, 'active_asbestos_removal_jobs');
+          });
+          console.log(`[REPORTS-FILTER] Condition 3: Found ${projectCount} projects with active asbestos removal jobs (${jobs.length} jobs)`);
+        } catch (err) {
+          console.error('Error fetching active asbestos removal jobs:', err);
+        }
+      })()
+    );
+
+    // 4. Completed asbestos removal jobs
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+          const jobs = await AsbestosRemovalJob.find({ status: 'completed' })
+            .select('projectId')
+            .lean();
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
+          jobs.forEach((job) => {
+            addProjectId(job.projectId, 'completed_asbestos_removal_jobs');
+          });
+          console.log(`[REPORTS-FILTER] Condition 4: Found ${projectCount} projects with completed asbestos removal jobs (${jobs.length} jobs)`);
+        } catch (err) {
+          console.error('Error fetching completed asbestos removal jobs:', err);
+        }
+      })()
+    );
+
+    // 5. Active client supplied jobs
+    promises.push(
+      ClientSuppliedJob.find({
+        status: { $in: ['In Progress', 'Analysis Complete'] }
+      })
+        .select('projectId')
+        .lean()
+        .then((jobs) => {
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
+          jobs.forEach((job) => {
+            addProjectId(job.projectId, 'active_client_supplied_jobs');
+          });
+          console.log(`[REPORTS-FILTER] Condition 5: Found ${projectCount} projects with active client supplied jobs (${jobs.length} jobs)`);
+        })
+        .catch((err) => {
+          console.error('Error fetching active client supplied jobs:', err);
+        })
+    );
+
+    // 6. Completed client supplied jobs (have fibre ID reports)
+    promises.push(
+      ClientSuppliedJob.find({ status: 'Completed' })
+        .select('projectId')
+        .lean()
+        .then((jobs) => {
+          const projectCount = new Set(jobs.map(j => j.projectId?.toString()).filter(Boolean)).size;
+          jobs.forEach((job) => {
+            addProjectId(job.projectId, 'completed_client_supplied_jobs');
+          });
+          console.log(`[REPORTS-FILTER] Condition 6: Found ${projectCount} projects with completed client supplied jobs (${jobs.length} jobs)`);
+        })
+        .catch((err) => {
+          console.error('Error fetching completed client supplied jobs:', err);
+        })
+    );
+
+    // 7. Projects with asbestos assessments
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+          const assessments = await AsbestosAssessment.find()
+            .select('projectId')
+            .lean();
+          const projectCount = new Set(assessments.map(a => a.projectId?.toString()).filter(Boolean)).size;
+          assessments.forEach((assessment) => {
+            addProjectId(assessment.projectId, 'asbestos_assessments');
+          });
+          console.log(`[REPORTS-FILTER] Condition 7: Found ${projectCount} projects with asbestos assessments (${assessments.length} assessments)`);
+        } catch (err) {
+          console.error('Error fetching asbestos assessments:', err);
+        }
+      })()
+    );
+
+    // 8. Projects with clearance reports
+    promises.push(
+      (async () => {
+        try {
+          const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
+          const clearances = await AsbestosClearance.find({
+            status: { $in: ['complete', 'Site Work Complete'] }
+          })
+            .select('projectId')
+            .lean();
+          const projectCount = new Set(clearances.map(c => c.projectId?.toString()).filter(Boolean)).size;
+          clearances.forEach((clearance) => {
+            addProjectId(clearance.projectId, 'clearance_reports');
+          });
+          console.log(`[REPORTS-FILTER] Condition 8: Found ${projectCount} projects with clearance reports (${clearances.length} clearances)`);
+        } catch (err) {
+          console.error('Error fetching clearance reports:', err);
+        }
+      })()
+    );
+
+    // 9. Projects with uploaded reports
+    promises.push(
+      (async () => {
+        try {
+          const UploadedReport = require('../models/UploadedReport');
+          const uploadedReports = await UploadedReport.find()
+            .select('projectId')
+            .lean();
+          const projectCount = new Set(uploadedReports.map(r => r.projectId?.toString()).filter(Boolean)).size;
+          uploadedReports.forEach((report) => {
+            addProjectId(report.projectId, 'uploaded_reports');
+          });
+          console.log(`[REPORTS-FILTER] Condition 9: Found ${projectCount} projects with uploaded reports (${uploadedReports.length} reports)`);
+        } catch (err) {
+          // UploadedReport model might not exist, ignore error
+          console.log(`[REPORTS-FILTER] Condition 9: UploadedReport model not found or error: ${err.message}`);
+        }
+      })()
+    );
+
+    // Wait for all queries to complete
+    await Promise.all(promises);
+
+    const projectIds = Array.from(projectIdsSet);
+    const queryTime = Date.now() - startTime;
+    
+    // Convert reasons map to object for logging
+    const reasonsSummary = {};
+    projectIdReasons.forEach((reasons, projectId) => {
+      reasonsSummary[projectId] = Array.from(reasons);
+    });
+
+    console.log(`[REPORTS-FILTER] Summary: Found ${projectIds.length} unique projects with reports/jobs in ${queryTime}ms`);
+    console.log(`[REPORTS-FILTER] Project reasons breakdown:`, JSON.stringify(reasonsSummary, null, 2));
+
+    res.json({ 
+      projectIds, 
+      count: projectIds.length,
+      // Include reasons for debugging (optional - can be removed if too large)
+      projectReasons: Object.fromEntries(
+        Array.from(projectIdReasons.entries()).map(([id, reasons]) => [id, Array.from(reasons)])
+      )
+    });
+  } catch (error) {
+    console.error('Error fetching project IDs with reports or jobs:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get projects by array of IDs (optimized for reports page)
+router.post('/by-ids', auth, checkPermission(['projects.view']), async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { projectIds } = req.body;
+
+    if (!Array.isArray(projectIds) || projectIds.length === 0) {
+      return res.status(400).json({ message: 'projectIds must be a non-empty array' });
+    }
+
+    // Convert string IDs to ObjectIds
+    const mongoose = require('mongoose');
+    const objectIds = projectIds
+      .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    if (objectIds.length === 0) {
+      return res.json({ data: [], count: 0 });
+    }
+
+    // Fetch projects with minimal fields for better performance
+    const projects = await Project.find({ _id: { $in: objectIds } })
+      .select('_id projectID name client status department createdAt')
+      .populate('client', 'name')
+      .lean();
+
+    const queryTime = Date.now() - startTime;
+    console.log(`[PROJECTS] Fetched ${projects.length} projects by IDs in ${queryTime}ms`);
+
+    res.json({ data: projects, count: projects.length });
+  } catch (error) {
+    console.error('Error fetching projects by IDs:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Export router as default
+module.exports = router;
+
+// Export cache invalidation function for use in other routes
+module.exports.invalidateStatusCache = invalidateStatusCache; 

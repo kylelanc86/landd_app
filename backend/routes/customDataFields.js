@@ -53,6 +53,7 @@ router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => 
     .sort({ text: 1 })
     .populate('createdBy', 'firstName lastName');
 
+
     res.json(fields);
   } catch (error) {
     console.error('Error fetching custom data fields:', error);
@@ -63,7 +64,7 @@ router.get('/:type', auth, checkPermission(['admin.view']), async (req, res) => 
 // Create new custom data field
 router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
   try {
-            const { type, text, legislationTitle, jurisdiction, isActiveStatus, statusColor } = req.body;
+    const { type, text, legislationTitle, jurisdiction, isActiveStatus, statusColor } = req.body;
     
     console.log('Creating custom data field:', { type, text, legislationTitle, jurisdiction });
     
@@ -77,7 +78,14 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
       return res.status(400).json({ message: 'Invalid type parameter' });
     }
 
-    // No duplicate checking - just create the field
+    // For legislation, ensure all required fields are provided
+    if (type === 'legislation') {
+      if (!legislationTitle || !jurisdiction) {
+        return res.status(400).json({ 
+          message: 'Legislation Title and Jurisdiction are required for legislation items' 
+        });
+      }
+    }
 
     const newFieldData = {
       type,
@@ -90,12 +98,12 @@ router.post('/', auth, checkPermission(['admin.edit']), async (req, res) => {
     if (jurisdiction) newFieldData.jurisdiction = jurisdiction.trim();
     
     // Add isActiveStatus field for project_status type
-            if (type === 'project_status' && isActiveStatus !== undefined) {
-          newFieldData.isActiveStatus = isActiveStatus;
-        }
-        if (type === 'project_status' && statusColor) {
-          newFieldData.statusColor = statusColor;
-        }
+    if (type === 'project_status' && isActiveStatus !== undefined) {
+      newFieldData.isActiveStatus = isActiveStatus;
+    }
+    if (type === 'project_status' && statusColor) {
+      newFieldData.statusColor = statusColor;
+    }
 
     const newField = new CustomDataField(newFieldData);
 

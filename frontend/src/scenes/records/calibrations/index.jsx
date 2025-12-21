@@ -3,38 +3,54 @@ import {
   Box,
   Grid,
   Typography,
-  useTheme,
-  IconButton,
   Button,
   Breadcrumbs,
   Link,
+  Tabs,
+  Tab,
 } from "@mui/material";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import { DataGrid } from "@mui/x-data-grid";
 import { tokens } from "../../../theme/tokens";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import Header from "../../../components/Header";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import { useAuth } from "../../../context/AuthContext";
+import { hasPermission } from "../../../config/permissions";
 import AirPumpCalibration from "./widgets/AirPumpCalibration";
 import FlowmeterCalibration from "./widgets/FlowmeterCalibration";
 import EFA from "./widgets/EFA";
-import MicroscopeCalibration from "./widgets/MicroscopeCalibration";
+import MicroscopeCalibration from "./widgets/PCMMicroscopeCalibration";
+import PLMMicroscopeCalibration from "./widgets/PLMMicroscopeCalibration";
+import StereomicroscopeCalibration from "./widgets/StereomicroscopeCalibration";
+import HSETestSlideCalibration from "./widgets/HSETestSlideCalibration";
 import AcetoneVaporiser from "./widgets/AcetoneVaporiser";
 import GraticuleCalibration from "./widgets/GraticuleCalibration";
 import PrimaryFlowmeter from "./widgets/PrimaryFlowmeter";
 import PureAsbestos from "./widgets/PureAsbestos";
 import RiLiquid from "./widgets/RiLiquid";
 import Sieves from "./widgets/Sieves";
+import Furnace from "./widgets/Furnace";
 
 const Calibrations = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "laboratory";
+  const { currentUser } = useAuth();
+  const [activeTab, setActiveTab] = useState(0);
 
   const handleBackToHome = () => {
-    navigate("/records");
+    navigate(`/records?view=${view}`);
   };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  // Check if user has admin access
+  const canAccessCalibrationFrequency = hasPermission(
+    currentUser,
+    "admin.access"
+  );
 
   return (
     <Box p="20px">
@@ -56,91 +72,127 @@ const Calibrations = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
+            Laboratory Records
           </Link>
           <Typography color="text.primary">Calibrations</Typography>
         </Breadcrumbs>
 
-        <Button
-          variant="contained"
-          startIcon={<ListAltIcon />}
-          onClick={() => navigate("/records/laboratory/equipment")}
-          sx={{
-            backgroundColor: tokens.primary[700],
-            color: tokens.grey[100],
-            fontSize: "14px",
-            fontWeight: "bold",
-            padding: "10px 20px",
-            "&:hover": {
-              backgroundColor: tokens.primary[800],
-            },
-          }}
-        >
-          Equipment List
-        </Button>
+        <Box display="flex" gap={2}>
+          {canAccessCalibrationFrequency && (
+            <Button
+              variant="contained"
+              startIcon={<ScheduleIcon />}
+              onClick={() =>
+                navigate("/records/laboratory/calibrations/frequency")
+              }
+              sx={{
+                backgroundColor: "#357ECA",
+                color: tokens.grey[100],
+                fontSize: "14px",
+                fontWeight: "bold",
+                padding: "10px 20px",
+                "&:hover": {
+                  backgroundColor: "#3D3DC2",
+                },
+              }}
+            >
+              Calibration Frequency
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<ListAltIcon />}
+            onClick={() => navigate("/records/laboratory/equipment")}
+            sx={{
+              backgroundColor: tokens.primary[700],
+              color: tokens.grey[100],
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                backgroundColor: tokens.primary[800],
+              },
+            }}
+          >
+            Equipment List
+          </Button>
+        </Box>
       </Box>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6} lg={4}>
-          <AirPumpCalibration
-            nextCalibrationDue="2024-03-15"
-            viewCalibrationsPath="/records/laboratory/calibrations/air-pump"
-          />
+
+      {/* Tabs */}
+      <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+        <Tabs value={activeTab} onChange={handleTabChange}>
+          <Tab label="Internal Calibrations" />
+          <Tab label="External Calibrations/Servicing" />
+        </Tabs>
+      </Box>
+
+      {/* Tab Panels */}
+      {activeTab === 0 && (
+        <Grid container spacing={3}>
+          {/* Air Monitors */}
+          <Grid item xs={12} md={6} lg={4}>
+            <AirPumpCalibration viewCalibrationsPath="/records/laboratory/calibrations/air-pump" />
+          </Grid>
+          {/* Site Rotameters */}
+          <Grid item xs={12} md={6} lg={4}>
+            <FlowmeterCalibration viewCalibrationsPath="/records/laboratory/calibrations/flowmeter" />
+          </Grid>
+          {/* Acetone Vaporiser */}
+          <Grid item xs={12} md={6} lg={4}>
+            <AcetoneVaporiser viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser" />
+          </Grid>
+          {/* RI Liquids */}
+          <Grid item xs={12} md={6} lg={4}>
+            <RiLiquid viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid" />
+          </Grid>
+          {/* PCM Graticules */}
+          <Grid item xs={12} md={6} lg={4}>
+            <GraticuleCalibration viewCalibrationsPath="/records/laboratory/calibrations/graticule" />
+          </Grid>
+          {/* Effective Filter Area */}
+          <Grid item xs={12} md={6} lg={4}>
+            <EFA viewCalibrationsPath="/records/laboratory/calibrations/efa" />
+          </Grid>
         </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <FlowmeterCalibration
-            nextCalibrationDue="2024-03-20"
-            viewCalibrationsPath="/records/laboratory/calibrations/flowmeter"
-          />
+      )}
+
+      {activeTab === 1 && (
+        <Grid container spacing={3}>
+          {/* PCM Microscope */}
+          <Grid item xs={12} md={6} lg={4}>
+            <MicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/microscope" />
+          </Grid>
+          {/* PLM Microscope */}
+          <Grid item xs={12} md={6} lg={4}>
+            <PLMMicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/plm-microscope" />
+          </Grid>
+          {/* Stereomicroscope */}
+          <Grid item xs={12} md={6} lg={4}>
+            <StereomicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope" />
+          </Grid>
+          {/* HSE Test Slide */}
+          <Grid item xs={12} md={6} lg={4}>
+            <HSETestSlideCalibration viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide" />
+          </Grid>
+          {/* Primary Flowmeter */}
+          <Grid item xs={12} md={6} lg={4}>
+            <PrimaryFlowmeter viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter" />
+          </Grid>
+          {/* Sieves */}
+          <Grid item xs={12} md={6} lg={4}>
+            <Sieves viewCalibrationsPath="/records/laboratory/calibrations/sieves" />
+          </Grid>
+          {/* Pure Asbestos */}
+          <Grid item xs={12} md={6} lg={4}>
+            <PureAsbestos viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos" />
+          </Grid>
+          {/* Furnace */}
+          <Grid item xs={12} md={6} lg={4}>
+            <Furnace viewCalibrationsPath="/records/laboratory/calibrations/furnace" />
+          </Grid>
         </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <EFA
-            nextCalibrationDue="2024-03-25"
-            viewCalibrationsPath="/records/laboratory/calibrations/efa"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <MicroscopeCalibration
-            nextCalibrationDue="2024-03-30"
-            viewCalibrationsPath="/records/laboratory/calibrations/microscope"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <AcetoneVaporiser
-            nextCalibrationDue="2024-04-05"
-            viewCalibrationsPath="/records/laboratory/calibrations/acetone-vaporiser"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <GraticuleCalibration
-            nextCalibrationDue="2024-04-10"
-            viewCalibrationsPath="/records/laboratory/calibrations/graticule"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <PrimaryFlowmeter
-            nextCalibrationDue="2024-04-15"
-            viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <PureAsbestos
-            nextCalibrationDue="2024-04-20"
-            viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <RiLiquid
-            nextCalibrationDue="2024-04-25"
-            viewCalibrationsPath="/records/laboratory/calibrations/ri-liquid"
-          />
-        </Grid>
-        <Grid item xs={12} md={6} lg={4}>
-          <Sieves
-            nextCalibrationDue="2024-04-30"
-            viewCalibrationsPath="/records/laboratory/calibrations/sieves"
-          />
-        </Grid>
-      </Grid>
+      )}
     </Box>
   );
 };

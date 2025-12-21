@@ -118,7 +118,7 @@ Each template in the unified collection contains:
 
 1. **Single Source of Truth**: All templates in one collection
 2. **Easier Management**: Unified admin interface
-3. **Consistent Schema**: Standardized structure across all template types
+3. **Consistent Schema**: Standardised structure across all template types
 4. **Better Performance**: Single collection queries instead of multiple
 5. **Simplified Maintenance**: One model to maintain instead of five
 6. **Easier Scaling**: Adding new template types is straightforward

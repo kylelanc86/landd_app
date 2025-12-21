@@ -1,10 +1,5 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -30,19 +25,21 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Snackbar,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Collapse,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ErrorIcon from "@mui/icons-material/Error";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import { projectService, clientService, userService } from "../../services/api";
 import ProjectAuditService from "../../services/projectAuditService";
@@ -51,6 +48,10 @@ import { hasPermission } from "../../config/permissions";
 import { usePermissions } from "../../hooks/usePermissions";
 import ProjectLogModalWrapper from "../reports/ProjectLogModalWrapper";
 import { StatusChip } from "../../components/JobStatus";
+import {
+  addProjectToCache,
+  removeProjectFromCache,
+} from "../../utils/reportsCache";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import loadGoogleMapsApi from "../../utils/loadGoogleMapsApi";
 import {
@@ -127,13 +128,13 @@ const ProjectInformation = () => {
   const [users, setUsers] = useState([]);
   const [newClientDialogOpen, setNewClientDialogOpen] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
+  const [clientDetailsDialogOpen, setClientDetailsDialogOpen] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientDetails, setClientDetails] = useState(null);
+  const [loadingClientDetails, setLoadingClientDetails] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   // Error dialog state
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
@@ -143,6 +144,13 @@ const ProjectInformation = () => {
   const [auditTrail, setAuditTrail] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState(null);
+  const [auditTrailExpanded, setAuditTrailExpanded] = useState(false);
+  const auditTrailRef = useRef(null);
+
+  // Function to handle audit trail expand/collapse
+  const handleAuditTrailToggle = () => {
+    setAuditTrailExpanded(!auditTrailExpanded);
+  };
 
   // State for tracking form changes and confirmation dialog
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -182,6 +190,7 @@ const ProjectInformation = () => {
     users: [],
     categories: [],
     notes: "",
+    budget: 0,
     isLargeProject: false,
     projectContact: {
       name: "",
@@ -413,13 +422,13 @@ const ProjectInformation = () => {
   const [placesService, setPlacesService] = useState(null);
   const [googleMaps, setGoogleMaps] = useState(null);
   const [googleMapsError, setGoogleMapsError] = useState(null);
+  const placesServiceDivRef = useRef(null);
 
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [isClientSearching, setIsClientSearching] = useState(false);
-  const [isGeneratingId, setIsGeneratingId] = useState(false);
-  const [idGenerated, setIdGenerated] = useState(false);
-  const isGeneratingRef = useRef(false);
+  // Removed: Frontend project ID generation
+  // Project IDs are now generated on the backend during save
   const formRef = useRef(form);
 
   // Get project statuses from custom data fields
@@ -550,101 +559,8 @@ const ProjectInformation = () => {
     return { active: [], inactive: [] };
   };
 
-  const generateNextProjectId = useCallback(async () => {
-    try {
-      const response = await projectService.getAll();
-
-      // Handle nested response structure where projects might be in response.data.data
-      const projects = response.data?.data || response.data;
-
-      // Log sample project structure
-      if (projects && Array.isArray(projects) && projects.length > 0) {
-      } else {
-      }
-
-      // Ensure we have a valid projects array
-      if (!Array.isArray(projects)) {
-        throw new Error("Invalid projects data structure received from API");
-      }
-
-      if (form.isLargeProject) {
-        // Generate HAZ prefix for large projects
-        const largeProjects = projects.filter(
-          (p) => p.projectID && p.projectID.startsWith("HAZ")
-        );
-
-        const lastLargeProject = largeProjects.sort((a, b) => {
-          const numA = parseInt(a.projectID.slice(3));
-          const numB = parseInt(b.projectID.slice(3));
-          return numB - numA;
-        })[0];
-
-        const nextNum = lastLargeProject
-          ? parseInt(lastLargeProject.projectID.slice(3)) + 1
-          : 1;
-
-        const nextId = `HAZ${String(nextNum).padStart(3, "0")}`;
-        return nextId;
-      } else {
-        // Generate LDJ prefix for regular projects
-        const regularProjects = projects.filter(
-          (p) => p.projectID && p.projectID.startsWith("LDJ")
-        );
-
-        const lastProject = regularProjects.sort((a, b) => {
-          const numA = parseInt(a.projectID.slice(3));
-          const numB = parseInt(b.projectID.slice(3));
-          return numB - numA;
-        })[0];
-
-        const nextNum = lastProject
-          ? parseInt(lastProject.projectID.slice(3)) + 1
-          : 1;
-
-        const nextId = `LDJ${String(nextNum).padStart(5, "0")}`;
-        return nextId;
-      }
-    } catch (error) {
-      throw new Error("Failed to generate project ID");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.isLargeProject]);
-
-  // Generate project ID immediately when page loads (for add mode only)
-  const generateInitialProjectId = useCallback(async () => {
-    if (
-      isEditMode ||
-      idGenerated ||
-      isGeneratingId ||
-      isGeneratingRef.current
-    ) {
-      return;
-    }
-
-    try {
-      isGeneratingRef.current = true;
-      setIsGeneratingId(true);
-      const nextId = await generateNextProjectId();
-
-      setForm((prev) => ({ ...prev, projectID: nextId }));
-      setIdGenerated(true);
-
-      // Original form will be set when change detection is enabled
-    } catch (error) {
-      // Don't show error to user, will fall back to generation on submit
-      setIdGenerated(false);
-    } finally {
-      isGeneratingRef.current = false;
-      setIsGeneratingId(false);
-    }
-  }, [isEditMode, idGenerated, isGeneratingId, generateNextProjectId]);
-
-  useEffect(() => {
-    // Generate project ID immediately for add mode
-    if (!isEditMode) {
-      generateInitialProjectId();
-    }
-  }, [isEditMode, generateInitialProjectId]);
+  // Removed: Frontend project ID generation
+  // Project IDs are now generated by the backend during save
 
   // Enable change detection after a delay to allow initial form setup
   useEffect(() => {
@@ -652,23 +568,16 @@ const ProjectInformation = () => {
       // For edit mode, enable immediately since data is already loaded
       setChangeDetectionEnabled(true);
     } else {
-      // For add mode, delay to allow initial setup (project ID generation, default values, etc.)
+      // For add mode, delay to allow default values to be set
       const timer = setTimeout(() => {
         // Set original form now that initialization is complete
         setOriginalForm(JSON.parse(JSON.stringify(formRef.current)));
         setChangeDetectionEnabled(true);
-      }, 2000); // 2 second delay
+      }, 1000); // 1 second delay (reduced since we're not generating IDs)
 
       return () => clearTimeout(timer);
     }
   }, [isEditMode]); // Removed form dependency to prevent multiple original form updates
-
-  // Regenerate ID when large project setting changes (only for add mode)
-  useEffect(() => {
-    if (!isEditMode && form.isLargeProject !== undefined) {
-      generateInitialProjectId();
-    }
-  }, [form.isLargeProject, isEditMode, generateInitialProjectId]);
 
   // Function to fetch audit trail
   const fetchAuditTrail = async (projectId) => {
@@ -776,13 +685,31 @@ const ProjectInformation = () => {
 
       try {
         const google = await loadGoogleMapsApi(apiKey);
+
+        // Verify Google Maps API is fully loaded
+        if (!google || !google.maps || !google.maps.places) {
+          throw new Error("Google Maps Places API is not available");
+        }
+
         setGoogleMaps(google);
+
+        // Create a proper DOM element for PlacesService that's attached to the document
+        // This is required for PlacesService to work properly
+        if (!placesServiceDivRef.current) {
+          const div = document.createElement("div");
+          div.style.display = "none";
+          div.style.visibility = "hidden";
+          div.style.position = "absolute";
+          div.style.top = "-9999px";
+          document.body.appendChild(div);
+          placesServiceDivRef.current = div;
+        }
 
         // Initialize the autocomplete service
         const autocompleteService =
           new google.maps.places.AutocompleteService();
         const placesService = new google.maps.places.PlacesService(
-          document.createElement("div")
+          placesServiceDivRef.current
         );
 
         setAutocompleteService(autocompleteService);
@@ -790,13 +717,29 @@ const ProjectInformation = () => {
 
         setGoogleMapsError(null); // Clear any previous errors
       } catch (error) {
+        console.error("Error initializing Google Maps Places API:", error);
         setGoogleMapsError(
-          "Error loading Google Maps. Please try refreshing the page."
+          `Error loading Google Maps: ${
+            error.message || "Please try refreshing the page."
+          }`
         );
       }
     };
 
     initializeGoogleMaps();
+
+    // Cleanup: remove the PlacesService div when component unmounts
+    return () => {
+      if (
+        placesServiceDivRef.current &&
+        placesServiceDivRef.current.parentNode
+      ) {
+        placesServiceDivRef.current.parentNode.removeChild(
+          placesServiceDivRef.current
+        );
+        placesServiceDivRef.current = null;
+      }
+    };
   }, []);
 
   // Sync addressInput with form address when editing
@@ -812,7 +755,19 @@ const ProjectInformation = () => {
     // Always update the form state, even for empty values
     setForm((prev) => ({ ...prev, address: value }));
 
-    if (!value || value.length < 2 || !autocompleteService || !googleMaps) {
+    if (!value || value.length < 2) {
+      setAddressOptions([]);
+      return;
+    }
+
+    // Verify services are available
+    if (
+      !autocompleteService ||
+      !googleMaps ||
+      !googleMaps.maps ||
+      !googleMaps.maps.places
+    ) {
+      console.warn("Google Maps Places API is not available");
       setAddressOptions([]);
       return;
     }
@@ -834,15 +789,28 @@ const ProjectInformation = () => {
             // Enhanced error handling with specific status messages
             switch (status) {
               case googleMaps.maps.places.PlacesServiceStatus.ZERO_RESULTS:
+                // No results found - this is normal, not an error
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
                 console.error(
                   "REQUEST_DENIED: API key may be invalid or have restrictions"
                 );
-                console.error("Check Google Cloud Console API key settings");
+                console.error("Check Google Cloud Console API key settings:");
+                console.error("1. Verify API key is correct");
+                console.error("2. Ensure Places API is enabled");
+                console.error(
+                  "3. Check API key restrictions (HTTP referrers, IP addresses)"
+                );
+                console.error("4. Verify billing is enabled");
+                setGoogleMapsError(
+                  "Address search is unavailable. Please check API configuration."
+                );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT:
                 console.error("OVER_QUERY_LIMIT: API quota exceeded");
+                setGoogleMapsError(
+                  "Address search quota exceeded. Please try again later."
+                );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.INVALID_REQUEST:
                 console.error(
@@ -865,6 +833,9 @@ const ProjectInformation = () => {
       console.error("Error fetching address predictions:", error);
       setAddressOptions([]);
       setIsAddressLoading(false);
+      setGoogleMapsError(
+        "Error fetching address suggestions. Please try again."
+      );
     }
   };
 
@@ -900,7 +871,19 @@ const ProjectInformation = () => {
 
   // Handle new client address input change for autocomplete
   const handleNewClientAddressInputChange = async (value) => {
-    if (!autocompleteService || !value || value.length < 2) {
+    if (!value || value.length < 2) {
+      setNewClientAddressOptions([]);
+      return;
+    }
+
+    // Verify services are available
+    if (
+      !autocompleteService ||
+      !googleMaps ||
+      !googleMaps.maps ||
+      !googleMaps.maps.places
+    ) {
+      console.warn("Google Maps Places API is not available");
       setNewClientAddressOptions([]);
       return;
     }
@@ -927,6 +910,16 @@ const ProjectInformation = () => {
             console.log("Setting new client address options:", predictions);
             setNewClientAddressOptions(predictions);
           } else {
+            // Handle errors similar to main address handler
+            if (
+              status ===
+              googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED
+            ) {
+              console.error("REQUEST_DENIED for new client address");
+              setGoogleMapsError(
+                "Address search is unavailable. Please check API configuration."
+              );
+            }
             console.log(
               "No new client address predictions found or error:",
               status
@@ -940,6 +933,9 @@ const ProjectInformation = () => {
       console.error("Error fetching new client address predictions:", error);
       setNewClientAddressOptions([]);
       setIsNewClientAddressLoading(false);
+      setGoogleMapsError(
+        "Error fetching address suggestions. Please try again."
+      );
     }
   };
 
@@ -1017,6 +1013,24 @@ const ProjectInformation = () => {
       ...prev,
       client: newValue,
     }));
+  };
+
+  const handleClientClick = async (client) => {
+    if (!client || !client._id) return;
+
+    setSelectedClient(client);
+    setClientDetailsDialogOpen(true);
+    setLoadingClientDetails(true);
+
+    try {
+      const response = await clientService.getById(client._id);
+      setClientDetails(response.data);
+    } catch (error) {
+      console.error("Error fetching client details:", error);
+      showSnackbar("Failed to load client details", "error");
+    } finally {
+      setLoadingClientDetails(false);
+    }
   };
 
   const searchClients = async (searchTerm) => {
@@ -1101,7 +1115,12 @@ const ProjectInformation = () => {
     setRefreshDialogOpen(false);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSaveAndContinue = async (e) => {
+    e.preventDefault();
+    await handleSubmit(e, false); // Pass false to indicate don't navigate away
+  };
+
+  const handleSubmit = async (e, shouldNavigate = true) => {
     e.preventDefault();
 
     // Prevent multiple submissions
@@ -1237,87 +1256,23 @@ const ProjectInformation = () => {
         const createStartTime = performance.now();
         console.log("🆕 PROJECT CREATE START", {
           timestamp: new Date().toISOString(),
-          hasPreGeneratedId: !!form.projectID,
         });
 
-        console.log("🔍 Creating new project");
-        console.log("🔍 Form before Project ID generation:", form);
-        console.log("🔍 Form structure before ID generation:", {
-          projectID: form.projectID,
-          _id: form._id,
-          hasProjectID: !!form.projectID,
-          hasId: !!form._id,
-        });
+        console.log(
+          "🔍 Creating new project (ID will be generated by backend)"
+        );
 
-        // Use pre-generated ID or generate one as fallback
-        let projectId = form.projectID;
-        let idGenerationTime = 0;
-
-        if (!projectId) {
-          console.log("🔍 No pre-generated ID, generating now...");
-          const idStartTime = performance.now();
-          projectId = await generateNextProjectId();
-          idGenerationTime = performance.now() - idStartTime;
-          console.log("🔍 Generated Project ID:", projectId);
-          console.log(
-            "⏱️ ID Generation Time:",
-            `${idGenerationTime.toFixed(2)}ms`
-          );
-        } else {
-          console.log("🔍 Using pre-generated Project ID:", projectId);
-        }
-
-        const formWithId = { ...form, projectID: projectId };
-        console.log("🔍 Form with Project ID:", formWithId);
-        console.log("🔍 Form with ID structure:", {
-          projectID: formWithId.projectID,
-          _id: formWithId._id,
-          hasProjectID: !!formWithId.projectID,
-          hasId: !!formWithId._id,
-          allKeys: Object.keys(formWithId),
-        });
-
-        // Verify project ID is still unique before creating
-        console.log("🔍 Verifying project ID uniqueness...");
-        try {
-          const projects = await projectService.getAll();
-          const existingProjects = projects.data?.data || projects.data;
-          const isDuplicate = existingProjects.some(
-            (p) => p.projectID === projectId
-          );
-
-          if (isDuplicate) {
-            console.log("🔍 Project ID is duplicate, generating new one...");
-            const idStartTime = performance.now();
-            projectId = await generateNextProjectId();
-            idGenerationTime = performance.now() - idStartTime;
-            console.log("🔍 Generated new Project ID:", projectId);
-            console.log(
-              "⏱️ ID Generation Time:",
-              `${idGenerationTime.toFixed(2)}ms`
-            );
-
-            // Update form with new ID
-            formWithId.projectID = projectId;
-          } else {
-            console.log("🔍 Project ID is unique, proceeding with creation");
-          }
-        } catch (error) {
-          console.warn(
-            "🔍 Could not verify uniqueness, proceeding with current ID:",
-            error.message
-          );
-        }
+        // Remove projectID from form if it exists (shouldn't for new projects)
+        const { projectID, ...formToSubmit } = form;
 
         console.log("🔍 Calling projectService.create...");
         const apiStartTime = performance.now();
-        const response = await projectService.create(formWithId);
+        const response = await projectService.create(formToSubmit);
         const apiEndTime = performance.now();
 
         console.log("✅ PROJECT CREATE API COMPLETE", {
-          projectId: projectId,
+          projectId: response.data?.projectID,
           apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
-          idGenerationTime: `${idGenerationTime.toFixed(2)}ms`,
           totalTime: `${(apiEndTime - createStartTime).toFixed(2)}ms`,
           responseSize: JSON.stringify(response).length,
         });
@@ -1330,9 +1285,19 @@ const ProjectInformation = () => {
           responseId: response.data?._id,
         });
 
-        // Navigate to projects page after successful creation
-        navigate("/projects");
-        return; // Exit early to avoid the navigate("/projects") call
+        // Update form with returned project ID so it's displayed immediately
+        if (response.data?.projectID) {
+          setForm((prev) => ({ ...prev, projectID: response.data.projectID }));
+
+          // Update reports cache with new project (pass full project object)
+          addProjectToCache(response.data);
+        }
+
+        // Navigate to projects page after successful creation if shouldNavigate is true
+        if (shouldNavigate) {
+          navigate("/projects");
+        }
+        return; // Exit early
       }
 
       const operationEndTime = performance.now();
@@ -1347,13 +1312,12 @@ const ProjectInformation = () => {
       console.log("🔍 Success!");
 
       // Show success message
-      setSnackbar({
-        open: true,
-        message: isEditMode
+      showSnackbar(
+        isEditMode
           ? "Project updated successfully!"
           : "Project created successfully!",
-        severity: "success",
-      });
+        "success"
+      );
 
       // Reset unsaved changes flag and update original form
       setHasUnsavedChanges(false);
@@ -1361,8 +1325,10 @@ const ProjectInformation = () => {
         setOriginalForm(JSON.parse(JSON.stringify(form)));
         // Refresh audit trail after update
         await fetchAuditTrail(form._id);
-        // Navigate to projects page after successful update
-        navigate("/projects");
+        // Navigate to projects page after successful update if shouldNavigate is true
+        if (shouldNavigate) {
+          navigate("/projects");
+        }
       }
     } catch (error) {
       const operationEndTime = performance.now();
@@ -1430,20 +1396,15 @@ const ProjectInformation = () => {
         paymentTerms: "Standard (30 days)",
         written_off: false,
       });
-      setSnackbar({
-        open: true,
-        message: "Client created successfully!",
-        severity: "success",
-      });
+      showSnackbar("Client created successfully!", "success");
     } catch (err) {
       console.error("Error creating client:", err);
-      setSnackbar({
-        open: true,
-        message: `Error creating client: ${
+      showSnackbar(
+        `Error creating client: ${
           err.response?.data?.message || "Unknown error"
         }`,
-        severity: "error",
-      });
+        "error"
+      );
     } finally {
       setCreatingClient(false);
     }
@@ -1480,6 +1441,17 @@ const ProjectInformation = () => {
       }
 
       console.log("✅ PROJECT DELETE SUCCESS", { projectId: id });
+
+      // Update reports cache - remove deleted project
+      try {
+        const project = await projectService.getById(id);
+        if (project.data?.projectID) {
+          removeProjectFromCache(project.data.projectID);
+        }
+      } catch (cacheError) {
+        console.error("Error updating cache after delete:", cacheError);
+      }
+
       // Success - navigate to projects list
       navigate("/projects");
     } catch (error) {
@@ -1600,15 +1572,20 @@ const ProjectInformation = () => {
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <Typography variant="h6" color="text.secondary">
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontSize: "1.56rem",
+                      color: "#2e7d32",
+                      fontWeight: 500,
+                    }}
+                  >
                     Project ID:{" "}
                     {isEditMode
                       ? form.projectID
                       : form.projectID
                       ? form.projectID
-                      : isGeneratingId
-                      ? "Generating..."
-                      : "Will be auto-generated"}
+                      : "Generated on Save"}
                   </Typography>
                   {!isEditMode && (
                     <Typography
@@ -1618,9 +1595,7 @@ const ProjectInformation = () => {
                     >
                       {form.projectID
                         ? "(Ready)"
-                        : isGeneratingId
-                        ? "(Generating...)"
-                        : "(Auto-generated)"}
+                        : "(Will be generated on save)"}
                     </Typography>
                   )}
                   {isEditMode && form.createdAt && (
@@ -1755,6 +1730,17 @@ const ProjectInformation = () => {
                         label="Client"
                         required
                         placeholder="Start typing to search clients..."
+                        onClick={() => {
+                          if (form.client) {
+                            handleClientClick(form.client);
+                          }
+                        }}
+                        sx={{
+                          cursor: form.client ? "pointer" : "default",
+                          "& .MuiInputBase-input": {
+                            cursor: form.client ? "pointer" : "default",
+                          },
+                        }}
                         InputProps={{
                           ...params.InputProps,
                           endAdornment: (
@@ -1767,6 +1753,11 @@ const ProjectInformation = () => {
                           ),
                         }}
                       />
+                    )}
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props}>
+                        <Typography variant="body2">{option.name}</Typography>
+                      </Box>
                     )}
                   />
                   <Button
@@ -1856,7 +1847,8 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              {/* Due Date, Status, and Work Order on same line */}
+              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   label="Due Date"
@@ -1874,25 +1866,7 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Department</InputLabel>
-                  <Select
-                    name="department"
-                    value={form.department}
-                    onChange={handleChange}
-                    label="Department"
-                  >
-                    {DEPARTMENTS.map((dept) => (
-                      <MenuItem key={dept} value={dept}>
-                        {dept}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <FormControl fullWidth required>
                   <InputLabel>Status</InputLabel>
                   <Select
@@ -1938,6 +1912,36 @@ const ProjectInformation = () => {
                 </FormControl>
               </Grid>
 
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Work Order/Job Reference"
+                  name="workOrder"
+                  value={form.workOrder}
+                  onChange={handleChange}
+                  placeholder="Enter work order or job reference number"
+                />
+              </Grid>
+
+              {/* Department and Categories on next line */}
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Department</InputLabel>
+                  <Select
+                    name="department"
+                    value={form.department}
+                    onChange={handleChange}
+                    label="Department"
+                  >
+                    {DEPARTMENTS.map((dept) => (
+                      <MenuItem key={dept} value={dept}>
+                        {dept}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
               <Grid item xs={12} md={6}>
                 <Autocomplete
                   multiple
@@ -1964,14 +1968,16 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Work Order/Job Reference"
-                  name="workOrder"
-                  value={form.workOrder}
+                  label="Project Budget ($)"
+                  name="budget"
+                  type="number"
+                  value={form.budget || 0}
                   onChange={handleChange}
-                  placeholder="Enter work order or job reference number"
+                  inputProps={{ min: 0, step: 0.01 }}
+                  helperText="Budget amount for project cost tracking and reporting"
                 />
               </Grid>
 
@@ -1983,20 +1989,31 @@ const ProjectInformation = () => {
                   value={form.notes}
                   onChange={handleChange}
                   multiline
-                  rows={4}
+                  rows={6}
+                  InputProps={{
+                    sx: {
+                      fontSize: "0.875rem",
+                      lineHeight: 1.3,
+                    },
+                  }}
+                  InputLabelProps={{
+                    sx: {
+                      fontSize: "0.875rem",
+                    },
+                  }}
                 />
               </Grid>
 
               <Grid item xs={12}>
                 <Typography
                   variant="subtitle1"
-                  sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  sx={{ mt: 1, mb: 0, fontWeight: "bold" }}
                 >
                   Project Contact
                 </Typography>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
                 <TextField
                   fullWidth
                   label="Contact Name"
@@ -2007,7 +2024,7 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
                 <TextField
                   fullWidth
                   label="Contact Number"
@@ -2018,7 +2035,7 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
                 <TextField
                   fullWidth
                   label="Contact Email"
@@ -2033,13 +2050,13 @@ const ProjectInformation = () => {
               <Grid item xs={12}>
                 <Typography
                   variant="subtitle1"
-                  sx={{ mt: 2, mb: 1, fontWeight: "bold" }}
+                  sx={{ mt: 1, mb: 0, fontWeight: "bold" }}
                 >
                   Project Team
                 </Typography>
               </Grid>
 
-              <Grid item xs={12}>
+              <Grid item xs={12} sx={{ pt: 0.5 }}>
                 <Autocomplete
                   multiple
                   options={users}
@@ -2102,12 +2119,20 @@ const ProjectInformation = () => {
                       Cancel
                     </Button>
                     <Button
+                      variant="outlined"
+                      color="primary"
+                      onClick={handleSaveAndContinue}
+                      disabled={saving}
+                    >
+                      Save and Continue
+                    </Button>
+                    <Button
                       type="submit"
                       variant="contained"
                       color="primary"
                       disabled={saving}
                     >
-                      {isEditMode ? "Update Project" : "Create Project"}
+                      {isEditMode ? "Update and Exit" : "Create and Exit"}
                     </Button>
                   </Box>
                 </Box>
@@ -2751,148 +2776,148 @@ const ProjectInformation = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        sx={{
-          position: "fixed",
-          zIndex: 9999999,
-          bottom: "20px !important",
-          right: "20px !important",
-          left: "252px !important", // 232px sidebar width + 20px margin
-          transform: "none !important",
-          width: "auto",
-          maxWidth: "400px",
-        }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-
       {/* Project Audit Trail */}
       {isEditMode && (
-        <Paper sx={{ p: 3, mt: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Project History
-          </Typography>
-
-          {auditLoading ? (
-            <Box display="flex" justifyContent="center" p={2}>
-              <CircularProgress />
-            </Box>
-          ) : auditError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {auditError}
-            </Alert>
-          ) : auditTrail.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No history available for this project.
+        <Box
+          ref={auditTrailRef}
+          sx={{
+            p: 3,
+            mt: 3,
+            backgroundColor: "#e8f5e8",
+            borderRadius: 1,
+            boxShadow: 1,
+          }}
+        >
+          <Box
+            display="flex"
+            alignItems="center"
+            sx={{ cursor: "pointer" }}
+            onClick={handleAuditTrailToggle}
+          >
+            <Typography variant="h6" gutterBottom sx={{ flexGrow: 1, mb: 0 }}>
+              Project History
             </Typography>
-          ) : (
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: "bold" }}>Event</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Details</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>User Name</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {auditTrail
-                    .sort(
-                      (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-                    )
-                    .map((entry, index) => {
-                      // Format the event name
-                      const getEventName = () => {
-                        if (entry.action === "created")
-                          return "Project Created";
-                        if (entry.action === "status_changed")
-                          return "Status Changed";
-                        if (entry.action === "updated")
-                          return `${entry.field} Updated`;
-                        return entry.action || "Unknown Event";
-                      };
+            <IconButton size="small">
+              {auditTrailExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
 
-                      // Format the details
-                      const getDetails = () => {
-                        if (entry.action === "status_changed") {
-                          return `${entry.oldValue || "Not set"} → ${
-                            entry.newValue
-                          }`;
-                        }
-                        if (entry.action === "updated") {
-                          return `${entry.oldValue || "Not set"} → ${
-                            entry.newValue
-                          }`;
-                        }
-                        if (entry.action === "created") {
-                          return "Project was created";
-                        }
-                        return entry.newValue || "No details available";
-                      };
+          <Collapse in={auditTrailExpanded}>
+            {auditLoading ? (
+              <Box display="flex" justifyContent="center" p={2}>
+                <CircularProgress />
+              </Box>
+            ) : auditError ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {auditError}
+              </Alert>
+            ) : auditTrail.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No history available for this project.
+              </Typography>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: "bold" }}>Event</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Details</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        User Name
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {auditTrail
+                      .sort(
+                        (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+                      )
+                      .map((entry, index) => {
+                        // Format the event name
+                        const getEventName = () => {
+                          if (entry.action === "created")
+                            return "Project Created";
+                          if (entry.action === "status_changed")
+                            return "Status Changed";
+                          if (entry.action === "updated")
+                            return `${entry.field} Updated`;
+                          return entry.action || "Unknown Event";
+                        };
 
-                      // Format the user name
-                      const getUserName = () => {
-                        if (entry.changedBy) {
-                          return `${entry.changedBy.firstName} ${entry.changedBy.lastName}`;
-                        }
-                        return "System";
-                      };
+                        // Format the details
+                        const getDetails = () => {
+                          if (entry.action === "status_changed") {
+                            return `${entry.oldValue || "Not set"} → ${
+                              entry.newValue
+                            }`;
+                          }
+                          if (entry.action === "updated") {
+                            return `${entry.oldValue || "Not set"} → ${
+                              entry.newValue
+                            }`;
+                          }
+                          if (entry.action === "created") {
+                            return "Project was created";
+                          }
+                          return entry.newValue || "No details available";
+                        };
 
-                      return (
-                        <TableRow key={entry._id || index} hover>
-                          <TableCell>
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: "medium" }}
-                            >
-                              {getEventName()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {new Date(entry.timestamp).toLocaleDateString(
-                                "en-AU",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                }
-                              )}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {getDetails()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="text.secondary">
-                              {getUserName()}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Paper>
+                        // Format the user name
+                        const getUserName = () => {
+                          if (entry.changedBy) {
+                            return `${entry.changedBy.firstName} ${entry.changedBy.lastName}`;
+                          }
+                          return "System";
+                        };
+
+                        return (
+                          <TableRow key={entry._id || index} hover>
+                            <TableCell>
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: "medium" }}
+                              >
+                                {getEventName()}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {new Date(entry.timestamp).toLocaleDateString(
+                                  "en-AU",
+                                  {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: true,
+                                  }
+                                )}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {getDetails()}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                {getUserName()}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Collapse>
+        </Box>
       )}
 
       {/* Project Log Modal */}
@@ -2903,6 +2928,257 @@ const ProjectInformation = () => {
           project={form}
         />
       )}
+
+      {/* Client Details Dialog */}
+      <Dialog
+        open={clientDetailsDialogOpen}
+        onClose={() => setClientDetailsDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+              {selectedClient?.name?.charAt(0) || "C"}
+            </Typography>
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Client Details
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          {loadingClientDetails ? (
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              minHeight="200px"
+            >
+              <CircularProgress />
+            </Box>
+          ) : clientDetails ? (
+            <Stack spacing={3}>
+              {/* Basic Information */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: "primary.main" }}>
+                  Basic Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Client Name
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.name || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Invoice Email
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.invoiceEmail || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Payment Terms
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.paymentTerms || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Status
+                    </Typography>
+                    <Chip
+                      label={clientDetails.isActive ? "Active" : "Inactive"}
+                      color={clientDetails.isActive ? "success" : "default"}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+
+              {/* Primary Contact */}
+              {(clientDetails.contact1Name ||
+                clientDetails.contact1Phone ||
+                clientDetails.contact1Email) && (
+                <Box>
+                  <Typography
+                    variant="h6"
+                    sx={{ mb: 2, color: "primary.main" }}
+                  >
+                    Primary Contact
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Name
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact1Name || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Phone
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact1Phone || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Email
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact1Email || "Not specified"}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Secondary Contact */}
+              {(clientDetails.contact2Name ||
+                clientDetails.contact2Phone ||
+                clientDetails.contact2Email) && (
+                <Box>
+                  <Typography
+                    variant="h6"
+                    sx={{ mb: 2, color: "primary.main" }}
+                  >
+                    Secondary Contact
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Name
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact2Name || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Phone
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact2Phone || "Not specified"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        Email
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {clientDetails.contact2Email || "Not specified"}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {/* Additional Information */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: "primary.main" }}>
+                  Additional Information
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      ABN
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.abn || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Address
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {clientDetails.address || "Not specified"}
+                    </Typography>
+                  </Grid>
+                  {clientDetails.written_off && (
+                    <Grid item xs={12}>
+                      <Chip
+                        label="WRITTEN OFF"
+                        color="error"
+                        variant="filled"
+                        sx={{ fontWeight: "bold" }}
+                      />
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+            </Stack>
+          ) : (
+            <Alert severity="error">
+              Failed to load client details. Please try again.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            component={Link}
+            to={`/clients/${selectedClient?._id}`}
+            variant="contained"
+            color="primary"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+            onClick={() => setClientDetailsDialogOpen(false)}
+          >
+            Full Client Details Page
+          </Button>
+          <Button
+            onClick={() => setClientDetailsDialogOpen(false)}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

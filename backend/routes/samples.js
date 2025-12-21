@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Sample = require('../models/Sample');
+const AirMonitoringJob = require('../models/Job');
+const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -42,23 +45,45 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
 // Get samples by project
 router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const samples = await Sample.find()
-      .populate({
-        path: 'job',
-        populate: {
-          path: 'projectId',
-          match: { projectID: req.params.projectId }
-        }
-      })
+    // First, find the Project by projectID to get its _id
+    const project = await Project.findOne({ projectID: req.params.projectId });
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Find all jobs (both types) that reference this project
+    const [airMonitoringJobs, asbestosRemovalJobs] = await Promise.all([
+      AirMonitoringJob.find({ projectId: project._id }).select('_id'),
+      AsbestosRemovalJob.find({ projectId: project._id }).select('_id')
+    ]);
+
+    // Combine job IDs
+    const jobIds = [
+      ...airMonitoringJobs.map(job => job._id),
+      ...asbestosRemovalJobs.map(job => job._id)
+    ];
+
+    if (jobIds.length === 0) {
+      // No jobs found for this project, return empty array
+      return res.json([]);
+    }
+
+    // Find samples that reference these jobs and populate necessary fields
+    const samples = await Sample.find({ job: { $in: jobIds } })
       .populate('collectedBy')
       .populate('sampler')
       .populate('analyzedBy')
+      .populate({
+        path: 'job',
+        populate: {
+          path: 'projectId'
+        }
+      })
       .sort({ createdAt: -1 });
 
-    // Filter samples where the populated project matches
-    const projectSamples = samples.filter(sample => sample.job?.projectId);
-    res.json(projectSamples);
+    res.json(samples);
   } catch (err) {
+    console.error('Error getting samples by project:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -93,6 +118,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     const sample = new Sample({
       shift: req.body.shift,
       job: req.body.job,
+      jobModel: req.body.jobModel,
       sampleNumber: req.body.sampleNumber,
       fullSampleID: req.body.fullSampleID,
       type: req.body.type,
@@ -104,6 +130,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
       filterSize: req.body.filterSize,
       startTime: req.body.startTime,
       endTime: req.body.endTime,
+      nextDay: req.body.nextDay === true || req.body.nextDay === 'on' || req.body.nextDay === 'true',
       initialFlowrate: req.body.initialFlowrate,
       finalFlowrate: req.body.finalFlowrate,
       averageFlowrate: req.body.averageFlowrate,
@@ -158,7 +185,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
     // Update other fields
     Object.keys(req.body).forEach(key => {
       if (key !== 'analysis') {
-        sample[key] = req.body[key];
+        // Convert nextDay from string "on" to boolean if needed
+        if (key === 'nextDay') {
+          sample[key] = req.body[key] === true || req.body[key] === 'on' || req.body[key] === 'true';
+        } else {
+          sample[key] = req.body[key];
+        }
       }
     });
 

@@ -1,13 +1,22 @@
 import React from "react";
-import { Box, Typography, Paper, Container, Breadcrumbs, Link } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import {
+  Box,
+  Typography,
+  Paper,
+  Container,
+  Breadcrumbs,
+  Link,
+} from "@mui/material";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
 const OHSEnvironmental = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const view = searchParams.get("view") || "general";
 
   const handleBackToHome = () => {
-    navigate("/records");
+    navigate(`/records?view=${view}`);
   };
 
   return (
@@ -24,11 +33,13 @@ const OHSEnvironmental = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
+            General Records
           </Link>
-          <Typography color="text.primary">OHS & Environmental Targets & Risks</Typography>
+          <Typography color="text.primary">
+            OHS & Environmental Targets & Risks
+          </Typography>
         </Breadcrumbs>
-        
+
         <Paper sx={{ p: 3, mt: 2 }}>
           <Typography variant="h6" gutterBottom>
             OHS & Environmental Management

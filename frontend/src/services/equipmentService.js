@@ -6,7 +6,8 @@ export const equipmentService = {
   // Get all equipment with optional filtering
   getAll: async (params = {}) => {
     try {
-      const response = await api.get(BASE_URL, { params });
+      const requestParams = { limit: 300, ...params };
+      const response = await api.get(BASE_URL, { params: requestParams });
       return response.data;
     } catch (error) {
       throw error;
@@ -100,12 +101,19 @@ export const equipmentService = {
     "Acetone Vaporiser",
     "Air pump",
     "Bubble flowmeter",
+    "Effective Filter Area",
+    "Filter Holder",
     "Fume Hood",
     "Furnace",
     "Graticule",
-    "Microscope",
+    "HSE Test Slide",
+    "Micrometer",
+    "Phase Contrast Microscope",
     "Pneumatic tester",
-    "Site flowmeter"
+    "Polarised Light Microscope",
+    "RI Liquids",
+    "Site flowmeter",
+    "Stereomicroscope"
   ],
 
   // Get section options (static)

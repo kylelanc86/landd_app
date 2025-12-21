@@ -1,7 +1,13 @@
 import React, { useEffect } from "react";
 import "react-pro-sidebar/dist/css/styles.css";
 import { ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
-import { Box, Typography, useTheme, Divider } from "@mui/material";
+import {
+  Box,
+  Typography,
+  useTheme,
+  Divider,
+  useMediaQuery,
+} from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
@@ -23,6 +29,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
+import { usePermissions } from "../../hooks/usePermissions";
 import PermissionGate from "../../components/PermissionGate";
 import { isFeatureEnabled } from "../../config/featureFlags";
 
@@ -91,15 +98,43 @@ const Item = ({ title, to, icon }) => {
       isTargetClientPage: to.startsWith("/clients/"),
     });
 
+    // Check for unsaved changes on project/client/user pages
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
       (location.pathname.startsWith("/projects/") ||
-        location.pathname.startsWith("/clients/")) &&
+        location.pathname.startsWith("/clients/") ||
+        location.pathname.startsWith("/users/")) &&
       !to.startsWith("/projects/") &&
-      !to.startsWith("/clients/")
+      !to.startsWith("/clients/") &&
+      !to.startsWith("/users/")
     ) {
       console.log("🔍 Sidebar showing unsaved changes dialog");
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
+    // Check for unsaved changes on analysis pages
+    if (
+      window.hasUnsavedChanges &&
+      window.currentAnalysisPath &&
+      (location.pathname.includes("/analysis") ||
+        location.pathname.includes("/sample/") ||
+        location.pathname.startsWith("/air-monitoring/") ||
+        location.pathname.startsWith("/client-supplied/") ||
+        location.pathname.startsWith("/fibre-id/client-supplied/")) &&
+      !to.includes("/analysis") &&
+      !to.includes("/sample/") &&
+      !to.startsWith("/air-monitoring/") &&
+      !to.startsWith("/client-supplied/") &&
+      !to.startsWith("/fibre-id/client-supplied/")
+    ) {
+      console.log(
+        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+      );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
@@ -214,15 +249,43 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
       isTargetClientPage: to.startsWith("/clients/"),
     });
 
+    // Check for unsaved changes on project/client/user pages
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
       (location.pathname.startsWith("/projects/") ||
-        location.pathname.startsWith("/clients/")) &&
+        location.pathname.startsWith("/clients/") ||
+        location.pathname.startsWith("/users/")) &&
       !to.startsWith("/projects/") &&
-      !to.startsWith("/clients/")
+      !to.startsWith("/clients/") &&
+      !to.startsWith("/users/")
     ) {
       console.log("🔍 Sidebar showing unsaved changes dialog");
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
+    // Check for unsaved changes on analysis pages
+    if (
+      window.hasUnsavedChanges &&
+      window.currentAnalysisPath &&
+      (location.pathname.includes("/analysis") ||
+        location.pathname.includes("/sample/") ||
+        location.pathname.startsWith("/air-monitoring/") ||
+        location.pathname.startsWith("/client-supplied/") ||
+        location.pathname.startsWith("/fibre-id/client-supplied/")) &&
+      !to.includes("/analysis") &&
+      !to.includes("/sample/") &&
+      !to.startsWith("/air-monitoring/") &&
+      !to.startsWith("/client-supplied/") &&
+      !to.startsWith("/fibre-id/client-supplied/")
+    ) {
+      console.log(
+        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+      );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
@@ -309,8 +372,13 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 const Sidebar = () => {
   const theme = useTheme();
   const { currentUser } = useAuth();
+  const { isAdmin } = usePermissions();
   const location = useLocation();
   const showHidden = true; // Set to true to show hidden components
+
+  // Detect tablet and mobile screens - hide sidebar completely
+  // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
+  const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -321,19 +389,43 @@ const Sidebar = () => {
         left: 0 !important;
         height: 100vh !important;
         z-index: 1300 !important;
+      }
+      
+      /* Expanded sidebar width */
+      .pro-sidebar:not(.collapsed) {
         width: 242px !important;
       }
+      
+      /* Collapsed sidebar width */
+      .pro-sidebar.collapsed {
+        width: 80px !important;
+      }
+      
       .pro-sidebar-inner {
         background: #ffffff !important;
         border-right: 1px solid #e0e0e0 !important;
-        width: 242px !important;
         position: relative !important;
       }
       
+      /* Expanded sidebar inner width */
+      .pro-sidebar:not(.collapsed) .pro-sidebar-inner {
+        width: 242px !important;
+      }
+      
+      /* Collapsed sidebar inner width */
+      .pro-sidebar.collapsed .pro-sidebar-inner {
+        width: 80px !important;
+      }
+      
       /* Reduce spacing between menu items */
-      .pro-menu-item:not(:first-child) {
+      .pro-menu-item {
         margin: 2px 0 !important;
         padding: 2px 8px !important;
+      }
+
+      /* Regular menu items padding */
+      .pro-menu-item .pro-inner-item {
+        padding: 5px 15px !important;
       }
 
       /* Special handling for logo container */
@@ -346,9 +438,14 @@ const Sidebar = () => {
         margin: 0 !important;
       }
 
-      /* Regular menu items padding */
-      .pro-menu-item:not(:first-child) .pro-inner-item {
-        padding: 5px 15px !important;
+      /* Hide logo when collapsed */
+      .pro-sidebar.collapsed .pro-menu-item:first-child {
+        display: none !important;
+      }
+      
+      /* Show logo when expanded */
+      .pro-sidebar:not(.collapsed) .pro-menu-item:first-child {
+        display: block !important;
       }
     `;
     document.head.appendChild(style);
@@ -358,22 +455,10 @@ const Sidebar = () => {
     };
   }, [theme.palette.mode]);
 
-  const getInitials = (user) => {
-    if (!user) return "?";
-    if (user.firstName && user.lastName) {
-      return `${user.firstName.charAt(0)}${user.lastName.charAt(
-        0
-      )}`.toUpperCase();
-    }
-    if (user.name) {
-      return user.name
-        .split(" ")
-        .map((word) => word[0])
-        .join("")
-        .toUpperCase();
-    }
-    return "?";
-  };
+  // Hide sidebar completely on tablets and mobile (drawer will be used instead)
+  if (isMobileOrTablet) {
+    return null;
+  }
 
   return (
     <ProSidebar collapsed={false}>
@@ -436,6 +521,9 @@ const Sidebar = () => {
 
         <Box paddingLeft="5%">
           <Item title="Dashboard" to="/" icon={<HomeOutlinedIcon />} />
+          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
+            <Item title="Admin Interface" to="/admin" icon={<SettingsIcon />} />
+          </PermissionGate>
 
           <PermissionGate requiredPermissions={["timesheets.view"]}>
             <Item
@@ -443,7 +531,11 @@ const Sidebar = () => {
               to="/timesheets/monthly"
               icon={<AccessTimeIcon />}
             />
+
+            <Item title="Projects" to="/projects" icon={<StorageIcon />} />
           </PermissionGate>
+
+          {/* Collapsible Sections */}
 
           {/* 
           <PermissionGate requiredPermissions={["calendar.view"]}>
@@ -455,13 +547,6 @@ const Sidebar = () => {
           </PermissionGate> */}
 
           <SectionDivider />
-
-          {/* Collapsible Sections */}
-          <CollapsibleSection
-            title="Projects"
-            to="/projects"
-            icon={<StorageIcon />}
-          />
 
           <CollapsibleSection
             title="Clients"
@@ -476,15 +561,15 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.REPORTS") && (
             <CollapsibleSection
-              title="REPORTS"
+              title="Reports"
               to="/reports"
               icon={<DescriptionIcon />}
             />
           )}
 
-          {isFeatureEnabled("ADVANCED.RECORDS") && (
+          {isAdmin && isFeatureEnabled("ADVANCED.RECORDS") && (
             <CollapsibleSection
-              title="RECORDS"
+              title="Records"
               to="/records"
               icon={<FolderCopyIcon />}
             />
@@ -502,7 +587,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
             <CollapsibleSection
-              title="ASBESTOS REMOVAL"
+              title="Air Mon & Clearances"
               to="/asbestos-removal"
               icon={<ConstructionIcon />}
             />
@@ -510,9 +595,19 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
             <CollapsibleSection
-              title="FIBRE ID"
+              title="Fibre Identification"
               to="/fibre-id"
               icon={<ScienceIcon />}
+            />
+          )}
+
+          <SectionDivider />
+
+          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
+            <CollapsibleSection
+              title="Client Supplied"
+              to="/client-supplied"
+              icon={<ContactsOutlinedIcon />}
             />
           )}
         </Box>
@@ -523,15 +618,7 @@ const Sidebar = () => {
             backgroundColor: "#ffffff",
             marginTop: "auto",
           }}
-        >
-          {/* Only show section divider if at least one advanced feature is enabled */}
-          {(isFeatureEnabled("ADVANCED.SURVEYS") ||
-            isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") ||
-            isFeatureEnabled("ADVANCED.FIBRE_ID")) && <SectionDivider />}
-          <PermissionGate requiredPermissions={["admin.view"]} fallback={null}>
-            <Item title="Admin" to="/admin" icon={<SettingsIcon />} />
-          </PermissionGate>
-        </Box>
+        ></Box>
       </Menu>
     </ProSidebar>
   );

@@ -7,6 +7,11 @@ const asbestosClearanceSchema = new mongoose.Schema(
       ref: "Project",
       required: true,
     },
+    asbestosRemovalJobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AsbestosRemovalJob",
+      required: false,
+    },
     clearanceDate: {
       type: Date,
       required: true,
@@ -22,8 +27,17 @@ const asbestosClearanceSchema = new mongoose.Schema(
     },
     clearanceType: {
       type: String,
-      enum: ["Non-friable", "Friable", "Mixed", "Complex"],
+      enum: ["Non-friable", "Friable", "Friable (Non-Friable Conditions)", "Vehicle/Equipment"],
       required: true,
+    },
+    jurisdiction: {
+      type: String,
+      enum: ["ACT", "NSW"],
+      required: true,
+    },
+    secondaryHeader: {
+      type: String,
+      required: false,
     },
     LAA: {
       type: String,
@@ -47,11 +61,35 @@ const asbestosClearanceSchema = new mongoose.Schema(
     sitePlanFile: {
       type: String, // Will store the file path or base64 data
     },
+    sitePlanSource: {
+      type: String,
+      enum: ["uploaded", "drawn"],
+    },
+    sitePlanLegend: [
+      {
+        color: {
+          type: String,
+        },
+        description: {
+          type: String,
+        },
+      },
+    ],
+    sitePlanLegendTitle: {
+      type: String,
+    },
+    sitePlanFigureTitle: {
+      type: String,
+    },
     jobSpecificExclusions: {
       type: String, // Job-specific exclusions text
     },
     notes: {
       type: String,
+    },
+    vehicleEquipmentDescription: {
+      type: String,
+      required: false,
     },
     // Array of clearance items embedded directly in the clearance job
     items: [{
@@ -76,9 +114,24 @@ const asbestosClearanceSchema = new mongoose.Schema(
         enum: ["non-friable", "friable"],
         required: true,
       },
-      photograph: {
-        type: String, // Base64 image data
-      },
+      photographs: [{
+        data: {
+          type: String, // Base64 image data
+          required: true,
+        },
+        includeInReport: {
+          type: Boolean,
+          default: true, // By default, include photos in report
+        },
+        uploadedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        photoNumber: {
+          type: Number,
+          required: false,
+        },
+      }],
       notes: {
         type: String,
       },
@@ -91,6 +144,37 @@ const asbestosClearanceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    revision: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    revisionReasons: [{
+      revisionNumber: {
+        type: Number,
+        required: true,
+      },
+      reason: {
+        type: String,
+        required: true,
+      },
+      revisedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      revisedAt: {
+        type: Date,
+        default: Date.now,
+      },
+    }],
+    reportApprovedBy: {
+      type: String,
+      required: false,
+    },
+    reportIssueDate: {
+      type: Date,
+      required: false,
+    },
   },
   {
     timestamps: true,
@@ -100,5 +184,6 @@ const asbestosClearanceSchema = new mongoose.Schema(
 // Index for better query performance
 asbestosClearanceSchema.index({ projectId: 1, status: 1 });
 asbestosClearanceSchema.index({ clearanceDate: 1 });
+asbestosClearanceSchema.index({ asbestosRemovalJobId: 1 });
 
 module.exports = mongoose.model("AsbestosClearance", asbestosClearanceSchema); 

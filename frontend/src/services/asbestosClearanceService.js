@@ -105,6 +105,49 @@ const asbestosClearanceService = {
   getAirMonitoringReports: async (projectId) => {
     const response = await axios.get(`${API_BASE_URL}/air-monitoring-reports/${projectId}`);
     return response.data;
+  },
+
+  // Get air monitoring reports for a specific asbestos removal job
+  getAirMonitoringReportsByJob: async (jobId) => {
+    const response = await axios.get(`${API_BASE_URL}/air-monitoring-reports-by-job/${jobId}`);
+    return response.data;
+  },
+
+  // Add photo to clearance item
+  addPhotoToItem: async (clearanceId, itemId, photoData, includeInReport = true) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos`,
+      { photoData, includeInReport }
+    );
+    return response.data;
+  },
+
+  // Delete photo from clearance item
+  deletePhotoFromItem: async (clearanceId, itemId, photoId) => {
+    const response = await axios.delete(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}`
+    );
+    return response.data;
+  },
+
+  // Toggle photo inclusion in report
+  togglePhotoInReport: async (clearanceId, itemId, photoId) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/toggle`
+    );
+    return response.data;
+  },
+
+  // Authorise clearance report
+  authorise: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/authorise`);
+    return response.data;
+  },
+
+  // Send clearance report for authorisation
+  sendForAuthorisation: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/send-for-authorisation`);
+    return response.data;
   }
 };
 

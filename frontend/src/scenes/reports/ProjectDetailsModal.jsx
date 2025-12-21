@@ -29,6 +29,16 @@ import {
   clientSuppliedJobsService,
 } from "../../services/api";
 
+// Helper function to calculate hours between two time strings (HH:mm format)
+const calculateHours = (startTime, endTime) => {
+  const [startHours, startMinutes] = startTime.split(":").map(Number);
+  const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+  const totalMinutes =
+    endHours * 60 + endMinutes - (startHours * 60 + startMinutes);
+  return (totalMinutes / 60).toFixed(2);
+};
+
 const modalStyle = {
   position: "absolute",
   top: "50%",
@@ -220,7 +230,7 @@ const ProjectDetailsModal = ({ open, onClose, project }) => {
                 <TableCell>Employee</TableCell>
                 <TableCell>Start Time</TableCell>
                 <TableCell>End Time</TableCell>
-                <TableCell>Total Hours</TableCell>
+                <TableCell>Time Logged</TableCell>
                 <TableCell>Description</TableCell>
               </TableRow>
             </TableHead>
@@ -235,10 +245,51 @@ const ProjectDetailsModal = ({ open, onClose, project }) => {
                   </TableCell>
                   <TableCell>{entry.startTime}</TableCell>
                   <TableCell>{entry.endTime}</TableCell>
-                  <TableCell>{entry.totalHours}</TableCell>
+                  <TableCell>
+                    {entry.totalHours ||
+                      (entry.startTime && entry.endTime
+                        ? calculateHours(entry.startTime, entry.endTime)
+                        : "N/A")}
+                  </TableCell>
                   <TableCell>{entry.description}</TableCell>
                 </TableRow>
               ))}
+              {timesheets.length > 0 && (
+                <TableRow
+                  sx={{
+                    backgroundColor: "rgba(0, 0, 0, 0.04)",
+                    fontWeight: "bold",
+                  }}
+                >
+                  <TableCell colSpan={4} align="right">
+                    <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>
+                      Total Hours:
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>
+                      {timesheets
+                        .reduce((total, entry) => {
+                          const hours =
+                            entry.totalHours ||
+                            (entry.startTime && entry.endTime
+                              ? parseFloat(
+                                  calculateHours(entry.startTime, entry.endTime)
+                                )
+                              : 0);
+                          return (
+                            total +
+                            (typeof hours === "number"
+                              ? hours
+                              : parseFloat(hours) || 0)
+                          );
+                        }, 0)
+                        .toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              )}
               {!timesheets.length && (
                 <TableRow>
                   <TableCell colSpan={6} align="center">

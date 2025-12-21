@@ -116,6 +116,14 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  labSignatory: {
+    type: Boolean,
+    default: false
+  },
+  reportProofer: {
+    type: Boolean,
+    default: false
+  },
   notifications: {
     email: {
       type: Boolean,
@@ -203,22 +211,35 @@ const userSchema = new mongoose.Schema({
           "readyForInvoicing",
           "invoiceSent",
           "awaitingPayment",
+          "allActive",
         ]
       },
       visibleWidgets: {
         type: Object,
         default: {
           dailyTimesheet: true,
-          inProgress: true,
-          samplesSubmitted: true,
-          labComplete: true,
-          reportReview: true,
-          readyForInvoicing: true,
-          invoiceSent: true,
-          awaitingPayment: true,
+          inProgress: false,
+          samplesSubmitted: false,
+          labComplete: false,
+          reportReview: false,
+          readyForInvoicing: false,
+          invoiceSent: false,
+          awaitingPayment: false,
+          allActive: false,
         }
       }
     }
+  },
+  chargeOutRate: {
+    type: Number,
+    required: false,
+    default: 0,
+    min: 0
+  },
+  allocatedProjectIds: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'Project',
+    default: []
   }
 }, {
   timestamps: true
@@ -265,8 +286,10 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
-// Create indexes
+// Create indexes for performance
 userSchema.index({ email: 1 });
+userSchema.index({ isActive: 1 }); // Index for filtering active/inactive users
+userSchema.index({ lastName: 1, firstName: 1 }); // Index for sorting
 
 const User = mongoose.model('User', userSchema);
 

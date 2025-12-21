@@ -42,6 +42,12 @@ const PERMISSIONS = {
   // Other restricted permissions
   'invoices.approve': 'Approve invoices',
   'timesheets.approve': 'Approve timesheets',
+
+  // Client supplied job permissions
+  'clientSup.view': 'View client supplied jobs',
+  'clientSup.create': 'Create client supplied jobs',
+  'clientSup.edit': 'Edit client supplied jobs',
+  'clientSup.delete': 'Delete client supplied jobs',
   
   // Admin permissions
   'admin.view': 'Admin view access',
@@ -81,6 +87,10 @@ const ROLE_PERMISSIONS = {
     'asbestos.delete',
     'invoices.approve',
     'timesheets.approve',
+    'clientSup.view',
+    'clientSup.create',
+    'clientSup.edit',
+    'clientSup.delete',
   ],
   employee: [
     'projects.view',
@@ -96,6 +106,12 @@ const ROLE_PERMISSIONS = {
     'equipment.view',
     'equipment.create',
     'equipment.edit',
+    'asbestos.view',
+    'asbestos.create',
+    'asbestos.edit',
+    'clientSup.view',
+    'clientSup.create',
+    'clientSup.edit',
   ], // Employees can view, create and edit projects but not change status
 };
 

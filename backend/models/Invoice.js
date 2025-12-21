@@ -126,4 +126,10 @@ invoiceSchema.statics.findOneIncludingDeleted = function(conditions) {
   return this.findOne(conditions);
 };
 
+// Create indexes for performance
+invoiceSchema.index({ status: 1 }); // Index for filtering by status
+invoiceSchema.index({ isDeleted: 1 }); // Index for filtering deleted invoices
+invoiceSchema.index({ createdAt: -1 }); // Index for sorting by creation date
+invoiceSchema.index({ status: 1, isDeleted: 1, createdAt: -1 }); // Compound index for common query pattern
+
 module.exports = mongoose.model('Invoice', invoiceSchema); 

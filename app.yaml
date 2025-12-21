@@ -1,0 +1,83 @@
+name: landd-app
+region: sgp  # Change to your preferred region (nyc, sfo, sgp, lon, fra, tor, blr, ams)
+
+# App-level environment variables (shared across all components)
+# These are available to all services/components in the app
+# Component-level variables override app-level variables with the same name
+envs:
+  - key: NODE_ENV
+    value: production
+    scope: RUN_TIME
+  # Add shared secrets here if needed (e.g., database URLs, shared API keys)
+  # Note: Secrets should typically be set at component level for security
+
+services:
+  # Backend service with Docker (has Chrome/Puppeteer)
+  - name: backend
+    github:
+      repo: your-username/your-repo-name  # Update with your actual repo
+      branch: development
+      deploy_on_push: true
+    dockerfile_path: ./backend/Dockerfile
+    dockerfile_context: ./backend
+    http_port: 5000
+    instance_count: 1
+    instance_size_slug: professional-xs  # Adjust based on your needs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+    routes:
+      - path: /api
+    envs:
+      # Component-level variables (specific to backend service)
+      # These override app-level variables with the same name
+      - key: MONGODB_URI
+        scope: RUN_TIME
+        type: SECRET
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: JWT_EXPIRE
+        value: 7d
+      - key: PORT
+        value: "5000"
+      - key: FRONTEND_URL
+        value: https://landd-app-dev-8h6ah.ondigitalocean.app  # DigitalOcean frontend URL
+
+  # Frontend service (Node.js)
+  - name: frontend
+    github:
+      repo: your-username/your-repo-name  # Update with your actual repo
+      branch: development
+      deploy_on_push: true
+    source_dir: /
+    build_command: npm run build
+    run_command: cd frontend && node server.js
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: basic-xxs  # Adjust based on your needs
+    health_check:
+      http_path: /
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+    routes:
+      - path: /
+    envs:
+      # Component-level variables (specific to frontend service)
+      # These override app-level variables with the same name
+      - key: REACT_APP_API_URL
+        value: https://landd-app-dev-8h6ah.ondigitalocean.app/api
+        scope: BUILD_TIME  # Required for React - env vars are embedded at build time
+      - key: REACT_APP_GOOGLE_MAPS_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: PORT
+        value: "3000"
+

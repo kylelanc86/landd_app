@@ -139,6 +139,11 @@ router.patch("/:templateType", auth, checkPermission("admin.update"), async (req
       };
     }
 
+    // Handle selectedLegislation updates
+    if (updateData.selectedLegislation !== undefined) {
+      template.selectedLegislation = updateData.selectedLegislation;
+    }
+
     template.updatedBy = req.user.id;
     await template.save();
     

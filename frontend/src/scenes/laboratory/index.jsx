@@ -32,7 +32,7 @@ const LaboratoryDashboard = () => {
         <AirIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
       ),
       path: "/air-monitoring",
-      requiredPermission: "fibre.view",
+      requiredPermission: "clientSup.view",
     },
     {
       id: "fibre-id-analysis",
@@ -44,7 +44,7 @@ const LaboratoryDashboard = () => {
         />
       ),
       path: "/fibreID",
-      requiredPermission: "fibre.view",
+      requiredPermission: "clientSup.view",
     },
     {
       id: "calibrations",
@@ -56,7 +56,7 @@ const LaboratoryDashboard = () => {
         />
       ),
       path: "/calibrations",
-      requiredPermission: "fibre.view",
+      requiredPermission: "clientSup.view",
     },
     {
       id: "laboratory-equipment",
@@ -66,7 +66,7 @@ const LaboratoryDashboard = () => {
         <BuildIcon sx={{ fontSize: 40, color: theme.palette.secondary.main }} />
       ),
       path: "/laboratory-equipment",
-      requiredPermission: "fibre.view",
+      requiredPermission: "clientSup.view",
     },
   ];
 
@@ -75,7 +75,7 @@ const LaboratoryDashboard = () => {
   };
 
   return (
-    <PermissionGate requiredPermissions={["fibre.view"]}>
+    <PermissionGate requiredPermissions={["clientSup.view"]}>
       <Box m="20px">
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, memo, useRef } from "react";
 import { usePermissions } from "../../hooks/usePermissions";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Button,
@@ -22,8 +23,6 @@ import {
   Checkbox,
   Divider,
   LinearProgress,
-  Snackbar,
-  Alert,
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import { clientService, userPreferencesService } from "../../services/api";
@@ -35,7 +34,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
-import ArchiveIcon from "@mui/icons-material/Archive";
+import WorkIcon from "@mui/icons-material/Work";
 import { formatPhoneNumber } from "../../utils/formatters";
 import { debounce } from "lodash";
 
@@ -49,8 +48,6 @@ const Clients = () => {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
-  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
-  const [clientToArchive, setClientToArchive] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -60,11 +57,7 @@ const Clients = () => {
   });
   const [rowCount, setRowCount] = useState(0);
   const [isFetching, setIsFetching] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const searchInputRef = useRef(null);
 
@@ -220,51 +213,15 @@ const Clients = () => {
       setClientToDelete(null);
     } catch (err) {
       if (err.response) {
-        setSnackbar({
-          open: true,
-          message: `Error deleting client: ${
+        showSnackbar(
+          `Error deleting client: ${
             err.response.data.message || "Unknown error"
           }`,
-          severity: "error",
-        });
+          "error"
+        );
       }
     }
   }, [clientToDelete]);
-
-  const handleArchiveClick = useCallback((client) => {
-    setClientToArchive(client);
-    setArchiveDialogOpen(true);
-  }, []);
-
-  const handleArchiveConfirm = useCallback(async () => {
-    try {
-      await clientService.archive(clientToArchive._id);
-      setClients((prevClients) =>
-        prevClients.filter((client) => client._id !== clientToArchive._id)
-      );
-      setArchiveDialogOpen(false);
-      setClientToArchive(null);
-      setSnackbar({
-        open: true,
-        message: `${clientToArchive.name} has been archived successfully`,
-        severity: "success",
-      });
-    } catch (err) {
-      if (err.response) {
-        setSnackbar({
-          open: true,
-          message: err.response.data.message || "Failed to archive client",
-          severity: "error",
-        });
-      } else {
-        setSnackbar({
-          open: true,
-          message: "Failed to archive client",
-          severity: "error",
-        });
-      }
-    }
-  }, [clientToArchive]);
 
   // Column visibility handlers
   const handleColumnVisibilityClick = useCallback((event) => {
@@ -326,16 +283,6 @@ const Clients = () => {
         ),
       },
       {
-        field: "contact1Name",
-        headerName: "Primary Contact",
-        flex: 1,
-        renderCell: (params) => (
-          <Typography sx={{ fontSize: "0.875rem" }}>
-            {params.row.contact1Name}
-          </Typography>
-        ),
-      },
-      {
         field: "contact1Number",
         headerName: "Primary Phone",
         flex: 1,
@@ -346,16 +293,7 @@ const Clients = () => {
           </Typography>
         ),
       },
-      {
-        field: "address",
-        headerName: "Address",
-        flex: 1,
-        renderCell: (params) => (
-          <Typography sx={{ fontSize: "0.875rem" }}>
-            {params.row.address}
-          </Typography>
-        ),
-      },
+
       // ...(canWriteOff
       //   ? [
       //       {
@@ -387,42 +325,39 @@ const Clients = () => {
         field: "actions",
         headerName: "Actions",
         flex: 1,
+        minWidth: 180,
+        maxWidth: 180,
         renderCell: (params) => (
           <Box>
             <IconButton
-              onClick={() =>
+              onClick={(e) => {
+                e.stopPropagation();
                 navigate(
                   `/invoices?client=${encodeURIComponent(params.row.name)}`
-                )
-              }
+                );
+              }}
               title="View Invoices"
             >
               <AttachMoneyIcon />
             </IconButton>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => navigate(`/clients/${params.row._id}`)}
-              title="View Details"
-              sx={{ mr: 1 }}
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(
+                  `/reports?search=${encodeURIComponent(params.row.name)}`
+                );
+              }}
+              title="View Jobs"
             >
-              Details
-            </Button>
-            {/* Archive button - only show for admin and manager users */}
-            {(isAdmin || isManager) && (
-              <IconButton
-                onClick={() => handleArchiveClick(params.row)}
-                title="Archive Client"
-                color="warning"
-                sx={{ mr: 1 }}
-              >
-                <ArchiveIcon />
-              </IconButton>
-            )}
+              <WorkIcon />
+            </IconButton>
             {/* Delete button - only show for admin and manager users */}
             {(isAdmin || isManager) && (
               <IconButton
-                onClick={() => handleDeleteClick(params.row)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(params.row);
+                }}
                 title="Delete Client"
                 color="error"
               >
@@ -639,6 +574,9 @@ const Clients = () => {
           "& .MuiDataGrid-row:nth-of-type(odd)": {
             backgroundColor: "#ffffff",
           },
+          "& .MuiDataGrid-row": {
+            cursor: "pointer",
+          },
           "& .MuiDataGrid-row:hover": {
             backgroundColor: "#e3f2fd",
           },
@@ -674,6 +612,10 @@ const Clients = () => {
           getRowClassName={(params) =>
             params.row.written_off ? "written-off-row" : ""
           }
+          onRowClick={(params) => {
+            // Navigate to client details page
+            navigate(`/clients/${params.id}`);
+          }}
         />
       </Box>
 
@@ -758,105 +700,6 @@ const Clients = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Archive Confirmation Dialog */}
-      <Dialog
-        open={archiveDialogOpen}
-        onClose={() => setArchiveDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 3,
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-            px: 3,
-            pt: 3,
-            pb: 1,
-            border: "none",
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 48,
-              height: 48,
-              borderRadius: "50%",
-              backgroundColor: "warning.light",
-              color: "warning.contrastText",
-            }}
-          >
-            <ArchiveIcon sx={{ fontSize: 20 }} />
-          </Box>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            Archive Client
-          </Typography>
-        </DialogTitle>
-        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-          <Typography variant="body1" sx={{ color: "text.primary" }}>
-            Are you sure you want to archive {clientToArchive?.name}? This will
-            move the client to the archived data section where it can be
-            restored later.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-          <Button
-            onClick={() => setArchiveDialogOpen(false)}
-            variant="outlined"
-            sx={{
-              minWidth: 100,
-              borderRadius: 2,
-              textTransform: "none",
-              fontWeight: 500,
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleArchiveConfirm}
-            variant="contained"
-            color="warning"
-            startIcon={<ArchiveIcon />}
-            sx={{
-              minWidth: 120,
-              borderRadius: 2,
-              textTransform: "none",
-              fontWeight: 500,
-              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
-              "&:hover": {
-                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
-              },
-            }}
-          >
-            Archive Client
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

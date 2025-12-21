@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const AirPumpCalibration = require('../models/AirPumpCalibration');
 const AirPump = require('../models/AirPump');
+const Equipment = require('../models/Equipment');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -14,15 +15,36 @@ router.get('/pump/:pumpId', auth, checkPermission(['calibrations.view']), async 
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const total = await AirPumpCalibration.countDocuments({ pumpId });
+    // Check if pumpId is a valid ObjectId, if not, try to find Equipment by reference
+    let queryPumpId = pumpId;
+    if (!mongoose.Types.ObjectId.isValid(pumpId)) {
+      // If it's not a valid ObjectId, it might be an equipmentReference
+      const equipment = await Equipment.findOne({ equipmentReference: pumpId });
+      if (equipment) {
+        queryPumpId = equipment._id;
+      } else {
+        // If not found, return empty results
+        return res.json({
+          data: [],
+          pagination: {
+            total: 0,
+            pages: 0,
+            page: parseInt(page),
+            limit: parseInt(limit),
+          }
+        });
+      }
+    }
+    
+    const total = await AirPumpCalibration.countDocuments({ pumpId: queryPumpId });
     const pages = Math.ceil(total / parseInt(limit));
 
-    const calibrations = await AirPumpCalibration.find({ pumpId })
+    const calibrations = await AirPumpCalibration.find({ pumpId: queryPumpId })
       .sort({ calibrationDate: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .populate('calibratedBy', 'firstName lastName')
-      .populate('pumpId', 'pumpReference pumpDetails');
+      .populate('pumpId', 'pumpReference pumpDetails equipmentReference brandModel');
 
     const response = {
       data: calibrations.map(cal => ({
@@ -92,24 +114,53 @@ router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res
 // Create new calibration record
 router.post('/', auth, checkPermission(['calibrations.create']), async (req, res) => {
   try {
+    console.log('Received calibration data:', JSON.stringify(req.body, null, 2));
+    
     const calibrationData = {
       ...req.body,
       calibratedBy: req.user.id
     };
 
+    console.log('Calibration data after adding user:', JSON.stringify(calibrationData, null, 2));
+
     const calibration = new AirPumpCalibration(calibrationData);
+    
+    // Validate before saving
+    const validationError = calibration.validateSync();
+    if (validationError) {
+      console.error('Validation error:', validationError);
+      return res.status(400).json({ 
+        message: 'Validation error', 
+        errors: validationError.errors 
+      });
+    }
+    
     const savedCalibration = await calibration.save();
     
-    // Update the pump's calibration date and due date
-    await AirPump.findByIdAndUpdate(calibrationData.pumpId, {
-      calibrationDate: calibrationData.calibrationDate,
-      calibrationDue: savedCalibration.nextCalibrationDue,
-      lastCalibratedBy: req.user.id
-    });
+    // Try to update Equipment if pumpId is an Equipment ID
+    try {
+      const equipment = await Equipment.findById(calibrationData.pumpId);
+      if (equipment && equipment.equipmentType === 'Air pump') {
+        // Equipment calibration data is fetched dynamically, so we don't need to update it
+        // Just dispatch an event or update if needed
+      }
+    } catch (equipmentError) {
+      // If pumpId doesn't reference Equipment, try AirPump (for backward compatibility)
+      try {
+        await AirPump.findByIdAndUpdate(calibrationData.pumpId, {
+          calibrationDate: calibrationData.calibrationDate,
+          calibrationDue: savedCalibration.nextCalibrationDue,
+          lastCalibratedBy: req.user.id
+        });
+      } catch (pumpError) {
+        // Ignore if neither Equipment nor AirPump found
+        console.log('Note: Could not update Equipment or AirPump record');
+      }
+    }
 
     const populatedCalibration = await AirPumpCalibration.findById(savedCalibration._id)
       .populate('calibratedBy', 'firstName lastName')
-      .populate('pumpId', 'pumpReference pumpDetails');
+      .populate('pumpId', 'pumpReference pumpDetails equipmentReference brandModel');
 
     res.status(201).json(populatedCalibration);
   } catch (error) {

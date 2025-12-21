@@ -1,5 +1,5 @@
+//table on project reports page
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Box,
   Paper,
@@ -19,7 +19,6 @@ import {
 import {
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
-  Print as PrintIcon,
   Edit as EditIcon,
 } from "@mui/icons-material";
 import { format } from "date-fns";
@@ -33,61 +32,16 @@ const ReportsList = ({
   onDownload,
   onPrint,
   onRevise,
+  processingReport = { reportId: null, action: null },
 }) => {
-  const navigate = useNavigate();
-
-  // Function to handle row clicks based on report type and status
-  const handleRowClick = (report) => {
-    // Only make clickable if not closed
-    if (report.status === "closed") {
-      return;
-    }
-
-    // Navigate based on report type
-    switch (report.type) {
-      case "clearance":
-        navigate(`/clearances/${report.id}/items`);
-        break;
-      case "asbestos_assessment":
-        // Navigate to asbestos assessment items page
-        navigate(`/surveys/asbestos/${report.id}/items`);
-        break;
-      case "shift":
-        // Navigate to air monitoring shift details
-        navigate(`/air-monitoring/jobs/${report.data?.job?._id}/shifts`);
-        break;
-      case "fibre_id":
-        // Check if it's client-supplied or L&D fibre ID based on the data structure
-        // For now, we'll check if there's a specific field or use the description
-        if (
-          report.data?.jobType === "client-supplied" ||
-          report.description?.toLowerCase().includes("client supplied") ||
-          report.additionalInfo?.toLowerCase().includes("client supplied")
-        ) {
-          // Navigate to client-supplied fibre ID samples page
-          navigate(`/fibre-id/client-supplied/${report.id}/samples`);
-        } else {
-          // Navigate to L&D fibre ID analysis page
-          navigate(`/fibre-id/analysis/${report.id}`);
-        }
-        break;
-      default:
-        // For other types, don't navigate
-        break;
-    }
-  };
   const getCategoryTitle = () => {
     switch (category) {
       case "asbestos-assessment":
         return "Asbestos Assessment Reports";
-      case "air-monitoring":
-        return "Air Monitoring Reports";
-      case "clearance":
-        return "Clearance Reports";
+      case "asbestos-removal-jobs":
+        return "Air Monitoring and Clearances";
       case "fibre-id":
         return "Fibre ID Reports";
-      case "invoices":
-        return "Invoices";
       default:
         return "Reports";
     }
@@ -136,7 +90,6 @@ const ReportsList = ({
       submitted: "Submitted",
       rejected: "Rejected",
       cancelled: "Cancelled",
-      in_progress: "In Progress",
       pending_review: "Pending Review",
       under_review: "Under Review",
       final: "Final",
@@ -200,97 +153,125 @@ const ReportsList = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {reports.map((report) => {
-              const isClickable = report.status !== "closed";
-              return (
-                <TableRow
-                  key={report.id}
-                  onClick={() => handleRowClick(report)}
-                  sx={{
-                    cursor: isClickable ? "pointer" : "default",
-                    transition: "background-color 0.2s ease",
-                    "&:hover": isClickable
-                      ? {
-                          backgroundColor: "action.hover",
-                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-                        }
-                      : {},
-                    "&:active": isClickable
-                      ? {
-                          backgroundColor: "action.selected",
-                        }
-                      : {},
-                  }}
-                >
-                  <TableCell>
-                    {format(new Date(report.date), "dd/MM/yyyy")}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {report.description}
-                    </Typography>
-                    {report.additionalInfo && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        display="block"
-                      >
-                        {report.additionalInfo}
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={formatStatus(report.status)}
-                      color={getStatusColor(report.status)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box
-                      sx={{ display: "flex", gap: 1, justifyContent: "center" }}
+            {reports.map((report) => (
+              <TableRow key={report.id}>
+                <TableCell>
+                  {format(new Date(report.date), "dd/MM/yyyy")}
+                </TableCell>
+                <TableCell>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "black", fontWeight: 500 }}
+                  >
+                    {report.description}
+                  </Typography>
+                  {report.asbestosRemovalist && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                      sx={{ mt: 0.5 }}
                     >
-                      <Tooltip title="View Report">
-                        <IconButton
-                          size="small"
-                          onClick={() => onView(report)}
-                          color="primary"
-                        >
-                          <VisibilityIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Download Report">
-                        <IconButton
-                          size="small"
-                          onClick={() => onDownload(report)}
-                          color="secondary"
-                        >
-                          <DownloadIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Print Report">
-                        <IconButton
-                          size="small"
-                          onClick={() => onPrint(report)}
-                          color="info"
-                        >
-                          <PrintIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Button
+                      {report.asbestosRemovalist}
+                    </Typography>
+                  )}
+                  {report.additionalInfo && !report.asbestosRemovalist && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                    >
+                      {report.additionalInfo}
+                    </Typography>
+                  )}
+                  {report.revision !== undefined && (
+                    <Typography
+                      variant="caption"
+                      display="block"
+                      sx={{
+                        mt: 0.5,
+                        fontWeight: "medium",
+                        color: report.revision > 0 ? "#ed6c02" : "#666",
+                      }}
+                    >
+                      Revision {report.revision}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={formatStatus(report.status)}
+                    color={getStatusColor(report.status)}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell align="center">
+                  <Box
+                    sx={{ display: "flex", gap: 1, justifyContent: "center" }}
+                  >
+                    <Tooltip title="View Report">
+                      <IconButton
                         size="small"
-                        onClick={() => onRevise(report)}
-                        color="warning"
-                        variant="outlined"
-                        sx={{ minWidth: "auto", px: 1 }}
+                        onClick={() => onView(report)}
+                        color="primary"
+                        disabled={
+                          (processingReport.reportId === report.id ||
+                            processingReport.reportId === report.data?._id ||
+                            processingReport.reportId === report.data?.id) &&
+                          processingReport.action === "view"
+                        }
                       >
-                        Revise Report
-                      </Button>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                        {(processingReport.reportId === report.id ||
+                          processingReport.reportId === report.data?._id ||
+                          processingReport.reportId === report.data?.id) &&
+                        processingReport.action === "view" ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <VisibilityIcon />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Download Report">
+                      <IconButton
+                        size="small"
+                        onClick={() => onDownload(report)}
+                        color="secondary"
+                        disabled={
+                          (processingReport.reportId === report.id ||
+                            processingReport.reportId === report.data?._id ||
+                            processingReport.reportId === report.data?.id) &&
+                          processingReport.action === "download"
+                        }
+                      >
+                        {(processingReport.reportId === report.id ||
+                          processingReport.reportId === report.data?._id ||
+                          processingReport.reportId === report.data?.id) &&
+                        processingReport.action === "download" ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <DownloadIcon />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    {/* Only show revise button for completed reports */}
+                    {(report.status === "complete" ||
+                      report.status === "completed" ||
+                      report.status === "Completed") &&
+                      onRevise && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="warning"
+                          onClick={() => onRevise(report)}
+                          startIcon={<EditIcon />}
+                        >
+                          Revise
+                        </Button>
+                      )}
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </TableContainer>

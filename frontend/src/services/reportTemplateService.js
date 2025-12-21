@@ -39,7 +39,7 @@ const reportTemplateService = {
   // Update an existing template
   updateTemplate: async (templateType, updateData) => {
     try {
-      const response = await api.put(`/report-templates/${templateType}`, updateData);
+      const response = await api.patch(`/report-templates/${templateType}`, updateData);
       return response.data;
     } catch (error) {
       console.error('Error updating report template:', error);

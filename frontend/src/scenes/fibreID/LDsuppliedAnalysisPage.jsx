@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -28,7 +29,6 @@ import {
   FormLabel,
   Chip,
   Checkbox,
-  Snackbar,
   Alert,
 } from "@mui/material";
 import {
@@ -62,11 +62,7 @@ const LDsuppliedAnalysisPage = () => {
   const [finalResult, setFinalResult] = useState("");
   const [noFibreDetected, setNoFibreDetected] = useState(false);
   const [analysisDate, setAnalysisDate] = useState(new Date());
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   useEffect(() => {
     if (assessmentId && itemNumber) {
@@ -324,21 +320,13 @@ const LDsuppliedAnalysisPage = () => {
       }));
 
       // Show success message and navigate to assessment items page
-      setSnackbar({
-        open: true,
-        message: "Analysis saved successfully!",
-        severity: "success",
-      });
+      showSnackbar("Analysis saved successfully!", "success");
       navigate(`/fibre-id/assessment/${assessmentId}/items`);
     } catch (error) {
       console.error("Error saving analysis:", error);
       console.error("Error details:", error.response?.data);
       // You could add an error notification here
-      setSnackbar({
-        open: true,
-        message: `Error saving analysis: ${error.message}`,
-        severity: "error",
-      });
+      showSnackbar(`Error saving analysis: ${error.message}`, "error");
     }
   };
 
@@ -352,12 +340,10 @@ const LDsuppliedAnalysisPage = () => {
         fibres.every((fibre) => fibre.result && fibre.result.trim() !== "");
 
       if (!isAnalysisComplete) {
-        setSnackbar({
-          open: true,
-          message:
-            "Cannot mark as analysed: All fibres must have results first.",
-          severity: "warning",
-        });
+        showSnackbar(
+          "Cannot mark as analysed: All fibres must have results first.",
+          "warning"
+        );
         return;
       }
 
@@ -395,20 +381,12 @@ const LDsuppliedAnalysisPage = () => {
       }));
 
       // You could add a success notification here
-      setSnackbar({
-        open: true,
-        message: "Item marked as analysed successfully!",
-        severity: "success",
-      });
+      showSnackbar("Item marked as analysed successfully!", "success");
     } catch (error) {
       console.error("Error marking item as analysed:", error);
       console.error("Error details:", error.response?.data);
       // You could add an error notification here
-      setSnackbar({
-        open: true,
-        message: `Error marking item as analysed: ${error.message}`,
-        severity: "error",
-      });
+      showSnackbar(`Error marking item as analysed: ${error.message}`, "error");
     }
   };
 
@@ -449,19 +427,14 @@ const LDsuppliedAnalysisPage = () => {
         },
       }));
 
-      setSnackbar({
-        open: true,
-        message: "Analysis is now editable!",
-        severity: "success",
-      });
+      showSnackbar("Analysis is now editable!", "success");
     } catch (error) {
       console.error("Error setting item to editable mode:", error);
       console.error("Error details:", error.response?.data);
-      setSnackbar({
-        open: true,
-        message: `Error setting item to editable mode: ${error.message}`,
-        severity: "error",
-      });
+      showSnackbar(
+        `Error setting item to editable mode: ${error.message}`,
+        "error"
+      );
     }
   };
 
@@ -1419,22 +1392,6 @@ const LDsuppliedAnalysisPage = () => {
           Save Analysis
         </Button>
       </Box>
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Container>
   );
 };

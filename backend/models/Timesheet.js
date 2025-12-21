@@ -65,6 +65,10 @@ const timesheetSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    isApproved: {
+      type: Boolean,
+      default: false,
+    },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

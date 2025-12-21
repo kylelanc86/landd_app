@@ -16,6 +16,24 @@ axiosInstance.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Debug logging for all requests
+    console.log('Axios request:', {
+      url: config.url,
+      method: config.method,
+      params: config.params
+    });
+    
+    // Debug logging for projects API calls
+    if (config.url && config.url.includes('/projects') && config.method === 'get') {
+      console.log('PROJECTS API CALL:', {
+        url: config.url,
+        params: config.params,
+        method: config.method,
+        fullConfig: config
+      });
+    }
+    
     return config;
   },
   (error) => {

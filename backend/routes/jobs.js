@@ -10,43 +10,51 @@ const dashboardStatsService = require('../services/dashboardStatsService');
 // Get all air monitoring jobs
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    console.log('Fetching all air monitoring jobs...');
+    const { status, excludeStatus, minimal } = req.query;
     
-    // First, let's check what's in the database
-    const jobs = await AirMonitoringJob.find().lean();
-    console.log('Raw jobs from database:', JSON.stringify(jobs, null, 2));
-
-    // Now let's check if the projectId references exist
-    const projectIds = jobs.map(job => job.projectId).filter(id => id);
-    console.log('Project IDs to look up:', projectIds);
-
-    if (projectIds.length > 0) {
-      const projects = await mongoose.model('Project').find({ _id: { $in: projectIds } }).lean();
-      console.log('Found projects:', JSON.stringify(projects, null, 2));
-    } else {
-      console.log('No project IDs to look up');
+    const filter = {};
+    
+    // Support excluding statuses (e.g., excludeStatus=completed,cancelled)
+    // This takes precedence if both status and excludeStatus are provided
+    if (excludeStatus) {
+      const excludedStatuses = excludeStatus.includes(',') 
+        ? excludeStatus.split(',').map(s => s.trim())
+        : [excludeStatus];
+      filter.status = { $nin: excludedStatuses };
+    } else if (status) {
+      // Support single status or comma-separated statuses
+      if (status.includes(',')) {
+        filter.status = { $in: status.split(',').map(s => s.trim()) };
+      } else {
+        filter.status = status;
+      }
     }
 
-    // Now try to populate
-    const populatedJobs = await AirMonitoringJob.find()
+    // If minimal=true, only fetch projectId for matching
+    if (minimal === "true" || minimal === true) {
+      const jobs = await AirMonitoringJob.find(filter)
+        .select("_id projectId")
+        .populate({
+          path: 'projectId',
+          select: '_id projectID name'
+        })
+        .lean()
+        .exec();
+      
+      return res.json(jobs);
+    }
+
+    // Full data for detailed views
+    const populatedJobs = await AirMonitoringJob.find(filter)
       .populate({
         path: 'projectId',
+        select: 'name projectID client projectContact workOrder status category categories department notes',
         populate: {
           path: 'client'
         }
       })
       .populate('assignedTo', 'firstName lastName');
     
-    console.log('Jobs after populate:', JSON.stringify(populatedJobs.map(job => ({
-      _id: job._id,
-      projectId: job.projectId,
-      projectIdRef: job.projectId?._id,
-      projectName: job.projectId?.name,
-      projectProjectID: job.projectId?.projectID,
-      status: job.status,
-      asbestosRemovalist: job.asbestosRemovalist
-    })), null, 2));
-
     res.json(populatedJobs);
   } catch (error) {
     console.error('Error in GET /air-monitoring-jobs:', error);
@@ -64,6 +72,7 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
     const job = await AirMonitoringJob.findById(req.params.id)
       .populate({
         path: 'projectId',
+        select: 'name projectID client projectContact workOrder status category categories department notes',
         populate: {
           path: 'client'
         }

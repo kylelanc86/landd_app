@@ -92,4 +92,167 @@ export const getBase64SizeKB = (base64DataUrl) => {
  */
 export const needsCompression = (file, maxSizeKB = 500) => {
   return file.size / 1024 > maxSizeKB;
-}; 
+};
+
+/**
+ * Save a file to the device storage (full-size original)
+ * Uses File System Access API if available, otherwise falls back to download
+ * @param {File|Blob} file - The file to save
+ * @param {string} filename - The filename to use
+ * @returns {Promise<void>}
+ */
+const sanitizeName = (value) => {
+  if (!value) {
+    return "clearance-photos";
+  }
+  return String(value)
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+    .slice(0, 255);
+};
+
+const verifyPermission = async (handle, readWrite = false) => {
+  if (!handle) return false;
+  const options = readWrite ? { mode: "readwrite" } : undefined;
+  if (await handle.queryPermission?.(options) === "granted") {
+    return true;
+  }
+  if (await handle.requestPermission?.(options) === "granted") {
+    return true;
+  }
+  return false;
+};
+
+let baseDirectoryHandle = null;
+const projectDirectoryCache = new Map();
+
+const ensureBaseDirectoryHandle = async () => {
+  if (baseDirectoryHandle) {
+    return baseDirectoryHandle;
+  }
+  if (!("showDirectoryPicker" in window)) {
+    return null;
+  }
+  try {
+    baseDirectoryHandle = await window.showDirectoryPicker({
+      id: "clearance-photo-directory",
+      mode: "readwrite",
+      startIn: "pictures",
+    });
+    return baseDirectoryHandle;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return null;
+    }
+    console.error("Failed to obtain base directory handle:", error);
+    return null;
+  }
+};
+
+const getProjectDirectoryHandle = async (projectId) => {
+  const directoryName = sanitizeName(projectId);
+  if (projectDirectoryCache.has(directoryName)) {
+    return projectDirectoryCache.get(directoryName);
+  }
+
+  const baseHandle = await ensureBaseDirectoryHandle();
+  if (!baseHandle) {
+    return null;
+  }
+
+  const hasPermission = await verifyPermission(baseHandle, true);
+  if (!hasPermission) {
+    return null;
+  }
+
+  try {
+    const projectDirectoryHandle = await baseHandle.getDirectoryHandle(
+      directoryName,
+      { create: true }
+    );
+
+    projectDirectoryCache.set(directoryName, projectDirectoryHandle);
+    return projectDirectoryHandle;
+  } catch (error) {
+    console.error("Failed to access project directory:", error);
+    return null;
+  }
+};
+
+const createFileInDirectory = async (directoryHandle, filename, file) => {
+  const sanitizedFilename = sanitizeName(filename);
+  const fileHandle = await directoryHandle.getFileHandle(sanitizedFilename, {
+    create: true,
+  });
+
+  const hasPermission = await verifyPermission(fileHandle, true);
+  if (!hasPermission) {
+    return false;
+  }
+
+  const writable = await fileHandle.createWritable();
+  await writable.write(file);
+  await writable.close();
+  return true;
+};
+
+export const saveFileToDevice = async (file, filename, options = {}) => {
+  const { projectId } = options;
+  try {
+    if (projectId && "showDirectoryPicker" in window) {
+      const projectDirectoryHandle = await getProjectDirectoryHandle(projectId);
+      if (projectDirectoryHandle) {
+        const stored = await createFileInDirectory(
+          projectDirectoryHandle,
+          filename,
+          file
+        );
+        if (stored) {
+          return;
+        }
+      }
+    }
+
+    if ("showSaveFilePicker" in window) {
+      try {
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [
+            {
+              description: "Image files",
+              accept: {
+                "image/jpeg": [".jpg", ".jpeg"],
+                "image/png": [".png"],
+                "image/webp": [".webp"],
+              },
+            },
+          ],
+        });
+
+        const writable = await fileHandle.createWritable();
+        await writable.write(file);
+        await writable.close();
+        return;
+      } catch (error) {
+        if (error.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
+  } catch (error) {
+    console.error("Error saving file to device:", error);
+    throw error;
+  }
+};

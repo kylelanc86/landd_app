@@ -40,18 +40,22 @@ async function loadImageAsBase64(imagePath) {
   }
 }
 
-export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false }) {
+export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false, reportApprovedBy = null, reportIssueDate = null }) {
+  // Detect if this is a client-supplied job (has jobType but no assessorId)
+  const isClientSupplied = assessment?.jobType === "Fibre ID" && !assessment?.assessorId;
 
-  // Determine base URL for fonts - use window.location for reliable detection
+  // Determine base URL for fonts - use window.location.origin to avoid CORS issues
   console.log('Fibre ID - Window location:', {
     hostname: window.location.hostname,
     href: window.location.href,
     origin: window.location.origin
   });
   
+  // Use window.location.origin to load fonts from the same origin as the app
+  // This prevents CORS errors when accessing from different domains
   const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000' 
-    : 'https://app.landd.com.au';
+    : window.location.origin;
   
   console.log('Fibre ID - Font base URL:', baseUrl);
 
@@ -193,9 +197,21 @@ pdfMake.fonts = {
                   {
                     stack: [
                       { text: [ { text: 'Client: ', bold: true }, { text: assessment?.projectId?.client?.name || 'Unknown Client' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Contact: ', bold: true }, { text: assessment?.projectId?.client?.contact1Name || 'Unknown Contact' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Email: ', bold: true }, { text: assessment?.projectId?.client?.contact1Email || 'Unknown Email' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Address: ', bold: true }, { text: assessment?.projectId?.client?.address || 'Unknown Address' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Contact: ', bold: true }, { text: (() => {
+                        if (isClientSupplied) {
+                          // For client-supplied: project contact name, then client contact1Name, then "-"
+                          return assessment?.projectId?.projectContact?.name || assessment?.projectId?.client?.contact1Name || '-';
+                        }
+                        return assessment?.projectId?.client?.contact1Name || 'Unknown Contact';
+                      })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Email: ', bold: true }, { text: (() => {
+                        if (isClientSupplied) {
+                          // For client-supplied: project contact email, then client invoiceEmail, then client contact1Email, then "-"
+                          return assessment?.projectId?.projectContact?.email || assessment?.projectId?.client?.invoiceEmail || assessment?.projectId?.client?.contact1Email || '-';
+                        }
+                        return assessment?.projectId?.client?.contact1Email || 'Unknown Email';
+                      })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: isClientSupplied ? 'Client reference: ' : 'Address: ', bold: true }, { text: isClientSupplied ? (assessment?.projectId?.name || '-') : (assessment?.projectId?.client?.address || 'Unknown Address') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
@@ -237,15 +253,21 @@ pdfMake.fonts = {
               widths: ['50%', '50%'],
               body: [
                 [
-                  { text: 'REPORT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0' },
-                  { text: '', style: 'tableHeader', fillColor: '#f0f0f0' }
+                  { text: 'REPORT DETAILS', style: 'tableHeader', fillColor: '#f0f0f0', colSpan: 2 },
+                  {}
                 ],
                 [
                   {
                     stack: [
-                      { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || assessment?.jobNumber || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Sampled by: ', bold: true }, { text: assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                    ]
+                  },
+                  {
+                    stack: [
+                      { text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Samples Received: ', bold: true }, { text: (() => {
                         if (assessment?.projectId?.d_Date) {
                           const date = new Date(assessment.projectId.d_Date);
@@ -257,13 +279,8 @@ pdfMake.fonts = {
                           return formatDate(new Date());
                         }
                       })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                    ]
-                  },
-                  {
-                    stack: [
-                      { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Report approved by: ', bold: true }, { text: 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: ' ', style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Report Approved by: ', bold: true }, { text: reportApprovedBy || 'Report not approved', color: reportApprovedBy ? 'black' : 'red' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   }
                 ]
@@ -307,7 +324,8 @@ pdfMake.fonts = {
               { text: '3. The practical detection limit for asbestos fibre identification is 0.01-0.1% (0.1-1g/kg).', style: 'notes' },
               { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
               { text: '5. Unknown Mineral Fibres (UMF) are reported as detected. Further analysis is required to confirm the identity of these fibres.', style: 'notes' },
-              { text: '6. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
+              { text: '6. The analysed samples detailed within this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details nor the quality of the supplied samples.', style: 'notes' },
+              { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
             ],
             margin: [0, 0, 0, 10],
           },
@@ -353,7 +371,7 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['11%', '11%', '11%', '23%', '12%', '15%', '17%'],
+              widths: ['11%', '16.8%', '11%', '17.2%', '12%', '15%', '17%'],
               body: [
                 [
                   { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
@@ -432,7 +450,7 @@ pdfMake.fonts = {
                     
                     if (!item.analysisData || !item.analysisData.fibres || !Array.isArray(item.analysisData.fibres)) {
                       console.log('No fibres data, returning defaults');
-                      return { nonAsbestos: 'None detected', asbestos: 'None detected' };
+                      return { nonAsbestos: 'None', asbestos: 'No Asbestos Detected' };
                     }
                     
                     const fibres = item.analysisData.fibres;
@@ -463,13 +481,13 @@ pdfMake.fonts = {
                     }
                     
                     const result = {
-                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(', ') : 'None detected',
-                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(', ') : 'None detected'
+                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(' ') : 'None',
+                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(' ') : 'No Asbestos Detected'
                     };
                     
                     // Ensure we never return undefined values
-                    if (!result.nonAsbestos) result.nonAsbestos = 'None detected';
-                    if (!result.asbestos) result.asbestos = 'None detected';
+                    if (!result.nonAsbestos) result.nonAsbestos = 'None';
+                    if (!result.asbestos) result.asbestos = 'No Asbestos Detected';
                     
                     console.log('Final fibre results:', result);
                     console.log('=== END FIBRE RESULTS DEBUG ===');
@@ -480,12 +498,31 @@ pdfMake.fonts = {
                   
                   // Ensure all values are safe strings to prevent NaN
                   const safeProjectID = (assessment?.projectId?.projectID && assessment.projectId.projectID !== 'undefined' && assessment.projectId.projectID !== 'null') ? assessment.projectId.projectID : 'Unknown';
-                  const safeSampleRef = (item.sampleReference && item.sampleReference !== 'undefined' && item.sampleReference !== 'null') ? item.sampleReference : `Sample ${index + 1}`;
+                  // For client-supplied jobs, use clientReference for sample reference
+                  // For regular jobs, use labReference or sampleReference
+                  const safeSampleRef = (() => {
+                    if (isClientSupplied) {
+                      // Client-supplied: prioritize clientReference
+                      const ref = item.clientReference || item.labReference || item.sampleReference;
+                      if (ref && ref !== 'undefined' && ref !== 'null') {
+                        return ref;
+                      }
+                      return `Sample ${index + 1}`;
+                    } else {
+                      // Regular jobs: use existing logic
+                      const ref = item.labReference || item.clientReference || item.sampleReference;
+                      if (ref && ref !== 'undefined' && ref !== 'null') {
+                        return ref;
+                      }
+                      return `Sample ${index + 1}`;
+                    }
+                  })();
                   const safeAnalysisDate = (analysisDate && analysisDate !== 'undefined' && analysisDate !== 'null') ? analysisDate : 'Unknown';
-                  const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription) ? (item.analysisData.sampleDescription || item.locationDescription) : 'No description';
+                  const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) ? 
+                    (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) : 'No description';
                   const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
-                  const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None detected';
-                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'None detected';
+                  const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None';
+                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'No asbestos detected';
                   
                   // DEBUG: Log every single value being passed to pdfMake
                   console.log(`=== TABLE ROW ${index + 1} DEBUG ===`);
@@ -506,8 +543,13 @@ pdfMake.fonts = {
                   });
                   console.log(`=== END TABLE ROW ${index + 1} DEBUG ===`);
                   
+                  // Use labReference for L&D ID Reference, or fall back to projectID-index
+                  const safeLabRef = (item.labReference && item.labReference !== 'undefined' && item.labReference !== 'null') 
+                    ? item.labReference 
+                    : `${safeProjectID}-${index + 1}`;
+                  
                   return [
-                    { text: `${safeProjectID}-${index + 1}`, fontSize: 8 },
+                    { text: safeLabRef, fontSize: 8 },
                     { text: safeSampleRef, fontSize: 8 },
                     { text: safeAnalysisDate, fontSize: 8 },
                     { text: safeDescription, fontSize: 8 },
@@ -568,7 +610,7 @@ pdfMake.fonts = {
                 {
                   stack: [
                     { text: `Report Reference: ${assessment?.projectId?.projectID}`, fontSize: 8 },
-                    { text: 'Revision: 0', fontSize: 8 }
+                    { text: `Revision: ${assessment?.revision || 0}`, fontSize: 8 }
                   ],
                   alignment: 'left',
                   width: '30%'

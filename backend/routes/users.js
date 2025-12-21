@@ -44,6 +44,7 @@ async function loadLogoAsBase64() {
 // Get all users
 router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
   try {
+    const startTime = Date.now();
     const query = {};
     
     // If isActive parameter is provided, filter by active status
@@ -51,13 +52,50 @@ router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
       query.isActive = req.query.isActive === 'true';
     }
     
+    // Only select fields needed for the table view
+    // Exclude large fields like signature (base64 images), userPreferences, workingHours, etc.
+    // Include labApprovals as it's needed for filtering analysts in fibre count analysis
+    // Use lean() for faster queries (returns plain objects instead of Mongoose documents)
     const users = await User.find(query)
-      .select('-password')
-      .sort({ createdAt: -1 });
+      .select('firstName lastName email role licences isActive _id createdAt phone labApprovals')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean(); // Use lean() for 2-3x faster queries - returns plain objects
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${users.length} users in ${queryTime}ms`);
     
     res.json(users);
   } catch (err) {
     console.error('Error fetching users:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get asbestos assessors only (optimized endpoint)
+router.get('/asbestos-assessors', auth, checkPermission(['users.view']), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    
+    // Filter for active users with asbestos assessor licenses
+    // Using MongoDB query to filter on the backend for better performance
+    const assessors = await User.find({
+      isActive: true,
+      licences: {
+        $elemMatch: {
+          licenceType: { $regex: /asbestos assessor/i }
+        }
+      }
+    })
+      .select('firstName lastName _id') // Only select fields needed
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${assessors.length} asbestos assessors in ${queryTime}ms`);
+    
+    res.json(assessors);
+  } catch (err) {
+    console.error('Error fetching asbestos assessors:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -78,7 +116,7 @@ router.get('/:id', auth, async (req, res) => {
 // Create new user
 router.post('/', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, licences, signature, workingHours, labApprovals, canSetJobComplete } = req.body;
+    const { firstName, lastName, email, role, phone, licences, signature, workingHours, labApprovals, canSetJobComplete, labSignatory, reportProofer } = req.body;
 
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -114,6 +152,8 @@ router.post('/', auth, async (req, res) => {
         fibreIdentification: false
       },
       canSetJobComplete: canSetJobComplete || false,
+      labSignatory: labSignatory || false,
+      reportProofer: reportProofer || false,
       isActive: true,
       setupPasswordToken: setupToken,
       setupPasswordExpires: setupExpires,
@@ -178,7 +218,7 @@ router.post('/', auth, async (req, res) => {
 // Update user
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { firstName, lastName, email, role, phone, isActive, licences, signature, workingHours, labApprovals, canSetJobComplete } = req.body;
+    const { firstName, lastName, email, role, phone, isActive, licences, signature, chargeOutRate, workingHours, labApprovals, canSetJobComplete, labSignatory, reportProofer } = req.body;
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -195,9 +235,12 @@ router.put('/:id', auth, async (req, res) => {
     if (typeof isActive === 'boolean') user.isActive = isActive;
     if (licences !== undefined) user.licences = licences;
     if (signature !== undefined) user.signature = signature;
+    if (chargeOutRate !== undefined) user.chargeOutRate = parseFloat(chargeOutRate) || 0;
     if (workingHours !== undefined) user.workingHours = workingHours;
     if (labApprovals !== undefined) user.labApprovals = labApprovals;
     if (canSetJobComplete !== undefined) user.canSetJobComplete = canSetJobComplete;
+    if (labSignatory !== undefined) user.labSignatory = labSignatory;
+    if (reportProofer !== undefined) user.reportProofer = reportProofer;
 
     await user.save();
 
@@ -244,18 +287,57 @@ router.get('/preferences/me', auth, async (req, res) => {
 });
 
 // Update user preferences
+const isPlainObject = (value) => {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  );
+};
+
+const mergeDeep = (target = {}, source = {}) => {
+  const output = { ...target };
+
+  Object.keys(source || {}).forEach((key) => {
+    const sourceValue = source[key];
+    const targetValue = output[key];
+
+    if (Array.isArray(sourceValue)) {
+      output[key] = [...sourceValue];
+    } else if (isPlainObject(sourceValue)) {
+      output[key] = mergeDeep(
+        isPlainObject(targetValue) ? targetValue : {},
+        sourceValue
+      );
+    } else {
+      output[key] = sourceValue;
+    }
+  });
+
+  return output;
+};
+
 router.put('/preferences/me', auth, async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      { userPreferences: req.body },
-      { new: true, runValidators: true }
-    ).select('userPreferences');
-    
+    const user = await User.findById(req.user.id).select('userPreferences');
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
+    const existingPreferences = user.userPreferences
+      ? (typeof user.userPreferences.toObject === 'function'
+          ? user.userPreferences.toObject()
+          : user.userPreferences)
+      : {};
+
+    const mergedPreferences = mergeDeep(existingPreferences, req.body || {});
+
+    user.userPreferences = mergedPreferences;
+    user.markModified('userPreferences');
+
+    await user.save();
+
     res.json(user.userPreferences || {});
   } catch (error) {
     console.error('Error updating user preferences:', error);

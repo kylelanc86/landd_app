@@ -17,11 +17,11 @@ export const FEATURE_FLAGS = {
 
   // Advanced functionality (can be disabled for initial deployment)
   ADVANCED: {
-    RECORDS: false,           // Asset register, audits, calibrations, etc.
+    RECORDS: true,            // Asset register, audits, calibrations, etc.
     SURVEYS: false,           // Asbestos, lead, mould assessments
-    ASBESTOS_REMOVAL: false,  // Asbestos removal job management
+    ASBESTOS_REMOVAL: true,  // Asbestos removal job management
     FIBRE_ID: false,          // Fibre identification and client supplied jobs
-    REPORTS: false,           // Report generation and templates
+    REPORTS: true,            // Report generation and templates
   },
 
   // Admin functionality
@@ -30,7 +30,7 @@ export const FEATURE_FLAGS = {
     CUSTOM_DATA_FIELDS: true,
     INVOICE_ITEMS: true,
     USER_MANAGEMENT: true,
-    TEMPLATE_MANAGEMENT: false, // Report templates
+    TEMPLATE_MANAGEMENT: true, // Report templates
   },
 };
 

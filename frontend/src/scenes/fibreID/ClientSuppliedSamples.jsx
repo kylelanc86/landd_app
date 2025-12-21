@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -14,53 +14,51 @@ import {
   Chip,
   IconButton,
   TextField,
-  InputAdornment,
   Breadcrumbs,
   Link,
-  Modal,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   IconButton as MuiIconButton,
-  MenuItem,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import {
-  Search as SearchIcon,
   Add as AddIcon,
+  Edit as EditIcon,
   Close as CloseIcon,
   ArrowBack as ArrowBackIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon,
-  PictureAsPdf as PdfIcon,
+  UploadFile as UploadFileIcon,
+  Description as DescriptionIcon,
+  Download as DownloadIcon,
 } from "@mui/icons-material";
-import { useNavigate, useParams } from "react-router-dom";
-import {
-  clientSuppliedJobsService,
-  sampleItemsService,
-  userService,
-} from "../../services/api";
-import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { clientSuppliedJobsService } from "../../services/api";
+import { compressImage } from "../../utils/imageCompression";
 
 const ClientSuppliedSamples = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { jobId } = useParams();
   const [job, setJob] = useState(null);
   const [samples, setSamples] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
   const [openModal, setOpenModal] = useState(false);
   const [sampleRows, setSampleRows] = useState([
-    { labReference: "", clientReference: "" },
+    { labReference: "", clientReference: "", cowlNumber: "" },
   ]);
-  const [analyst, setAnalyst] = useState("");
-  const [analysisDate, setAnalysisDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [users, setUsers] = useState([]);
-  const [generatingPDF, setGeneratingPDF] = useState(false);
-  const [completingJob, setCompletingJob] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+  const [uploadingCOC, setUploadingCOC] = useState(false);
+  const [cocDialogOpen, setCocDialogOpen] = useState(false);
+  const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   useEffect(() => {
     // Reset data when jobId changes
@@ -72,12 +70,15 @@ const ClientSuppliedSamples = () => {
       // Load data for the new jobId
       fetchJobDetails();
       fetchSampleItems();
-      fetchUsers();
     } else if (jobId === "[object Object]") {
       setLoading(false);
       // Redirect back to the jobs list if we have an invalid jobId
-      navigate("/fibre-id/client-supplied");
+      const basePath = location.pathname.startsWith("/client-supplied")
+        ? "/client-supplied"
+        : "/fibre-id/client-supplied";
+      navigate(basePath);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   // Refresh data when page gains focus (e.g., when returning from analysis page)
@@ -90,6 +91,7 @@ const ClientSuppliedSamples = () => {
 
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   const fetchJobDetails = async () => {
@@ -119,53 +121,31 @@ const ClientSuppliedSamples = () => {
     }
 
     try {
-      // Get the job first to get the projectId
+      // Get the job which now has embedded samples
       const jobResponse = await clientSuppliedJobsService.getById(jobId);
-      const projectId =
-        jobResponse.data.projectId._id || jobResponse.data.projectId;
-
-      const response = await sampleItemsService.getAll({ projectId });
-      setSamples(response.data || []);
+      // Samples are now embedded in the job
+      setSamples(jobResponse.data.samples || []);
     } catch (error) {
       console.error("Error fetching sample items:", error);
       setSamples([]);
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await userService.getAll();
-      setUsers(response.data || []);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      setUsers([]);
-    }
-  };
+  // Removed fetchUsers - analyst selection is now only on the analysis page
 
-  const filteredSamples = samples
-    .filter(
-      (sample) =>
-        sample.labReference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sample.clientReference
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        sample.sampleDescription
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      // Sort by labReference in ascending order
-      const labRefA = a.labReference || "";
-      const labRefB = b.labReference || "";
-      return labRefA.localeCompare(labRefB);
-    });
+  const filteredSamples = samples.sort((a, b) => {
+    // Sort by labReference in ascending order
+    const labRefA = a.labReference || "";
+    const labRefB = b.labReference || "";
+    return labRefA.localeCompare(labRefB);
+  });
 
   const handleBackToJobs = () => {
-    navigate("/fibre-id/client-supplied");
-  };
-
-  const handleBackToHome = () => {
-    navigate("/fibre-id");
+    // Use the appropriate route based on current location
+    const basePath = location.pathname.startsWith("/client-supplied")
+      ? "/client-supplied"
+      : "/fibre-id/client-supplied";
+    navigate(basePath);
   };
 
   const handleOpenModal = () => {
@@ -176,41 +156,18 @@ const ClientSuppliedSamples = () => {
       const existingRows = samples.map((sample) => ({
         labReference: sample.labReference,
         clientReference: sample.clientReference,
+        cowlNumber: sample.cowlNumber || "",
       }));
       setSampleRows(existingRows);
-      // Set analyst and analysis date from first sample if available
-      if (samples[0].analyzedBy) {
-        // Handle both string and object formats for analyzedBy
-        if (typeof samples[0].analyzedBy === "string") {
-          setAnalyst(samples[0].analyzedBy);
-        } else if (
-          samples[0].analyzedBy.firstName &&
-          samples[0].analyzedBy.lastName
-        ) {
-          setAnalyst(
-            samples[0].analyzedBy.firstName +
-              " " +
-              samples[0].analyzedBy.lastName
-          );
-        } else {
-          setAnalyst("");
-        }
-      }
-      if (samples[0].analyzedAt) {
-        setAnalysisDate(
-          new Date(samples[0].analyzedAt).toISOString().split("T")[0]
-        );
-      }
     } else {
       // Start with one empty row with auto-generated lab reference
       setSampleRows([
         {
           labReference: `${job?.projectId?.projectID || "PROJ"}-1`,
           clientReference: "",
+          cowlNumber: "",
         },
       ]);
-      setAnalyst("");
-      setAnalysisDate(new Date().toISOString().split("T")[0]);
     }
   };
 
@@ -243,6 +200,7 @@ const ClientSuppliedSamples = () => {
       {
         labReference: newLabReference,
         clientReference: "",
+        cowlNumber: "",
       },
     ]);
   };
@@ -267,16 +225,13 @@ const ClientSuppliedSamples = () => {
 
   const handleConfirmSamples = async () => {
     try {
-      // Get the projectId from the job
-      const projectId = job.projectId._id || job.projectId;
-
       // Create a map of existing samples by labReference for quick lookup
       const existingSamplesMap = new Map();
       samples.forEach((sample) => {
         existingSamplesMap.set(sample.labReference, sample);
       });
 
-      // Prepare sample data with analyst and analysis date
+      // Prepare sample data (analyst and analysis date are set on the analysis page)
       const sampleData = sampleRows.map((row) => {
         const existingSample = existingSamplesMap.get(row.labReference);
 
@@ -286,46 +241,36 @@ const ClientSuppliedSamples = () => {
             ...existingSample,
             labReference: row.labReference,
             clientReference: row.clientReference,
+            cowlNumber: row.cowlNumber || "",
             // Preserve existing analysis data
             analysisData: existingSample.analysisData,
             analysisResult: existingSample.analysisResult,
-            // Update analyst info only if not already set
-            analyzedBy: existingSample.analyzedBy || analyst || undefined,
-            analyzedAt:
-              existingSample.analyzedAt ||
-              (analysisDate ? new Date(analysisDate) : undefined),
+            // Only preserve analyzedBy/analyzedAt if analysis was actually completed
+            // (i.e., if analysisData exists, meaning analysis was finalized)
+            analyzedBy: existingSample.analysisData
+              ? existingSample.analyzedBy
+              : undefined,
+            analyzedAt: existingSample.analysisData
+              ? existingSample.analyzedAt
+              : undefined,
           };
         } else {
-          // New sample - create with basic info
+          // New sample - create with basic info only (no analysis data yet)
           return {
             ...row,
-            analyzedBy: analyst || undefined,
-            analyzedAt: analysisDate ? new Date(analysisDate) : undefined,
+            // Don't set analyzedBy/analyzedAt for new samples - they haven't been analyzed yet
+            analyzedBy: undefined,
+            analyzedAt: undefined,
           };
         }
       });
 
-      // Update existing samples and create new ones
-      const updatePromises = sampleData.map(async (sampleData) => {
-        const existingSample = existingSamplesMap.get(sampleData.labReference);
-
-        if (existingSample) {
-          // Update existing sample
-          return await sampleItemsService.update(
-            existingSample._id,
-            sampleData
-          );
-        } else {
-          // Create new sample
-          return await sampleItemsService.create({
-            projectId,
-            ...sampleData,
-          });
-        }
+      // Update the job with the new samples array
+      await clientSuppliedJobsService.update(jobId, {
+        samples: sampleData,
       });
 
-      const results = await Promise.all(updatePromises);
-      console.log("Samples updated/created:", results);
+      console.log("Samples saved to job");
 
       // Refresh the samples list
       await fetchSampleItems();
@@ -335,67 +280,168 @@ const ClientSuppliedSamples = () => {
     }
   };
 
-  const handleDeleteSample = async (sampleId) => {
-    try {
-      await sampleItemsService.delete(sampleId);
-      // Remove the deleted sample from the local state
-      setSamples(samples.filter((sample) => sample._id !== sampleId));
-    } catch (error) {
-      console.error("Error deleting sample:", error);
+  const compressFile = async (file) => {
+    const fileSizeKB = file.size / 1024;
+
+    // If file is under 50KB, return as is
+    if (fileSizeKB <= 50) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
     }
+
+    // If it's an image, use the image compression utility
+    if (file.type.startsWith("image/")) {
+      try {
+        return await compressImage(file, {
+          maxWidth: 1200,
+          maxHeight: 1200,
+          quality: 0.75,
+          maxSizeKB: 50,
+        });
+      } catch (error) {
+        console.error("Error compressing image:", error);
+        throw error;
+      }
+    }
+
+    // For PDFs and other files over 50KB, we'll still upload but warn the user
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "pending":
-        return "warning";
-      case "in_progress":
-        return "info";
-      case "analyzed":
-        return "success";
-      default:
-        return "default";
+  const handleCOCUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+    ];
+    if (!validTypes.includes(file.type)) {
+      setSnackbar({
+        open: true,
+        message: "Please upload a PDF or image file (JPEG, PNG, WEBP)",
+        severity: "error",
+      });
+      return;
     }
-  };
 
-  const handleGeneratePDF = async () => {
+    // Validate file size (max 5MB before compression)
+    const maxSizeMB = 5;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      setSnackbar({
+        open: true,
+        message: `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
+        severity: "error",
+      });
+      return;
+    }
+
     try {
-      setGeneratingPDF(true);
+      setUploadingCOC(true);
+      const compressedFile = await compressFile(file);
 
-      // Generate the PDF using pdfMake
-      await generateFibreIDReport({
-        job: job,
-        sampleItems: samples,
-        openInNewTab: false,
+      // Update job with COC data
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: {
+          fileName: file.name,
+          fileType: file.type,
+          uploadedAt: new Date().toISOString(),
+          data: compressedFile,
+        },
       });
 
-      console.log("Client supplied fibre ID PDF downloaded successfully");
+      // Refresh job details to show the uploaded COC
+      await fetchJobDetails();
+
+      setSnackbar({
+        open: true,
+        message: "Chain of Custody form uploaded successfully",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      // You might want to show a snackbar or alert here
+      console.error("Error uploading COC:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload Chain of Custody form",
+        severity: "error",
+      });
     } finally {
-      setGeneratingPDF(false);
+      setUploadingCOC(false);
+      // Reset the file input
+      event.target.value = "";
     }
   };
 
-  const handleCompleteJob = async () => {
-    try {
-      setCompletingJob(true);
+  const handleDownloadCOC = () => {
+    if (!job?.chainOfCustody?.data) return;
 
-      const response = await clientSuppliedJobsService.update(jobId, {
-        status: "Completed",
+    try {
+      // Convert base64 to blob
+      const byteString = atob(job.chainOfCustody.data.split(",")[1]);
+      const mimeString = job.chainOfCustody.data
+        .split(",")[0]
+        .split(":")[1]
+        .split(";")[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = job.chainOfCustody.fileName || "chain-of-custody.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading COC:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to download Chain of Custody form",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleDeleteCOC = async () => {
+    try {
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: null,
       });
 
-      // Update the local job state
-      setJob((prevJob) => ({ ...prevJob, status: "Completed" }));
+      // Refresh job details
+      await fetchJobDetails();
 
-      console.log("Job completed successfully");
-      // You might want to show a success message here
+      setSnackbar({
+        open: true,
+        message: "Chain of Custody form removed",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Error completing job:", error);
-      // You might want to show an error message here
-    } finally {
-      setCompletingJob(false);
+      console.error("Error deleting COC:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove Chain of Custody form",
+        severity: "error",
+      });
     }
   };
 
@@ -426,40 +472,23 @@ const ClientSuppliedSamples = () => {
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
-        {/* PDF Loading Overlay */}
-        <PDFLoadingOverlay
-          open={generatingPDF}
-          message="Generating Fibre ID Report PDF..."
-        />
         {/* Breadcrumbs */}
         <Breadcrumbs sx={{ mb: 3 }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Fibre ID Home
-          </Link>
           <Link
             component="button"
             variant="body1"
             onClick={handleBackToJobs}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
+            <ArrowBackIcon sx={{ mr: 1 }} />
             Client Supplied Jobs
           </Link>
-          <Link
-            component="button"
+          <Typography
             variant="body1"
-            onClick={() =>
-              navigate(`/fibre-id/client-supplied/${jobId}/samples`)
-            }
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+            sx={{ display: "flex", alignItems: "center" }}
           >
             Sample Items
-          </Link>
+          </Typography>
         </Breadcrumbs>
 
         {/* Header */}
@@ -478,74 +507,72 @@ const ClientSuppliedSamples = () => {
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
                 Project ID: {job.projectId?.projectID || "N/A"} | Client:{" "}
-                {job.projectId?.client?.name || "Unknown Client"} | Sample Date:{" "}
-                {job.projectId?.d_Date
-                  ? new Date(job.projectId.d_Date).toLocaleDateString("en-GB")
-                  : job.projectId?.createdAt
-                  ? new Date(job.projectId.createdAt).toLocaleDateString(
-                      "en-GB"
-                    )
+                {job.projectId?.client?.name || "Unknown Client"} | Sample
+                Receipt Date:{" "}
+                {job.sampleReceiptDate
+                  ? new Date(job.sampleReceiptDate).toLocaleDateString("en-GB")
                   : "N/A"}
               </Typography>
             </Box>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={fetchSampleItems}
-                sx={{ ml: 2 }}
-              >
-                Refresh
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<PdfIcon />}
-                onClick={handleGeneratePDF}
-                disabled={generatingPDF || samples.length === 0}
-                sx={{ ml: 2 }}
-              >
-                {generatingPDF ? "Generating PDF..." : "Generate PDF"}
-              </Button>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button
                 variant="contained"
-                startIcon={<AddIcon />}
+                startIcon={samples.length > 0 ? <EditIcon /> : <AddIcon />}
                 onClick={handleOpenModal}
               >
-                Add Samples
+                {samples.length > 0 ? "Edit Samples" : "Add Samples"}
               </Button>
-              {job?.status !== "Completed" && (
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={handleCompleteJob}
-                  disabled={completingJob || samples.length === 0}
-                  sx={{ ml: 2 }}
-                >
-                  {completingJob ? "Completing..." : "Complete Job"}
-                </Button>
-              )}
+
+              {/* Upload/View COC Button */}
+              <Button
+                variant="outlined"
+                startIcon={
+                  job?.chainOfCustody ? <DescriptionIcon /> : <UploadFileIcon />
+                }
+                onClick={() => setCocDialogOpen(true)}
+                disabled={uploadingCOC}
+              >
+                {job?.chainOfCustody
+                  ? "View/Edit COC"
+                  : uploadingCOC
+                  ? "Uploading..."
+                  : "Upload COC"}
+              </Button>
+
+              {/* Analysis Status Chip */}
+              {samples.length > 0 &&
+                (() => {
+                  // Determine if all samples are analyzed based on job type
+                  const isAllAnalysisComplete =
+                    job.jobType === "Fibre ID"
+                      ? samples.every(
+                          (sample) =>
+                            sample.analysisData &&
+                            sample.analysisData.isAnalyzed === true
+                        )
+                      : samples.every(
+                          (sample) =>
+                            sample.analysisData &&
+                            sample.analysisData.fieldsCounted !== undefined &&
+                            sample.analyzedAt
+                        );
+
+                  return (
+                    <Chip
+                      label={
+                        isAllAnalysisComplete
+                          ? "Analysis Complete"
+                          : "Analysis In Progress"
+                      }
+                      color={isAllAnalysisComplete ? "success" : "warning"}
+                      size="medium"
+                      sx={{ ml: 2 }}
+                    />
+                  );
+                })()}
             </Box>
           </Box>
         </Box>
-
-        {/* Search Bar */}
-        <Box sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search by lab reference, client reference, or sample description..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-
         {/* Sample Items Table */}
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
           <TableContainer>
@@ -558,80 +585,365 @@ const ClientSuppliedSamples = () => {
                   <TableCell sx={{ fontWeight: "bold" }}>
                     Client Reference
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
-                    Sample Description
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
-                    Analysis Result
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                  {job.jobType !== "Fibre ID" && (
+                    <TableCell sx={{ fontWeight: "bold" }}>
+                      Cowl Number
+                    </TableCell>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredSamples.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      {searchTerm
-                        ? "No samples match your search criteria"
-                        : "No samples found for this job. Click 'Add Samples' to get started."}
+                    <TableCell
+                      colSpan={job.jobType !== "Fibre ID" ? 3 : 2}
+                      align="center"
+                    >
+                      No samples found for this job. Click 'Add Samples' to get
+                      started.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSamples.map((sample) => (
-                    <TableRow key={sample.id} hover>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: "medium" }}
-                        >
-                          {sample.labReference}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {sample.clientReference || "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {sample.sampleDescription || "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={sample.analysisResult || "Pending"}
-                          color={sample.analysisResult ? "success" : "warning"}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          color="primary"
-                          onClick={() =>
-                            navigate(`/fibre-id/analysis/${sample._id}`)
-                          }
-                          sx={{ mr: 1 }}
-                        >
-                          Analysis
-                        </Button>
-                        <IconButton
-                          color="error"
-                          size="small"
-                          title="Delete Sample"
-                          onClick={() => handleDeleteSample(sample._id)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredSamples.map((sample, filteredIndex) => {
+                    // Find the actual index in the original samples array
+                    const actualIndex = samples.findIndex(
+                      (s) => s.labReference === sample.labReference
+                    );
+                    return (
+                      <TableRow key={actualIndex} hover>
+                        <TableCell>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: "medium" }}
+                          >
+                            {sample.labReference}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {sample.clientReference || "N/A"}
+                          </Typography>
+                        </TableCell>
+                        {job.jobType !== "Fibre ID" && (
+                          <TableCell>
+                            <Typography variant="body2">
+                              {sample.cowlNumber || "N/A"}
+                            </Typography>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </TableContainer>
         </Paper>
+
+        {/* Analysis Button */}
+        {samples.length > 0 && (
+          <Box sx={{ mt: 3, display: "flex", justifyContent: "center" }}>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => {
+                const basePath = location.pathname.startsWith(
+                  "/client-supplied"
+                )
+                  ? "/client-supplied"
+                  : "/fibre-id/client-supplied";
+
+                // For Fibre ID jobs, navigate to first sample's analysis page
+                // For Fibre Count jobs, navigate to bulk analysis page
+                if (job.jobType === "Fibre ID") {
+                  // Ensure we have at least one sample before navigating
+                  if (samples.length > 0) {
+                    const targetPath = `${basePath}/${jobId}/sample/0/analysis`;
+                    console.log(
+                      "Navigating to Fibre ID analysis:",
+                      targetPath,
+                      { jobId, basePath, samplesCount: samples.length }
+                    );
+                    navigate(targetPath);
+                  } else {
+                    console.warn("Cannot navigate: No samples available");
+                  }
+                } else {
+                  const targetPath = `${basePath}/${jobId}/analysis`;
+                  console.log(
+                    "Navigating to Fibre Count analysis:",
+                    targetPath
+                  );
+                  navigate(targetPath);
+                }
+              }}
+              disabled={job.jobType === "Fibre ID" && samples.length === 0}
+              sx={{
+                minWidth: 200,
+                backgroundColor: "#1976d2", // Blue color
+                "&:hover": {
+                  backgroundColor: "#1565c0", // Darker blue on hover
+                },
+              }}
+            >
+              {samples.every(
+                (sample) =>
+                  sample.analyzedAt ||
+                  (sample.analysisData && sample.analysisData.analyzedAt)
+              )
+                ? "Edit Analysis"
+                : "Analysis"}
+            </Button>
+          </Box>
+        )}
+
+        {/* Snackbar for notifications */}
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            severity={snackbar.severity}
+            sx={{ width: "100%" }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+
+        {/* COC View/Edit Dialog */}
+        <Dialog
+          open={cocDialogOpen}
+          onClose={() => setCocDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="h6">Chain of Custody</Typography>
+              <MuiIconButton onClick={() => setCocDialogOpen(false)}>
+                <CloseIcon />
+              </MuiIconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {job?.chainOfCustody
+                ? `File: ${job.chainOfCustody.fileName}`
+                : "No Chain of Custody file uploaded yet."}
+              <br />
+              {job?.chainOfCustody?.uploadedAt &&
+                `Uploaded: ${new Date(
+                  job.chainOfCustody.uploadedAt
+                ).toLocaleString("en-GB")}`}
+            </Typography>
+
+            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+              {/* Action Buttons - Left Side */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1.5,
+                  minWidth: "160px",
+                }}
+              >
+                {job?.chainOfCustody && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      startIcon={<DownloadIcon />}
+                      onClick={handleDownloadCOC}
+                      size="small"
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => {
+                        handleDeleteCOC();
+                        setCocDialogOpen(false);
+                      }}
+                      size="small"
+                    >
+                      Remove
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileIcon />}
+                  disabled={uploadingCOC}
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingCOC
+                    ? "Uploading..."
+                    : job?.chainOfCustody
+                    ? "Replace"
+                    : "Upload File"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  disabled={uploadingCOC}
+                  size="small"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  {uploadingCOC ? "Uploading..." : "Take Photo"}
+                </Button>
+              </Box>
+
+              {/* Preview - Right Side */}
+              {job?.chainOfCustody && (
+                <Box sx={{ flex: 1, minWidth: "220px" }}>
+                  {/* Preview COC if it's an image */}
+                  {job.chainOfCustody.fileType?.startsWith("image/") && (
+                    <Box
+                      sx={{
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        overflow: "hidden",
+                        maxHeight: "400px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          opacity: 0.9,
+                        },
+                      }}
+                      onClick={() => setCocFullScreenOpen(true)}
+                      title="Click to view full size"
+                    >
+                      <img
+                        src={job.chainOfCustody.data}
+                        alt="Chain of Custody"
+                        style={{
+                          maxHeight: "400px",
+                          maxWidth: "100%",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                    </Box>
+                  )}
+
+                  {/* Show PDF icon for PDFs */}
+                  {job.chainOfCustody.fileType === "application/pdf" && (
+                    <Box
+                      sx={{
+                        p: 4,
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        textAlign: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "#e8e8e8",
+                        },
+                      }}
+                      onClick={handleDownloadCOC}
+                      title="Click to download PDF"
+                    >
+                      <DescriptionIcon
+                        sx={{ fontSize: 60, color: "#1976d2", mb: 1 }}
+                      />
+                      <Typography variant="body2">
+                        PDF Document
+                        <br />
+                        Click to download
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+
+            <input
+              type="file"
+              hidden
+              ref={fileInputRef}
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => {
+                handleCOCUpload(e);
+                setCocDialogOpen(false);
+              }}
+            />
+            <input
+              type="file"
+              hidden
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                handleCOCUpload(e);
+                setCocDialogOpen(false);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+
+        {/* Full Screen COC Viewer */}
+        <Dialog
+          open={cocFullScreenOpen}
+          onClose={() => setCocFullScreenOpen(false)}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "90vh",
+              maxHeight: "90vh",
+            },
+          }}
+        >
+          <DialogTitle>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="h6">
+                Chain of Custody - {job?.chainOfCustody?.fileName}
+              </Typography>
+              <MuiIconButton onClick={() => setCocFullScreenOpen(false)}>
+                <CloseIcon />
+              </MuiIconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              p: 2,
+            }}
+          >
+            {job?.chainOfCustody?.fileType?.startsWith("image/") && (
+              <img
+                src={job.chainOfCustody.data}
+                alt="Chain of Custody Full Size"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Add Samples Modal */}
         <Dialog
@@ -648,7 +960,9 @@ const ClientSuppliedSamples = () => {
                 alignItems: "center",
               }}
             >
-              <Typography variant="h6">Add Samples</Typography>
+              <Typography variant="h6">
+                {samples.length > 0 ? "Edit Samples" : "Add Samples"}
+              </Typography>
               <MuiIconButton onClick={handleCloseModal}>
                 <CloseIcon />
               </MuiIconButton>
@@ -656,50 +970,10 @@ const ClientSuppliedSamples = () => {
           </DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Add sample references for project {job.projectId?.projectID}
+              {samples.length > 0
+                ? `Edit sample references for project ${job.projectId?.projectID}`
+                : `Add sample references for project ${job.projectId?.projectID}`}
             </Typography>
-
-            {/* Analyst and Analysis Date Fields */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Analysis Details
-              </Typography>
-              <Box sx={{ display: "flex", gap: 2 }}>
-                <TextField
-                  select
-                  label="Analyst"
-                  variant="outlined"
-                  size="small"
-                  value={analyst}
-                  onChange={(e) => setAnalyst(e.target.value)}
-                  sx={{ flex: 1 }}
-                >
-                  <MenuItem value="">
-                    <em>Select an analyst</em>
-                  </MenuItem>
-                  {users.map((user) => (
-                    <MenuItem
-                      key={user._id}
-                      value={`${user.firstName} ${user.lastName}`}
-                    >
-                      {user.firstName} {user.lastName}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Analysis Date"
-                  type="date"
-                  variant="outlined"
-                  size="small"
-                  value={analysisDate}
-                  onChange={(e) => setAnalysisDate(e.target.value)}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  sx={{ flex: 1 }}
-                />
-              </Box>
-            </Box>
 
             <TableContainer component={Paper}>
               <Table>
@@ -711,6 +985,12 @@ const ClientSuppliedSamples = () => {
                     <TableCell sx={{ fontWeight: "bold" }}>
                       Client Reference
                     </TableCell>
+                    {job.jobType !== "Fibre ID" && (
+                      <TableCell sx={{ fontWeight: "bold" }}>
+                        Cowl Number
+                      </TableCell>
+                    )}
+                    <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -749,6 +1029,35 @@ const ClientSuppliedSamples = () => {
                           }
                           placeholder="Enter client reference"
                         />
+                      </TableCell>
+                      {job.jobType !== "Fibre ID" && (
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            variant="outlined"
+                            size="small"
+                            value={row.cowlNumber}
+                            onChange={(e) =>
+                              handleRowChange(
+                                index,
+                                "cowlNumber",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Enter cowl number"
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <IconButton
+                          color="error"
+                          size="small"
+                          onClick={() => handleRemoveRow(index)}
+                          disabled={sampleRows.length === 1}
+                          title="Delete Sample"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}

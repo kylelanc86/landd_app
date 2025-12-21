@@ -77,7 +77,8 @@ router.post('/register', async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-        notifications: user.notifications
+        notifications: user.notifications,
+        labSignatory: user.labSignatory || false
       }
     });
   } catch (err) {
@@ -132,7 +133,8 @@ router.post('/login', async (req, res) => {
           email: user.email,
           role: user.role,
           phone: user.phone,
-          notifications: user.notifications
+          notifications: user.notifications,
+          labSignatory: user.labSignatory || false
         }
       });
     } catch (tokenError) {
@@ -149,6 +151,12 @@ router.post('/login', async (req, res) => {
 router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
+    
+    // Ensure labSignatory field is present for backward compatibility
+    if (user && user.labSignatory === undefined) {
+      user.labSignatory = false;
+    }
+    
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });

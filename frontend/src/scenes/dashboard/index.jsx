@@ -33,12 +33,11 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useNavigate } from "react-router-dom";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, lazy, Suspense } from "react";
 import { invoiceService } from "../../services/api";
 
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
-import AllocatedJobsTable from "./AllocatedJobsTable";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import ScienceIcon from "@mui/icons-material/Science";
 import SendIcon from "@mui/icons-material/Send";
@@ -57,6 +56,9 @@ import {
   navigateToDatabase,
 } from "../../utils/navigationHelpers";
 
+// Lazy load the table component to prioritize widget rendering
+const AllocatedJobsTable = lazy(() => import("./AllocatedJobsTable"));
+
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -65,10 +67,8 @@ const Dashboard = () => {
   const [dataLoading, setDataLoading] = useState(false);
 
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
-  const [dailyTimesheetData, setDailyTimesheetData] = useState({
-    totalTime: 0,
-    status: "incomplete",
-  });
+  const [dailyTimesheetStatus, setDailyTimesheetStatus] =
+    useState("incomplete");
 
   // Add responsive breakpoints - allow single row when possible
   const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // Back to "sm" for mobile
@@ -91,16 +91,37 @@ const Dashboard = () => {
 
   // Load widget preferences from user preferences or use defaults
   // All additional widgets are false by default - users must explicitly select them
-  const [visibleWidgets, setVisibleWidgets] = useState({
-    dailyTimesheet: true, // Required widget (always true)
-    inProgress: false, // Additional widget 1 (user must select)
-    samplesSubmitted: false, // Additional widget 2 (user must select)
-    labComplete: false, // Additional widget 3 (user must select)
-    reportReview: false, // Additional widget 4 (user must select)
-    readyForInvoicing: false, // Additional widget 5 (user must select)
-    invoiceSent: false, // Additional widget 6 (user must select)
-    awaitingPayment: false, // Additional widget 7 (user must select)
-    allActive: false, // Additional widget 8 (user must select)
+  const [visibleWidgets, setVisibleWidgets] = useState(() => {
+    // Initialize from localStorage if available while API loads
+    const savedWidgets = localStorage.getItem("dashboardWidgets");
+    if (savedWidgets) {
+      try {
+        return { ...JSON.parse(savedWidgets), dailyTimesheet: true };
+      } catch {
+        return {
+          dailyTimesheet: true,
+          inProgress: false,
+          samplesSubmitted: false,
+          labComplete: false,
+          reportReview: false,
+          readyForInvoicing: false,
+          invoiceSent: false,
+          awaitingPayment: false,
+          allActive: false,
+        };
+      }
+    }
+    return {
+      dailyTimesheet: true, // Required widget (always true)
+      inProgress: false, // Additional widget 1 (user must select)
+      samplesSubmitted: false, // Additional widget 2 (user must select)
+      labComplete: false, // Additional widget 3 (user must select)
+      reportReview: false, // Additional widget 4 (user must select)
+      readyForInvoicing: false, // Additional widget 5 (user must select)
+      invoiceSent: false, // Additional widget 6 (user must select)
+      awaitingPayment: false, // Additional widget 7 (user must select)
+      allActive: false, // Additional widget 8 (user must select)
+    };
   });
 
   const [stats, setStats] = useState({
@@ -115,10 +136,23 @@ const Dashboard = () => {
 
   // Load user preferences from database
   useEffect(() => {
+    const DEBUG_PREFS = false; // Set to true to enable preference loading logs
     const loadUserPreferences = async () => {
       try {
+        // Check if cache is empty - if so, load from database
+        const cachedOrder = localStorage.getItem("dashboardWidgetOrder");
+        const cachedWidgets = localStorage.getItem("dashboardWidgets");
+        const cacheIsEmpty = !cachedOrder || !cachedWidgets;
+
+        if (cacheIsEmpty) {
+          if (DEBUG_PREFS) console.log("Cache is empty, loading from database");
+        } else {
+          if (DEBUG_PREFS)
+            console.log("Cache exists, loading from cache first");
+        }
+
         const response = await userPreferencesService.getPreferences();
-        console.log("Loaded user preferences:", response.data);
+        if (DEBUG_PREFS) console.log("Loaded user preferences:", response.data);
 
         if (response.data?.dashboard) {
           const dashboardPrefs = response.data.dashboard;
@@ -129,10 +163,12 @@ const Dashboard = () => {
             Array.isArray(dashboardPrefs.widgetOrder) &&
             dashboardPrefs.widgetOrder.length > 0
           ) {
-            console.log(
-              "Loading widget order from preferences:",
-              dashboardPrefs.widgetOrder
-            );
+            if (DEBUG_PREFS) {
+              console.log(
+                "Loading widget order from preferences:",
+                dashboardPrefs.widgetOrder
+              );
+            }
 
             // Map old status-based IDs to new widget IDs
             const idMapping = {
@@ -152,13 +188,24 @@ const Dashboard = () => {
 
             // Remove duplicates while preserving order
             const uniqueOrder = [...new Set(mappedOrder)];
-            console.log("Mapped widget order:", mappedOrder);
-            console.log("Unique widget order:", uniqueOrder);
+            if (DEBUG_PREFS) {
+              console.log("Mapped widget order:", mappedOrder);
+              console.log("Unique widget order:", uniqueOrder);
+            }
             setWidgetOrder(uniqueOrder);
-          } else {
-            console.log(
-              "No valid widget order in preferences, keeping default"
+
+            // Cache the widget order
+            localStorage.setItem(
+              "dashboardWidgetOrder",
+              JSON.stringify(uniqueOrder)
             );
+            if (DEBUG_PREFS) console.log("Cached widget order:", uniqueOrder);
+          } else {
+            if (DEBUG_PREFS) {
+              console.log(
+                "No valid widget order in preferences, keeping default"
+              );
+            }
           }
 
           // Load visible widgets - only if they exist in preferences
@@ -166,12 +213,61 @@ const Dashboard = () => {
             const prefs = { ...dashboardPrefs.visibleWidgets };
             // Ensure daily timesheet is always enabled (required widget)
             prefs.dailyTimesheet = true;
-            console.log("Setting visible widgets from preferences:", prefs);
-            setVisibleWidgets(prefs);
+            if (DEBUG_PREFS)
+              console.log("Setting visible widgets from preferences:", prefs);
+
+            // Get current state (may have localStorage values or initial state)
+            const currentWidgets = visibleWidgets;
+
+            // Check if preferences have all widgets defined
+            // If not, we should preserve current state for missing widgets
+            const allWidgetKeys = [
+              "dailyTimesheet",
+              "inProgress",
+              "samplesSubmitted",
+              "labComplete",
+              "reportReview",
+              "readyForInvoicing",
+              "invoiceSent",
+              "awaitingPayment",
+              "allActive",
+            ];
+
+            const prefsHasAllKeys = allWidgetKeys.every((key) => key in prefs);
+
+            // Merge strategy:
+            // 1. Start with current state (preserves what user sees initially)
+            // 2. If preferences have all keys, use them (complete preferences)
+            // 3. If preferences are incomplete, merge: current state + prefs (only override what exists)
+            const merged = prefsHasAllKeys
+              ? {
+                  ...currentWidgets, // Start with current
+                  ...prefs, // Apply all preferences (complete)
+                }
+              : {
+                  ...currentWidgets, // Start with current (preserves visible widgets)
+                  ...prefs, // Only override widgets that exist in prefs
+                  dailyTimesheet: true, // Always ensure dailyTimesheet is true
+                };
+
+            if (DEBUG_PREFS) {
+              console.log("Merged visible widgets (current + prefs):", {
+                prefsHasAllKeys,
+                currentWidgets,
+                prefs,
+                merged,
+              });
+            }
+            setVisibleWidgets(merged);
+
+            // Cache the visible widgets
+            localStorage.setItem("dashboardWidgets", JSON.stringify(merged));
+            if (DEBUG_PREFS) console.log("Cached visible widgets:", merged);
           } else {
             // No preferences found - use default state (only dailyTimesheet enabled)
-            console.log("No widget preferences found, using defaults");
-            setVisibleWidgets({
+            if (DEBUG_PREFS)
+              console.log("No widget preferences found, using defaults");
+            const defaultWidgets = {
               dailyTimesheet: true,
               inProgress: false,
               samplesSubmitted: false,
@@ -181,12 +277,22 @@ const Dashboard = () => {
               invoiceSent: false,
               awaitingPayment: false,
               allActive: false,
-            });
+            };
+            setVisibleWidgets(defaultWidgets);
+
+            // Cache the default widgets
+            localStorage.setItem(
+              "dashboardWidgets",
+              JSON.stringify(defaultWidgets)
+            );
+            if (DEBUG_PREFS)
+              console.log("Cached default widgets:", defaultWidgets);
           }
         } else {
           // No dashboard preferences found - use default state
-          console.log("No dashboard preferences found, using defaults");
-          setVisibleWidgets({
+          if (DEBUG_PREFS)
+            console.log("No dashboard preferences found, using defaults");
+          const defaultWidgets = {
             dailyTimesheet: true,
             inProgress: false,
             samplesSubmitted: false,
@@ -195,7 +301,17 @@ const Dashboard = () => {
             readyForInvoicing: false,
             invoiceSent: false,
             awaitingPayment: false,
-          });
+            allActive: false,
+          };
+          setVisibleWidgets(defaultWidgets);
+
+          // Cache the default widgets
+          localStorage.setItem(
+            "dashboardWidgets",
+            JSON.stringify(defaultWidgets)
+          );
+          if (DEBUG_PREFS)
+            console.log("Cached default widgets:", defaultWidgets);
         }
       } catch (error) {
         console.error("Error loading user preferences:", error);
@@ -214,9 +330,25 @@ const Dashboard = () => {
         if (savedWidgets) {
           try {
             const parsed = JSON.parse(savedWidgets);
-            parsed.dailyTimesheet = true; // Ensure daily timesheet is always enabled
-            console.log("Using localStorage fallback:", parsed);
-            setVisibleWidgets(parsed);
+
+            // Merge with defaults to ensure all widgets exist
+            const merged = {
+              dailyTimesheet: true,
+              inProgress: false,
+              samplesSubmitted: false,
+              labComplete: false,
+              reportReview: false,
+              readyForInvoicing: false,
+              invoiceSent: false,
+              awaitingPayment: false,
+              allActive: false,
+              ...parsed,
+              dailyTimesheet: true, // Force daily timesheet to always be true
+            };
+
+            if (DEBUG_PREFS)
+              console.log("Using localStorage fallback:", merged);
+            setVisibleWidgets(merged);
           } catch (parseError) {
             console.error(
               "Error parsing saved widget preferences:",
@@ -247,6 +379,7 @@ const Dashboard = () => {
             readyForInvoicing: false,
             invoiceSent: false,
             awaitingPayment: false,
+            allActive: false,
           });
         }
       }
@@ -255,49 +388,36 @@ const Dashboard = () => {
     loadUserPreferences();
   }, []);
 
-  // Fetch daily timesheet data
+  // Fetch daily timesheet status only (optimized - removed unnecessary entries fetch)
   useEffect(() => {
-    const fetchDailyTimesheet = async () => {
+    const fetchDailyTimesheetStatus = async () => {
       try {
+        const startTime = performance.now();
         const today = new Date();
         const formattedDate = format(today, "yyyy-MM-dd");
 
-        // Get timesheet entries for time calculation
-        const entriesResponse = await api.get(
-          `/timesheets/range/${formattedDate}/${formattedDate}`
-        );
-
-        // Get daily status
+        // OPTIMIZATION: Only fetch status, not timesheet entries
+        // Removed: /timesheets/range API call (was unused - calculated totalTime but never displayed it)
         const statusResponse = await api.get(
           `/timesheets/status/range/${formattedDate}/${formattedDate}`
         );
 
-        // Calculate total time from entries
-        const totalMinutes = entriesResponse.data.reduce((total, entry) => {
-          const [startHours, startMinutes] = entry.startTime
-            .split(":")
-            .map(Number);
-          const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
-          const startTotalMinutes = startHours * 60 + startMinutes;
-          const endTotalMinutes = endHours * 60 + endMinutes;
-          let duration = endTotalMinutes - startTotalMinutes;
-          if (duration < 0) duration += 24 * 60;
-          return total + duration;
-        }, 0);
+        const fetchTime = performance.now() - startTime;
+        console.log(
+          `⚡ Dashboard timesheet status loaded in ${fetchTime.toFixed(
+            2
+          )}ms (was 2 API calls)`
+        );
 
-        // Get status from daily status summary (not individual entries)
         const dailyStatus = statusResponse.data[0]?.status || "incomplete";
-
-        setDailyTimesheetData({
-          totalTime: totalMinutes,
-          status: dailyStatus,
-        });
+        setDailyTimesheetStatus(dailyStatus);
       } catch (error) {
-        console.error("Error fetching daily timesheet:", error);
+        console.error("Error fetching daily timesheet status:", error);
+        setDailyTimesheetStatus("incomplete"); // Fallback to incomplete on error
       }
     };
 
-    fetchDailyTimesheet();
+    fetchDailyTimesheetStatus();
   }, []);
 
   const handleDragEnd = async (result) => {
@@ -318,10 +438,15 @@ const Dashboard = () => {
           visibleWidgets: visibleWidgets,
         },
       });
+
+      // Update cache after successful database save
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(newOrder));
+      localStorage.setItem("dashboardWidgets", JSON.stringify(visibleWidgets));
     } catch (error) {
       console.error("Error saving widget order preferences:", error);
       // Fallback to localStorage if API fails
       localStorage.setItem("dashboardWidgetOrder", JSON.stringify(newOrder));
+      localStorage.setItem("dashboardWidgets", JSON.stringify(visibleWidgets));
     }
 
     // Force a re-render by updating visibleWidgets
@@ -338,8 +463,8 @@ const Dashboard = () => {
         bgcolor: "#EA1517",
         onClick: () => navigate("/timesheets"),
         subtitle:
-          dailyTimesheetData.status.charAt(0).toUpperCase() +
-          dailyTimesheetData.status.slice(1),
+          dailyTimesheetStatus.charAt(0).toUpperCase() +
+          dailyTimesheetStatus.slice(1),
       },
       {
         id: "inProgress",
@@ -391,7 +516,7 @@ const Dashboard = () => {
         id: "awaitingPayment",
         title: "Invoiced - Awaiting Payment",
         icon: <PaymentIcon />,
-        bgcolor: "#d32f2f",
+        bgcolor: "#000000",
         onClick: () =>
           navigateToProjects(navigate, {
             status: "Invoiced - Awaiting Payment",
@@ -399,13 +524,13 @@ const Dashboard = () => {
       },
       {
         id: "allActive",
-        title: "All Active Projects",
+        title: "Active Projects",
         icon: <PlayArrowIcon />,
-        bgcolor: "#2e7d32",
-        onClick: () => navigate("/projects?status=active"),
+        bgcolor: "#ebba34",
+        onClick: () => navigate("/projects"),
       },
     ],
-    [dailyTimesheetData, currentUser, navigate]
+    [dailyTimesheetStatus, currentUser, navigate]
   );
 
   // Clean up invalid widget IDs after gridItems is defined
@@ -443,20 +568,33 @@ const Dashboard = () => {
     }
   }, [visibleWidgets.dailyTimesheet]);
 
-  // Debug: Log when visibleWidgets changes
-  useEffect(() => {
-    console.log("visibleWidgets changed:", visibleWidgets);
-  }, [visibleWidgets]);
+  // Debug: Log when visibleWidgets changes (disabled for performance)
+  // useEffect(() => {
+  //   console.log("visibleWidgets changed:", visibleWidgets);
+  //   console.log(
+  //     "Visible count:",
+  //     Object.values(visibleWidgets).filter(Boolean).length
+  //   );
+  //   console.log(
+  //     "All widgets state:",
+  //     Object.entries(visibleWidgets)
+  //       .map(([key, val]) => `${key}: ${val}`)
+  //       .join(", ")
+  //   );
+  // }, [visibleWidgets]);
 
   // Get ordered and visible widgets - limit to 3 additional widgets + daily timesheet = 4 total
   const displayWidgets = useMemo(() => {
-    console.log("displayWidgets useMemo running with:", {
-      widgetOrder,
-      visibleWidgets,
-      gridItemsLength: gridItems.length,
-    });
-    console.log("visibleWidgets keys:", Object.keys(visibleWidgets));
-    console.log("visibleWidgets values:", Object.values(visibleWidgets));
+    const DEBUG = false; // Set to true to enable verbose widget debugging
+    if (DEBUG) {
+      console.log("displayWidgets useMemo running with:", {
+        widgetOrder,
+        visibleWidgets,
+        gridItemsLength: gridItems.length,
+      });
+      console.log("visibleWidgets keys:", Object.keys(visibleWidgets));
+      console.log("visibleWidgets values:", Object.values(visibleWidgets));
+    }
 
     // First, ensure we have valid widget IDs
     const validWidgetIds = gridItems.map((item) => item.id);
@@ -475,60 +613,76 @@ const Dashboard = () => {
       (id) => !orderToUse.includes(id)
     );
     if (missingVisibleWidgets.length > 0) {
-      console.log(
-        "Adding missing visible widgets to order:",
-        missingVisibleWidgets
-      );
+      if (DEBUG) {
+        console.log(
+          "Adding missing visible widgets to order:",
+          missingVisibleWidgets
+        );
+      }
       orderToUse = [...orderToUse, ...missingVisibleWidgets];
     }
 
-    console.log("Display widgets calculation:", {
-      validWidgetIds,
-      filteredOrder,
-      orderToUse,
-      widgetOrder,
-      visibleWidgets,
-      gridItems: gridItems.map((item) => ({ id: item.id, title: item.title })),
-      allActiveInValidIds: validWidgetIds.includes("allActive"),
-      allActiveInOrder: widgetOrder.includes("allActive"),
-      allActiveVisible: visibleWidgets.allActive,
-      allActiveInFinalOrder: orderToUse.includes("allActive"),
-    });
+    if (DEBUG) {
+      console.log("Display widgets calculation:", {
+        validWidgetIds,
+        filteredOrder,
+        orderToUse,
+        widgetOrder,
+        visibleWidgets,
+        gridItems: gridItems.map((item) => ({
+          id: item.id,
+          title: item.title,
+        })),
+        allActiveInValidIds: validWidgetIds.includes("allActive"),
+        allActiveInOrder: widgetOrder.includes("allActive"),
+        allActiveVisible: visibleWidgets.allActive,
+        allActiveInFinalOrder: orderToUse.includes("allActive"),
+      });
+    }
 
     // Map and filter widgets, then limit to first 4 (1 required + up to 3 additional)
     const result = orderToUse
       .map((id) => {
         const item = gridItems.find((item) => item.id === id);
-        console.log(`Mapping ${id}:`, { item, isVisible: visibleWidgets[id] });
+        if (DEBUG) {
+          console.log(`Mapping ${id}:`, {
+            item,
+            isVisible: visibleWidgets[id],
+          });
+        }
         return item;
       })
       .filter(Boolean)
       .filter((item) => {
         const isVisible = visibleWidgets[item.id];
-        console.log(`Filtering ${item.id}:`, {
-          isVisible,
-          willShow: isVisible,
-        });
+        if (DEBUG) {
+          console.log(`Filtering ${item.id}:`, {
+            isVisible,
+            willShow: isVisible,
+          });
+        }
         return isVisible;
       })
       .slice(0, 4); // Only show first 4 widgets (1 required + up to 3 additional)
 
-    console.log(
-      "Final display widgets:",
-      result.map((item) => ({ id: item.id, title: item.title }))
-    );
-    console.log("displayWidgets length:", result.length);
+    if (DEBUG) {
+      console.log(
+        "Final display widgets:",
+        result.map((item) => ({ id: item.id, title: item.title }))
+      );
+      console.log("displayWidgets length:", result.length);
+    }
     return result;
   }, [widgetOrder, gridItems, visibleWidgets]);
 
-  // Debug: Test without useMemo
-  const debugDisplayWidgets = gridItems.filter(
-    (item) => visibleWidgets[item.id]
-  );
-  console.log(
-    "Debug display widgets (no useMemo):",
-    debugDisplayWidgets.map((item) => ({ id: item.id, title: item.title }))
-  );
+  // Debug: Test without useMemo (disabled for performance)
+  // const debugDisplayWidgets = gridItems.filter(
+  //   (item) => visibleWidgets[item.id]
+  // );
+  // console.log(
+  //   "Debug display widgets (no useMemo):",
+  //   debugDisplayWidgets.map((item) => ({ id: item.id, title: item.title }))
+  // );
 
   const handleCardClick = (item) => {
     if (typeof item.onClick === "function") {
@@ -537,18 +691,18 @@ const Dashboard = () => {
   };
 
   const handleWidgetToggle = async (widgetId) => {
-    console.log("Toggling widget:", widgetId);
+    // console.log("Toggling widget:", widgetId);
 
     const isCurrentlyVisible = visibleWidgets[widgetId];
     const currentVisibleCount =
       Object.values(visibleWidgets).filter(Boolean).length;
-    console.log("Current state:", visibleWidgets);
-    console.log("Is currently visible:", isCurrentlyVisible);
-    console.log("Current visible count:", currentVisibleCount);
+    // console.log("Current state:", visibleWidgets);
+    // console.log("Is currently visible:", isCurrentlyVisible);
+    // console.log("Current visible count:", currentVisibleCount);
 
     // Prevent disabling the daily timesheet widget (it's required)
     if (widgetId === "dailyTimesheet" && isCurrentlyVisible) {
-      console.log("Cannot disable required daily timesheet widget");
+      // console.log("Cannot disable required daily timesheet widget");
       return; // Exit early - cannot disable required widget
     }
 
@@ -580,10 +734,16 @@ const Dashboard = () => {
         },
       });
       console.log("Saved to database:", JSON.stringify(newState));
+
+      // Update cache after successful database save
+      localStorage.setItem("dashboardWidgets", JSON.stringify(newState));
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(widgetOrder));
+      console.log("Updated cache with new widget selections");
     } catch (error) {
       console.error("Error saving widget preferences:", error);
       // Fallback to localStorage if API fails
       localStorage.setItem("dashboardWidgets", JSON.stringify(newState));
+      localStorage.setItem("dashboardWidgetOrder", JSON.stringify(widgetOrder));
       console.log("Saved to localStorage:", JSON.stringify(newState));
     }
   };
@@ -997,9 +1157,22 @@ const Dashboard = () => {
         </DragDropContext>
       </Box>
 
-      {/* Allocated Jobs Table */}
+      {/* Allocated Jobs Table - Lazy loaded to prioritize widget rendering */}
       <Box mt="40px">
-        <AllocatedJobsTable />
+        <Suspense
+          fallback={
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              height="200px"
+            >
+              <CircularProgress />
+            </Box>
+          }
+        >
+          <AllocatedJobsTable />
+        </Suspense>
       </Box>
 
       {/* Widget Configuration Dialog */}
@@ -1021,19 +1194,22 @@ const Dashboard = () => {
             {gridItems
               .filter((item) => item.id !== "dailyTimesheet") // Exclude daily timesheet from selection
               .map((item) => {
-                const isChecked = visibleWidgets[item.id] || false;
+                // Check if this widget is currently visible
+                const isChecked = visibleWidgets[item.id] === true;
                 const currentCount =
                   Object.values(visibleWidgets).filter(Boolean).length;
+
                 // Can toggle if: already checked (can uncheck) OR not at limit of 4 total widgets
                 const canToggle = isChecked || currentCount < 4;
 
-                console.log(`Widget ${item.id}:`, {
-                  isChecked,
-                  currentCount,
-                  canToggle,
-                  visibleWidgets: visibleWidgets[item.id],
-                  allVisibleWidgets: visibleWidgets,
-                });
+                // Disabled for performance
+                // console.log(`Widget ${item.id}:`, {
+                //   isChecked,
+                //   currentCount,
+                //   canToggle,
+                //   visibleWidgetsValue: visibleWidgets[item.id],
+                //   widgetState: visibleWidgets,
+                // });
 
                 return (
                   <FormControlLabel

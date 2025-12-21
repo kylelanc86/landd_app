@@ -1,4 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -17,43 +24,60 @@ import {
   useTheme,
   Breadcrumbs,
   Link,
-  Snackbar,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
-import EditIcon from "@mui/icons-material/Edit";
-import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
-import AssessmentIcon from "@mui/icons-material/Assessment";
 import MicIcon from "@mui/icons-material/Mic";
 import DownloadIcon from "@mui/icons-material/Download";
+import MapIcon from "@mui/icons-material/Map";
 import { sampleService, shiftService } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import { formatDate, formatTime } from "../../utils/dateUtils";
+import PermissionGate from "../../components/PermissionGate";
+import { useAuth } from "../../context/AuthContext";
+import SitePlanMap from "../../components/SitePlanMap";
 
 const SampleList = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [samples, setSamples] = useState([]);
-  const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState("fullSampleID");
   const [sortAsc, setSortAsc] = useState(true);
   const [shift, setShift] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [job, setJob] = useState(null);
   const [isCompleteDisabled, setIsCompleteDisabled] = useState(true);
   const [nextSampleNumber, setNextSampleNumber] = useState(null);
   const [descriptionOfWorks, setDescriptionOfWorks] = useState("");
   const [descSaveStatus, setDescSaveStatus] = useState("");
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const recognitionRef = useRef(null);
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [sampleToDelete, setSampleToDelete] = useState(null);
+  const [showDescriptionDialog, setShowDescriptionDialog] = useState(false);
+  const [showSamplingCompleteDialog, setShowSamplingCompleteDialog] =
+    useState(false);
+  const [tempDescription, setTempDescription] = useState("");
+  const [showSamplesSubmittedDialog, setShowSamplesSubmittedDialog] =
+    useState(false);
+  const [submittedBySignature, setSubmittedBySignature] = useState("");
+  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
+  const [sitePlanData, setSitePlanData] = useState(null);
+  const { showSnackbar } = useSnackbar();
+
+  // Check if report is authorized
+  const isReportAuthorized = shift?.reportApprovedBy;
 
   // Function to extract the numeric part from a sample number
   const extractSampleNumber = (sampleNumber) => {
@@ -62,75 +86,108 @@ const SampleList = () => {
     return match ? parseInt(match[1]) : 0;
   };
 
-  // Function to generate the next sample number
-  const generateNextSampleNumber = async (samples, projectID) => {
-    if (!projectID) return 1;
-
-    try {
-      // Get all samples for the project
-      const allSamplesResponse = await sampleService.getByProject(projectID);
-      const allSamples = allSamplesResponse.data;
-      console.log("All samples for project:", allSamples);
-
-      // Get the highest sample number from all samples in the project
-      const highestNumber = Math.max(
-        ...allSamples.map((sample) => {
-          const number = extractSampleNumber(sample.fullSampleID);
-          console.log(`Sample ${sample.fullSampleID} has number ${number}`);
-          return number;
-        })
-      );
-      console.log("Highest sample number found:", highestNumber);
-
-      const nextNumber = highestNumber + 1;
-      console.log("Next sample number will be:", nextNumber);
-      return nextNumber;
-    } catch (err) {
-      console.error("Error generating next sample number:", err);
-      return 1;
-    }
-  };
-
   // Load shift and samples data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const shiftResponse = await shiftService.getById(shiftId);
-        setShift(shiftResponse.data);
 
-        const samplesResponse = await sampleService.getByShift(shiftId);
-        setSamples(samplesResponse.data || []);
+        // Parallelize critical API calls
+        const [shiftResponse, samplesResponse] = await Promise.all([
+          shiftService.getById(shiftId),
+          sampleService.getByShift(shiftId),
+        ]);
 
-        // Get project ID from shift data
-        const projectId = shiftResponse.data?.job?.projectId?.projectID;
-        if (projectId) {
-          // Fetch all samples for the project to determine next sample number
-          const projectSamplesResponse = await sampleService.getByProject(
-            projectId
-          );
-          const allProjectSamples = projectSamplesResponse.data || [];
+        const shiftData = shiftResponse.data;
+        setShift(shiftData);
+        const fetchedSamples = samplesResponse.data || [];
+        setSamples(fetchedSamples);
 
-          // Find the highest sample number
-          const highestNumber = allProjectSamples.reduce((max, sample) => {
-            const match = sample.fullSampleID?.match(/AM(\d+)$/);
-            const number = match ? parseInt(match[1]) : 0;
+        // Set description immediately if available
+        if (shiftData?.descriptionOfWorks) {
+          setDescriptionOfWorks(shiftData.descriptionOfWorks);
+        }
+
+        // Calculate next sample number from fetched samples (if samples exist)
+        const projectId = shiftData?.job?.projectId?.projectID;
+        if (projectId && fetchedSamples.length > 0) {
+          const highestNumber = fetchedSamples.reduce((max, sample) => {
+            const number = extractSampleNumber(sample.fullSampleID);
             return Math.max(max, number);
           }, 0);
-
-          // Set next sample number
           setNextSampleNumber(highestNumber + 1);
+        } else {
+          // Default to 1 for now - will be calculated in background if needed
+          setNextSampleNumber(1);
         }
 
-        if (shiftResponse.data?.descriptionOfWorks) {
-          setDescriptionOfWorks(shiftResponse.data.descriptionOfWorks);
-        }
-
+        // Set loading to false early so page can render
         setError(null);
+        setLoading(false);
+
+        // Fetch non-critical data in parallel (don't block page render)
+        const backgroundPromises = [];
+
+        // Site plan (non-critical, can fail silently)
+        backgroundPromises.push(
+          shiftService
+            .getSitePlan(shiftId)
+            .then((response) => setSitePlanData(response.data))
+            .catch(() => setSitePlanData(null))
+        );
+
+        // Job data (non-critical for initial render)
+        const jobId = shiftData?.job?._id || shiftData?.job;
+        if (jobId) {
+          backgroundPromises.push(
+            asbestosRemovalJobService
+              .getById(jobId)
+              .then((response) => setJob(response.data))
+              .catch(async (error) => {
+                // Try to fetch as air monitoring job as fallback
+                try {
+                  const { jobService } = await import("../../services/api");
+                  const airMonitoringJobResponse = await jobService.getById(
+                    jobId
+                  );
+                  setJob(airMonitoringJobResponse.data);
+                } catch (airMonitoringError) {
+                  // Silently fail - job data is not critical for page load
+                }
+              })
+          );
+        }
+
+        // Fetch project samples in background only if needed (when no samples exist)
+        if (projectId && fetchedSamples.length === 0) {
+          backgroundPromises.push(
+            sampleService
+              .getByProject(projectId)
+              .then((projectSamplesResponse) => {
+                const allProjectSamples = projectSamplesResponse.data || [];
+                const highestNumber = allProjectSamples.reduce(
+                  (max, sample) => {
+                    const number = extractSampleNumber(sample.fullSampleID);
+                    return Math.max(max, number);
+                  },
+                  0
+                );
+                setNextSampleNumber(highestNumber + 1);
+              })
+              .catch((err) => {
+                console.error("Error fetching project samples:", err);
+                // Keep default of 1 if fetch fails
+              })
+          );
+        }
+
+        // Execute background fetches (don't await - let them complete asynchronously)
+        Promise.allSettled(backgroundPromises).catch(() => {
+          // Silently handle any unhandled promise rejections
+        });
       } catch (err) {
         console.error("Error fetching data:", err);
         setError("Failed to load data. Please try again later.");
-      } finally {
         setLoading(false);
       }
     };
@@ -138,19 +195,69 @@ const SampleList = () => {
     fetchData();
   }, [shiftId]);
 
+  // Memoize validation function to avoid recreating it on every render
+  const validateSamplesCompleteMemo = useCallback((samplesToValidate) => {
+    if (!samplesToValidate || samplesToValidate.length === 0) {
+      return false;
+    }
+
+    return samplesToValidate.every((sample) => {
+      // Handle sampler field - use sampler if available, fall back to collectedBy
+      const sampler = sample.sampler || sample.collectedBy;
+
+      // If it's a field blank sample, only validate basic required fields
+      if (sample.location === "Field blank") {
+        return (
+          sample.sampleNumber && sample.location && sampler && sample.cowlNo
+        );
+      }
+
+      // For non-field blank samples, validate all required fields
+      return (
+        sample.sampleNumber &&
+        sample.type &&
+        sample.location &&
+        sampler &&
+        sample.pumpNo &&
+        sample.flowmeter &&
+        sample.cowlNo &&
+        sample.filterSize &&
+        sample.startTime &&
+        sample.endTime &&
+        sample.initialFlowrate &&
+        sample.finalFlowrate &&
+        sample.averageFlowrate &&
+        // Ensure flowrates are valid numbers and not failed
+        parseFloat(sample.initialFlowrate) > 0 &&
+        parseFloat(sample.finalFlowrate) > 0 &&
+        sample.status !== "failed"
+      );
+    });
+  }, []);
+
   // Re-validate samples whenever samples change
   useEffect(() => {
     if (samples.length > 0) {
-      const isValid = validateSamplesComplete(samples);
+      const isValid = validateSamplesCompleteMemo(samples);
       setIsCompleteDisabled(!isValid);
     } else {
       setIsCompleteDisabled(true);
     }
-  }, [samples]);
+  }, [samples, validateSamplesCompleteMemo]);
 
-  const handleSearch = (event) => {
-    setSearch(event.target.value);
-  };
+  // Cleanup: stop dictation when component unmounts
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          // Ignore errors during cleanup
+        }
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSort = (field) => {
     if (field === sortField) {
@@ -161,16 +268,31 @@ const SampleList = () => {
     }
   };
 
-  const handleDelete = async (sampleId) => {
-    if (window.confirm("Are you sure you want to delete this sample?")) {
-      try {
-        await sampleService.delete(sampleId);
-        setSamples(samples.filter((sample) => sample._id !== sampleId));
-      } catch (err) {
-        console.error("Error deleting sample:", err);
-        setError("Failed to delete sample. Please try again.");
-      }
+  const handleDelete = (sampleId) => {
+    const sample = samples.find((s) => s._id === sampleId);
+    setSampleToDelete(sample);
+    setDeleteConfirmDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!sampleToDelete) return;
+
+    try {
+      await sampleService.delete(sampleToDelete._id);
+      setSamples(samples.filter((sample) => sample._id !== sampleToDelete._id));
+      showSnackbar("Sample deleted successfully", "success");
+    } catch (err) {
+      console.error("Error deleting sample:", err);
+      showSnackbar("Failed to delete sample. Please try again.", "error");
+    } finally {
+      setDeleteConfirmDialogOpen(false);
+      setSampleToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmDialogOpen(false);
+    setSampleToDelete(null);
   };
 
   const handleDownloadCSV = async () => {
@@ -188,49 +310,138 @@ const SampleList = () => {
         })
       );
 
-      // Prepare CSV headers
-      const headers = [
-        ...Object.keys(samples[0] || {}),
-        ...(samples[0]?.analysis ? Object.keys(samples[0].analysis) : []),
-        ...(samples[0]?.analysis?.fibreCounts
-          ? samples[0].analysis.fibreCounts.map((_, i) => `fibreCount_${i + 1}`)
-          : []),
+      const escapeCsvCell = (value) => {
+        if (value === undefined || value === null) return "";
+        return `"${String(value).replace(/"/g, '""')}"`;
+      };
+
+      const formatPersonName = (value) => {
+        if (!value) return "";
+        if (typeof value === "string") return value;
+        if (typeof value === "object") {
+          const { firstName, lastName, name, fullName, displayName, email } =
+            value;
+          if (firstName || lastName) {
+            return [firstName, lastName].filter(Boolean).join(" ").trim();
+          }
+          if (name) return name;
+          if (fullName) return fullName;
+          if (displayName) return displayName;
+          if (email) return email;
+          return "";
+        }
+        return "";
+      };
+
+      const csvRows = [
+        ["Project ID", job?.projectId?.projectID || ""],
+        ["Project Name", job?.projectName || job?.name || ""],
+        ["Sample Date", shift?.date ? formatDate(shift.date) : ""],
+        ["Description of Works", descriptionOfWorks || ""],
+        [],
+        [],
       ];
 
-      // Prepare CSV rows
-      const rows = samples.map((sample) => {
+      const excludedColumns = new Set([
+        "analysis",
+        "_id",
+        "shift",
+        "job",
+        "jobModel",
+        "sampleNumber",
+        "status",
+        "collectedBy",
+        "createdAt",
+        "updatedAt",
+        "__v",
+        "fibreCount_1",
+        "fibreCount_2",
+        "fibreCount_3",
+        "fibreCount_4",
+        "fibreCount_5",
+        "counted",
+        "reportedConcentration",
+      ]);
+
+      const sampleRows = samples.map((sample) => {
         const base = { ...sample };
-        const analysis = sample.analysis || {};
-        // Flatten fibreCounts if present
-        let fibreCounts = {};
+        const analysis = base.analysis || {};
+
+        delete base.analysis;
+
+        const row = Object.entries(base).reduce((acc, [key, value]) => {
+          if (!excludedColumns.has(key)) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
+
+        Object.entries(analysis).forEach(([key, value]) => {
+          if (!excludedColumns.has(key) && key !== "fibreCounts") {
+            row[key] = value;
+          }
+        });
+
         if (Array.isArray(analysis.fibreCounts)) {
           analysis.fibreCounts.forEach((val, i) => {
-            fibreCounts[`fibreCount_${i + 1}`] = Array.isArray(val)
+            row[`fibreCount_${i + 1}`] = Array.isArray(val)
               ? val.join("|")
               : val;
           });
         }
-        // Merge all fields
-        return {
-          ...base,
-          ...analysis,
-          ...fibreCounts,
-        };
+
+        if (row.counted === undefined) {
+          const countedValue =
+            analysis.fieldsCounted ??
+            analysis.fibresCounted ??
+            analysis.counted ??
+            "";
+          row.counted = countedValue;
+        }
+
+        if (row.reportedConcentration === undefined) {
+          row.reportedConcentration = analysis.reportedConcentration ?? "";
+        }
+
+        if (sample.sampler || sample.collectedBy) {
+          row.sampler = formatPersonName(sample.sampler || sample.collectedBy);
+        } else if (row.sampler) {
+          row.sampler = formatPersonName(row.sampler);
+        }
+
+        if (row.analyst) {
+          row.analyst = formatPersonName(row.analyst);
+        }
+
+        return row;
       });
 
-      // Convert to CSV string
-      const csv = [
-        headers.join(","),
-        ...rows.map((row) =>
-          headers
-            .map((field) =>
-              row[field] !== undefined && row[field] !== null
-                ? `"${String(row[field]).replace(/"/g, '""')}"`
-                : ""
-            )
-            .join(",")
-        ),
-      ].join("\r\n");
+      if (sampleRows.length > 0) {
+        const headers = [];
+        sampleRows.forEach((row) => {
+          Object.keys(row).forEach((key) => {
+            if (!excludedColumns.has(key) && !headers.includes(key)) {
+              headers.push(key);
+            }
+          });
+        });
+
+        if (!headers.includes("reportedConcentration")) {
+          headers.push("reportedConcentration");
+        }
+
+        csvRows.push(headers);
+
+        sampleRows.forEach((row) => {
+          csvRows.push(headers.map((header) => row[header] ?? ""));
+        });
+      }
+
+      const csv = csvRows
+        .map((row) =>
+          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : ""
+        )
+        .join("\r\n");
 
       // Download CSV
       const blob = new Blob([csv], { type: "text/csv" });
@@ -244,112 +455,58 @@ const SampleList = () => {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Error downloading CSV:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to download CSV.",
-        severity: "error",
-      });
+      showSnackbar("Failed to download CSV.", "error");
     }
   };
 
-  const filteredSamples = samples.filter((sample) =>
-    Object.values(sample).some(
-      (value) =>
-        value && value.toString().toLowerCase().includes(search.toLowerCase())
-    )
-  );
-
-  const sortedSamples = [...filteredSamples].sort((a, b) => {
-    if (sortField === "sampleNumber" || sortField === "fullSampleID") {
-      // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
-      const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
-      const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
-      const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
-      const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
-      return sortAsc ? aNum - bNum : bNum - aNum;
-    } else {
-      const aValue = a[sortField];
-      const bValue = b[sortField];
-      if (aValue < bValue) return sortAsc ? -1 : 1;
-      if (aValue > bValue) return sortAsc ? 1 : -1;
-      return 0;
-    }
-  });
-
-  // Add validation function
-  const validateSamplesComplete = (samples) => {
-    if (!samples || samples.length === 0) {
-      console.log("No samples to validate");
-      return false; // No samples means not complete
-    }
-
-    console.log("Validating samples:", samples.length, "samples");
-
-    const result = samples.every((sample) => {
-      // Handle sampler field - use sampler if available, fall back to collectedBy
-      const sampler = sample.sampler || sample.collectedBy;
-
-      console.log(`Sample ${sample.fullSampleID}:`, {
-        sampleNumber: sample.sampleNumber,
-        type: sample.type,
-        location: sample.location,
-        sampler: sampler,
-        pumpNo: sample.pumpNo,
-        flowmeter: sample.flowmeter,
-        cowlNo: sample.cowlNo,
-        filterSize: sample.filterSize,
-        startTime: sample.startTime,
-        endTime: sample.endTime,
-        initialFlowrate: sample.initialFlowrate,
-        finalFlowrate: sample.finalFlowrate,
-        averageFlowrate: sample.averageFlowrate,
-        status: sample.status,
-      });
-
-      // If it's a field blank sample, only validate basic required fields
-      if (sample.location === "Field blank") {
-        const isValid =
-          sample.sampleNumber && sample.location && sampler && sample.cowlNo;
-        console.log(`Field blank sample validation:`, isValid);
-        return isValid;
+  // Memoize sorted samples to avoid recalculating on every render
+  const sortedSamples = useMemo(() => {
+    return [...samples].sort((a, b) => {
+      if (sortField === "sampleNumber" || sortField === "fullSampleID") {
+        // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
+        const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
+        const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
+        const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
+        const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
+        return sortAsc ? aNum - bNum : bNum - aNum;
+      } else {
+        const aValue = a[sortField];
+        const bValue = b[sortField];
+        if (aValue < bValue) return sortAsc ? -1 : 1;
+        if (aValue > bValue) return sortAsc ? 1 : -1;
+        return 0;
       }
-
-      // For non-field blank samples, validate all required fields
-      const isValid =
-        sample.sampleNumber &&
-        sample.type &&
-        sample.location &&
-        sampler &&
-        sample.pumpNo &&
-        sample.flowmeter &&
-        sample.cowlNo &&
-        sample.filterSize &&
-        sample.startTime &&
-        sample.endTime &&
-        sample.initialFlowrate &&
-        sample.finalFlowrate &&
-        sample.averageFlowrate &&
-        // Ensure flowrates are valid numbers and not failed
-        parseFloat(sample.initialFlowrate) > 0 &&
-        parseFloat(sample.finalFlowrate) > 0 &&
-        sample.status !== "failed";
-
-      console.log(`Regular sample validation:`, isValid);
-      return isValid;
     });
-
-    console.log("Overall validation result:", result);
-    return result;
-  };
+  }, [samples, sortField, sortAsc]);
 
   // Add handleSampleComplete function
-  const handleSampleComplete = async () => {
+  const handleSampleComplete = () => {
+    // Set the current description as the temp description for editing
+    setTempDescription(descriptionOfWorks);
+    setShowSamplingCompleteDialog(true);
+  };
+
+  // Handle the actual completion after dialog confirmation
+  const handleConfirmSamplingComplete = async () => {
     try {
+      // Update the description if it was modified
+      if (tempDescription !== descriptionOfWorks) {
+        await shiftService.update(shiftId, {
+          descriptionOfWorks: tempDescription,
+        });
+        setDescriptionOfWorks(tempDescription);
+        setDescSaveStatus("Saved");
+      }
+
       // Update shift status
       await shiftService.update(shiftId, { status: "sampling_complete" });
+
       // Refetch shift to update UI
       const shiftResponse = await shiftService.getById(shiftId);
       setShift(shiftResponse.data);
+
+      // Close dialog
+      setShowSamplingCompleteDialog(false);
     } catch (error) {
       console.error("Error updating shift status:", error);
       setError("Failed to update shift status. Please try again.");
@@ -357,16 +514,35 @@ const SampleList = () => {
   };
 
   // Add handler for Samples Submitted to Lab
-  const handleSamplesSubmittedToLab = async () => {
+  const handleSamplesSubmittedToLab = () => {
+    // Automatically set the current user's name
+    const userName = currentUser
+      ? `${currentUser.firstName} ${currentUser.lastName}`
+      : "";
+    setSubmittedBySignature(userName);
+    setShowSamplesSubmittedDialog(true);
+  };
+
+  // Handle the actual submission after dialog confirmation
+  const handleConfirmSamplesSubmitted = async () => {
     try {
       const currentDate = new Date().toISOString();
       await shiftService.update(shiftId, {
         status: "samples_submitted_to_lab",
         samplesReceivedDate: currentDate,
+        submittedBy: submittedBySignature,
       });
       // Refetch shift to update UI
       const shiftResponse = await shiftService.getById(shiftId);
       setShift(shiftResponse.data);
+      // Close dialog
+      setShowSamplesSubmittedDialog(false);
+
+      // Navigate to AsbestosRemovalJobDetails page
+      const jobId = shiftResponse.data?.job?._id || shiftResponse.data?.job;
+      if (jobId) {
+        navigate(`/asbestos-removal/jobs/${jobId}/details`);
+      }
     } catch (error) {
       setError("Failed to update shift status to 'Samples Submitted to Lab'.");
     }
@@ -380,6 +556,26 @@ const SampleList = () => {
     });
   };
 
+  const handleOpenSitePlan = () => {
+    setSitePlanDialogOpen(true);
+  };
+
+  const handleCloseSitePlan = () => {
+    setSitePlanDialogOpen(false);
+  };
+
+  const handleSaveSitePlan = async (sitePlanData) => {
+    try {
+      await shiftService.saveSitePlan(shiftId, sitePlanData);
+      setSitePlanData(sitePlanData);
+      showSnackbar("Site plan saved successfully", "success");
+      setSitePlanDialogOpen(false);
+    } catch (error) {
+      console.error("Error saving site plan:", error);
+      showSnackbar("Failed to save site plan. Please try again.", "error");
+    }
+  };
+
   const handleDescriptionChange = (e) => {
     setDescriptionOfWorks(e.target.value);
     setDescSaveStatus("");
@@ -387,15 +583,24 @@ const SampleList = () => {
 
   const saveDescriptionOfWorks = async () => {
     try {
-      await shiftService.update(shiftId, { descriptionOfWorks });
+      await shiftService.update(shiftId, {
+        descriptionOfWorks,
+      });
       setDescSaveStatus("Saved");
     } catch (err) {
+      console.error("Error saving description of works:", err);
       setDescSaveStatus("Error");
     }
   };
 
   // Dictation functions
   const startDictation = () => {
+    // If already dictating, stop it first
+    if (isDictating && recognitionRef.current) {
+      stopDictation();
+      return;
+    }
+
     // Check if browser supports speech recognition
     if (
       !("webkitSpeechRecognition" in window) &&
@@ -423,22 +628,25 @@ const SampleList = () => {
 
       recognition.onresult = (event) => {
         let finalTranscript = "";
-        let interimTranscript = "";
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
           }
         }
 
         // Update the description field with the final transcript
         if (finalTranscript) {
-          setDescriptionOfWorks(
-            (prev) => prev + (prev ? " " : "") + finalTranscript
-          );
+          setDescriptionOfWorks((prev) => {
+            const isFirstWord = !prev || prev.trim().length === 0;
+            const newText = isFirstWord
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
+              : finalTranscript;
+            return prev + (prev ? " " : "") + newText;
+          });
+          setDescSaveStatus(""); // Reset save status when description changes
         }
       };
 
@@ -446,21 +654,32 @@ const SampleList = () => {
         console.error("Speech recognition error:", event.error);
         setDictationError(`Dictation error: ${event.error}`);
         setIsDictating(false);
+        recognitionRef.current = null;
       };
 
       recognition.onend = () => {
         setIsDictating(false);
+        recognitionRef.current = null;
       };
 
+      recognitionRef.current = recognition;
       recognition.start();
     } catch (error) {
       console.error("Error starting dictation:", error);
       setDictationError("Failed to start dictation. Please try again.");
+      recognitionRef.current = null;
     }
   };
 
   const stopDictation = () => {
-    // The recognition will automatically stop, but we can set the state
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error("Error stopping dictation:", error);
+      }
+      recognitionRef.current = null;
+    }
     setIsDictating(false);
   };
 
@@ -474,16 +693,6 @@ const SampleList = () => {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() =>
-          navigate(`/air-monitoring/jobs/${shift?.job?._id}/shifts`)
-        }
-        sx={{ mb: 4 }}
-      >
-        Back to Shifts
-      </Button>
-
       {/* Breadcrumbs */}
       <Breadcrumbs sx={{ marginBottom: 3 }}>
         <Link
@@ -493,75 +702,112 @@ const SampleList = () => {
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
           <ArrowBackIcon sx={{ mr: 1 }} />
-          Asbestos Removal
+          Asbestos Removal Jobs
         </Link>
         <Link
           component="button"
           variant="body1"
-          onClick={() => navigate("/air-monitoring")}
+          onClick={() => {
+            const jobId = shift?.job?._id || shift?.job;
+            if (jobId) {
+              navigate(`/asbestos-removal/jobs/${jobId}/details`);
+            } else {
+              navigate("/asbestos-removal");
+            }
+          }}
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
-          Air Monitoring
+          Asbestos Removal Job Details
         </Link>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={() =>
-            navigate(`/air-monitoring/jobs/${shift?.job?._id}/shifts`)
-          }
-          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-        >
-          Shifts
-        </Link>
-        <Typography color="text.primary">Samples</Typography>
+        <Typography color="text.primary">
+          {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
+          {job?.projectName || job?.name || "Loading..."}
+        </Typography>
       </Breadcrumbs>
 
+      {/* Authorization Warning */}
+      {isReportAuthorized && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          This report was finalised by {shift.reportApprovedBy} on{" "}
+          {formatDate(shift.reportIssueDate)}. Contact admin if shift data needs
+          revision.
+        </Alert>
+      )}
+
+      <Typography
+        variant="h4"
+        sx={{
+          color:
+            theme.palette.mode === "dark"
+              ? "#fff"
+              : theme.palette.secondary[200],
+          mb: 4,
+        }}
+      >
+        {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
+        {job?.projectName || job?.name || "Loading..."} -
+        {shift?.name ? `${formatDate(shift.date)}` : "Loading..."}
+      </Typography>
       {/* Description of Works Field */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h6" sx={{ mb: 1 }}>
           Description of Works
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Type your description or click the microphone icon to dictate. Speak
-          clearly and naturally for best results.
-        </Typography>
-        <TextField
-          fullWidth
-          multiline
-          minRows={2}
-          maxRows={6}
-          value={descriptionOfWorks}
-          onChange={handleDescriptionChange}
-          placeholder="Enter a description of works for this shift..."
-          required
-          error={!descriptionOfWorks}
-          helperText={
-            !descriptionOfWorks ? "Description of works is required" : ""
-          }
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  onClick={isDictating ? stopDictation : startDictation}
-                  color={isDictating ? "error" : "primary"}
-                  title={isDictating ? "Stop Dictation" : "Start Dictation"}
-                  sx={{
-                    backgroundColor: isDictating
-                      ? theme.palette.error.light
-                      : "transparent",
-                    "&:hover": {
+        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+          <TextField
+            sx={{ flex: 1 }}
+            multiline
+            minRows={2}
+            maxRows={6}
+            value={descriptionOfWorks}
+            onChange={handleDescriptionChange}
+            placeholder="Enter a description of works for this shift..."
+            required
+            error={!descriptionOfWorks}
+            helperText={
+              !descriptionOfWorks ? "Description of works is required" : ""
+            }
+            disabled={isReportAuthorized}
+            InputProps={{
+              endAdornment: !isReportAuthorized ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={isDictating ? stopDictation : startDictation}
+                    color={isDictating ? "error" : "primary"}
+                    title={isDictating ? "Stop Dictation" : "Start Dictation"}
+                    sx={{
                       backgroundColor: isDictating
-                        ? theme.palette.error.main
-                        : theme.palette.action.hover,
-                    },
-                  }}
-                >
-                  <MicIcon />
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-        />
+                        ? theme.palette.error.light
+                        : "transparent",
+                      "&:hover": {
+                        backgroundColor: isDictating
+                          ? theme.palette.error.main
+                          : theme.palette.action.hover,
+                      },
+                    }}
+                  >
+                    <MicIcon />
+                  </IconButton>
+                </InputAdornment>
+              ) : undefined,
+            }}
+          />
+          <Button
+            variant="contained"
+            onClick={saveDescriptionOfWorks}
+            disabled={!descriptionOfWorks.trim() || isReportAuthorized}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+              minWidth: 140,
+              height: 56, // Match the height of the text field
+            }}
+          >
+            Save Description
+          </Button>
+        </Box>
         {/* Dictation Status and Errors */}
         {isDictating && (
           <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
@@ -593,20 +839,8 @@ const SampleList = () => {
             {dictationError}
           </Typography>
         )}
+        {/* Save Status Messages */}
         <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
-          <Button
-            variant="contained"
-            onClick={saveDescriptionOfWorks}
-            disabled={!descriptionOfWorks.trim()}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              "&:hover": {
-                backgroundColor: theme.palette.primary.dark,
-              },
-            }}
-          >
-            Save Description
-          </Button>
           {descSaveStatus === "Saved" && (
             <Typography variant="caption" color="success.main">
               Description saved successfully
@@ -619,21 +853,6 @@ const SampleList = () => {
           )}
         </Box>
       </Box>
-
-      <Typography
-        variant="h4"
-        sx={{
-          color:
-            theme.palette.mode === "dark"
-              ? "#fff"
-              : theme.palette.secondary[200],
-          mb: 4,
-        }}
-      >
-        Samples for{" "}
-        {shift?.name ? `Shift ${formatDate(shift.date)}` : "Loading..."}
-      </Typography>
-
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -641,20 +860,67 @@ const SampleList = () => {
         justifyContent="space-between"
         alignItems="center"
       >
-        <TextField
-          label="Search"
-          variant="outlined"
-          value={search}
-          onChange={handleSearch}
-          sx={{ width: { xs: "100%", sm: "300px" } }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddSample}
+            disabled={isReportAuthorized}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Add Sample
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<MapIcon />}
+            onClick={handleOpenSitePlan}
+            disabled={isReportAuthorized}
+            sx={{
+              borderColor: theme.palette.secondary.main,
+              color: theme.palette.secondary.main,
+              "&:hover": {
+                borderColor: theme.palette.secondary.dark,
+                backgroundColor: theme.palette.secondary.light,
+              },
+            }}
+          >
+            {sitePlanData?.sitePlan ? "Edit Site Plan" : "Add Site Plan"}
+          </Button>
+          {sitePlanData?.sitePlan && (
+            <Button
+              variant="outlined"
+              startIcon={<DeleteIcon />}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Are you sure you want to delete this site plan? This action cannot be undone."
+                  )
+                ) {
+                  handleSaveSitePlan({
+                    sitePlan: false,
+                    sitePlanData: null,
+                  });
+                }
+              }}
+              disabled={isReportAuthorized}
+              sx={{
+                borderColor: theme.palette.error.main,
+                color: theme.palette.error.main,
+                "&:hover": {
+                  borderColor: theme.palette.error.dark,
+                  backgroundColor: theme.palette.error.light,
+                },
+              }}
+            >
+              Delete Site Plan
+            </Button>
+          )}
+        </Box>
         <Button
           variant="outlined"
           startIcon={<DownloadIcon />}
@@ -668,20 +934,7 @@ const SampleList = () => {
             },
           }}
         >
-          Download Raw Data
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddSample}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
-            },
-          }}
-        >
-          Add Sample
+          Download Sample Data
         </Button>
       </Stack>
 
@@ -689,37 +942,95 @@ const SampleList = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell onClick={() => handleSort("sampleNumber")}>
+              <TableCell
+                sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
+                onClick={
+                  !isReportAuthorized
+                    ? () => handleSort("sampleNumber")
+                    : undefined
+                }
+              >
                 Sample Number
               </TableCell>
-              <TableCell onClick={() => handleSort("type")}>Type</TableCell>
-              <TableCell onClick={() => handleSort("location")}>
+              <TableCell
+                sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                onClick={
+                  !isReportAuthorized ? () => handleSort("type") : undefined
+                }
+              >
+                Type
+              </TableCell>
+              <TableCell
+                sx={{ minWidth: "200px", flex: 2 }}
+                onClick={
+                  !isReportAuthorized ? () => handleSort("location") : undefined
+                }
+              >
                 Location
               </TableCell>
-              <TableCell onClick={() => handleSort("startTime")}>
+              <TableCell
+                sx={{ minWidth: "70px", maxWidth: "110px" }}
+                onClick={
+                  !isReportAuthorized
+                    ? () => handleSort("startTime")
+                    : undefined
+                }
+              >
                 Start Time
               </TableCell>
-              <TableCell onClick={() => handleSort("endTime")}>
+              <TableCell
+                sx={{ minWidth: "70px", maxWidth: "110px" }}
+                onClick={
+                  !isReportAuthorized ? () => handleSort("endTime") : undefined
+                }
+              >
                 End Time
               </TableCell>
-              <TableCell onClick={() => handleSort("averageFlowrate")}>
+              <TableCell
+                sx={{ minWidth: "100px", maxWidth: "150px" }}
+                onClick={
+                  !isReportAuthorized
+                    ? () => handleSort("averageFlowrate")
+                    : undefined
+                }
+              >
                 Flow Rate (L/min)
               </TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell
+                sx={{ width: "180px", minWidth: "200px", maxWidth: "200px" }}
+              >
+                Actions
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sortedSamples.map((sample) => (
               <TableRow key={sample._id}>
-                <TableCell>{sample.fullSampleID}</TableCell>
-                <TableCell>{sample.type}</TableCell>
-                <TableCell>{sample.location}</TableCell>
-                <TableCell>{formatTime(sample.startTime)}</TableCell>
-                <TableCell>
+                <TableCell
+                  sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
+                >
+                  {sample.fullSampleID}
+                </TableCell>
+                <TableCell
+                  sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                >
+                  {sample.location === "Field blank" ? "-" : sample.type}
+                </TableCell>
+                <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                  {sample.location}
+                </TableCell>
+                <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
+                  {formatTime(sample.startTime)}
+                </TableCell>
+                <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
                   {sample.endTime ? formatTime(sample.endTime) : "-"}
                 </TableCell>
-                <TableCell>{sample.averageFlowrate}</TableCell>
-                <TableCell>
+                <TableCell sx={{ minWidth: "100px", maxWidth: "150px" }}>
+                  {sample.averageFlowrate || "-"}
+                </TableCell>
+                <TableCell
+                  sx={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}
+                >
                   <Button
                     variant="outlined"
                     size="small"
@@ -728,13 +1039,23 @@ const SampleList = () => {
                         `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
                       )
                     }
+                    disabled={isReportAuthorized}
                     sx={{ mr: 1 }}
                   >
                     Edit Sample
                   </Button>
-                  <IconButton onClick={() => handleDelete(sample._id)}>
-                    <DeleteIcon />
-                  </IconButton>
+                  <PermissionGate
+                    requiredPermissions={["admin.view"]}
+                    fallback={null}
+                  >
+                    <IconButton
+                      onClick={() => handleDelete(sample._id)}
+                      disabled={isReportAuthorized}
+                      title="Delete (Admin Only)"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </PermissionGate>
                 </TableCell>
               </TableRow>
             ))}
@@ -757,24 +1078,15 @@ const SampleList = () => {
           "shift_complete",
         ].includes(shift?.status) && (
           <>
-            {isCompleteDisabled && shift?.status === "ongoing" && (
-              <Typography
-                variant="body2"
-                color="warning.main"
-                sx={{
-                  alignSelf: "center",
-                  mr: 2,
-                  fontStyle: "italic",
-                }}
-              >
-                Complete all sample data before marking sampling complete
-              </Typography>
-            )}
             <Button
               variant="contained"
               color="primary"
               onClick={handleSampleComplete}
-              disabled={isCompleteDisabled || shift?.status !== "ongoing"}
+              disabled={
+                isCompleteDisabled ||
+                shift?.status !== "ongoing" ||
+                isReportAuthorized
+              }
               sx={{
                 backgroundColor: theme.palette.info.main,
                 color: theme.palette.info.contrastText,
@@ -801,6 +1113,7 @@ const SampleList = () => {
               variant="contained"
               color="secondary"
               onClick={handleSamplesSubmittedToLab}
+              disabled={isReportAuthorized}
               sx={{
                 backgroundColor: theme.palette.warning.main,
                 color: theme.palette.warning.contrastText,
@@ -814,43 +1127,300 @@ const SampleList = () => {
           )}
       </Box>
 
-      {["samples_submitted_to_lab", "analysis_complete"].includes(
-        shift?.status
-      ) && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
+      {/* Description Required Dialog */}
+      <Dialog
+        open={showDescriptionDialog}
+        onClose={() => setShowDescriptionDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Description of Works Required</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mt: 2, mb: 2 }}>
+            You must save a description of works before adding samples to this
+            shift. Please enter your description and click the "Save" button.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
           <Button
+            onClick={() => setShowDescriptionDialog(false)}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setShowDescriptionDialog(false);
+              // Scroll to the description field
+              const descriptionField = document.querySelector(
+                'textarea[placeholder*="description of works"]'
+              );
+              if (descriptionField) {
+                descriptionField.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+                descriptionField.focus();
+              }
+            }}
             variant="contained"
-            onClick={() =>
-              navigate(`/air-monitoring/shift/${shiftId}/analysis`)
-            }
+            color="primary"
+          >
+            Go to Description Field
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Sampling Complete Confirmation Dialog */}
+      <Dialog
+        open={showSamplingCompleteDialog}
+        onClose={() => setShowSamplingCompleteDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Complete Sampling</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Please review and confirm the description of works and sample
+            summary before completing sampling.
+          </Typography>
+
+          {/* Description of Works Section */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Description of Works
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={tempDescription}
+              onChange={(e) => setTempDescription(e.target.value)}
+              placeholder="Enter description of works..."
+              variant="outlined"
+            />
+          </Box>
+
+          {/* Sample Summary Section */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Sample Summary ({samples.length} samples)
+            </Typography>
+            {samples.length > 0 ? (
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Sample ID</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Location</TableCell>
+                    <TableCell>Start Time</TableCell>
+                    <TableCell>End Time</TableCell>
+                    <TableCell>Avg Flow Rate</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {[...samples]
+                    .sort((a, b) => {
+                      // Extract just the number part from AM prefix (e.g., "AM1" -> 1)
+                      const aMatch = a.fullSampleID?.match(/AM(\d+)$/);
+                      const bMatch = b.fullSampleID?.match(/AM(\d+)$/);
+                      const aNum = aMatch ? parseInt(aMatch[1], 10) : 0;
+                      const bNum = bMatch ? parseInt(bMatch[1], 10) : 0;
+                      return aNum - bNum; // Ascending order
+                    })
+                    .map((sample) => (
+                      <TableRow key={sample._id}>
+                        <TableCell>{sample.fullSampleID}</TableCell>
+                        <TableCell>{sample.type || "Unknown"}</TableCell>
+                        <TableCell>
+                          {sample.location || "Not specified"}
+                        </TableCell>
+                        <TableCell>
+                          {sample.startTime
+                            ? formatTime(sample.startTime)
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {sample.endTime ? formatTime(sample.endTime) : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {sample.averageFlowrate
+                            ? `${sample.averageFlowrate} L/min`
+                            : "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No samples added yet
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowSamplingCompleteDialog(false)}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSamplingComplete}
+            variant="contained"
+            color="primary"
+            disabled={!tempDescription.trim()}
+          >
+            Complete Sampling
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Samples Submitted to Lab Confirmation Dialog */}
+      <Dialog
+        open={showSamplesSubmittedDialog}
+        onClose={() => setShowSamplesSubmittedDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Samples Submitted to Lab</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Please confirm that the samples have been physically delivered to
+            the laboratory and sign below to verify.
+          </Typography>
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Signature
+            </Typography>
+            <TextField
+              fullWidth
+              value={submittedBySignature}
+              variant="outlined"
+              disabled
+              helperText="This will be automatically signed with your name"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowSamplesSubmittedDialog(false)}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSamplesSubmitted}
+            variant="contained"
+            color="primary"
+          >
+            Confirm Submission
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmDialogOpen}
+        onClose={cancelDelete}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
             sx={{
-              backgroundColor: theme.palette.success.main,
-              color: theme.palette.success.contrastText,
-              "&:hover": {
-                backgroundColor: theme.palette.success.dark,
-              },
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "error.main",
+              color: "white",
             }}
           >
-            COMPLETE ANALYSIS
+            <DeleteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Delete Sample
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Typography variant="body1" sx={{ color: "text.primary" }}>
+            Are you sure you want to delete this air monitoring sample? This
+            action cannot be undone.
+          </Typography>
+          {sampleToDelete && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <strong>Sample ID:</strong> {sampleToDelete.fullSampleID}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <strong>Type:</strong> {sampleToDelete.type}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Location:</strong> {sampleToDelete.location}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={cancelDelete}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
           </Button>
-        </Box>
-      )}
+          <Button
+            onClick={confirmDelete}
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Delete Sample
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      {/* Site Plan Dialog */}
+      <SitePlanMap
+        open={sitePlanDialogOpen}
+        onClose={handleCloseSitePlan}
+        shiftId={shiftId}
+        initialData={sitePlanData}
+        onSave={handleSaveSitePlan}
+        projectId={job?.projectId?.projectID}
+      />
     </Box>
   );
 };

@@ -1,5 +1,11 @@
 const express = require("express");
 const router = express.Router();
+
+// Debug middleware to log all requests to timesheets routes
+router.use((req, res, next) => {
+  console.log('Timesheets route hit:', req.method, req.path, req.query);
+  next();
+});
 const Timesheet = require("../models/Timesheet");
 const TimesheetStatus = require("../models/TimesheetStatus");
 const auth = require("../middleware/auth");
@@ -123,11 +129,159 @@ router.get("/range/:startDate/:endDate", auth, async (req, res) => {
   }
 });
 
+// Get timesheet report for a specific user and date range
+router.get("/report", auth, async (req, res) => {
+  console.log('Report endpoint reached!');
+  try {
+    const { userId, startDate, endDate } = req.query;
+
+    console.log('Report request received:', {
+      userId,
+      startDate,
+      endDate,
+      query: req.query
+    });
+
+    // Validate required parameters
+    if (!userId || !startDate || !endDate) {
+      console.log('Missing required parameters:', { userId, startDate, endDate });
+      return res.status(400).json({ message: "userId, startDate, and endDate are required" });
+    }
+
+    // Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    // Set time to start/end of day
+    start.setUTCHours(0, 0, 0, 0);
+    end.setUTCHours(23, 59, 59, 999);
+
+    // Get user details
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Get all timesheets for the user in the date range
+    const timesheets = await Timesheet.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      date: {
+        $gte: start,
+        $lte: end
+      }
+    }).populate('projectId', 'name projectID');
+
+    // Get timesheet statuses for the date range
+    const timesheetStatuses = await TimesheetStatus.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      date: {
+        $gte: start,
+        $lte: end
+      }
+    });
+
+    // Create a map of statuses by date
+    const statusMap = {};
+    timesheetStatuses.forEach(status => {
+      if (!status.date) {
+        console.log('Skipping status with missing date:', status._id);
+        return;
+      }
+      
+      const dateKey = format(new Date(status.date), 'yyyy-MM-dd');
+      statusMap[dateKey] = status.status;
+    });
+
+    // Group timesheets by date and calculate totals
+    const dailyData = {};
+    
+    timesheets.forEach(timesheet => {
+      if (!timesheet.date) {
+        console.log('Skipping timesheet with missing date:', timesheet._id);
+        return;
+      }
+      
+      const dateKey = format(new Date(timesheet.date), 'yyyy-MM-dd');
+      
+      if (!dailyData[dateKey]) {
+        dailyData[dateKey] = {
+          date: timesheet.date,
+          totalTime: 0,
+          projectTime: 0,
+          nonProjectTime: 0,
+          status: statusMap[dateKey] || 'incomplete'
+        };
+      }
+      
+      // Calculate duration in minutes from startTime and endTime
+      if (!timesheet.startTime || !timesheet.endTime) {
+        console.log('Skipping timesheet with missing time data:', timesheet._id);
+        return;
+      }
+      
+      const [startHours, startMinutes] = timesheet.startTime.split(':').map(Number);
+      const [endHours, endMinutes] = timesheet.endTime.split(':').map(Number);
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+      let duration = endTotalMinutes - startTotalMinutes;
+      if (duration < 0) duration += 24 * 60; // Handle overnight entries
+      
+      // Only add to total time if it's NOT a break entry
+      if (!timesheet.isBreak) {
+        dailyData[dateKey].totalTime += duration;
+        
+        // Add to project time if it's project work (not admin work or break)
+        if (timesheet.projectId && !timesheet.isAdminWork) {
+          dailyData[dateKey].projectTime += duration;
+        } else if (!timesheet.projectId && !timesheet.isAdminWork) {
+          // This shouldn't happen based on validation, but handle it
+          dailyData[dateKey].nonProjectTime += duration;
+        } else if (timesheet.isAdminWork) {
+          dailyData[dateKey].nonProjectTime += duration;
+        }
+      }
+    });
+
+    // Convert to array and calculate project percentage
+    const reportData = Object.values(dailyData).map(entry => {
+      const projectPercentage = entry.totalTime > 0 
+        ? (entry.projectTime / entry.totalTime) * 100 
+        : 0;
+      
+      return {
+        date: entry.date,
+        totalTime: entry.totalTime,
+        projectTime: entry.projectTime,
+        projectTimePercentage: projectPercentage,
+        status: entry.status
+      };
+    });
+
+    // Sort by date
+    reportData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json(reportData);
+  } catch (error) {
+    console.error("Error generating timesheet report:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get timesheets for a specific date
 router.get("/:date", auth, async (req, res) => {
   try {
     // Parse date in yyyy-MM-dd format
     const date = new Date(req.params.date);
+    
+    // Validate the date
+    if (isNaN(date.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+    
     date.setUTCHours(0, 0, 0, 0);
     
     console.log('Fetching timesheets for date:', {
@@ -219,6 +373,21 @@ router.post("/", auth, async (req, res) => {
     const newTimesheet = await timesheet.save();
     console.log('Timesheet saved successfully:', newTimesheet);
     
+    // Add timesheet entry to project if it's project work
+    if (projectId && !isAdminWork && !isBreak) {
+      try {
+        await Project.findByIdAndUpdate(
+          projectId,
+          { $addToSet: { timesheetEntries: newTimesheet._id } },
+          { new: true }
+        );
+        console.log(`Added timesheet ${newTimesheet._id} to project ${projectId}`);
+      } catch (projectError) {
+        console.error('Error adding timesheet to project:', projectError);
+        // Don't fail the timesheet creation if project update fails
+      }
+    }
+    
     res.status(201).json(newTimesheet);
   } catch (error) {
     console.error("Error creating timesheet:", error);
@@ -236,6 +405,21 @@ router.delete("/:id", auth, async (req, res) => {
 
     if (!timesheet) {
       return res.status(404).json({ message: "Timesheet entry not found" });
+    }
+
+    // Remove from project if it had one
+    if (timesheet.projectId && !timesheet.isAdminWork && !timesheet.isBreak) {
+      try {
+        await Project.findByIdAndUpdate(
+          timesheet.projectId,
+          { $pull: { timesheetEntries: req.params.id } },
+          { new: true }
+        );
+        console.log(`Removed timesheet ${req.params.id} from project ${timesheet.projectId}`);
+      } catch (projectError) {
+        console.error('Error removing timesheet from project:', projectError);
+        // Don't fail the deletion if project update fails
+      }
     }
 
     await timesheet.deleteOne();
@@ -302,15 +486,53 @@ router.put("/:id", auth, async (req, res) => {
       updateData.projectInputType = null;
     }
 
-    // Find and update the timesheet
+    // Fetch the old timesheet first to check for project changes
+    const oldTimesheet = await Timesheet.findOne({ 
+      _id: req.params.id, 
+      userId: req.user._id 
+    });
+
+    if (!oldTimesheet) {
+      return res.status(404).json({ message: "Timesheet entry not found" });
+    }
+
+    const oldProjectId = oldTimesheet.projectId ? oldTimesheet.projectId.toString() : null;
+    const newProjectId = projectId || null;
+
+    // Update the timesheet
     const timesheet = await Timesheet.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
       updateData,
       { new: true }
     );
 
-    if (!timesheet) {
-      return res.status(404).json({ message: "Timesheet entry not found" });
+    // Handle project updates
+    // Remove from old project if it had one and (project changed OR became admin/break)
+    if (oldProjectId && (oldProjectId !== newProjectId || isAdminWork || isBreak)) {
+      try {
+        await Project.findByIdAndUpdate(
+          oldProjectId,
+          { $pull: { timesheetEntries: req.params.id } },
+          { new: true }
+        );
+        console.log(`Removed timesheet ${req.params.id} from old project ${oldProjectId}`);
+      } catch (projectError) {
+        console.error('Error removing timesheet from old project:', projectError);
+      }
+    }
+
+    // Add to new project if it's project work and (project changed OR was previously admin/break)
+    if (newProjectId && !isAdminWork && !isBreak && oldProjectId !== newProjectId) {
+      try {
+        await Project.findByIdAndUpdate(
+          newProjectId,
+          { $addToSet: { timesheetEntries: req.params.id } },
+          { new: true }
+        );
+        console.log(`Added timesheet ${req.params.id} to new project ${newProjectId}`);
+      } catch (projectError) {
+        console.error('Error adding timesheet to new project:', projectError);
+      }
     }
 
     console.log('Timesheet updated successfully:', timesheet);
@@ -374,7 +596,7 @@ router.put("/:id/reject", auth, async (req, res) => {
 // Update timesheet status for a specific date
 router.put("/status/:date", auth, async (req, res) => {
   try {
-    const { status, userId } = req.body;
+    const { status, userId, forceFinalize } = req.body;
     
     // Parse date in yyyy-MM-dd format
     const date = new Date(req.params.date);
@@ -385,6 +607,7 @@ router.put("/status/:date", auth, async (req, res) => {
       parsedDate: date.toISOString(),
       status,
       userId,
+      forceFinalize,
       user: req.user._id
     });
 
@@ -403,6 +626,28 @@ router.put("/status/:date", auth, async (req, res) => {
     try {
       // Convert userId to ObjectId to validate format
       const targetUserId = new mongoose.Types.ObjectId(userId);
+      
+      // Check current status to prevent conflicts
+      const currentStatus = await TimesheetStatus.findOne({
+        userId: targetUserId,
+        date: date
+      });
+      
+      // Prevent setting finalised if currently absent
+      if (status === "finalised" && currentStatus?.status === "absent") {
+        console.log('Cannot finalise - timesheet is marked as absent');
+        return res.status(400).json({ 
+          message: "Cannot finalise a timesheet that is marked as absent. Please mark as present first." 
+        });
+      }
+      
+      // Prevent setting absent if currently finalised
+      if (status === "absent" && currentStatus?.status === "finalised") {
+        console.log('Cannot mark as absent - timesheet is finalised');
+        return res.status(400).json({ 
+          message: "Cannot mark a finalised timesheet as absent. Please unfinalise first." 
+        });
+      }
       
       // Find or create the timesheet status for this date
       const timesheetStatus = await TimesheetStatus.findOneAndUpdate(
@@ -431,31 +676,49 @@ router.put("/status/:date", auth, async (req, res) => {
         }
       }
 
-      // If status is finalised and no entries exist, create a default entry
-      if (status === "finalised") {
+      // If status is finalised, validate that at least 7.5 hours have been entered
+      // Unless forceFinalize is true (user confirmed they want to finalize anyway)
+      if (status === "finalised" && !forceFinalize) {
         try {
           const existingEntries = await Timesheet.find({
             userId: targetUserId,
             date: date
           });
 
-          if (existingEntries.length === 0) {
-            const newEntry = new Timesheet({
-              userId: targetUserId,
-              date: date,
-              startTime: "09:00",
-              endTime: "17:00",
-              description: "Auto-generated entry for finalised status",
-              isAdminWork: true,
-              status: "finalised"
+          // Calculate total time for the day
+          let totalMinutes = 0;
+          existingEntries.forEach((entry) => {
+            if (!entry.isBreak) {
+              const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
+              const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+              const startTotalMinutes = startHours * 60 + startMinutes;
+              const endTotalMinutes = endHours * 60 + endMinutes;
+              let duration = endTotalMinutes - startTotalMinutes;
+              if (duration < 0) duration += 24 * 60;
+              totalMinutes += duration;
+            }
+          });
+
+          const totalHours = totalMinutes / 60;
+          
+          // Require at least 7.5 hours to finalize (unless forceFinalize is true)
+          if (totalHours < 7.5) {
+            console.log('Cannot finalize - insufficient hours:', totalHours);
+            return res.status(400).json({ 
+              message: `Cannot finalize timesheet. At least 7.5 hours required, but only ${totalHours.toFixed(1)} hours entered.` 
             });
-            await newEntry.save();
-            console.log('Created new entry for finalised status:', newEntry);
           }
+
+          console.log('Finalizing timesheet with', totalHours, 'hours');
         } catch (error) {
-          console.error('Error creating default entry for finalised status:', error);
-          // Continue execution even if creation fails
+          console.error('Error validating hours for finalise:', error);
+          return res.status(500).json({ 
+            message: "Error validating timesheet hours" 
+          });
         }
+      } else if (status === "finalised" && forceFinalize) {
+        // User confirmed they want to finalize with less than 7.5 hours
+        console.log('Finalizing timesheet with forceFinalize flag (bypassing 7.5 hour requirement)');
       }
 
       res.json(timesheetStatus);
@@ -821,107 +1084,5 @@ router.put("/:userId/:date/approve", auth, async (req, res) => {
   }
 });
 
-// Get timesheet report for a specific user and date range
-router.get("/report", auth, async (req, res) => {
-  try {
-    const { userId, startDate, endDate } = req.query;
-
-    // Validate required parameters
-    if (!userId || !startDate || !endDate) {
-      return res.status(400).json({ message: "userId, startDate, and endDate are required" });
-    }
-
-    // Validate dates
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({ message: "Invalid date format" });
-    }
-
-    // Set time to start/end of day
-    start.setUTCHours(0, 0, 0, 0);
-    end.setUTCHours(23, 59, 59, 999);
-
-    // Get user details
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Get all timesheets for the user in the date range
-    const timesheets = await Timesheet.find({
-      userId: new mongoose.Types.ObjectId(userId),
-      date: {
-        $gte: start,
-        $lte: end
-      }
-    }).populate('projectId', 'name projectID');
-
-    // Get timesheet statuses for the date range
-    const timesheetStatuses = await TimesheetStatus.find({
-      userId: new mongoose.Types.ObjectId(userId),
-      date: {
-        $gte: start,
-        $lte: end
-      }
-    });
-
-    // Create a map of statuses by date
-    const statusMap = {};
-    timesheetStatuses.forEach(status => {
-      const dateKey = format(new Date(status.date), 'yyyy-MM-dd');
-      statusMap[dateKey] = status.status;
-    });
-
-    // Group timesheets by date and calculate totals
-    const dailyData = {};
-    
-    timesheets.forEach(timesheet => {
-      const dateKey = format(new Date(timesheet.date), 'yyyy-MM-dd');
-      
-      if (!dailyData[dateKey]) {
-        dailyData[dateKey] = {
-          date: timesheet.date,
-          totalTime: 0,
-          projectTime: 0,
-          nonProjectTime: 0,
-          status: statusMap[dateKey] || 'incomplete'
-        };
-      }
-      
-      // Add time based on whether it's project or non-project time
-      if (timesheet.projectId) {
-        dailyData[dateKey].projectTime += timesheet.duration || 0;
-      } else {
-        dailyData[dateKey].nonProjectTime += timesheet.duration || 0;
-      }
-      
-      dailyData[dateKey].totalTime += timesheet.duration || 0;
-    });
-
-    // Convert to array and calculate project percentage
-    const reportData = Object.values(dailyData).map(entry => {
-      const projectPercentage = entry.totalTime > 0 
-        ? (entry.projectTime / entry.totalTime) * 100 
-        : 0;
-      
-      return {
-        date: entry.date,
-        totalTime: entry.totalTime,
-        projectTimePercentage: projectPercentage,
-        status: entry.status
-      };
-    });
-
-    // Sort by date
-    reportData.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    res.json(reportData);
-  } catch (error) {
-    console.error("Error generating timesheet report:", error);
-    res.status(500).json({ message: error.message });
-  }
-});
 
 module.exports = router; 

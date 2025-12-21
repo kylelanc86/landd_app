@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -23,37 +24,44 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Alert,
-  Snackbar,
   CircularProgress,
   Chip,
   Breadcrumbs,
   Link,
   Autocomplete,
+  Alert,
+  InputAdornment,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  ArrowBack as ArrowBackIcon,
   PhotoCamera as PhotoCameraIcon,
   Upload as UploadIcon,
-  Delete as DeletePhotoIcon,
   Description as DescriptionIcon,
+  Assessment as AssessmentIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
+  Map as MapIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
+import MicIcon from "@mui/icons-material/Mic";
 import { Checkbox, FormControlLabel } from "@mui/material";
 
 import { useNavigate, useParams } from "react-router-dom";
-import { tokens } from "../../theme/tokens";
 import PermissionGate from "../../components/PermissionGate";
+import SitePlanDrawing from "../../components/SitePlanDrawing";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
-import customDataFieldService from "../../services/customDataFieldService";
-import { compressImage, needsCompression } from "../../utils/imageCompression";
+import customDataFieldGroupService from "../../services/customDataFieldGroupService";
+import {
+  compressImage,
+  needsCompression,
+  saveFileToDevice,
+} from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const ClearanceItems = () => {
-  const colors = tokens;
   const navigate = useNavigate();
   const { clearanceId } = useParams();
 
@@ -63,11 +71,7 @@ const ClearanceItems = () => {
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const [form, setForm] = useState({
     locationDescription: "",
@@ -75,16 +79,17 @@ const ClearanceItems = () => {
     roomArea: "",
     materialDescription: "",
     asbestosType: "non-friable",
-    photograph: "",
     notes: "",
   });
-
+  const [photoGalleryDialogOpen, setPhotoGalleryDialogOpen] = useState(false);
+  const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
+  const [localPhotoChanges, setLocalPhotoChanges] = useState({}); // Track local changes
+  const [photosToDelete, setPhotosToDelete] = useState(new Set()); // Track photos to delete
+  const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
+  const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
+  const [compressionStatus, setCompressionStatus] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
-  const [compressionStatus, setCompressionStatus] = useState(null);
-  const [airMonitoringDialogOpen, setAirMonitoringDialogOpen] = useState(false);
-  const [airMonitoringFile, setAirMonitoringFile] = useState(null);
-  const [uploadingReport, setUploadingReport] = useState(false);
   const [airMonitoringReportsDialogOpen, setAirMonitoringReportsDialogOpen] =
     useState(false);
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
@@ -92,81 +97,574 @@ const ClearanceItems = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [savingExclusions, setSavingExclusions] = useState(false);
   const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
+  const [isDictating, setIsDictating] = useState(false);
+  const [dictationError, setDictationError] = useState("");
+  const recognitionRef = useRef(null);
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
   const [sitePlanFile, setSitePlanFile] = useState(null);
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
+  const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
+    useState(false);
   const [generatingAirMonitoringPDF, setGeneratingAirMonitoringPDF] =
     useState(false);
   const [attachmentsModalOpen, setAttachmentsModalOpen] = useState(false);
+  const [jobExclusionsModalOpen, setJobExclusionsModalOpen] = useState(false);
   const [jobCompleted, setJobCompleted] = useState(false);
   const [showLevelFloor, setShowLevelFloor] = useState(false);
+  const [asbestosRemovalJobId, setAsbestosRemovalJobId] = useState(null);
   const [customDataFields, setCustomDataFields] = useState({
     roomAreas: [],
     locationDescriptions: [],
     materialsDescriptions: [],
   });
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [stream, setStream] = useState(null);
+  const [videoRef, setVideoRef] = useState(null);
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Pinch zoom state
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [lastPinchDistance, setLastPinchDistance] = useState(null);
+  const [lastPanPoint, setLastPanPoint] = useState(null);
+  const [lastTapTime, setLastTapTime] = useState(0);
+  const videoContainerRef = useRef(null);
+
+  // Track first tap for tablet two-tap behavior
+  const [firstTapFields, setFirstTapFields] = useState({
+    levelFloor: false,
+    roomArea: false,
+    locationDescription: false,
+    materialDescription: false,
+  });
+
+  // Detect if device is a tablet/touch device
+  const isTablet = () => {
+    return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  };
+
+  // Format status for display (remove underscores, capitalize)
+  const formatStatus = (status) => {
+    if (!status) return "";
+    return status
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
+
+  const getProjectFolderName = () => {
+    const project = clearance?.projectId;
+
+    if (project) {
+      if (typeof project === "string") {
+        return project;
+      }
+      return (
+        project.projectID ||
+        project.projectId ||
+        project.externalId ||
+        project._id ||
+        project.name ||
+        clearanceId ||
+        "clearance-photos"
+      );
+    }
+
+    return clearanceId || "clearance-photos";
+  };
+
+  // Dictation functions
+  const startDictation = () => {
+    // If already dictating, stop it first
+    if (isDictating && recognitionRef.current) {
+      stopDictation();
+      return;
+    }
+
+    // Check if browser supports speech recognition
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      setDictationError(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+      );
+      return;
+    }
+
+    try {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-AU";
+
+      recognition.onstart = () => {
+        setIsDictating(true);
+        setDictationError("");
+      };
+
+      recognition.onresult = (event) => {
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          }
+        }
+
+        // Update the job specific exclusions field with the final transcript
+        if (finalTranscript) {
+          setClearance((prev) => {
+            const currentText = prev?.jobSpecificExclusions || "";
+            const isFirstWord = !currentText || currentText.trim().length === 0;
+            const newText = isFirstWord
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
+              : finalTranscript;
+            return {
+              ...prev,
+              jobSpecificExclusions:
+                currentText + (currentText ? " " : "") + newText,
+            };
+          });
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setDictationError(`Dictation error: ${event.error}`);
+        setIsDictating(false);
+        recognitionRef.current = null;
+      };
+
+      recognition.onend = () => {
+        setIsDictating(false);
+        recognitionRef.current = null;
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (error) {
+      console.error("Error starting dictation:", error);
+      setDictationError("Failed to start dictation. Please try again.");
+      recognitionRef.current = null;
+    }
+  };
+
+  const stopDictation = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error("Error stopping dictation:", error);
+      }
+      recognitionRef.current = null;
+    }
+    setIsDictating(false);
+  };
+
+  // Cleanup: stop dictation when component unmounts
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          // Ignore errors during cleanup
+        }
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
+
+  // Set up video stream when camera dialog opens
+  useEffect(() => {
+    if (cameraDialogOpen && stream && videoRef) {
+      videoRef.srcObject = stream;
+    }
+  }, [cameraDialogOpen, stream, videoRef]);
+
+  // Clean up stream when component unmounts or dialog closes
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [stream]);
 
   // Fetch items and clearance data on component mount
   useEffect(() => {
-    fetchData();
-    fetchCustomDataFields();
+    console.log("[ClearanceItems] Component mount effect triggered", {
+      clearanceId,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (clearanceId) {
+      console.log("[ClearanceItems] Starting data fetch operations", {
+        clearanceId,
+        timestamp: new Date().toISOString(),
+      });
+      fetchData();
+      fetchCustomDataFields();
+    } else {
+      console.error(
+        "[ClearanceItems] No clearanceId provided in URL parameters"
+      );
+      setError("No clearance ID provided");
+      setLoading(false);
+    }
   }, [clearanceId]);
 
   const fetchCustomDataFields = async () => {
+    console.log("[ClearanceItems] fetchCustomDataFields - Starting", {
+      timestamp: new Date().toISOString(),
+    });
+    const startTime = performance.now();
+
     try {
+      console.log("[ClearanceItems] fetchCustomDataFields - Making API calls", {
+        timestamp: new Date().toISOString(),
+      });
+      const apiStartTime = performance.now();
+
       const [
         roomAreasData,
         locationDescriptionsData,
         materialsDescriptionsData,
       ] = await Promise.all([
-        customDataFieldService.getByType("room_area"),
-        customDataFieldService.getByType("location_description"),
-        customDataFieldService.getByType("materials_description"),
+        customDataFieldGroupService.getFieldsByType("room_area"),
+        customDataFieldGroupService.getFieldsByType("location_description"),
+        customDataFieldGroupService.getFieldsByType("materials_description"),
       ]);
 
-      setCustomDataFields({
-        roomAreas: roomAreasData || [],
-        locationDescriptions: locationDescriptionsData || [],
-        materialsDescriptions: materialsDescriptionsData || [],
+      const apiEndTime = performance.now();
+      console.log(
+        "[ClearanceItems] fetchCustomDataFields - API calls completed",
+        {
+          apiCallDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          roomAreasCount: Array.isArray(roomAreasData)
+            ? roomAreasData.length
+            : "unknown",
+          locationDescriptionsCount: Array.isArray(locationDescriptionsData)
+            ? locationDescriptionsData.length
+            : "unknown",
+          materialsDescriptionsCount: Array.isArray(materialsDescriptionsData)
+            ? materialsDescriptionsData.length
+            : "unknown",
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      // Handle both array and object responses and sort alphabetically
+      const processData = (data) => {
+        let processedData = [];
+
+        if (Array.isArray(data)) {
+          processedData = data;
+        } else if (data && typeof data === "object") {
+          // If it's an object, try to extract the array from common property names
+          processedData =
+            data.data ||
+            data.items ||
+            data.fields ||
+            Object.values(data).filter(Array.isArray)[0] ||
+            [];
+        }
+
+        // Sort alphabetically by text field
+        return processedData.sort((a, b) => {
+          const textA = (a.text || "").toLowerCase();
+          const textB = (b.text || "").toLowerCase();
+          return textA.localeCompare(textB);
+        });
+      };
+
+      const processStartTime = performance.now();
+      const processedData = {
+        roomAreas: processData(roomAreasData),
+        locationDescriptions: processData(locationDescriptionsData),
+        materialsDescriptions: processData(materialsDescriptionsData),
+      };
+      const processEndTime = performance.now();
+
+      console.log(
+        "[ClearanceItems] fetchCustomDataFields - Data processing completed",
+        {
+          processingDuration: `${(processEndTime - processStartTime).toFixed(
+            2
+          )}ms`,
+          processedRoomAreasCount: processedData.roomAreas.length,
+          processedLocationDescriptionsCount:
+            processedData.locationDescriptions.length,
+          processedMaterialsDescriptionsCount:
+            processedData.materialsDescriptions.length,
+          timestamp: new Date().toISOString(),
+        }
+      );
+
+      setCustomDataFields(processedData);
+
+      const endTime = performance.now();
+      console.log("[ClearanceItems] fetchCustomDataFields - Completed", {
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      console.error("Error fetching custom data fields:", err);
+      const endTime = performance.now();
+      console.error("[ClearanceItems] fetchCustomDataFields - Error", {
+        error: err,
+        errorMessage: err.message,
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
   const fetchData = async () => {
+    console.log("[ClearanceItems] fetchData - Starting", {
+      clearanceId,
+      timestamp: new Date().toISOString(),
+    });
+    const fetchStartTime = performance.now();
+
     try {
       setLoading(true);
+
+      // Check if clearanceId is valid
+      if (!clearanceId) {
+        throw new Error("Clearance ID is missing from URL");
+      }
+
+      console.log("[ClearanceItems] fetchData - Making API calls", {
+        clearanceId,
+        timestamp: new Date().toISOString(),
+      });
+      const apiStartTime = performance.now();
+
       const [itemsData, clearanceData] = await Promise.all([
         asbestosClearanceService.getItems(clearanceId),
         asbestosClearanceService.getById(clearanceId),
       ]);
 
+      const apiEndTime = performance.now();
+      console.log("[ClearanceItems] fetchData - API calls completed", {
+        apiCallDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+        itemsCount: Array.isArray(itemsData) ? itemsData.length : "unknown",
+        clearanceDataReceived: !!clearanceData,
+        timestamp: new Date().toISOString(),
+      });
+
+      const stateUpdateStartTime = performance.now();
+
       setItems(itemsData || []);
       setClearance(clearanceData);
 
+      // Debug: Log clearance data to check site plan fields
+      console.log("[ClearanceItems] fetchData - Clearance data loaded", {
+        sitePlan: clearanceData?.sitePlan,
+        sitePlanFile: clearanceData?.sitePlanFile ? "Present" : "Missing",
+        sitePlanSource: clearanceData?.sitePlanSource,
+        clearanceId,
+        status: clearanceData?.status,
+        clearanceType: clearanceData?.clearanceType,
+        projectId: clearanceData?.projectId?._id || clearanceData?.projectId,
+        timestamp: new Date().toISOString(),
+      });
+
       // Set job completed state based on clearance status
       setJobCompleted(clearanceData?.status === "complete");
+
+      const stateUpdateEndTime = performance.now();
+      console.log("[ClearanceItems] fetchData - State updated", {
+        stateUpdateDuration: `${(
+          stateUpdateEndTime - stateUpdateStartTime
+        ).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Fetch asbestos removal job ID for breadcrumb navigation (separate from main data loading)
+      if (clearanceData?.projectId) {
+        try {
+          console.log(
+            "[ClearanceItems] fetchData - Fetching asbestos removal job ID",
+            {
+              projectId: clearanceData.projectId._id || clearanceData.projectId,
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const jobFetchStartTime = performance.now();
+
+          const importStartTime = performance.now();
+          const asbestosRemovalJobService = (
+            await import("../../services/asbestosRemovalJobService")
+          ).default;
+          const importEndTime = performance.now();
+          console.log("[ClearanceItems] fetchData - Service imported", {
+            importDuration: `${(importEndTime - importStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          });
+
+          const jobsResponse = await asbestosRemovalJobService.getAll();
+          const jobFetchEndTime = performance.now();
+          console.log("[ClearanceItems] fetchData - Jobs fetched", {
+            jobsFetchDuration: `${(jobFetchEndTime - jobFetchStartTime).toFixed(
+              2
+            )}ms`,
+            jobsCount: Array.isArray(jobsResponse?.data)
+              ? jobsResponse.data.length
+              : Array.isArray(jobsResponse?.jobs)
+              ? jobsResponse.jobs.length
+              : 0,
+            timestamp: new Date().toISOString(),
+          });
+          const projectId =
+            clearanceData.projectId._id || clearanceData.projectId;
+
+          // Handle different response structures - some APIs return {data: [...]} others return {jobs: [...]}
+          const jobsArray = jobsResponse.data || jobsResponse.jobs || [];
+
+          console.log(
+            "Looking for asbestos removal job with projectId:",
+            projectId
+          );
+          console.log("Clearance data projectId:", clearanceData.projectId);
+          console.log("Jobs response structure:", jobsResponse);
+          console.log(
+            "Available jobs:",
+            jobsArray?.map((job) => ({
+              id: job._id,
+              projectId: job.projectId,
+              projectIdId: job.projectId?._id,
+              name: job.name,
+            }))
+          );
+
+          // Find the asbestos removal job that matches this project
+          // Try multiple matching strategies to be more robust
+          const matchingJob = jobsArray.find((job) => {
+            const jobProjectId = job.projectId?._id || job.projectId;
+            const clearanceProjectId =
+              clearanceData.projectId._id || clearanceData.projectId;
+
+            console.log(
+              `Comparing job ${job._id} projectId (${jobProjectId}) with clearance projectId (${clearanceProjectId})`
+            );
+
+            return (
+              jobProjectId === clearanceProjectId ||
+              jobProjectId === projectId ||
+              job.projectId === projectId ||
+              job.projectId === clearanceData.projectId ||
+              job.projectId?._id === projectId ||
+              job.projectId?._id === clearanceData.projectId
+            );
+          });
+
+          console.log("Matching job found:", matchingJob);
+
+          if (matchingJob) {
+            setAsbestosRemovalJobId(matchingJob._id);
+            console.log("[ClearanceItems] fetchData - Matching job found", {
+              jobId: matchingJob._id,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            console.log("[ClearanceItems] fetchData - No matching job found", {
+              projectId: projectId,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        } catch (jobError) {
+          console.error("[ClearanceItems] fetchData - Error fetching job ID", {
+            error: jobError,
+            errorMessage: jobError.message,
+            timestamp: new Date().toISOString(),
+          });
+          // Don't fail the entire data loading if job ID fetching fails
+        }
+      }
+
+      const fetchEndTime = performance.now();
+      console.log("[ClearanceItems] fetchData - Completed successfully", {
+        totalDuration: `${(fetchEndTime - fetchStartTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     } catch (err) {
-      console.error("Error fetching data:", err);
-      setError("Failed to load data");
+      const fetchEndTime = performance.now();
+      console.error("[ClearanceItems] fetchData - Error occurred", {
+        error: err,
+        errorMessage: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        clearanceId: clearanceId,
+        totalDuration: `${(fetchEndTime - fetchStartTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
+      setError(`Failed to load data: ${err.message || "Unknown error"}`);
     } finally {
+      const loadingEndTime = performance.now();
       setLoading(false);
+      console.log("[ClearanceItems] fetchData - Loading state set to false", {
+        totalDuration: `${(loadingEndTime - fetchStartTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields based on clearance type
+    if (clearance?.clearanceType === "Vehicle/Equipment") {
+      if (!form.materialDescription.trim()) {
+        showSnackbar("Item Description is required", "error");
+        return;
+      }
+    } else {
+      if (!form.roomArea.trim()) {
+        showSnackbar("Room/Area is required", "error");
+        return;
+      }
+
+      if (!form.locationDescription.trim()) {
+        showSnackbar("Location Description is required", "error");
+        return;
+      }
+
+      if (!form.materialDescription.trim()) {
+        showSnackbar("Materials Description is required", "error");
+        return;
+      }
+    }
+
     try {
-      const itemData = {
-        locationDescription: form.locationDescription, // Location Description
-        levelFloor: showLevelFloor ? form.levelFloor : "",
-        roomArea: form.roomArea,
-        materialDescription: form.materialDescription, // Materials Description
-        asbestosType: form.asbestosType, // Material Type
-        photograph: form.photograph,
-        notes: form.notes,
-      };
+      const itemData =
+        clearance?.clearanceType === "Vehicle/Equipment"
+          ? {
+              // For Vehicle/Equipment, use placeholder values for required fields
+              roomArea: "N/A", // Placeholder for required field
+              locationDescription: "N/A", // Placeholder for required field
+              materialDescription: form.materialDescription, // Item Description
+              asbestosType: form.asbestosType, // Material Type
+              notes: form.notes,
+            }
+          : {
+              locationDescription: form.locationDescription,
+              levelFloor: showLevelFloor ? form.levelFloor : "",
+              roomArea: form.roomArea,
+              materialDescription: form.materialDescription,
+              asbestosType: form.asbestosType,
+              notes: form.notes,
+            };
 
       console.log("Submitting item data:", itemData);
 
@@ -176,80 +674,102 @@ const ClearanceItems = () => {
           editingItem._id,
           itemData
         );
-        setSnackbar({
-          open: true,
-          message: "Item updated successfully",
-          severity: "success",
-        });
+        showSnackbar("Item updated successfully", "success");
+        setDialogOpen(false);
+        setEditingItem(null);
+        resetForm();
+        await fetchData();
       } else {
         await asbestosClearanceService.addItem(clearanceId, itemData);
-        setSnackbar({
-          open: true,
-          message: "Item created successfully",
-          severity: "success",
-        });
+        showSnackbar("Item created successfully. Add photos below.", "success");
+
+        // Close the item dialog and refresh data
+        setDialogOpen(false);
+        resetForm();
+        await fetchData();
+
+        // Find the newly created item and open photo gallery
+        const updatedItems = await asbestosClearanceService.getItems(
+          clearanceId
+        );
+        const createdItem = updatedItems.find(
+          (item) =>
+            item.locationDescription === itemData.locationDescription &&
+            item.roomArea === itemData.roomArea &&
+            item.materialDescription === itemData.materialDescription
+        );
+
+        if (createdItem) {
+          setSelectedItemForPhotos(createdItem);
+          setPhotoGalleryDialogOpen(true);
+        }
       }
 
-      setDialogOpen(false);
-      setEditingItem(null);
-      resetForm();
-      await fetchData();
-
-      // Update clearance type based on all items
-      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
-      await updateClearanceTypeFromItems(updatedItems);
+      // Update clearance type based on all items (only for editing, since we already fetched items for new items)
+      if (editingItem) {
+        const updatedItems = await asbestosClearanceService.getItems(
+          clearanceId
+        );
+        await updateClearanceTypeFromItems(updatedItems);
+      }
     } catch (err) {
       console.error("Error saving item:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to save item",
-        severity: "error",
-      });
+      showSnackbar("Failed to save item", "error");
     }
   };
 
   const handleEdit = (item) => {
     setEditingItem(item);
     setForm({
-      locationDescription: item.locationDescription,
+      locationDescription: item.locationDescription || "",
       levelFloor: item.levelFloor || "",
       roomArea: item.roomArea || "",
       materialDescription: item.materialDescription,
       asbestosType: item.asbestosType,
-      photograph: item.photograph || "",
       notes: item.notes || "",
     });
-    setShowLevelFloor(!!item.levelFloor);
-    setPhotoPreview(item.photograph || null);
-    setPhotoFile(null);
+    // Don't show level floor checkbox for Vehicle/Equipment items
+    setShowLevelFloor(
+      clearance?.clearanceType !== "Vehicle/Equipment" && !!item.levelFloor
+    );
+    // Reset first tap state when editing
+    setFirstTapFields({
+      levelFloor: false,
+      roomArea: false,
+      locationDescription: false,
+      materialDescription: false,
+    });
     setDialogOpen(true);
   };
 
-  const handleDelete = async (item) => {
-    if (window.confirm("Are you sure you want to delete this item?")) {
-      try {
-        await asbestosClearanceService.deleteItem(clearanceId, item._id);
-        setSnackbar({
-          open: true,
-          message: "Item deleted successfully",
-          severity: "success",
-        });
-        await fetchData();
+  const handleDelete = (item) => {
+    setItemToDelete(item);
+    setDeleteConfirmDialogOpen(true);
+  };
 
-        // Update clearance type based on remaining items
-        const updatedItems = await asbestosClearanceService.getItems(
-          clearanceId
-        );
-        await updateClearanceTypeFromItems(updatedItems);
-      } catch (err) {
-        console.error("Error deleting item:", err);
-        setSnackbar({
-          open: true,
-          message: "Failed to delete item",
-          severity: "error",
-        });
-      }
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+
+    try {
+      await asbestosClearanceService.deleteItem(clearanceId, itemToDelete._id);
+      showSnackbar("Item deleted successfully", "success");
+      await fetchData();
+
+      // Update clearance type based on remaining items
+      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
+      await updateClearanceTypeFromItems(updatedItems);
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      showSnackbar("Failed to delete item", "error");
+    } finally {
+      setDeleteConfirmDialogOpen(false);
+      setItemToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirmDialogOpen(false);
+    setItemToDelete(null);
   };
 
   const resetForm = () => {
@@ -259,18 +779,29 @@ const ClearanceItems = () => {
       roomArea: "",
       materialDescription: "",
       asbestosType: "non-friable",
-      photograph: "",
       notes: "",
     });
     setShowLevelFloor(false);
-    setPhotoPreview(null);
-    setPhotoFile(null);
-    setCompressionStatus(null);
+    // Reset first tap state when form is reset
+    setFirstTapFields({
+      levelFloor: false,
+      roomArea: false,
+      locationDescription: false,
+      materialDescription: false,
+    });
   };
 
   // Function to automatically determine and update clearance type based on asbestos items
   const updateClearanceTypeFromItems = async (items) => {
     if (!items || items.length === 0) {
+      return;
+    }
+
+    // Don't auto-update clearance type for Vehicle/Equipment or specialized clearance types
+    if (
+      clearance?.clearanceType === "Vehicle/Equipment" ||
+      clearance?.clearanceType === "Friable (Non-Friable Conditions)"
+    ) {
       return;
     }
 
@@ -280,8 +811,11 @@ const ClearanceItems = () => {
     );
 
     let newClearanceType;
+    // Determine clearance type based on asbestos items
+    // If has both friable and non-friable, use "Friable (Non-Friable Conditions)"
+    // Otherwise use the predominant type
     if (hasFriable && hasNonFriable) {
-      newClearanceType = "Mixed";
+      newClearanceType = "Friable (Non-Friable Conditions)";
     } else if (hasFriable) {
       newClearanceType = "Friable";
     } else {
@@ -326,9 +860,625 @@ const ClearanceItems = () => {
     return type.charAt(0).toUpperCase() + type.slice(1).replace("-", "-");
   };
 
-  const handlePhotoUpload = async (event) => {
+  const handleTakePhoto = async () => {
+    // Check if the device supports camera access
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      // Fallback to file input with camera capture
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.capture = "environment"; // Use back camera on mobile devices
+      input.onchange = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          handlePhotoUploadForGallery({ target: { files: [file] } });
+        }
+      };
+      input.click();
+      return;
+    }
+
+    try {
+      // First try to get back camera
+      let mediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment", // Use back camera
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch (backCameraError) {
+        console.log(
+          "Back camera not available, trying any camera:",
+          backCameraError
+        );
+        // Fallback to any available camera
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      }
+
+      console.log("Camera stream obtained:", mediaStream);
+      setStream(mediaStream);
+      // Reset zoom and pan when opening camera
+      setZoom(1);
+      setPanX(0);
+      setPanY(0);
+      setLastPinchDistance(null);
+      setLastPanPoint(null);
+      setCameraDialogOpen(true);
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      let errorMessage =
+        "Failed to access camera. Please check permissions or use upload instead.";
+
+      if (error.name === "NotAllowedError") {
+        errorMessage =
+          "Camera access denied. Please allow camera permissions and try again.";
+      } else if (error.name === "NotFoundError") {
+        errorMessage =
+          "No camera found on this device. Please use upload instead.";
+      } else if (error.name === "NotSupportedError") {
+        errorMessage =
+          "Camera access is not supported on this device. Please use upload instead.";
+      }
+
+      showSnackbar(errorMessage, "error");
+    }
+  };
+
+  const handleCapturePhoto = async () => {
+    if (videoRef) {
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+
+      // Set canvas dimensions to match video
+      canvas.width = videoRef.videoWidth;
+      canvas.height = videoRef.videoHeight;
+
+      // If zoomed, capture the zoomed portion
+      if (zoom > 1 && videoContainerRef.current) {
+        // Get container dimensions to calculate scale factor
+        const container = videoContainerRef.current;
+        const containerRect = container.getBoundingClientRect();
+
+        // Calculate the scale factor between container and video
+        // The video is displayed with objectFit: cover, so we need to account for that
+        const videoAspect = videoRef.videoWidth / videoRef.videoHeight;
+        const containerAspect = containerRect.width / containerRect.height;
+
+        let videoDisplayWidth, videoDisplayHeight;
+        if (videoAspect > containerAspect) {
+          // Video is wider - height fits container
+          videoDisplayHeight = containerRect.height;
+          videoDisplayWidth = videoDisplayHeight * videoAspect;
+        } else {
+          // Video is taller - width fits container
+          videoDisplayWidth = containerRect.width;
+          videoDisplayHeight = videoDisplayWidth / videoAspect;
+        }
+
+        // Calculate the source rectangle based on zoom and pan
+        const sourceWidth = videoRef.videoWidth / zoom;
+        const sourceHeight = videoRef.videoHeight / zoom;
+
+        // Convert pan from container pixels to video pixels
+        const panXVideo = (panX * videoDisplayWidth) / containerRect.width;
+        const panYVideo = (panY * videoDisplayHeight) / containerRect.height;
+
+        // Calculate source X and Y, accounting for pan
+        const sourceX = (videoRef.videoWidth - sourceWidth) / 2 - panXVideo;
+        const sourceY = (videoRef.videoHeight - sourceHeight) / 2 - panYVideo;
+
+        // Ensure we don't go out of bounds
+        const clampedSourceX = Math.max(
+          0,
+          Math.min(sourceX, videoRef.videoWidth - sourceWidth)
+        );
+        const clampedSourceY = Math.max(
+          0,
+          Math.min(sourceY, videoRef.videoHeight - sourceHeight)
+        );
+        const clampedSourceWidth = Math.min(
+          sourceWidth,
+          videoRef.videoWidth - clampedSourceX
+        );
+        const clampedSourceHeight = Math.min(
+          sourceHeight,
+          videoRef.videoHeight - clampedSourceY
+        );
+
+        // Draw the zoomed portion to canvas, scaled to fill
+        context.drawImage(
+          videoRef,
+          clampedSourceX,
+          clampedSourceY,
+          clampedSourceWidth,
+          clampedSourceHeight,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+      } else {
+        // No zoom, capture full frame
+        context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+      }
+
+      // Generate filename with timestamp
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, -5);
+      const filename = `clearance-photo-${timestamp}.jpg`;
+
+      // Capture full-quality version first
+      canvas.toBlob(
+        async (blob) => {
+          if (blob) {
+            // Create a file from the blob (full quality)
+            const fullQualityFile = new File([blob], filename, {
+              type: "image/jpeg",
+            });
+
+            // Save full-size original to device
+            try {
+              const projectFolderName = getProjectFolderName();
+              await saveFileToDevice(fullQualityFile, filename, {
+                projectId: projectFolderName
+                  ? `${projectFolderName} - Photos`
+                  : "clearance-photos",
+              });
+            } catch (error) {
+              console.error("Error saving photo to device:", error);
+              // Continue with upload even if device save fails
+            }
+
+            // Now process the full-quality file for upload (will be compressed if needed)
+            // Pass it with a special name to prevent double-saving in handlePhotoUploadForGallery
+            const uploadFile = new File([blob], "camera-photo.jpg", {
+              type: "image/jpeg",
+            });
+            handlePhotoUploadForGallery({ target: { files: [uploadFile] } });
+          }
+        },
+        "image/jpeg",
+        1.0 // Full quality for device storage
+      );
+    }
+
+    // Close camera dialog and stop stream
+    handleCloseCamera();
+  };
+
+  const handleCloseCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setCameraDialogOpen(false);
+    // Reset zoom and pan when closing camera
+    setZoom(1);
+    setPanX(0);
+    setPanY(0);
+    setLastPinchDistance(null);
+    setLastPanPoint(null);
+  };
+
+  // Calculate distance between two touch points
+  const getDistance = (touch1, touch2) => {
+    const dx = touch2.clientX - touch1.clientX;
+    const dy = touch2.clientY - touch1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Get center point between two touches
+  const getCenter = (touch1, touch2) => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
+  };
+
+  // Handle touch start for pinch zoom
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      // Two fingers - pinch zoom
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      setLastPinchDistance(distance);
+      const center = getCenter(e.touches[0], e.touches[1]);
+      setLastPanPoint(center);
+    } else if (e.touches.length === 1) {
+      // Single finger - check for double tap to reset zoom
+      const currentTime = new Date().getTime();
+      const timeSinceLastTap = currentTime - lastTapTime;
+
+      if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+        // Double tap detected - reset zoom
+        setZoom(1);
+        setPanX(0);
+        setPanY(0);
+        setLastTapTime(0);
+        return;
+      }
+
+      setLastTapTime(currentTime);
+
+      if (zoom > 1) {
+        // Single finger - pan when zoomed, prepare for pan
+        setLastPanPoint({
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+        });
+      }
+    }
+  };
+
+  // Handle touch move for pinch zoom and pan
+  const handleTouchMove = (e) => {
+    e.preventDefault(); // Prevent scrolling while zooming/panning
+
+    if (e.touches.length === 2) {
+      // Two fingers - pinch zoom
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      const center = getCenter(e.touches[0], e.touches[1]);
+
+      if (lastPinchDistance !== null && videoContainerRef.current) {
+        const scale = distance / lastPinchDistance;
+        const newZoom = Math.max(1, Math.min(5, zoom * scale)); // Limit zoom between 1x and 5x
+
+        const container = videoContainerRef.current;
+        const rect = container.getBoundingClientRect();
+        const containerCenterX = rect.width / 2;
+        const containerCenterY = rect.height / 2;
+
+        // Calculate the pinch center relative to container
+        const pinchCenterX = center.x - rect.left - containerCenterX;
+        const pinchCenterY = center.y - rect.top - containerCenterY;
+
+        // Adjust pan to keep the pinch center point stable
+        // When zooming, we need to adjust pan to maintain the pinch point
+        const zoomChange = newZoom / zoom;
+        setZoom(newZoom);
+        setPanX((prevPanX) => {
+          // Adjust pan to keep pinch center stable
+          const newPanX =
+            prevPanX - (pinchCenterX * (zoomChange - 1)) / newZoom;
+          // Limit pan based on zoom level (can pan more when more zoomed)
+          const maxPan = (newZoom - 1) * 50;
+          return Math.max(-maxPan, Math.min(maxPan, newPanX));
+        });
+        setPanY((prevPanY) => {
+          const newPanY =
+            prevPanY - (pinchCenterY * (zoomChange - 1)) / newZoom;
+          const maxPan = (newZoom - 1) * 50;
+          return Math.max(-maxPan, Math.min(maxPan, newPanY));
+        });
+
+        setLastPinchDistance(distance);
+        setLastPanPoint(center);
+      } else {
+        setLastPinchDistance(distance);
+        setLastPanPoint(center);
+      }
+    } else if (e.touches.length === 1 && zoom > 1 && lastPanPoint) {
+      // Single finger - pan when zoomed
+      const deltaX = (e.touches[0].clientX - lastPanPoint.x) / zoom;
+      const deltaY = (e.touches[0].clientY - lastPanPoint.y) / zoom;
+
+      const maxPan = (zoom - 1) * 50;
+      setPanX((prevPanX) => {
+        const newPanX = prevPanX + deltaX;
+        return Math.max(-maxPan, Math.min(maxPan, newPanX));
+      });
+      setPanY((prevPanY) => {
+        const newPanY = prevPanY + deltaY;
+        return Math.max(-maxPan, Math.min(maxPan, newPanY));
+      });
+
+      setLastPanPoint({
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      });
+    }
+  };
+
+  // Handle touch end
+  const handleTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      setLastPinchDistance(null);
+    }
+    if (e.touches.length === 0) {
+      setLastPanPoint(null);
+    }
+  };
+
+  // Open photo gallery for an item
+  const handleOpenPhotoGallery = (item) => {
+    console.log("[ClearanceItems] handleOpenPhotoGallery - Opening gallery", {
+      itemId: item._id,
+      photoCount: item.photographs?.length || 0,
+      timestamp: new Date().toISOString(),
+    });
+    setSelectedItemForPhotos(item);
+    setPhotoGalleryDialogOpen(true);
+  };
+
+  // Close photo gallery
+  const handleClosePhotoGallery = async () => {
+    setPhotoGalleryDialogOpen(false);
+    setSelectedItemForPhotos(null);
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    setCompressionStatus(null);
+    setLocalPhotoChanges({}); // Clear any unsaved changes
+    setPhotosToDelete(new Set()); // Clear any photos marked for deletion
+
+    // Refresh the main table data to update photo counts
+    await fetchData();
+  };
+
+  // Handle site plan save
+  const handleSitePlanSave = async (sitePlanData) => {
+    try {
+      const imageData =
+        typeof sitePlanData === "string"
+          ? sitePlanData
+          : sitePlanData?.imageData;
+      const legendEntries = Array.isArray(sitePlanData?.legend)
+        ? sitePlanData.legend.map((entry) => ({
+            color: entry.color,
+            description: entry.description,
+          }))
+        : [];
+      const legendTitle =
+        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
+          ? sitePlanData.legendTitle.trim()
+          : "Key";
+      const figureTitle =
+        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
+          ? sitePlanData.figureTitle.trim()
+          : "Asbestos Removal Site Plan";
+
+      if (!imageData) {
+        showSnackbar("No site plan image data was provided", "error");
+        return;
+      }
+
+      // Save the drawn site plan to the clearance
+      const response = await asbestosClearanceService.update(clearanceId, {
+        sitePlan: true, // Enable site plan functionality
+        sitePlanFile: imageData, // Base64 image data
+        sitePlanLegend: legendEntries,
+        sitePlanLegendTitle: legendTitle,
+        sitePlanFigureTitle: figureTitle,
+        sitePlanSource: "drawn", // Mark it as a drawn site plan
+      });
+
+      console.log("Site plan save response:", response);
+
+      showSnackbar("Drawn site plan saved successfully!", "success");
+      setSitePlanDrawingDialogOpen(false);
+      fetchData(); // Refresh clearance data to show the new site plan
+    } catch (error) {
+      console.error("Error saving site plan:", error);
+      showSnackbar("Error saving site plan", "error");
+    }
+  };
+
+  // Handle site plan drawing dialog close
+  const handleSitePlanDrawingClose = () => {
+    setSitePlanDrawingDialogOpen(false);
+  };
+
+  // Add photo to existing item
+  const handleAddPhotoToItem = async (photoData) => {
+    if (!selectedItemForPhotos) return;
+
+    try {
+      const response = await asbestosClearanceService.addPhotoToItem(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photoData,
+        true // includeInReport default to true
+      );
+
+      // Update the selected item with the new photo data immediately
+      if (response && response.photographs) {
+        setSelectedItemForPhotos((prev) => ({
+          ...prev,
+          photographs: response.photographs,
+        }));
+      } else if (response) {
+        // If response is the entire item, update the selected item
+        setSelectedItemForPhotos(response);
+      }
+
+      setPhotoPreview(null);
+      setPhotoFile(null);
+      setCompressionStatus(null);
+      showSnackbar("Photo added successfully", "success");
+    } catch (error) {
+      console.error("Error adding photo:", error);
+      showSnackbar("Failed to add photo", "error");
+    }
+  };
+
+  // Delete photo from item
+  // Delete photo from item (local state only)
+  const handleDeletePhotoFromItem = (itemId, photoId) => {
+    setPhotosToDelete((prev) => new Set([...prev, photoId]));
+  };
+
+  // Toggle photo inclusion in report
+  // Toggle photo inclusion in report (local state only)
+  const handleTogglePhotoInReport = (itemId, photoId) => {
+    setLocalPhotoChanges((prev) => ({
+      ...prev,
+      [photoId]: !getCurrentPhotoState(photoId),
+    }));
+  };
+
+  // View full-size photo
+  const handleViewFullSizePhoto = (photoUrl) => {
+    setFullSizePhotoUrl(photoUrl);
+    setFullSizePhotoDialogOpen(true);
+  };
+
+  // Helper function to get current photo state (including local changes)
+  const getCurrentPhotoState = (photoId) => {
+    const localChange = localPhotoChanges[photoId];
+    if (localChange !== undefined) {
+      return localChange;
+    }
+    // Find the photo in the selected item
+    const photo = selectedItemForPhotos?.photographs?.find(
+      (p) => p._id === photoId
+    );
+    return photo?.includeInReport ?? true;
+  };
+
+  // Helper function to check if there are unsaved changes
+  const hasUnsavedChanges = () => {
+    return Object.keys(localPhotoChanges).length > 0 || photosToDelete.size > 0;
+  };
+
+  // Helper function to apply local changes to photo state
+  const applyLocalChangesToPhoto = (photo) => {
+    const localChange = localPhotoChanges[photo._id];
+    return {
+      ...photo,
+      includeInReport:
+        localChange !== undefined ? localChange : photo.includeInReport,
+    };
+  };
+
+  // Helper function to check if photo is marked for deletion
+  const isPhotoMarkedForDeletion = (photoId) => {
+    return photosToDelete.has(photoId);
+  };
+
+  // Save all photo changes to backend
+  const savePhotoChanges = async () => {
+    try {
+      const togglePromises = [];
+      let toggleResults = [];
+      let deletionResults = [];
+
+      // Handle photo inclusion changes (can be done in parallel)
+      Object.entries(localPhotoChanges).forEach(
+        ([photoId, includeInReport]) => {
+          const photo = selectedItemForPhotos?.photographs?.find(
+            (p) => p._id === photoId
+          );
+          if (photo && photo.includeInReport !== includeInReport) {
+            togglePromises.push(
+              asbestosClearanceService.togglePhotoInReport(
+                clearanceId,
+                selectedItemForPhotos._id,
+                photoId
+              )
+            );
+          }
+        }
+      );
+
+      // Process toggle operations in parallel
+      if (togglePromises.length > 0) {
+        toggleResults = await Promise.allSettled(togglePromises);
+      }
+
+      // Handle photo deletions sequentially to avoid backend race conditions
+      // Process deletions one at a time to prevent concurrent modification errors
+      for (const photoId of photosToDelete) {
+        try {
+          await asbestosClearanceService.deletePhotoFromItem(
+            clearanceId,
+            selectedItemForPhotos._id,
+            photoId
+          );
+          deletionResults.push({ status: "fulfilled", photoId });
+        } catch (error) {
+          console.error(`Error deleting photo ${photoId}:`, error);
+          deletionResults.push({ status: "rejected", photoId, reason: error });
+        }
+      }
+
+      // Combine results
+      const allResults = [...toggleResults, ...deletionResults];
+      const failures = allResults.filter((r) => r.status === "rejected");
+      const successes = allResults.filter((r) => r.status === "fulfilled");
+
+      // Log any failures for debugging
+      failures.forEach((result) => {
+        if (result.reason) {
+          console.error(
+            `Operation failed for photo ${result.photoId || "unknown"}:`,
+            result.reason
+          );
+        }
+      });
+
+      if (failures.length > 0) {
+        if (successes.length === 0) {
+          // All operations failed
+          showSnackbar("Failed to save photo changes", "error");
+          return;
+        } else {
+          // Some operations succeeded, some failed
+          showSnackbar(
+            `Saved ${successes.length} of ${allResults.length} changes. Some operations failed.`,
+            "warning"
+          );
+        }
+      } else {
+        // All operations succeeded
+        showSnackbar("Photo changes saved successfully", "success");
+      }
+
+      // Clear local changes - refresh will update the state
+      // Only clear if we had at least some successes
+      if (successes.length > 0) {
+        setLocalPhotoChanges({});
+        setPhotosToDelete(new Set());
+      }
+
+      // Refresh data to get updated state
+      await fetchData();
+
+      // Update selected item
+      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
+      const updatedItem = updatedItems.find(
+        (item) => item._id === selectedItemForPhotos._id
+      );
+      if (updatedItem) {
+        setSelectedItemForPhotos(updatedItem);
+      }
+    } catch (error) {
+      console.error("Error saving photo changes:", error);
+      showSnackbar("Failed to save photo changes", "error");
+    }
+  };
+
+  // Handle photo upload for photo gallery
+  const handlePhotoUploadForGallery = async (event) => {
     const file = event.target.files[0];
     if (file) {
+      console.log("[ClearanceItems] handlePhotoUploadForGallery - Starting", {
+        fileName: file.name,
+        fileSize: `${(file.size / 1024).toFixed(2)}KB`,
+        fileType: file.type,
+        timestamp: new Date().toISOString(),
+      });
+      const uploadStartTime = performance.now();
+
       setPhotoFile(file);
       setCompressionStatus({
         type: "processing",
@@ -337,12 +1487,26 @@ const ClearanceItems = () => {
 
       try {
         const originalSizeKB = Math.round(file.size / 1024);
+        const shouldCompress = needsCompression(file, 300);
 
-        // Check if compression is needed
-        const shouldCompress = needsCompression(file, 300); // 300KB threshold
+        console.log(
+          "[ClearanceItems] handlePhotoUploadForGallery - Compression check",
+          {
+            originalSizeKB,
+            shouldCompress,
+            timestamp: new Date().toISOString(),
+          }
+        );
 
         if (shouldCompress) {
-          console.log("Compressing image...");
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Starting compression",
+            {
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const compressionStartTime = performance.now();
+
           setCompressionStatus({
             type: "compressing",
             message: "Compressing image...",
@@ -355,6 +1519,17 @@ const ClearanceItems = () => {
             maxSizeKB: 300,
           });
 
+          const compressionEndTime = performance.now();
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Compression completed",
+            {
+              compressionDuration: `${(
+                compressionEndTime - compressionStartTime
+              ).toFixed(2)}ms`,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
           const compressedSizeKB = Math.round(
             (compressedImage.length * 0.75) / 1024
           );
@@ -362,20 +1537,55 @@ const ClearanceItems = () => {
             ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100
           );
 
-          setPhotoPreview(compressedImage);
-          setForm({ ...form, photograph: compressedImage });
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Adding compressed photo",
+            {
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const addStartTime = performance.now();
+          await handleAddPhotoToItem(compressedImage);
+          const addEndTime = performance.now();
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
+            {
+              addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
+              timestamp: new Date().toISOString(),
+            }
+          );
+
           setCompressionStatus({
             type: "success",
             message: `Compressed: ${originalSizeKB}KB → ${compressedSizeKB}KB (${reduction}% reduction)`,
           });
-
-          console.log("Image compressed successfully");
         } else {
-          // Use original if no compression needed
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - No compression needed, reading file",
+            {
+              timestamp: new Date().toISOString(),
+            }
+          );
+          const readStartTime = performance.now();
           const reader = new FileReader();
-          reader.onload = (e) => {
-            setPhotoPreview(e.target.result);
-            setForm({ ...form, photograph: e.target.result });
+          reader.onload = async (e) => {
+            const readEndTime = performance.now();
+            console.log(
+              "[ClearanceItems] handlePhotoUploadForGallery - File read completed",
+              {
+                readDuration: `${(readEndTime - readStartTime).toFixed(2)}ms`,
+                timestamp: new Date().toISOString(),
+              }
+            );
+            const addStartTime = performance.now();
+            await handleAddPhotoToItem(e.target.result);
+            const addEndTime = performance.now();
+            console.log(
+              "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
+              {
+                addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
+                timestamp: new Date().toISOString(),
+              }
+            );
             setCompressionStatus({
               type: "info",
               message: `No compression needed (${originalSizeKB}KB)`,
@@ -383,73 +1593,123 @@ const ClearanceItems = () => {
           };
           reader.readAsDataURL(file);
         }
+
+        const uploadEndTime = performance.now();
+        console.log(
+          "[ClearanceItems] handlePhotoUploadForGallery - Completed",
+          {
+            totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          }
+        );
       } catch (error) {
-        console.error("Error processing image:", error);
-        // Fallback to original image if compression fails
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setPhotoPreview(e.target.result);
-          setForm({ ...form, photograph: e.target.result });
-          setCompressionStatus({
-            type: "warning",
-            message: "Compression failed, using original image",
-          });
-        };
-        reader.readAsDataURL(file);
+        const uploadEndTime = performance.now();
+        console.error("[ClearanceItems] handlePhotoUploadForGallery - Error", {
+          error: error,
+          errorMessage: error.message,
+          totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
+          timestamp: new Date().toISOString(),
+        });
+        setCompressionStatus({
+          type: "error",
+          message: "Failed to process image",
+        });
       }
     }
   };
 
-  const handleTakePhoto = () => {
-    // Create a file input for camera access
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment"; // Use back camera
-    input.onchange = handlePhotoUpload;
-    input.click();
-  };
-
-  const handleRemovePhoto = () => {
-    setPhotoFile(null);
-    setPhotoPreview(null);
-    setForm({ ...form, photograph: "" });
-  };
-
-  const convertToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
   const fetchAirMonitoringReports = async () => {
+    console.log("[ClearanceItems] fetchAirMonitoringReports - Starting", {
+      projectId: clearance?.projectId?._id,
+      asbestosRemovalJobId,
+      timestamp: new Date().toISOString(),
+    });
+    const startTime = performance.now();
+
     if (!clearance?.projectId?._id) {
-      setSnackbar({
-        open: true,
-        message: "No project found for this clearance",
-        severity: "error",
-      });
+      console.warn(
+        "[ClearanceItems] fetchAirMonitoringReports - No project ID",
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
+      showSnackbar("No project found for this clearance", "error");
       return;
     }
 
     try {
       setLoadingReports(true);
-      const reports = await asbestosClearanceService.getAirMonitoringReports(
-        clearance.projectId._id
-      );
-      setAirMonitoringReports(reports);
-    } catch (error) {
-      console.error("Error fetching air monitoring reports:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to fetch air monitoring reports",
-        severity: "error",
+
+      // Use asbestos removal job ID if available, otherwise fall back to project ID
+      if (asbestosRemovalJobId) {
+        console.log(
+          "[ClearanceItems] fetchAirMonitoringReports - Fetching by job ID",
+          {
+            asbestosRemovalJobId,
+            timestamp: new Date().toISOString(),
+          }
+        );
+        const apiStartTime = performance.now();
+        const reports =
+          await asbestosClearanceService.getAirMonitoringReportsByJob(
+            asbestosRemovalJobId
+          );
+        const apiEndTime = performance.now();
+        console.log(
+          "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by job",
+          {
+            reportsCount: Array.isArray(reports) ? reports.length : 0,
+            apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          }
+        );
+        setAirMonitoringReports(reports);
+      } else {
+        console.log(
+          "[ClearanceItems] fetchAirMonitoringReports - Fetching by project ID",
+          {
+            projectId: clearance.projectId._id,
+            timestamp: new Date().toISOString(),
+          }
+        );
+        const apiStartTime = performance.now();
+        const reports = await asbestosClearanceService.getAirMonitoringReports(
+          clearance.projectId._id
+        );
+        const apiEndTime = performance.now();
+        console.log(
+          "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by project",
+          {
+            reportsCount: Array.isArray(reports) ? reports.length : 0,
+            apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+            timestamp: new Date().toISOString(),
+          }
+        );
+        setAirMonitoringReports(reports);
+      }
+
+      const endTime = performance.now();
+      console.log("[ClearanceItems] fetchAirMonitoringReports - Completed", {
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
       });
+    } catch (error) {
+      const endTime = performance.now();
+      console.error("[ClearanceItems] fetchAirMonitoringReports - Error", {
+        error: error,
+        errorMessage: error.message,
+        totalDuration: `${(endTime - startTime).toFixed(2)}ms`,
+        timestamp: new Date().toISOString(),
+      });
+      showSnackbar("Failed to fetch air monitoring reports", "error");
     } finally {
       setLoadingReports(false);
+      console.log(
+        "[ClearanceItems] fetchAirMonitoringReports - Loading state set to false",
+        {
+          timestamp: new Date().toISOString(),
+        }
+      );
     }
   };
 
@@ -467,20 +1727,18 @@ const ClearanceItems = () => {
       const { generateShiftReport } = await import(
         "../../utils/generateShiftReport"
       );
-      const {
-        shiftService,
-        jobService,
-        sampleService,
-        projectService,
-        clientService,
-      } = await import("../../services/api");
+      const { shiftService, sampleService, projectService, clientService } =
+        await import("../../services/api");
+      const asbestosRemovalJobService = (
+        await import("../../services/asbestosRemovalJobService")
+      ).default;
 
       // Get the shift data
       const shiftResponse = await shiftService.getById(report._id);
       const shift = shiftResponse.data;
 
-      // Get the job data
-      const jobResponse = await jobService.getById(report.jobId);
+      // Get the asbestos removal job data
+      const jobResponse = await asbestosRemovalJobService.getById(report.jobId);
       const job = jobResponse.data;
 
       // Get samples for this shift
@@ -505,83 +1763,39 @@ const ClearanceItems = () => {
         samples: samples,
         projectId: project,
         returnPdfData: true, // This will return the PDF data URL instead of downloading
+        sitePlanData: shift.sitePlan
+          ? {
+              sitePlan: shift.sitePlan,
+              sitePlanData: shift.sitePlanData,
+            }
+          : null,
       });
 
       // Extract base64 data from data URL
       const base64Data = pdfDataUrl.split(",")[1];
 
-      // Upload the report to the clearance
+      // Upload the report to the clearance and enable air monitoring
       await asbestosClearanceService.uploadAirMonitoringReport(clearanceId, {
         reportData: base64Data,
+        shiftDate: shift.date,
+        shiftId: shift._id,
+        airMonitoring: true, // Enable air monitoring when report is uploaded
       });
 
-      setSnackbar({
-        open: true,
-        message: "Air monitoring report selected and uploaded successfully",
-        severity: "success",
-      });
+      showSnackbar(
+        "Air monitoring report selected and uploaded successfully",
+        "success"
+      );
 
       setAirMonitoringReportsDialogOpen(false);
+      setAttachmentsModalOpen(false); // Close the main air monitoring modal
       setSelectedReport(null);
       fetchData(); // Refresh clearance data
     } catch (error) {
       console.error("Error selecting air monitoring report:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to select air monitoring report",
-        severity: "error",
-      });
+      showSnackbar("Failed to select air monitoring report", "error");
     } finally {
       setGeneratingAirMonitoringPDF(false);
-    }
-  };
-
-  const handleAirMonitoringFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setAirMonitoringFile(file);
-    }
-  };
-
-  const handleUploadAirMonitoringReport = async () => {
-    if (!airMonitoringFile) {
-      setSnackbar({
-        open: true,
-        message: "Please select a file to upload",
-        severity: "error",
-      });
-      return;
-    }
-
-    try {
-      setUploadingReport(true);
-
-      // Convert file to base64
-      const base64Data = await convertToBase64(airMonitoringFile);
-
-      // Upload to backend
-      await asbestosClearanceService.uploadAirMonitoringReport(clearanceId, {
-        reportData: base64Data,
-      });
-
-      setSnackbar({
-        open: true,
-        message: "Air monitoring report uploaded successfully",
-        severity: "success",
-      });
-
-      setAirMonitoringDialogOpen(false);
-      setAirMonitoringFile(null);
-      fetchData(); // Refresh clearance data
-    } catch (error) {
-      console.error("Error uploading air monitoring report:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to upload air monitoring report",
-        severity: "error",
-      });
-    } finally {
-      setUploadingReport(false);
     }
   };
 
@@ -592,25 +1806,18 @@ const ClearanceItems = () => {
       )
     ) {
       try {
-        // Update the clearance to remove the air monitoring report
+        // Update the clearance to remove the air monitoring report and disable air monitoring
         await asbestosClearanceService.update(clearanceId, {
           airMonitoringReport: null,
+          airMonitoring: false, // Disable air monitoring when report is removed
         });
 
-        setSnackbar({
-          open: true,
-          message: "Air monitoring report removed successfully",
-          severity: "success",
-        });
+        showSnackbar("Air monitoring report removed successfully", "success");
 
         fetchData(); // Refresh clearance data
       } catch (error) {
         console.error("Error removing air monitoring report:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to remove air monitoring report",
-          severity: "error",
-        });
+        showSnackbar("Failed to remove air monitoring report", "error");
       }
     }
   };
@@ -624,11 +1831,7 @@ const ClearanceItems = () => {
 
   const handleUploadSitePlan = async () => {
     if (!sitePlanFile) {
-      setSnackbar({
-        open: true,
-        message: "Please select a file first",
-        severity: "error",
-      });
+      showSnackbar("Please select a file first", "error");
       return;
     }
 
@@ -646,24 +1849,18 @@ const ClearanceItems = () => {
           // Update the clearance with the site plan file
           await asbestosClearanceService.update(clearanceId, {
             sitePlanFile: base64Data,
+            sitePlanLegend: [],
+            sitePlanLegendTitle: null,
           });
 
-          setSnackbar({
-            open: true,
-            message: "Site plan uploaded successfully",
-            severity: "success",
-          });
+          showSnackbar("Site plan uploaded successfully", "success");
 
           setSitePlanDialogOpen(false);
           setSitePlanFile(null);
           fetchData(); // Refresh clearance data
         } catch (error) {
           console.error("Error uploading site plan:", error);
-          setSnackbar({
-            open: true,
-            message: "Failed to upload site plan",
-            severity: "error",
-          });
+          showSnackbar("Failed to upload site plan", "error");
         } finally {
           setUploadingSitePlan(false);
         }
@@ -671,11 +1868,7 @@ const ClearanceItems = () => {
       reader.readAsDataURL(sitePlanFile);
     } catch (error) {
       console.error("Error processing site plan file:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to process site plan file",
-        severity: "error",
-      });
+      showSnackbar("Failed to process site plan file", "error");
       setUploadingSitePlan(false);
     }
   };
@@ -686,55 +1879,125 @@ const ClearanceItems = () => {
         // Update the clearance to remove the site plan file
         await asbestosClearanceService.update(clearanceId, {
           sitePlanFile: null,
+          sitePlanSource: null, // Backend will convert null to undefined to remove the field
+          sitePlanLegend: [],
+          sitePlanLegendTitle: null,
         });
 
-        setSnackbar({
-          open: true,
-          message: "Site plan removed successfully",
-          severity: "success",
-        });
+        showSnackbar("Site plan removed successfully", "success");
 
         fetchData(); // Refresh clearance data
       } catch (error) {
         console.error("Error removing site plan:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to remove site plan",
-          severity: "error",
-        });
+        showSnackbar("Failed to remove site plan", "error");
       }
     }
   };
 
-  const handleBackToHome = () => {
-    navigate("/asbestos-removal");
+  const handleCompleteJob = () => {
+    setCompleteDialogOpen(true);
   };
 
-  const handleCompleteJob = async () => {
-    if (window.confirm("Are you sure you want to complete this job?")) {
-      try {
-        await asbestosClearanceService.update(clearanceId, {
-          status: "complete",
-        });
-        setJobCompleted(true);
-        setSnackbar({
-          open: true,
-          message: "Job completed successfully!",
-          severity: "success",
-        });
-        fetchData(); // Refresh the data to show updated status
-      } catch (error) {
-        console.error("Error completing job:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to complete job",
-          severity: "error",
-        });
+  const confirmCompleteJob = async () => {
+    try {
+      await asbestosClearanceService.update(clearanceId, {
+        status: "complete",
+      });
+      setJobCompleted(true);
+      showSnackbar("Job completed successfully!", "success");
+      fetchData(); // Refresh the data to show updated status
+
+      console.log(
+        "Complete clearance button clicked - asbestosRemovalJobId:",
+        asbestosRemovalJobId
+      );
+
+      // Navigate to asbestos removal job details after completing clearance
+      if (asbestosRemovalJobId) {
+        console.log(
+          "Navigating to asbestos removal job details:",
+          `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`
+        );
+        // Navigate to the asbestos removal job details using the already fetched job ID
+        navigate(`/asbestos-removal/jobs/${asbestosRemovalJobId}/details`);
+      } else {
+        console.log(
+          "No asbestosRemovalJobId found, attempting to find job ID again..."
+        );
+
+        // Try to find the job ID one more time as a fallback
+        try {
+          const asbestosRemovalJobService = (
+            await import("../../services/asbestosRemovalJobService")
+          ).default;
+          const jobsResponse = await asbestosRemovalJobService.getAll();
+          const projectId = clearance?.projectId?._id || clearance?.projectId;
+
+          // Handle different response structures - some APIs return {data: [...]} others return {jobs: [...]}
+          const jobsArray = jobsResponse.data || jobsResponse.jobs || [];
+
+          const matchingJob = jobsArray.find((job) => {
+            const jobProjectId = job.projectId?._id || job.projectId;
+            return jobProjectId === projectId;
+          });
+
+          if (matchingJob) {
+            console.log("Found matching job in fallback:", matchingJob._id);
+            navigate(`/asbestos-removal/jobs/${matchingJob._id}/details`);
+          } else {
+            console.log(
+              "Still no matching job found, navigating to asbestos removal list"
+            );
+            navigate("/asbestos-removal");
+          }
+        } catch (fallbackError) {
+          console.error("Error in fallback job search:", fallbackError);
+          navigate("/asbestos-removal");
+        }
       }
+    } catch (error) {
+      console.error("Error completing job:", error);
+      showSnackbar("Failed to complete job", "error");
+    } finally {
+      setCompleteDialogOpen(false);
     }
   };
+
+  const handleReopenJob = () => {
+    setReopenDialogOpen(true);
+  };
+
+  const confirmReopenJob = async () => {
+    try {
+      await asbestosClearanceService.update(clearanceId, {
+        status: "in progress",
+      });
+      setJobCompleted(false);
+      showSnackbar("Clearance reopened successfully!", "success");
+      fetchData(); // Refresh the data to show updated status
+    } catch (error) {
+      console.error("Error reopening job:", error);
+      showSnackbar("Failed to reopen clearance", "error");
+    } finally {
+      setReopenDialogOpen(false);
+    }
+  };
+
+  // Log render
+  useEffect(() => {
+    console.log("[ClearanceItems] Component render", {
+      loading,
+      error: !!error,
+      itemsCount: items?.length || 0,
+      clearanceLoaded: !!clearance,
+      timestamp: new Date().toISOString(),
+    });
+  });
 
   if (loading) {
+    console.log("[ClearanceItems] Rendering loading state", {
+      timestamp: new Date().toISOString(),
+    });
     return (
       <Box
         display="flex"
@@ -748,12 +2011,23 @@ const ClearanceItems = () => {
   }
 
   if (error) {
+    console.log("[ClearanceItems] Rendering error state", {
+      error,
+      timestamp: new Date().toISOString(),
+    });
     return (
       <Box m="20px">
         <Alert severity="error">{error}</Alert>
       </Box>
     );
   }
+
+  console.log("[ClearanceItems] Rendering main content", {
+    itemsCount: items?.length || 0,
+    clearanceType: clearance?.clearanceType,
+    jobCompleted,
+    timestamp: new Date().toISOString(),
+  });
 
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
@@ -773,10 +2047,25 @@ const ClearanceItems = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={() => navigate(`/clearances/asbestos`)}
+            onClick={() => navigate("/asbestos-removal")}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            Asbestos Clearances
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Asbestos Removal Jobs
+          </Link>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={() =>
+              navigate(
+                asbestosRemovalJobId
+                  ? `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`
+                  : `/asbestos-removal`
+              )
+            }
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            Job Details
           </Link>
           <Typography color="text.primary">
             {clearance.projectId?.name || "Unknown Project"}:{" "}
@@ -793,44 +2082,49 @@ const ClearanceItems = () => {
         {/* Project Info */}
 
         <Box display="flex" justifyContent="space-between" sx={{ mb: 2 }}>
-          <Button
-            variant="outlined"
-            color="primary"
-            onClick={() => setAttachmentsModalOpen(true)}
-            startIcon={<DescriptionIcon />}
-          >
-            Attachments
-          </Button>
-
-          <Button
-            variant="contained"
-            color={jobCompleted ? "error" : "success"}
-            onClick={jobCompleted ? undefined : handleCompleteJob}
-            disabled={!items || items.length === 0 || jobCompleted}
-            sx={{
-              backgroundColor: jobCompleted ? "#d32f2f" : undefined,
-              "&:hover": {
-                backgroundColor: jobCompleted ? "#d32f2f" : undefined,
-              },
-            }}
-          >
-            {jobCompleted ? "COMPLETED" : "COMPLETE JOB"}
-          </Button>
-        </Box>
-
-        {/* Air Monitoring Indicators */}
-        {clearance?.airMonitoring && (
-          <Box display="flex" gap={2} sx={{ mt: 2 }} alignItems="center">
-            {clearance.airMonitoringReport && (
-              <Typography
-                variant="body2"
-                color="error"
-                sx={{ fontWeight: "medium" }}
-              >
-                ✓ Air Monitoring Report Attached
-              </Typography>
+          <Box display="flex" gap={2} alignItems="center">
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => setAttachmentsModalOpen(true)}
+              startIcon={<AssessmentIcon />}
+            >
+              Air Monitoring Report
+            </Button>
+            {clearance?.airMonitoringReport && (
+              <Box display="flex" alignItems="center" gap={2}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={handleRemoveAirMonitoringReport}
+                  startIcon={<DeleteIcon />}
+                  size="small"
+                  sx={{
+                    borderColor: "#d32f2f",
+                    color: "#d32f2f",
+                    "&:hover": {
+                      borderColor: "#b71c1c",
+                      backgroundColor: "rgba(211, 47, 47, 0.04)",
+                    },
+                  }}
+                >
+                  Delete Report
+                </Button>
+                <Typography
+                  variant="body2"
+                  color="success.main"
+                  sx={{ fontWeight: "medium" }}
+                >
+                  ✓ Air Monitoring Report Attached
+                  {clearance.airMonitoringShiftDate && (
+                    <Box component="span" sx={{ ml: 1 }}>
+                      ({formatDate(clearance.airMonitoringShiftDate)})
+                    </Box>
+                  )}
+                </Typography>
+              </Box>
             )}
-            {!clearance.airMonitoringReport && (
+            {!clearance?.airMonitoringReport && (
               <Typography
                 variant="body2"
                 color="warning.main"
@@ -840,126 +2134,105 @@ const ClearanceItems = () => {
               </Typography>
             )}
           </Box>
-        )}
 
-        {/* Site Plan Indicators */}
-        {clearance?.sitePlan && (
-          <Box display="flex" gap={2} sx={{ mt: 2 }} alignItems="center">
-            {clearance.sitePlanFile && (
-              <Typography
-                variant="body2"
-                color="success.main"
-                sx={{ fontWeight: "medium" }}
-              >
-                ✓ Site Plan Attached
-              </Typography>
-            )}
-            {!clearance.sitePlanFile && (
-              <Typography
-                variant="body2"
-                color="warning.main"
-                sx={{ fontWeight: "medium" }}
-              >
-                ⚠ No Site Plan Attached
-              </Typography>
-            )}
-          </Box>
-        )}
+          <Button
+            variant="contained"
+            color={jobCompleted ? "error" : "primary"}
+            onClick={jobCompleted ? handleReopenJob : handleCompleteJob}
+            disabled={!items || items.length === 0}
+            sx={{
+              backgroundColor: jobCompleted ? "#d32f2f" : "#1976d2",
+              "&:hover": {
+                backgroundColor: jobCompleted ? "#b71c1c" : "#1565c0",
+              },
+            }}
+          >
+            {jobCompleted ? "REOPEN CLEARANCE" : "COMPLETE CLEARANCE"}
+          </Button>
+        </Box>
 
-        {/* Job Specific Exclusions */}
-        <Card sx={{ mt: 3 }}>
-          <CardContent>
-            <Typography variant="h6" color="black" sx={{ mb: 2 }}>
-              Job Specific Exclusions
-            </Typography>
-            <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-              <TextField
-                sx={{ flex: 1 }}
-                label="Job Specific Exclusions"
-                value={clearance?.jobSpecificExclusions || ""}
-                onChange={(e) => {
-                  // Update local state for the text field
-                  setClearance((prev) => ({
-                    ...prev,
-                    jobSpecificExclusions: e.target.value,
-                  }));
-                }}
-                multiline
-                rows={3}
-                placeholder="Enter job-specific exclusions that will be added to the Inspection Exclusions section of the report..."
-                // helperText={
-                //   clearance?.jobSpecificExclusions && !savingExclusions
-                //     ? "This text will be appended to the standard Inspection Exclusions section in the clearance report."
-                //     : savingExclusions
-                //     ? "Saving..."
-                //     : "This text will be appended to the standard Inspection Exclusions section in the clearance report."
-                // }
-                InputProps={{
-                  endAdornment: savingExclusions ? (
-                    <CircularProgress size={20} sx={{ mr: 1 }} />
-                  ) : null,
-                }}
-              />
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={async () => {
-                  try {
-                    setSavingExclusions(true);
-                    await asbestosClearanceService.update(clearanceId, {
-                      jobSpecificExclusions:
-                        clearance?.jobSpecificExclusions || "",
-                    });
-                    setSnackbar({
-                      open: true,
-                      message: "Job specific exclusions saved successfully",
-                      severity: "success",
-                    });
-                    setExclusionsLastSaved(new Date());
-                  } catch (error) {
-                    console.error(
-                      "Error saving job specific exclusions:",
-                      error
-                    );
-                    setSnackbar({
-                      open: true,
-                      message: "Failed to save job specific exclusions",
-                      severity: "error",
-                    });
-                  } finally {
-                    setSavingExclusions(false);
-                  }
-                }}
-                disabled={savingExclusions}
-                sx={{ minWidth: "120px" }}
-              >
-                {savingExclusions ? (
-                  <CircularProgress size={24} color="inherit" />
-                ) : (
-                  "Save Exclusions"
-                )}
-              </Button>
-            </Box>
-            {exclusionsLastSaved && (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Last saved: {formatDate(exclusionsLastSaved)}
-              </Typography>
-            )}
-          </CardContent>
-        </Card>
-        <Button
-          variant="contained"
-          color="secondary"
-          sx={{ mt: 3 }}
-          onClick={() => {
-            setEditingItem(null);
-            resetForm();
-            setDialogOpen(true);
-          }}
-          startIcon={<AddIcon />}
+        {/* Site Plan Actions */}
+        <Box
+          display="flex"
+          gap={2}
+          sx={{ mt: 2 }}
+          alignItems="center"
+          flexWrap="wrap"
         >
-          Add Item
-        </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() => setSitePlanDrawingDialogOpen(true)}
+            startIcon={<MapIcon />}
+          >
+            {clearance.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+          </Button>
+          {clearance.sitePlanFile && (
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleRemoveSitePlan}
+              startIcon={<DeleteIcon />}
+              sx={{
+                borderColor: "#d32f2f",
+                color: "#d32f2f",
+                "&:hover": {
+                  borderColor: "#b71c1c",
+                  backgroundColor: "rgba(211, 47, 47, 0.04)",
+                },
+              }}
+            >
+              Delete Site Plan
+            </Button>
+          )}
+          {clearance?.sitePlanFile && (
+            <Typography
+              variant="body2"
+              color="success.main"
+              sx={{ fontWeight: "medium" }}
+            >
+              ✓ Site Plan Attached
+            </Typography>
+          )}
+          {!clearance?.sitePlanFile && (
+            <Typography
+              variant="body2"
+              color="warning.main"
+              sx={{ fontWeight: "medium" }}
+            >
+              ⚠ No Site Plan
+            </Typography>
+          )}
+        </Box>
+
+        <Box display="flex" gap={2} sx={{ mt: 3 }}>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => {
+              setEditingItem(null);
+              resetForm();
+              setDialogOpen(true);
+            }}
+            startIcon={<AddIcon />}
+          >
+            Add Item
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setJobExclusionsModalOpen(true)}
+            startIcon={<DescriptionIcon />}
+            sx={{
+              backgroundColor: "#1976d2",
+              color: "white",
+              "&:hover": {
+                backgroundColor: "#1565c0",
+              },
+            }}
+          >
+            Job Specific Exclusions
+          </Button>
+        </Box>
 
         <Card sx={{ mt: 3 }}>
           <CardContent>
@@ -967,18 +2240,28 @@ const ClearanceItems = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    {items &&
-                      items.length > 0 &&
-                      items.some(
-                        (item) =>
-                          item.levelFloor && item.levelFloor.trim() !== ""
-                      ) && <TableCell>Level/Floor</TableCell>}
-                    <TableCell>Room/Area</TableCell>
-                    <TableCell>Location Description</TableCell>
-                    <TableCell>Materials Description</TableCell>
-                    <TableCell>Asbestos Type</TableCell>
-                    <TableCell>Photograph</TableCell>
-                    <TableCell>Actions</TableCell>
+                    {clearance?.clearanceType === "Vehicle/Equipment" ? (
+                      <>
+                        <TableCell>Item Description</TableCell>
+                        <TableCell>Photo No.</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </>
+                    ) : (
+                      <>
+                        {items &&
+                          items.length > 0 &&
+                          items.some(
+                            (item) =>
+                              item.levelFloor && item.levelFloor.trim() !== ""
+                          ) && <TableCell>Level/Floor</TableCell>}
+                        <TableCell>Room/Area</TableCell>
+                        <TableCell>Location Description</TableCell>
+                        <TableCell>Materials Description</TableCell>
+                        <TableCell>Asbestos Type</TableCell>
+                        <TableCell>Photograph</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </>
+                    )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -990,6 +2273,89 @@ const ClearanceItems = () => {
                         (item) =>
                           item.levelFloor && item.levelFloor.trim() !== ""
                       );
+
+                    // For Vehicle/Equipment, show simplified view
+                    if (clearance?.clearanceType === "Vehicle/Equipment") {
+                      const photoCount =
+                        (item.photographs?.length || 0) +
+                        (item.photograph ? 1 : 0);
+                      const selectedCount =
+                        item.photographs?.filter((p) => p.includeInReport)
+                          .length || 0;
+
+                      return (
+                        <TableRow key={item._id}>
+                          <TableCell>{item.materialDescription}</TableCell>
+                          <TableCell>
+                            {photoCount > 0 ? (
+                              <Box
+                                display="flex"
+                                flexDirection="column"
+                                alignItems="flex-start"
+                                gap={0.5}
+                              >
+                                <Chip
+                                  label={`${photoCount} photo${
+                                    photoCount !== 1 ? "s" : ""
+                                  }`}
+                                  color="success"
+                                  size="small"
+                                />
+                                {item.photographs?.length > 0 && (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {selectedCount} in report
+                                  </Typography>
+                                )}
+                              </Box>
+                            ) : (
+                              <Chip
+                                label="No photos"
+                                color="default"
+                                size="small"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Box display="flex" gap={1}>
+                              <IconButton
+                                onClick={() => handleOpenPhotoGallery(item)}
+                                color="secondary"
+                                size="small"
+                                title="Manage Photos"
+                              >
+                                <PhotoCameraIcon />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => handleEdit(item)}
+                                color="primary"
+                                size="small"
+                                title="Edit"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              <PermissionGate
+                                requiredPermissions={["admin.view"]}
+                                fallback={null}
+                              >
+                                <IconButton
+                                  onClick={() => handleDelete(item)}
+                                  color="error"
+                                  size="small"
+                                  title="Delete (Admin Only)"
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              </PermissionGate>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+
+                    // Standard view for non-Vehicle/Equipment clearances
                     return (
                       <TableRow key={item._id}>
                         {hasLevelFloor && (
@@ -1034,30 +2400,78 @@ const ClearanceItems = () => {
                           />
                         </TableCell>
                         <TableCell>
-                          {item.photograph ? (
-                            <Chip label="Yes" color="success" size="small" />
-                          ) : (
-                            <Chip label="No" color="default" size="small" />
-                          )}
+                          {(() => {
+                            const photoCount =
+                              (item.photographs?.length || 0) +
+                              (item.photograph ? 1 : 0);
+                            const selectedCount =
+                              item.photographs?.filter((p) => p.includeInReport)
+                                .length || 0;
+                            return photoCount > 0 ? (
+                              <Box
+                                display="flex"
+                                flexDirection="column"
+                                alignItems="flex-start"
+                                gap={0.5}
+                              >
+                                <Chip
+                                  label={`${photoCount} photo${
+                                    photoCount !== 1 ? "s" : ""
+                                  }`}
+                                  color="success"
+                                  size="small"
+                                />
+                                {item.photographs?.length > 0 && (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
+                                    {selectedCount} in report
+                                  </Typography>
+                                )}
+                              </Box>
+                            ) : (
+                              <Chip
+                                label="No photos"
+                                color="default"
+                                size="small"
+                              />
+                            );
+                          })()}
                         </TableCell>
 
                         <TableCell>
-                          <IconButton
-                            onClick={() => handleEdit(item)}
-                            color="primary"
-                            size="small"
-                            title="Edit"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => handleDelete(item)}
-                            color="error"
-                            size="small"
-                            title="Delete"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
+                          <Box display="flex" gap={1}>
+                            <IconButton
+                              onClick={() => handleOpenPhotoGallery(item)}
+                              color="secondary"
+                              size="small"
+                              title="Manage Photos"
+                            >
+                              <PhotoCameraIcon />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => handleEdit(item)}
+                              color="primary"
+                              size="small"
+                              title="Edit"
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <PermissionGate
+                              requiredPermissions={["admin.view"]}
+                              fallback={null}
+                            >
+                              <IconButton
+                                onClick={() => handleDelete(item)}
+                                color="error"
+                                size="small"
+                                title="Delete (Admin Only)"
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </PermissionGate>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );
@@ -1117,190 +2531,348 @@ const ClearanceItems = () => {
           <form onSubmit={handleSubmit}>
             <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
               <Grid container spacing={2}>
-                <Grid item xs={12} container spacing={2} alignItems="center">
-                  <Grid item>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={showLevelFloor}
-                          onChange={(e) => setShowLevelFloor(e.target.checked)}
-                        />
+                {clearance?.clearanceType === "Vehicle/Equipment" ? (
+                  // Simplified view for Vehicle/Equipment
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Item Description"
+                      value={form.materialDescription}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          materialDescription: e.target.value,
+                        })
                       }
-                      label="Include Level/Floor"
+                      required
+                      placeholder="e.g., Trailer, hydrovac tank"
                     />
                   </Grid>
-                  {showLevelFloor && (
-                    <Grid item xs={6}>
-                      <TextField
-                        fullWidth
-                        label="Level/Floor"
-                        value={form.levelFloor}
-                        onChange={(e) =>
-                          setForm({ ...form, levelFloor: e.target.value })
+                ) : (
+                  // Standard view for other clearance types
+                  <>
+                    <Grid
+                      item
+                      xs={12}
+                      container
+                      spacing={2}
+                      alignItems="center"
+                    >
+                      <Grid item>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={showLevelFloor}
+                              onChange={(e) =>
+                                setShowLevelFloor(e.target.checked)
+                              }
+                            />
+                          }
+                          label="Include Level/Floor"
+                        />
+                      </Grid>
+                      {showLevelFloor && (
+                        <Grid item xs={6}>
+                          <TextField
+                            fullWidth
+                            label="Level/Floor"
+                            value={form.levelFloor}
+                            onChange={(e) =>
+                              setForm({ ...form, levelFloor: e.target.value })
+                            }
+                            placeholder="e.g., Ground Floor, Level 1, Basement"
+                            onTouchStart={(e) => {
+                              if (isTablet() && !firstTapFields.levelFloor) {
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    levelFloor: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (isTablet() && !firstTapFields.levelFloor) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  levelFloor: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              readOnly:
+                                isTablet() && !firstTapFields.levelFloor,
+                            }}
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        value={form.roomArea}
+                        onChange={(event, newValue) =>
+                          setForm({ ...form, roomArea: newValue || "" })
                         }
-                        placeholder="e.g., Ground Floor, Level 1, Basement"
+                        onInputChange={(event, newInputValue) =>
+                          setForm({ ...form, roomArea: newInputValue })
+                        }
+                        options={customDataFields.roomAreas.map(
+                          (item) => item.text
+                        )}
+                        onOpen={() => {
+                          if (isTablet() && !firstTapFields.roomArea) {
+                            setFirstTapFields((prev) => ({
+                              ...prev,
+                              roomArea: true,
+                            }));
+                          }
+                          console.log(
+                            "Room areas options:",
+                            customDataFields.roomAreas
+                          );
+                        }}
+                        freeSolo
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Room/Area"
+                            required
+                            onTouchStart={(e) => {
+                              if (isTablet() && !firstTapFields.roomArea) {
+                                // Prevent input focus on first tap, but allow dropdown to open
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    roomArea: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (isTablet() && !firstTapFields.roomArea) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  roomArea: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              readOnly: isTablet() && !firstTapFields.roomArea,
+                            }}
+                          />
+                        )}
                       />
                     </Grid>
-                  )}
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    value={form.roomArea}
-                    onChange={(event, newValue) =>
-                      setForm({ ...form, roomArea: newValue || "" })
-                    }
-                    options={customDataFields.roomAreas.map(
-                      (item) => item.text
-                    )}
-                    freeSolo
-                    renderInput={(params) => (
-                      <TextField {...params} label="Room/Area" required />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    value={form.locationDescription}
-                    onChange={(event, newValue) =>
-                      setForm({ ...form, locationDescription: newValue || "" })
-                    }
-                    options={customDataFields.locationDescriptions.map(
-                      (item) => item.text
-                    )}
-                    freeSolo
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Location Description"
-                        required
-                      />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Autocomplete
-                    value={form.materialDescription}
-                    onChange={(event, newValue) =>
-                      setForm({ ...form, materialDescription: newValue || "" })
-                    }
-                    options={customDataFields.materialsDescriptions.map(
-                      (item) => item.text
-                    )}
-                    freeSolo
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Materials Description"
-                        required
-                      />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth required>
-                    <InputLabel>Asbestos Type</InputLabel>
-                    <Select
-                      value={form.asbestosType}
-                      onChange={(e) =>
-                        setForm({ ...form, asbestosType: e.target.value })
-                      }
-                      label="Asbestos Type"
-                    >
-                      <MenuItem value="non-friable">Non-friable</MenuItem>
-                      <MenuItem value="friable">Friable</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Photograph
-                    </Typography>
-                    <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-                      <Button
-                        variant="outlined"
-                        startIcon={<PhotoCameraIcon />}
-                        onClick={handleTakePhoto}
-                        size="small"
-                      >
-                        Take Photo
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        startIcon={<UploadIcon />}
-                        component="label"
-                        size="small"
-                      >
-                        Upload Photo
-                        <input
-                          type="file"
-                          hidden
-                          accept="image/*"
-                          onChange={handlePhotoUpload}
-                        />
-                      </Button>
-                      {photoPreview && (
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          startIcon={<DeletePhotoIcon />}
-                          onClick={handleRemovePhoto}
-                          size="small"
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </Box>
-                    {photoPreview && (
-                      <Box
-                        sx={{
-                          width: 200,
-                          height: 150,
-                          borderRadius: 1,
-                          overflow: "hidden",
-                          border: "1px solid #ddd",
-                          mb: 2,
-                        }}
-                      >
-                        <img
-                          src={photoPreview}
-                          alt="Preview"
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                          }}
-                        />
-                      </Box>
-                    )}
-                    {compressionStatus && (
-                      <Alert
-                        severity={compressionStatus.type}
-                        sx={{ mb: 2 }}
-                        icon={
-                          compressionStatus.type === "processing" ||
-                          compressionStatus.type === "compressing" ? (
-                            <CircularProgress size={16} />
-                          ) : undefined
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        value={form.locationDescription}
+                        onChange={(event, newValue) =>
+                          setForm({
+                            ...form,
+                            locationDescription: newValue || "",
+                          })
                         }
-                      >
-                        {compressionStatus.message}
-                      </Alert>
-                    )}
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Notes"
-                    value={form.notes}
-                    onChange={(e) =>
-                      setForm({ ...form, notes: e.target.value })
-                    }
-                    multiline
-                    rows={3}
-                  />
-                </Grid>
+                        onInputChange={(event, newInputValue) =>
+                          setForm({
+                            ...form,
+                            locationDescription: newInputValue,
+                          })
+                        }
+                        options={customDataFields.locationDescriptions.map(
+                          (item) => item.text
+                        )}
+                        onOpen={() => {
+                          if (
+                            isTablet() &&
+                            !firstTapFields.locationDescription
+                          ) {
+                            setFirstTapFields((prev) => ({
+                              ...prev,
+                              locationDescription: true,
+                            }));
+                          }
+                        }}
+                        freeSolo
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Location Description"
+                            required
+                            onTouchStart={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.locationDescription
+                              ) {
+                                // Prevent input focus on first tap, but allow dropdown to open
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    locationDescription: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.locationDescription
+                              ) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  locationDescription: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              readOnly:
+                                isTablet() &&
+                                !firstTapFields.locationDescription,
+                            }}
+                          />
+                        )}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        value={form.materialDescription}
+                        onChange={(event, newValue) =>
+                          setForm({
+                            ...form,
+                            materialDescription: newValue || "",
+                          })
+                        }
+                        onInputChange={(event, newInputValue) =>
+                          setForm({
+                            ...form,
+                            materialDescription: newInputValue,
+                          })
+                        }
+                        options={customDataFields.materialsDescriptions.map(
+                          (item) => item.text
+                        )}
+                        onOpen={() => {
+                          if (
+                            isTablet() &&
+                            !firstTapFields.materialDescription
+                          ) {
+                            setFirstTapFields((prev) => ({
+                              ...prev,
+                              materialDescription: true,
+                            }));
+                          }
+                        }}
+                        freeSolo
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Materials Description"
+                            required
+                            onTouchStart={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.materialDescription
+                              ) {
+                                // Prevent input focus on first tap, but allow dropdown to open
+                                const input =
+                                  e.target.querySelector("input") || e.target;
+                                if (input && input.tagName === "INPUT") {
+                                  input.setAttribute("readonly", "readonly");
+                                  setFirstTapFields((prev) => ({
+                                    ...prev,
+                                    materialDescription: true,
+                                  }));
+                                  setTimeout(() => {
+                                    input.removeAttribute("readonly");
+                                  }, 300);
+                                }
+                              }
+                            }}
+                            onFocus={(e) => {
+                              if (
+                                isTablet() &&
+                                !firstTapFields.materialDescription
+                              ) {
+                                e.target.setAttribute("readonly", "readonly");
+                                setFirstTapFields((prev) => ({
+                                  ...prev,
+                                  materialDescription: true,
+                                }));
+                                setTimeout(() => {
+                                  e.target.removeAttribute("readonly");
+                                }, 300);
+                              }
+                            }}
+                            InputProps={{
+                              ...params.InputProps,
+                              readOnly:
+                                isTablet() &&
+                                !firstTapFields.materialDescription,
+                            }}
+                          />
+                        )}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <FormControl fullWidth required>
+                        <InputLabel>Asbestos Type</InputLabel>
+                        <Select
+                          value={form.asbestosType}
+                          onChange={(e) =>
+                            setForm({ ...form, asbestosType: e.target.value })
+                          }
+                          label="Asbestos Type"
+                        >
+                          <MenuItem value="non-friable">Non-friable</MenuItem>
+                          <MenuItem value="friable">Friable</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Notes"
+                        value={form.notes}
+                        onChange={(e) =>
+                          setForm({ ...form, notes: e.target.value })
+                        }
+                        multiline
+                        rows={3}
+                      />
+                    </Grid>
+                  </>
+                )}
               </Grid>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
@@ -1320,6 +2892,13 @@ const ClearanceItems = () => {
                 type="submit"
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
+                disabled={
+                  clearance?.clearanceType === "Vehicle/Equipment"
+                    ? !form.materialDescription.trim()
+                    : !form.roomArea.trim() ||
+                      !form.locationDescription.trim() ||
+                      !form.materialDescription.trim()
+                }
                 sx={{
                   minWidth: 120,
                   borderRadius: 2,
@@ -1327,7 +2906,7 @@ const ClearanceItems = () => {
                   fontWeight: 500,
                 }}
               >
-                {editingItem ? "Update" : "Create"}
+                {editingItem ? "Update Item" : "Create Item"}
               </Button>
             </DialogActions>
           </form>
@@ -1336,7 +2915,10 @@ const ClearanceItems = () => {
         {/* Air Monitoring Reports Selection Dialog */}
         <Dialog
           open={airMonitoringReportsDialogOpen}
-          onClose={() => setAirMonitoringReportsDialogOpen(false)}
+          onClose={() => {
+            setAirMonitoringReportsDialogOpen(false);
+            setSelectedReport(null);
+          }}
           maxWidth="md"
           fullWidth
           PaperProps={{
@@ -1379,7 +2961,7 @@ const ClearanceItems = () => {
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Select an air monitoring report from the list below. This will
-                be included in the clearance report as Appendix B.
+                be included in the clearance report appendices.
               </Typography>
 
               {loadingReports ? (
@@ -1432,13 +3014,13 @@ const ClearanceItems = () => {
                                 variant="subtitle1"
                                 fontWeight="medium"
                               >
-                                {report.name}
+                                {formatDate(report.date)}
                               </Typography>
                               <Chip
                                 label={
                                   report.reportApprovedBy
                                     ? "Authorized"
-                                    : report.status
+                                    : formatStatus(report.status)
                                 }
                                 color={
                                   report.reportApprovedBy
@@ -1453,14 +3035,17 @@ const ClearanceItems = () => {
                               color="text.secondary"
                               mb={0.5}
                             >
-                              Job: {report.jobName}
+                              <Box component="span" fontWeight="bold">
+                                Asbestos Removalist:{" "}
+                              </Box>
+                              {report.asbestosRemovalist || "Not specified"}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                              Date: {formatDate(report.date)}
-                              {report.reportIssueDate &&
-                                ` • Issue Date: ${formatDate(
-                                  report.reportIssueDate
-                                )}`}
+                              <Box component="span" fontWeight="bold">
+                                Description of Works:{" "}
+                              </Box>
+                              {report.descriptionOfWorks ||
+                                "No description provided"}
                             </Typography>
                           </Box>
                           {selectedReport?._id === report._id && (
@@ -1476,7 +3061,10 @@ const ClearanceItems = () => {
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
-              onClick={() => setAirMonitoringReportsDialogOpen(false)}
+              onClick={() => {
+                setAirMonitoringReportsDialogOpen(false);
+                setSelectedReport(null);
+              }}
               variant="outlined"
               sx={{
                 minWidth: 100,
@@ -1642,95 +3230,59 @@ const ClearanceItems = () => {
               <DescriptionIcon sx={{ fontSize: 20 }} />
             </Box>
             <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Manage Attachments
+              Manage Air Monitoring Report
             </Typography>
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             {/* Air Monitoring Section */}
-            {clearance?.airMonitoring && (
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="h6" color="black" sx={{ mb: 2 }}>
-                  Air Monitoring Report
+            <Box sx={{ mb: 4 }}>
+              {clearance.airMonitoringReport && (
+                <Typography
+                  variant="body2"
+                  color="success.main"
+                  sx={{ mb: 2, fontWeight: "medium" }}
+                >
+                  ✓ Air Monitoring Report Currently Attached
+                  {clearance.airMonitoringShiftDate && (
+                    <Box component="span" sx={{ ml: 1 }}>
+                      Shift Date: {formatDate(clearance.airMonitoringShiftDate)}
+                    </Box>
+                  )}
                 </Typography>
+              )}
+              <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleOpenAirMonitoringReportsDialog}
+                  startIcon={<DescriptionIcon />}
+                >
+                  {clearance.airMonitoringReport
+                    ? "Replace Air Monitoring Report"
+                    : "Select Air Monitoring Report"}
+                </Button>
                 {clearance.airMonitoringReport && (
-                  <Typography
-                    variant="body2"
-                    color="success.main"
-                    sx={{ mb: 2, fontWeight: "medium" }}
-                  >
-                    ✓ Air Monitoring Report Currently Attached
-                  </Typography>
-                )}
-                <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                   <Button
                     variant="outlined"
-                    color="primary"
-                    onClick={handleOpenAirMonitoringReportsDialog}
-                    startIcon={<DescriptionIcon />}
+                    color="error"
+                    onClick={handleRemoveAirMonitoringReport}
+                    startIcon={<DeleteIcon />}
                   >
-                    {clearance.airMonitoringReport
-                      ? "Replace Air Monitoring Report"
-                      : "Select Air Monitoring Report"}
+                    Remove Report
                   </Button>
-                  {clearance.airMonitoringReport && (
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      onClick={handleRemoveAirMonitoringReport}
-                      startIcon={<DeleteIcon />}
-                    >
-                      Remove Report
-                    </Button>
-                  )}
-                </Box>
+                )}
               </Box>
-            )}
-
-            {/* Site Plan Section */}
-            {clearance?.sitePlan && (
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="h6" color="black" sx={{ mb: 2 }}>
-                  Site Plan
+              {!clearance?.airMonitoringReport && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 2 }}
+                >
+                  No air monitoring report has been uploaded for this clearance
+                  yet. Use the button above to upload a report.
                 </Typography>
-                {clearance.sitePlanFile && (
-                  <Typography
-                    variant="body2"
-                    color="success.main"
-                    sx={{ mb: 2, fontWeight: "medium" }}
-                  >
-                    ✓ Site Plan Currently Attached
-                  </Typography>
-                )}
-                <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    onClick={() => setSitePlanDialogOpen(true)}
-                    startIcon={<UploadIcon />}
-                  >
-                    {clearance.sitePlanFile
-                      ? "Replace Site Plan"
-                      : "Upload Site Plan"}
-                  </Button>
-                  {clearance.sitePlanFile && (
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      onClick={handleRemoveSitePlan}
-                      startIcon={<DeleteIcon />}
-                    >
-                      Remove Site Plan
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-            )}
-
-            {!clearance?.airMonitoring && !clearance?.sitePlan && (
-              <Typography variant="body2" color="text.secondary">
-                No attachments are configured for this clearance type.
-              </Typography>
-            )}
+              )}
+            </Box>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
@@ -1748,20 +3300,1030 @@ const ClearanceItems = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Snackbar for notifications */}
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        {/* Job Specific Exclusions Modal */}
+        <Dialog
+          open={jobExclusionsModalOpen}
+          onClose={() => setJobExclusionsModalOpen(false)}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
         >
-          <Alert
-            onClose={() => setSnackbar({ ...snackbar, open: false })}
-            severity={snackbar.severity}
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
           >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <DescriptionIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Job Specific Exclusions
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box sx={{ mb: 3 }}>
+              <TextField
+                fullWidth
+                value={clearance?.jobSpecificExclusions || ""}
+                onChange={(e) => {
+                  // Update local state for the text field
+                  setClearance((prev) => ({
+                    ...prev,
+                    jobSpecificExclusions: e.target.value,
+                  }));
+                }}
+                multiline
+                rows={6}
+                placeholder="Enter job-specific exclusions/caveats that should be included in the clearance report"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      {savingExclusions ? (
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                      ) : (
+                        <IconButton
+                          onClick={isDictating ? stopDictation : startDictation}
+                          color={isDictating ? "error" : "primary"}
+                          title={
+                            isDictating ? "Stop Dictation" : "Start Dictation"
+                          }
+                          sx={{
+                            backgroundColor: isDictating
+                              ? "error.light"
+                              : "transparent",
+                            "&:hover": {
+                              backgroundColor: isDictating
+                                ? "error.main"
+                                : "action.hover",
+                            },
+                          }}
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      )}
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ mb: 2 }}
+              />
+              {/* Dictation Status and Errors */}
+              {isDictating && (
+                <Box
+                  sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      backgroundColor: "error.main",
+                      animation: "pulse 1.5s ease-in-out infinite",
+                      "@keyframes pulse": {
+                        "0%": { opacity: 1 },
+                        "50%": { opacity: 0.5 },
+                        "100%": { opacity: 1 },
+                      },
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Dictating... Speak clearly into your microphone
+                  </Typography>
+                </Box>
+              )}
+              {dictationError && (
+                <Typography
+                  variant="caption"
+                  color="error.main"
+                  sx={{ mt: 1, display: "block" }}
+                >
+                  {dictationError}
+                </Typography>
+              )}
+              {exclusionsLastSaved && (
+                <Typography variant="body2" color="text.secondary">
+                  Last saved: {formatDate(exclusionsLastSaved)}
+                </Typography>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setJobExclusionsModalOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  setSavingExclusions(true);
+                  await asbestosClearanceService.update(clearanceId, {
+                    jobSpecificExclusions:
+                      clearance?.jobSpecificExclusions || "",
+                  });
+                  showSnackbar(
+                    "Job specific exclusions saved successfully",
+                    "success"
+                  );
+                  setExclusionsLastSaved(new Date());
+                  setJobExclusionsModalOpen(false);
+                } catch (error) {
+                  console.error("Error saving job specific exclusions:", error);
+                  showSnackbar(
+                    "Failed to save job specific exclusions",
+                    "error"
+                  );
+                } finally {
+                  setSavingExclusions(false);
+                }
+              }}
+              variant="contained"
+              color="primary"
+              disabled={savingExclusions}
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {savingExclusions ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                "Save Exclusions"
+              )}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Complete Clearance Confirmation Dialog */}
+        <Dialog
+          open={completeDialogOpen}
+          onClose={() => setCompleteDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "success.main",
+                color: "white",
+              }}
+            >
+              <CheckIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Complete Clearance
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to complete this clearance?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setCompleteDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmCompleteJob}
+              variant="contained"
+              color="success"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: "success.main",
+                "&:hover": {
+                  backgroundColor: "success.dark",
+                },
+              }}
+            >
+              Complete Clearance
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Reopen Clearance Confirmation Dialog */}
+        <Dialog
+          open={reopenDialogOpen}
+          onClose={() => setReopenDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <EditIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Reopen Clearance
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to reopen this clearance?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setReopenDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReopenJob}
+              variant="contained"
+              color="warning"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: "warning.main",
+                "&:hover": {
+                  backgroundColor: "warning.dark",
+                },
+              }}
+            >
+              Reopen Clearance
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Camera Dialog */}
+        <Dialog
+          open={cameraDialogOpen}
+          onClose={handleCloseCamera}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <PhotoCameraIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Take Photo
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box
+              ref={videoContainerRef}
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: "300px",
+                backgroundColor: "#000",
+                borderRadius: 2,
+                overflow: "hidden",
+                position: "relative",
+                touchAction: "none", // Prevent default touch behaviors
+              }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {stream ? (
+                <video
+                  ref={(ref) => {
+                    setVideoRef(ref);
+                    if (ref && stream) {
+                      ref.srcObject = stream;
+                      console.log("Video element set up with stream:", stream);
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
+                    transformOrigin: "center center",
+                    transition: zoom === 1 ? "transform 0.1s" : "none", // Smooth transition only when resetting
+                  }}
+                  onLoadedMetadata={() => {
+                    console.log("Video metadata loaded");
+                  }}
+                  onCanPlay={() => {
+                    console.log("Video can play");
+                  }}
+                  onError={(e) => {
+                    console.error("Video error:", e);
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                    color: "white",
+                  }}
+                >
+                  <CircularProgress color="inherit" />
+                  <Typography variant="body1">Starting camera...</Typography>
+                </Box>
+              )}
+            </Box>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2, textAlign: "center" }}
+            >
+              Position the item within the frame and click "Capture" to take the
+              photo. Pinch to zoom (up to 5x) or double-tap to reset zoom.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={handleCloseCamera}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCapturePhoto}
+              variant="contained"
+              color="primary"
+              startIcon={<PhotoCameraIcon />}
+              disabled={!stream}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Capture Photo
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog
+          open={deleteConfirmDialogOpen}
+          onClose={cancelDelete}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "error.main",
+                color: "white",
+              }}
+            >
+              <DeleteIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Delete Item
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to delete this clearance item? This action
+              cannot be undone.
+            </Typography>
+            {itemToDelete && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Location:</strong> {itemToDelete.locationDescription}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Room/Area:</strong>{" "}
+                  {itemToDelete.roomArea || "Not specified"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Material:</strong> {itemToDelete.materialDescription}
+                </Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={cancelDelete}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDelete}
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Delete Item
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Photo Gallery Dialog */}
+        <Dialog
+          open={photoGalleryDialogOpen}
+          onClose={handleClosePhotoGallery}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 40,
+                  height: 40,
+                  borderRadius: "50%",
+                  bgcolor: "secondary.main",
+                  color: "white",
+                }}
+              >
+                <PhotoCameraIcon sx={{ fontSize: 20 }} />
+              </Box>
+              <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+                Manage Photos
+              </Typography>
+            </Box>
+            <IconButton onClick={handleClosePhotoGallery}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
+            {selectedItemForPhotos && (
+              <>
+                <Box sx={{ mb: 3 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    <strong>Location:</strong>{" "}
+                    {selectedItemForPhotos.locationDescription}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    <strong>Room/Area:</strong> {selectedItemForPhotos.roomArea}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Material:</strong>{" "}
+                    {selectedItemForPhotos.materialDescription}
+                  </Typography>
+                </Box>
+
+                {/* Add Photo Section */}
+                <Box sx={{ mb: 3, p: 2, bgcolor: "grey.50", borderRadius: 2 }}>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{ mb: 2, fontWeight: 600 }}
+                  >
+                    Add New Photo
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<PhotoCameraIcon />}
+                      onClick={handleTakePhoto}
+                      size="small"
+                    >
+                      Take Photo
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<UploadIcon />}
+                      component="label"
+                      size="small"
+                    >
+                      Upload Photo
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/*"
+                        onChange={handlePhotoUploadForGallery}
+                      />
+                    </Button>
+                  </Box>
+                  {compressionStatus && (
+                    <Alert severity={compressionStatus.type} sx={{ mt: 2 }}>
+                      {compressionStatus.message}
+                    </Alert>
+                  )}
+                </Box>
+
+                {/* Photos Grid */}
+                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
+                  Photos (
+                  {(selectedItemForPhotos.photographs?.length || 0) +
+                    (selectedItemForPhotos.photograph ? 1 : 0)}
+                  )
+                </Typography>
+
+                {(selectedItemForPhotos.photographs?.length || 0) +
+                  (selectedItemForPhotos.photograph ? 1 : 0) ===
+                0 ? (
+                  <Box sx={{ textAlign: "center", py: 4 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No photos yet. Add your first photo above.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Grid container spacing={2}>
+                    {/* New photos array */}
+                    {selectedItemForPhotos.photographs?.map((photo, index) => (
+                      <Grid item xs={12} sm={6} md={4} key={photo._id}>
+                        <Card
+                          sx={{
+                            position: "relative",
+                            height: "100%",
+                            border: getCurrentPhotoState(photo._id)
+                              ? "3px solid #4caf50"
+                              : "3px solid transparent", // Green outline if included in report
+                            borderRadius: 2,
+                            transition: "border-color 0.2s ease-in-out",
+                            opacity: isPhotoMarkedForDeletion(photo._id)
+                              ? 0.5
+                              : 1,
+                            filter: isPhotoMarkedForDeletion(photo._id)
+                              ? "grayscale(50%)"
+                              : "none",
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              position: "relative",
+                              paddingTop: "75%",
+                              cursor: "pointer",
+                              "&:hover": {
+                                opacity: 0.9,
+                              },
+                            }}
+                            onClick={() => handleViewFullSizePhoto(photo.data)}
+                          >
+                            <img
+                              src={photo.data}
+                              alt={`${index + 1}`}
+                              style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                            />
+
+                            {/* Marked for deletion overlay */}
+                            {isPhotoMarkedForDeletion(photo._id) && (
+                              <Box
+                                sx={{
+                                  position: "absolute",
+                                  top: 0,
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  backgroundColor: "rgba(244, 67, 54, 0.3)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  zIndex: 2,
+                                }}
+                              >
+                                <Typography
+                                  variant="h6"
+                                  sx={{
+                                    color: "white",
+                                    fontWeight: "bold",
+                                    textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  Marked for Deletion
+                                </Typography>
+                              </Box>
+                            )}
+
+                            {/* Checkbox for report inclusion */}
+                            <Box
+                              sx={{
+                                position: "absolute",
+                                top: 8,
+                                left: 8,
+                                backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                borderRadius: 1,
+                                padding: 0.5,
+                                zIndex: 3, // Higher than overlay z-index (2)
+                              }}
+                            >
+                              <Checkbox
+                                checked={getCurrentPhotoState(photo._id)}
+                                size="small"
+                                sx={{
+                                  color: "white",
+                                  "&.Mui-checked": {
+                                    color: "#4caf50",
+                                  },
+                                }}
+                                onChange={(e) => {
+                                  e.stopPropagation(); // Prevent opening full-size view
+                                  handleTogglePhotoInReport(
+                                    selectedItemForPhotos._id,
+                                    photo._id
+                                  );
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent opening full-size view
+                                }}
+                                title={
+                                  getCurrentPhotoState(photo._id)
+                                    ? "Remove from report"
+                                    : "Include in report"
+                                }
+                              />
+                            </Box>
+
+                            {/* Delete/Undo button */}
+                            <IconButton
+                              size="small"
+                              sx={{
+                                position: "absolute",
+                                top: 8,
+                                right: 8,
+                                backgroundColor: isPhotoMarkedForDeletion(
+                                  photo._id
+                                )
+                                  ? "rgba(76, 175, 80, 0.8)"
+                                  : "rgba(0, 0, 0, 0.6)",
+                                color: "white",
+                                "&:hover": {
+                                  backgroundColor: isPhotoMarkedForDeletion(
+                                    photo._id
+                                  )
+                                    ? "rgba(76, 175, 80, 1)"
+                                    : "rgba(0, 0, 0, 0.8)",
+                                },
+                                zIndex: 3, // Higher than overlay z-index (2)
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation(); // Prevent opening full-size view
+                                if (isPhotoMarkedForDeletion(photo._id)) {
+                                  // Undo deletion
+                                  setPhotosToDelete((prev) => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(photo._id);
+                                    return newSet;
+                                  });
+                                } else {
+                                  // Mark for deletion
+                                  handleDeletePhotoFromItem(
+                                    selectedItemForPhotos._id,
+                                    photo._id
+                                  );
+                                }
+                              }}
+                              title={
+                                isPhotoMarkedForDeletion(photo._id)
+                                  ? "Undo Deletion"
+                                  : "Remove Photo"
+                              }
+                            >
+                              {isPhotoMarkedForDeletion(photo._id) ? (
+                                <CheckIcon fontSize="small" />
+                              ) : (
+                                <CloseIcon fontSize="small" />
+                              )}
+                            </IconButton>
+                          </Box>
+                          <CardContent sx={{ py: 1 }}>
+                            <Box
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="space-between"
+                              flexWrap="wrap"
+                              gap={1}
+                            >
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                Photo {index + 1}
+                              </Typography>
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
+              </>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={async () => {
+                if (hasUnsavedChanges()) {
+                  await savePhotoChanges();
+                }
+                await handleClosePhotoGallery();
+              }}
+              variant="contained"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: hasUnsavedChanges()
+                  ? "#ff9800"
+                  : "primary.main",
+                "&:hover": {
+                  backgroundColor: hasUnsavedChanges()
+                    ? "#f57c00"
+                    : "primary.dark",
+                },
+              }}
+            >
+              {hasUnsavedChanges() ? "Update" : "Done"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Full Size Photo Dialog */}
+        <Dialog
+          open={fullSizePhotoDialogOpen}
+          onClose={() => setFullSizePhotoDialogOpen(false)}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              bgcolor: "rgba(0, 0, 0, 0.9)",
+            },
+          }}
+        >
+          <DialogContent sx={{ p: 0, position: "relative" }}>
+            <IconButton
+              onClick={() => setFullSizePhotoDialogOpen(false)}
+              sx={{
+                position: "absolute",
+                top: 10,
+                right: 10,
+                color: "white",
+                bgcolor: "rgba(0, 0, 0, 0.5)",
+                "&:hover": {
+                  bgcolor: "rgba(0, 0, 0, 0.7)",
+                },
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+            {fullSizePhotoUrl && (
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  minHeight: "80vh",
+                  p: 2,
+                }}
+              >
+                <img
+                  src={fullSizePhotoUrl}
+                  alt="Full size"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "90vh",
+                    objectFit: "contain",
+                  }}
+                />
+              </Box>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Site Plan Drawing Modal */}
+        <Dialog
+          open={sitePlanDrawingDialogOpen}
+          onClose={handleSitePlanDrawingClose}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "90vh",
+              maxHeight: "90vh",
+            },
+          }}
+        >
+          <DialogTitle>
+            <Box
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+            >
+              <Typography variant="h6">Site Plan Drawing</Typography>
+              <IconButton onClick={() => setSitePlanDrawingDialogOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ p: 2, height: "100%" }}>
+            <SitePlanDrawing
+              onSave={handleSitePlanSave}
+              onCancel={() => setSitePlanDrawingDialogOpen(false)}
+              existingSitePlan={clearance?.sitePlanFile}
+              existingLegend={clearance?.sitePlanLegend}
+              existingLegendTitle={clearance?.sitePlanLegendTitle}
+              existingFigureTitle={clearance?.sitePlanFigureTitle}
+            />
+          </DialogContent>
+        </Dialog>
       </Box>
     </PermissionGate>
   );

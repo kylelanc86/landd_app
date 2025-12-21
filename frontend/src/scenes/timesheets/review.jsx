@@ -1,589 +1,652 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
-  useTheme,
   Paper,
-  Button,
-  Chip,
   IconButton,
-  Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  useTheme,
+  Chip,
   Breadcrumbs,
   Link,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Button,
+  Divider,
   TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Grid,
-  Alert,
+  LinearProgress,
+  CircularProgress,
 } from "@mui/material";
-import Header from "../../components/Header";
-import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../services/api";
 import {
   format,
-  startOfMonth,
-  endOfMonth,
+  startOfWeek,
+  endOfWeek,
   eachDayOfInterval,
-  addMonths,
-  subMonths,
+  addWeeks,
+  subWeeks,
+  isSameDay,
 } from "date-fns";
-import { DataGrid } from "@mui/x-data-grid";
-import VisibilityIcon from "@mui/icons-material/Visibility";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import CloseIcon from "@mui/icons-material/Close";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import PrintIcon from "@mui/icons-material/Print";
-import DateRangeIcon from "@mui/icons-material/DateRange";
-import { useNavigate, useLocation } from "react-router-dom";
+import DescriptionIcon from "@mui/icons-material/Description";
+import { useNavigate } from "react-router-dom";
+import LoadingSpinner from "../../components/LoadingSpinner";
+import ProjectLogModalWrapper from "../reports/ProjectLogModalWrapper";
 
 const TimesheetReview = () => {
   const theme = useTheme();
-  const colors = tokens;
-  const { currentUser, restoreUserState } = useAuth();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [timesheetData, setTimesheetData] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [timesheetData, setTimesheetData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [calendarKey, setCalendarKey] = useState(0);
-  const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedUserName, setSelectedUserName] = useState("");
-  const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
-  const [viewMode, setViewMode] = useState("full");
-  const [dailyStatuses, setDailyStatuses] = useState({});
-  const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
-  const [error, setError] = useState("");
+
+  // Get the week range
+  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 }); // Monday
+  const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 }); // Sunday
+  const daysInWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalData, setModalData] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
 
   // Report modal state
   const [reportModalOpen, setReportModalOpen] = useState(false);
-  const [reportUser, setReportUser] = useState("");
-  const [reportStartDate, setReportStartDate] = useState("");
-  const [reportEndDate, setReportEndDate] = useState("");
-  const [reportUsers, setReportUsers] = useState([]);
+  const [reportStartDate, setReportStartDate] = useState(
+    format(weekStart, "yyyy-MM-dd")
+  );
+  const [reportEndDate, setReportEndDate] = useState(
+    format(weekEnd, "yyyy-MM-dd")
+  );
+  const [reportSelectedUser, setReportSelectedUser] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportError, setReportError] = useState("");
 
-  // Handle navigation back to user management
-  const handleBackToUserManagement = () => {
-    navigate("/users");
-  };
+  // Project log modal state
+  const [projectLogModalOpen, setProjectLogModalOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
 
-  // Handle report modal
-  const handleOpenReportModal = () => {
-    setReportModalOpen(true);
-    setReportError("");
-    // Set default dates to current month
-    const today = new Date();
-    const firstDay = startOfMonth(today);
-    const lastDay = endOfMonth(today);
-    setReportStartDate(format(firstDay, "yyyy-MM-dd"));
-    setReportEndDate(format(lastDay, "yyyy-MM-dd"));
-  };
-
-  const handleCloseReportModal = () => {
-    setReportModalOpen(false);
-    setReportUser("");
-    setReportStartDate("");
-    setReportEndDate("");
-    setReportError("");
-  };
-
-  // Fetch users for report dropdown
-  const fetchReportUsers = async () => {
+  // Fetch users with chargeOutRate for report calculations
+  const fetchUsers = async () => {
     try {
-      const response = await api.get("/users");
-      setReportUsers(response.data || []);
+      const response = await api.get("/users?showInactive=false");
+      const activeUsers = (response.data || []).filter((user) => user.isActive);
+      setUsers(activeUsers);
     } catch (error) {
-      console.error("Error fetching users for report:", error);
-      setReportError("Failed to load users");
+      console.error("Error fetching users:", error);
     }
   };
 
-  // Generate PDF report
-  const generateReport = async () => {
-    if (!reportUser || !reportStartDate || !reportEndDate) {
-      setReportError("Please select a user and date range");
-      return;
-    }
-
-    setReportLoading(true);
-    setReportError("");
-
-    try {
-      // Fetch timesheet data for the selected user and date range
-      const response = await api.get(`/timesheets/report`, {
-        params: {
-          userId: reportUser,
-          startDate: reportStartDate,
-          endDate: reportEndDate,
-        },
-      });
-
-      const timesheetData = response.data || [];
-
-      // Calculate averages
-      const totalTime = timesheetData.reduce(
-        (sum, entry) => sum + (entry.totalTime || 0),
-        0
-      );
-      const totalProjectPercentage = timesheetData.reduce(
-        (sum, entry) => sum + (entry.projectTimePercentage || 0),
-        0
-      );
-      const averageTime =
-        timesheetData.length > 0 ? totalTime / timesheetData.length : 0;
-      const averageProjectPercentage =
-        timesheetData.length > 0
-          ? totalProjectPercentage / timesheetData.length
-          : 0;
-
-      // Format hours and minutes
-      const formatTime = (minutes) => {
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        return `${hours}h ${mins}m`;
-      };
-
-      // Create PDF content
-      const pdfContent = `
-        <html>
-          <head>
-            <title>Timesheet Review Report</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #1976d2; text-align: center; }
-              h2 { color: #333; }
-              table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f5f5f5; font-weight: bold; }
-              .summary { background-color: #e3f2fd; padding: 15px; margin: 20px 0; }
-              .summary h3 { margin: 0 0 10px 0; color: #1976d2; }
-            </style>
-          </head>
-          <body>
-            <h1>Timesheet Review Report</h1>
-            <h2>Period: ${format(
-              new Date(reportStartDate),
-              "dd/MM/yyyy"
-            )} - ${format(new Date(reportEndDate), "dd/MM/yyyy")}</h2>
-            
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Time Entered</th>
-                  <th>Project %</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${timesheetData
-                  .map(
-                    (entry) => `
-                  <tr>
-                    <td>${format(new Date(entry.date), "dd/MM/yyyy")}</td>
-                    <td>${formatTime(entry.totalTime || 0)}</td>
-                    <td>${(entry.projectTimePercentage || 0).toFixed(1)}%</td>
-                    <td>${entry.status || "N/A"}</td>
-                  </tr>
-                `
-                  )
-                  .join("")}
-              </tbody>
-            </table>
-            
-            <div class="summary">
-              <h3>Summary</h3>
-              <p><strong>Average Time Entered:</strong> ${formatTime(
-                averageTime
-              )}</p>
-              <p><strong>Average Project %:</strong> ${averageProjectPercentage.toFixed(
-                1
-              )}%</p>
-              <p><strong>Total Days:</strong> ${timesheetData.length}</p>
-            </div>
-          </body>
-        </html>
-      `;
-
-      // Create and download PDF
-      const printWindow = window.open("", "_blank");
-      printWindow.document.write(pdfContent);
-      printWindow.document.close();
-      printWindow.print();
-
-      handleCloseReportModal();
-    } catch (error) {
-      console.error("Error generating report:", error);
-      setReportError("Failed to generate report. Please try again.");
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
-  // Add a ref to track the current request
-  const currentRequestRef = useRef(null);
-
-  // Get userId from URL query parameters
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const userId = params.get("userId");
-    if (userId) {
-      setSelectedUserId(userId);
-      // Fetch user details to get their name
-      const fetchUserDetails = async () => {
-        try {
-          const response = await api.get(`/users/${userId}`);
-          setSelectedUserName(
-            `${response.data.firstName} ${response.data.lastName}`
-          );
-        } catch (error) {
-          console.error("Error fetching user details:", error);
-        }
-      };
-      fetchUserDetails();
-    } else {
-      setSelectedUserId(null);
-      setSelectedUserName("");
-    }
-  }, [location.search]);
-
-  // Fetch users when report modal opens
-  useEffect(() => {
-    if (reportModalOpen) {
-      fetchReportUsers();
-    }
-  }, [reportModalOpen]);
-
-  // Update useEffect to handle initial setup and user data loading
-  useEffect(() => {
-    let isMounted = true;
-
-    const initializeData = async () => {
-      try {
-        // First restore user state
-        await restoreUserState();
-
-        // Then set up the date to the first day of the current month
-        const today = new Date();
-        const firstDayOfMonth = startOfMonth(today);
-        if (isMounted) {
-          setSelectedDate(firstDayOfMonth);
-          setIsInitialLoading(false);
-          setIsUserDataLoaded(true);
-        }
-      } catch (error) {
-        console.error("Error initializing data:", error);
-      }
-    };
-
-    initializeData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []); // Only run once on mount
-
-  // Fetch timesheet data for the current month
+  // Fetch timesheet data for all users for the week
   const fetchTimesheetData = async () => {
-    if (!currentUser?._id) return; // Don't fetch if user data isn't loaded
+    if (users.length === 0) return;
 
     setIsLoading(true);
     try {
-      // Set the date to the first day of the month
-      const startDate = startOfMonth(selectedDate);
-      // Set end date to the last day of the month at 23:59:59
-      const endDate = new Date(endOfMonth(selectedDate));
-      endDate.setHours(23, 59, 59, 999);
+      const startDate = format(weekStart, "yyyy-MM-dd");
+      const endDate = format(weekEnd, "yyyy-MM-dd");
 
-      // Cancel any existing request
-      if (currentRequestRef.current) {
-        currentRequestRef.current.abort();
+      // Fetch timesheet data for each user
+      const allEntries = [];
+      for (const user of users) {
+        try {
+          const response = await api.get(
+            `/timesheets/range/${startDate}/${endDate}?userId=${user._id}`
+          );
+          const userEntries = response.data || [];
+          allEntries.push(...userEntries);
+        } catch (error) {
+          console.error(`Error fetching data for user ${user._id}:`, error);
+        }
       }
 
-      // Create a new AbortController for this request
-      const controller = new AbortController();
-      currentRequestRef.current = controller;
+      const entries = allEntries;
 
-      console.log("Review - Date range:", {
-        selectedDate: format(selectedDate, "yyyy-MM-dd"),
-        startDate: format(startDate, "yyyy-MM-dd"),
-        endDate: format(endDate, "yyyy-MM-dd HH:mm:ss"),
-        month: format(startDate, "MMMM yyyy"),
+      // Organize data by userId and date, also track approval status
+      const organized = {};
+      const approvalTracking = {}; // Track entries per user/date to calculate approval
+
+      entries.forEach((entry) => {
+        const userId = entry.userId?._id || entry.userId;
+        const entryDate = format(new Date(entry.date), "yyyy-MM-dd");
+        const approvalKey = `${userId}_${entryDate}`;
+
+        if (!organized[userId]) {
+          organized[userId] = {};
+        }
+
+        if (!organized[userId][entryDate]) {
+          organized[userId][entryDate] = 0;
+          approvalTracking[approvalKey] = { approved: 0, total: 0 };
+        }
+
+        // Calculate duration in minutes
+        const [startHours, startMinutes] = entry.startTime
+          .split(":")
+          .map(Number);
+        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        let duration = endTotalMinutes - startTotalMinutes;
+        if (duration < 0) duration += 24 * 60;
+
+        if (!entry.isBreak) {
+          organized[userId][entryDate] += duration;
+        }
+
+        // Track approval status - count how many entries are approved
+        approvalTracking[approvalKey].total++;
+        if (entry.isApproved === true) {
+          approvalTracking[approvalKey].approved++;
+        }
       });
 
-      // Always include userId parameter if selectedUserId exists
-      const url = `/timesheets/review/${format(
-        startDate,
-        "yyyy-MM-dd"
-      )}/${format(endDate, "yyyy-MM-dd")}?userId=${
-        selectedUserId || currentUser._id
-      }`;
-
-      console.log("Review - API request URL:", url);
-
-      const { data } = await api.get(url, { signal: controller.signal });
-
-      // Filter out any entries that are not in the selected month
-      const filteredData = data.filter((entry) => {
-        const entryDate = new Date(entry.date);
-        return (
-          entryDate.getMonth() === selectedDate.getMonth() &&
-          entryDate.getFullYear() === selectedDate.getFullYear()
-        );
+      // Calculate approval status - only approved if ALL entries for that day are approved
+      Object.keys(approvalTracking).forEach((key) => {
+        const track = approvalTracking[key];
+        // A day is approved only if all entries have been explicitly approved
+        organized[`${key}_approved`] =
+          track.total > 0 && track.approved === track.total;
       });
 
-      // Only update state if this is still the current request
-      if (currentRequestRef.current === controller) {
-        console.log("Review - Filtered response data:", filteredData);
-        setTimesheetData(filteredData);
-      }
+      setTimesheetData(organized);
     } catch (error) {
-      if (error.name === "AbortError") {
-        console.log("Request was aborted");
-        return;
-      }
-      console.error("Review - Error fetching timesheet data:", error);
-      setError("Failed to fetch timesheet data. Please try again.");
+      console.error("Error fetching timesheet data:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Cleanup function to abort any pending request
+  // Fetch users on mount
   useEffect(() => {
-    return () => {
-      if (currentRequestRef.current) {
-        currentRequestRef.current.abort();
-      }
-    };
+    fetchUsers();
   }, []);
 
-  // Update the fetch effect to include proper cleanup and debouncing
+  // Fetch timesheet data when users or selected date changes
   useEffect(() => {
-    if (!isUserDataLoaded || !currentUser?._id) return;
-
-    let timeoutId;
-    let isMounted = true;
-
-    const fetchData = async () => {
-      if (!isMounted) return;
-
-      try {
-        await fetchTimesheetData();
-      } catch (error) {
-        console.error("Error fetching timesheet data:", error);
-      }
-    };
-
-    // Clear any existing timeout
-    if (timeoutId) {
-      clearTimeout(timeoutId);
+    if (users.length > 0) {
+      fetchTimesheetData();
     }
+  }, [users, selectedDate]);
 
-    // Set a new timeout
-    timeoutId = setTimeout(fetchData, 300); // Increased debounce time
-
-    return () => {
-      isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      // Abort any ongoing request
-      if (currentRequestRef.current) {
-        currentRequestRef.current.abort();
-      }
-    };
-  }, [selectedDate, selectedUserId]); // Removed isUserDataLoaded and currentUser?._id from dependencies
-
-  const handleMonthChange = (direction) => {
+  const handleWeekChange = (direction) => {
     const newDate =
       direction === "next"
-        ? addMonths(selectedDate, 1)
-        : subMonths(selectedDate, 1);
-
-    // Set the date to the first day of the month
-    const firstDayOfMonth = startOfMonth(newDate);
-    console.log("Month changed:", {
-      direction,
-      oldDate: format(selectedDate, "yyyy-MM-dd"),
-      newDate: format(newDate, "yyyy-MM-dd"),
-      firstDayOfMonth: format(firstDayOfMonth, "yyyy-MM-dd"),
-    });
-    setSelectedDate(firstDayOfMonth);
+        ? addWeeks(selectedDate, 1)
+        : subWeeks(selectedDate, 1);
+    setSelectedDate(newDate);
   };
 
-  const handleViewTimesheet = (userId, date) => {
+  const handleBackToUserManagement = () => {
+    navigate("/users");
+  };
+
+  const handleCellClick = async (userId, date) => {
+    const user = users.find((u) => u._id === userId);
+    setSelectedUser(user);
+    setSelectedDay(date);
+    setModalOpen(true);
+    setModalLoading(true);
+
     try {
-      // Parse the date to ensure it's in the correct format
-      const parsedDate = new Date(date);
-      const formattedDate = format(parsedDate, "yyyy-MM-dd");
+      const formattedDate = format(date, "yyyy-MM-dd");
+      const response = await api.get(
+        `/timesheets/range/${formattedDate}/${formattedDate}?userId=${userId}`
+      );
 
-      // Use selectedUserId if available, otherwise fall back to the row's userId
-      const targetUserId = selectedUserId || userId;
+      const entries = response.data || [];
 
-      console.log("Navigating to timesheet view:", {
-        selectedUserId,
-        rowUserId: userId,
-        targetUserId,
-        date: formattedDate,
+      // Calculate totals and check approval status
+      let totalMinutes = 0;
+      let projectMinutes = 0;
+      let isApproved =
+        entries.length > 0 && entries.every((entry) => entry.isApproved);
+
+      entries.forEach((entry) => {
+        const [startHours, startMinutes] = entry.startTime
+          .split(":")
+          .map(Number);
+        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        let duration = endTotalMinutes - startTotalMinutes;
+        if (duration < 0) duration += 24 * 60;
+
+        if (!entry.isBreak) {
+          totalMinutes += duration;
+          if (!entry.isAdminWork) {
+            projectMinutes += duration;
+          }
+        }
       });
 
-      // Navigate to the timesheet view with the correct user ID
-      navigate(`/timesheets?userId=${targetUserId}&date=${formattedDate}`);
+      setModalData({
+        entries,
+        totalMinutes,
+        projectMinutes,
+        isApproved,
+      });
     } catch (error) {
-      console.error("Error navigating to timesheet:", error);
-      setError("Failed to open timesheet. Please try again.");
+      console.error("Error fetching timesheet data:", error);
+      setModalData({ entries: [], totalMinutes: 0, projectMinutes: 0 });
+    } finally {
+      setModalLoading(false);
     }
   };
 
-  const handleAuthorizeTimesheet = async (userId, date) => {
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setModalData(null);
+    setSelectedUser(null);
+    setSelectedDay(null);
+  };
+
+  const handleApproveTimesheet = async () => {
+    if (!selectedUser || !selectedDay) return;
+
     try {
-      // Update the timesheet status to authorized
-      await api.put(`/timesheets/${userId}/${date}/approve`);
+      const formattedDate = format(selectedDay, "yyyy-MM-dd");
+      await api.put(`/timesheets/${selectedUser._id}/${formattedDate}/approve`);
 
-      // Refresh the timesheet data
+      // Update modal data to reflect approval
+      setModalData((prev) => ({
+        ...prev,
+        isApproved: true,
+      }));
+
+      // Update the timesheet data in the table to show blue
+      setTimesheetData((prev) => {
+        const dateStr = formattedDate;
+        const userId = selectedUser._id;
+        return {
+          ...prev,
+          [`${userId}_${dateStr}_approved`]: true,
+        };
+      });
+
+      // Refresh the timesheet data to get updated approval status
       await fetchTimesheetData();
-
-      // Show success message
-      alert("Timesheet authorized successfully");
     } catch (error) {
-      console.error("Error authorizing timesheet:", error);
-      setError("Failed to authorize timesheet. Please try again.");
+      console.error("Error approving timesheet:", error);
+      alert("Failed to approve timesheet. Please try again.");
     }
   };
 
-  const columns = [
-    {
-      field: "date",
-      headerName: "Date",
-      minWidth: 240,
-      flex: 1,
-      valueGetter: (params) => {
-        try {
-          // Parse the date string in yyyy-MM-dd format
-          const date = new Date(params.row.date);
-          return {
-            date: date,
-            formattedDate: format(date, "EEEE, dd MMMM yyyy"),
-            isWeekend: date.getDay() === 0 || date.getDay() === 6,
-          };
-        } catch (error) {
-          console.error("Error formatting date:", error);
-          return {
-            date: new Date(params.row.date),
-            formattedDate: params.row.date,
-            isWeekend: false,
-          };
+  const handleOpenReportModal = () => {
+    setReportModalOpen(true);
+    // Default to first user if available
+    setReportSelectedUser(users.length > 0 ? users[0]._id : "");
+    // Default to current week
+    setReportStartDate(format(weekStart, "yyyy-MM-dd"));
+    setReportEndDate(format(weekEnd, "yyyy-MM-dd"));
+  };
+
+  const handleCloseReportModal = () => {
+    setReportModalOpen(false);
+    setReportSelectedUser("");
+  };
+
+  const handleGenerateReport = async () => {
+    if (!reportSelectedUser) {
+      alert("Please select a user");
+      return;
+    }
+
+    setReportLoading(true);
+    try {
+      const user = users.find((u) => u._id === reportSelectedUser);
+      const userName = user ? `${user.firstName} ${user.lastName}` : "Unknown";
+
+      // Fetch ALL users (including inactive) for charge rate calculations
+      const allUsersResponse = await api.get("/users?showInactive=true");
+      const allUsers = allUsersResponse.data || [];
+
+      // Fetch timesheet data for selected user and date range
+      const response = await api.get(
+        `/timesheets/range/${reportStartDate}/${reportEndDate}?userId=${reportSelectedUser}`
+      );
+
+      const entries = response.data || [];
+
+      // Fetch timesheet status data to check for absent days
+      const statusResponse = await api.get(
+        `/timesheets/status/range/${reportStartDate}/${reportEndDate}?userId=${reportSelectedUser}`
+      );
+      const statusData = statusResponse.data || [];
+
+      // Calculate absent days
+      const absentDays = statusData.filter((s) => s.status === "absent").length;
+
+      // Calculate weekend days with entries
+      const weekendDates = new Set();
+      entries.forEach((entry) => {
+        const entryDate = new Date(entry.date);
+        const dayOfWeek = entryDate.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          weekendDates.add(format(entryDate, "yyyy-MM-dd"));
         }
-      },
-      renderCell: (params) => {
-        const { formattedDate, isWeekend } = params.value;
-        return (
-          <Typography
-            sx={{
-              color: isWeekend ? colors.grey[100] : colors.grey[700],
-              fontStyle: isWeekend ? "italic" : "normal",
-              fontSize: "0.875rem",
-            }}
-          >
-            {formattedDate}
-          </Typography>
-        );
-      },
-    },
-    {
-      field: "totalTime",
-      headerName: "Time Entered",
-      width: 120,
-      valueGetter: (params) => {
-        const hours = Math.floor(params.row.totalTime / 60);
-        const minutes = params.row.totalTime % 60;
-        return `${hours}h ${minutes}m`;
-      },
-    },
-    {
-      field: "projectTimePercentage",
-      headerName: "Project %",
-      width: 100,
-      valueGetter: (params) => {
-        if (params.row.totalTime === 0) return "0%";
-        return `${Math.round(
-          (params.row.projectTime / params.row.totalTime) * 100
-        )}%`;
-      },
-    },
-    {
-      field: "status",
-      headerName: "Status",
-      minWidth: 140,
-      renderCell: (params) => {
-        const statusColors = {
-          incomplete: "warning",
-          absent: "error",
-          finalised: "success",
-          authorized: "success",
-        };
-        return (
-          <Chip
-            label={params.value.charAt(0).toUpperCase() + params.value.slice(1)}
-            color={statusColors[params.value]}
-            size="small"
-          />
-        );
-      },
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      flex: 1,
-      renderCell: (params) => {
-        return (
-          <Box display="flex" alignItems="center" gap={1}>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={(event) => {
-                event.stopPropagation();
-                handleAuthorizeTimesheet(params.row.userId, params.row.date);
-              }}
-              disabled={params.row.status === "authorized"}
-              sx={{
-                backgroundColor: "#5A9DA5",
-                color: "colors.grey[100]",
-                fontSize: "0.75rem",
-                padding: "4px 8px",
-                minWidth: "120px",
-                "&:hover": {
-                  backgroundColor: colors.secondary[600],
-                },
-                "&.Mui-disabled": {
-                  backgroundColor: colors.grey[700],
-                  color: colors.grey[500],
-                },
-              }}
-            >
-              Authorise Timesheet
-            </Button>
-          </Box>
-        );
-      },
-    },
-  ];
+      });
+      const weekendDaysWorked = weekendDates.size;
+
+      // Group entries by project and calculate totals
+      const projectTotals = {};
+      let totalMinutes = 0;
+      let projectMinutes = 0;
+
+      entries.forEach((entry) => {
+        const [startHours, startMinutes] = entry.startTime
+          .split(":")
+          .map(Number);
+        const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        let duration = endTotalMinutes - startTotalMinutes;
+        if (duration < 0) duration += 24 * 60;
+
+        if (!entry.isBreak) {
+          totalMinutes += duration;
+
+          if (!entry.isAdminWork && entry.projectId) {
+            const projectKey = entry.projectId._id || entry.projectId;
+            const projectName = entry.projectId?.name || "Unknown Project";
+            const projectID = entry.projectId?.projectID || "";
+
+            if (!projectTotals[projectKey]) {
+              projectTotals[projectKey] = {
+                _id: projectKey,
+                name: projectName,
+                projectID: projectID,
+                userMinutes: 0,
+              };
+            }
+            projectTotals[projectKey].userMinutes += duration;
+            projectMinutes += duration;
+          }
+        }
+      });
+
+      // Fetch total hours for each project using the timesheetEntries field
+      const projectKeys = Object.keys(projectTotals);
+      for (const projectKey of projectKeys) {
+        try {
+          // Get project details with populated timesheet entries
+          const projectResponse = await api.get(`/projects/${projectKey}`);
+          const project = projectResponse.data;
+          projectTotals[projectKey].budget = project.budget || 0;
+          projectTotals[projectKey].categories = project.categories || [];
+
+          // Get all timesheet entry IDs for this project
+          const timesheetEntryIds = project.timesheetEntries || [];
+
+          // Fetch each timesheet entry to calculate totals within the date range
+          let projectTotalMinutes = 0;
+          let projectSpending = 0;
+
+          if (timesheetEntryIds.length > 0) {
+            // Fetch all timesheet entries for this project
+            const entriesPromises = timesheetEntryIds.map(async (entryId) => {
+              try {
+                const entryResponse = await api.get(`/timesheets/${entryId}`);
+                return entryResponse.data;
+              } catch (err) {
+                console.error(
+                  `Error fetching timesheet entry ${entryId}:`,
+                  err
+                );
+                return null;
+              }
+            });
+
+            const projectEntries = (await Promise.all(entriesPromises)).filter(
+              (e) => e !== null
+            );
+
+            // Filter entries within the date range and calculate totals
+            projectEntries.forEach((entry) => {
+              const entryDate = new Date(entry.date);
+              const rangeStart = new Date(reportStartDate);
+              const rangeEnd = new Date(reportEndDate);
+
+              // Only include entries within the report date range
+              if (entryDate >= rangeStart && entryDate <= rangeEnd) {
+                const [startHours, startMinutes] = entry.startTime
+                  .split(":")
+                  .map(Number);
+                const [endHours, endMinutes] = entry.endTime
+                  .split(":")
+                  .map(Number);
+                const startTotalMinutes = startHours * 60 + startMinutes;
+                const endTotalMinutes = endHours * 60 + endMinutes;
+                let duration = endTotalMinutes - startTotalMinutes;
+                if (duration < 0) duration += 24 * 60;
+                projectTotalMinutes += duration;
+
+                // Calculate spending based on user charge out rate
+                const entryUserId = entry.userId?._id || entry.userId;
+                const entryUser = allUsers.find((u) => u._id === entryUserId);
+                if (entryUser && entryUser.chargeOutRate) {
+                  const hours = duration / 60;
+                  projectSpending += hours * entryUser.chargeOutRate;
+                }
+              }
+            });
+          }
+
+          projectTotals[projectKey].totalMinutes = projectTotalMinutes;
+          projectTotals[projectKey].spending = projectSpending;
+        } catch (error) {
+          console.error(
+            `Error fetching data for project ${projectKey}:`,
+            error
+          );
+          projectTotals[projectKey].totalMinutes =
+            projectTotals[projectKey].userMinutes;
+          projectTotals[projectKey].budget = 0;
+          projectTotals[projectKey].spending = 0;
+        }
+      }
+
+      // Calculate chargeable work percentage
+      const chargeableWorkPercentage =
+        totalMinutes > 0
+          ? Math.round((projectMinutes / totalMinutes) * 100)
+          : 0;
+
+      // Calculate project budget statistics
+      const numberOfProjects = Object.keys(projectTotals).length;
+      let projectsUnderBudget = 0;
+      let projectsOverBudget = 0;
+      let totalBudgetPercentages = 0;
+      let projectsWithBudget = 0;
+
+      Object.values(projectTotals).forEach((project) => {
+        if (project.budget > 0 && project.spending > 0) {
+          projectsWithBudget++;
+          const percentageUsed = (project.spending / project.budget) * 100;
+          totalBudgetPercentages += percentageUsed;
+
+          if (project.spending < project.budget) {
+            projectsUnderBudget++;
+          } else if (project.spending > project.budget) {
+            projectsOverBudget++;
+          }
+        }
+      });
+
+      const averageBudgetPercentage =
+        projectsWithBudget > 0
+          ? (totalBudgetPercentages / projectsWithBudget).toFixed(1)
+          : "N/A";
+
+      // Build CSV with summary first, then project breakdown
+      let csvContent = `Employee Performance Report\n`;
+      csvContent += `Employee:,${userName}\n`;
+      csvContent += `Period:,${format(
+        new Date(reportStartDate),
+        "dd/MM/yyyy"
+      )} - ${format(new Date(reportEndDate), "dd/MM/yyyy")}\n`;
+      csvContent += `\n`;
+      csvContent += `Summary\n`;
+      csvContent += `Chargeable Work %:,${chargeableWorkPercentage}%\n`;
+      csvContent += `Absent Days:,${absentDays}\n`;
+      csvContent += `Weekend Days Worked:,${weekendDaysWorked}\n`;
+      csvContent += `Number of Projects:,${numberOfProjects}\n`;
+      csvContent += `Projects Under Budget:,${projectsUnderBudget}\n`;
+      csvContent += `Projects Over Budget:,${projectsOverBudget}\n`;
+      csvContent += `Overall Budget Usage:,${averageBudgetPercentage}${
+        typeof averageBudgetPercentage === "number" ? "%" : ""
+      }\n`;
+      csvContent += `\n`;
+      csvContent += `Project Breakdown\n`;
+      csvContent += `Project ID,Project Name,Category,User Hours,Total Project Hours,Project Budget,Project Spending,Budget Status\n`;
+
+      // Sort projects by user time spent (descending)
+      const sortedProjects = Object.values(projectTotals).sort(
+        (a, b) => b.userMinutes - a.userMinutes
+      );
+      sortedProjects.forEach((project) => {
+        const userHours = formatHours(project.userMinutes);
+        const totalHours = formatHours(project.totalMinutes || 0);
+        const budget =
+          project.budget > 0
+            ? `$${project.budget.toLocaleString()}`
+            : "Not Set";
+        const categories =
+          project.categories && project.categories.length > 0
+            ? project.categories.join("; ")
+            : "Not Set";
+
+        let spending = "Not Available";
+        let budgetStatus = "N/A";
+
+        if (project.spending > 0) {
+          spending = `$${project.spending.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+
+          // Calculate budget status
+          if (project.budget > 0) {
+            const percentageUsed = (project.spending / project.budget) * 100;
+            const difference = project.budget - project.spending;
+
+            if (difference > 0) {
+              budgetStatus = `Under budget: $${Math.abs(
+                difference
+              ).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} (${(100 - percentageUsed).toFixed(1)}%)`;
+            } else if (difference < 0) {
+              budgetStatus = `Over budget: $${Math.abs(
+                difference
+              ).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} (${(percentageUsed - 100).toFixed(1)}%)`;
+            } else {
+              budgetStatus = "On budget";
+            }
+          }
+        }
+
+        csvContent += `"${project.projectID}","${project.name}","${categories}","${userHours}","${totalHours}","${budget}","${spending}","${budgetStatus}"\n`;
+      });
+
+      // Download CSV
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute(
+        "download",
+        `${userName.replace(
+          /\s+/g,
+          "-"
+        )}-performance-report-${reportStartDate}-to-${reportEndDate}.csv`
+      );
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      handleCloseReportModal();
+    } catch (error) {
+      console.error("Error generating report:", error);
+      alert("Failed to generate report. Please try again.");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  // Format hours for display
+  const formatHours = (minutes) => {
+    if (!minutes || minutes === 0) return "-";
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (mins === 0) {
+      return `${hours}h`;
+    }
+    return `${hours}h ${mins}m`;
+  };
+
+  // Get total hours for a user for the week
+  const getWeekTotal = (userId) => {
+    const userData = timesheetData[userId] || {};
+    const total = Object.values(userData).reduce(
+      (sum, minutes) => sum + minutes,
+      0
+    );
+    return total;
+  };
+
+  // Get cell background color based on hours and approval status
+  const getCellColor = (minutes, isApproved) => {
+    if (!minutes || minutes === 0) {
+      return theme.palette.grey[100];
+    }
+    if (isApproved) {
+      return theme.palette.info.light; // Blue for approved
+    }
+    const hours = minutes / 60;
+    if (hours >= 7.5) {
+      return theme.palette.success.light;
+    } else if (hours >= 4) {
+      return theme.palette.warning.light;
+    } else {
+      return theme.palette.error.light;
+    }
+  };
+
+  if (isLoading && users.length === 0) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <Box m="20px">
       <Typography variant="h3" component="h1" marginTop="20px" gutterBottom>
-        Timesheet Review
+        Timesheet Review - Weekly Summary
       </Typography>
 
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -609,17 +672,33 @@ const TimesheetReview = () => {
       >
         <Box display="flex" alignItems="center" gap={2}>
           <IconButton
-            onClick={() => handleMonthChange("prev")}
-            sx={{ color: colors.grey[100] }}
+            onClick={() => handleWeekChange("prev")}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
           >
             <ArrowBackIosNewIcon />
           </IconButton>
-          <Typography variant="h6">
-            {format(selectedDate, "MMMM yyyy")}
+          <Typography
+            variant="h5"
+            sx={{ minWidth: "300px", textAlign: "center" }}
+          >
+            {format(weekStart, "dd MMM yyyy")} -{" "}
+            {format(weekEnd, "dd MMM yyyy")}
           </Typography>
           <IconButton
-            onClick={() => handleMonthChange("next")}
-            sx={{ color: colors.grey[100] }}
+            onClick={() => handleWeekChange("next")}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.primary.contrastText,
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
           >
             <ArrowForwardIosIcon />
           </IconButton>
@@ -627,14 +706,16 @@ const TimesheetReview = () => {
 
         <Button
           variant="contained"
-          startIcon={<PrintIcon />}
+          color="primary"
+          startIcon={<DescriptionIcon />}
           onClick={handleOpenReportModal}
           sx={{
-            backgroundColor: colors.primary[500],
-            color: colors.grey[100],
+            backgroundColor: theme.palette.info.main,
             "&:hover": {
-              backgroundColor: colors.primary[600],
+              backgroundColor: theme.palette.info.dark,
             },
+            fontWeight: 600,
+            px: 3,
           }}
         >
           Generate Report
@@ -644,74 +725,638 @@ const TimesheetReview = () => {
       <Paper
         elevation={3}
         sx={{
-          p: 2,
-          backgroundColor: theme.palette.background.alt,
-          height: "calc(100vh - 200px)",
+          backgroundColor: theme.palette.background.paper,
+          borderRadius: 2,
+          overflow: "hidden",
+          position: "relative",
         }}
       >
-        <DataGrid
-          rows={timesheetData}
-          columns={columns}
-          loading={isLoading}
-          getRowId={(row) => `${row.userId}-${row.date}`}
-          sortingOrder={["desc", "asc"]}
-          onRowClick={(params) => {
-            // Check if the click was in the actions column
-            if (params.field === "actions") {
-              return;
-            }
-            handleViewTimesheet(params.row.userId, params.row.date);
-          }}
-          sx={{
-            "& .MuiDataGrid-cell": {
-              borderBottom: `1px solid ${colors.grey[800]}`,
-            },
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: colors.primary[500],
-              borderBottom: "none",
-            },
-            "& .MuiDataGrid-virtualScroller": {
-              backgroundColor: theme.palette.background.alt,
-            },
-            "& .MuiDataGrid-footerContainer": {
-              borderTop: "none",
-              backgroundColor: colors.primary[500],
-            },
-            "& .MuiDataGrid-toolbarContainer .MuiButton-text": {
-              color: `${colors.grey[100]} !important`,
-            },
-            "& .MuiDataGrid-row": {
-              cursor: "pointer",
-              "&:hover": {
-                backgroundColor: colors.primary[600],
-              },
-              "&.authorized": {
-                backgroundColor: theme.palette.success.main,
-                "&:hover": {
-                  backgroundColor: theme.palette.success.dark,
+        {/* Loading Indicator */}
+        {isLoading && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
+            }}
+          >
+            <LinearProgress
+              sx={{
+                height: 4,
+                borderRadius: "2px 2px 0 0",
+                backgroundColor: "rgba(25, 118, 210, 0.1)",
+                "& .MuiLinearProgress-bar": {
+                  backgroundColor: "#1976d2",
                 },
-              },
-              "&.weekend": {
-                backgroundColor: colors.primary[700],
-                "&:hover": {
-                  backgroundColor: colors.primary[600],
-                },
-              },
-            },
-          }}
-          getRowClassName={(params) => {
-            const classes = [];
-            if (params.row.status === "authorized") {
-              classes.push("authorized");
-            }
-            const date = new Date(params.row.date);
-            if (date.getDay() === 0 || date.getDay() === 6) {
-              classes.push("weekend");
-            }
-            return classes.join(" ");
-          }}
-        />
+              }}
+            />
+          </Box>
+        )}
+
+        <TableContainer sx={{ maxHeight: "calc(100vh - 300px)" }}>
+          <Table stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell
+                  sx={{
+                    backgroundColor: theme.palette.primary.main,
+                    color: theme.palette.primary.contrastText,
+                    fontWeight: 700,
+                    fontSize: "1rem",
+                    minWidth: "200px",
+                    position: "sticky",
+                    left: 0,
+                    zIndex: 3,
+                  }}
+                >
+                  Employee
+                </TableCell>
+                {daysInWeek.map((day) => {
+                  const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                  const isToday = isSameDay(day, new Date());
+                  return (
+                    <TableCell
+                      key={day.toISOString()}
+                      align="center"
+                      sx={{
+                        backgroundColor: isWeekend
+                          ? theme.palette.grey[400]
+                          : isToday
+                          ? theme.palette.warning.main
+                          : theme.palette.primary.main,
+                        color: theme.palette.primary.contrastText,
+                        fontWeight: 700,
+                        fontSize: "0.9rem",
+                        minWidth: "120px",
+                      }}
+                    >
+                      <Box>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 700, fontSize: "0.85rem" }}
+                        >
+                          {format(day, "EEE")}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          sx={{ fontSize: "0.75rem" }}
+                        >
+                          {format(day, "dd MMM")}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  );
+                })}
+                <TableCell
+                  align="center"
+                  sx={{
+                    backgroundColor: theme.palette.success.main,
+                    color: theme.palette.success.contrastText,
+                    fontWeight: 700,
+                    fontSize: "1rem",
+                    minWidth: "120px",
+                    position: "sticky",
+                    right: 0,
+                    zIndex: 3,
+                  }}
+                >
+                  Week Total
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading &&
+              users.length > 0 &&
+              Object.keys(timesheetData).length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={daysInWeek.length + 2}
+                    align="center"
+                    sx={{
+                      py: 8,
+                      border: "none",
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 2,
+                      }}
+                    >
+                      <CircularProgress size={40} />
+                      <Typography variant="body1" color="text.secondary">
+                        Loading timesheet data...
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={daysInWeek.length + 2}
+                    align="center"
+                    sx={{
+                      py: 8,
+                      border: "none",
+                    }}
+                  >
+                    <Typography variant="body1" color="text.secondary">
+                      No employees found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user, index) => {
+                  const weekTotal = getWeekTotal(user._id);
+                  return (
+                    <TableRow
+                      key={user._id}
+                      sx={{
+                        "&:nth-of-type(odd)": {
+                          backgroundColor: theme.palette.action.hover,
+                        },
+                        "&:hover": {
+                          backgroundColor: theme.palette.action.selected,
+                        },
+                      }}
+                    >
+                      <TableCell
+                        component="th"
+                        scope="row"
+                        sx={{
+                          fontWeight: 600,
+                          position: "sticky",
+                          left: 0,
+                          backgroundColor: "inherit",
+                          zIndex: 1,
+                        }}
+                      >
+                        {user.firstName} {user.lastName}
+                      </TableCell>
+                      {daysInWeek.map((day) => {
+                        const dateStr = format(day, "yyyy-MM-dd");
+                        const minutes = timesheetData[user._id]?.[dateStr] || 0;
+                        const isApproved =
+                          timesheetData[`${user._id}_${dateStr}_approved`] ||
+                          false;
+                        const isWeekend =
+                          day.getDay() === 0 || day.getDay() === 6;
+                        return (
+                          <TableCell
+                            key={day.toISOString()}
+                            align="center"
+                            onClick={() => handleCellClick(user._id, day)}
+                            sx={{
+                              backgroundColor:
+                                isApproved && minutes > 0
+                                  ? theme.palette.info.light
+                                  : isWeekend
+                                  ? theme.palette.grey[200]
+                                  : getCellColor(minutes, isApproved),
+                              fontWeight: 500,
+                              fontSize: "0.9rem",
+                              border: `1px solid ${theme.palette.divider}`,
+                              cursor: isLoading ? "default" : "pointer",
+                              transition: "all 0.2s ease",
+                              opacity: isLoading ? 0.6 : 1,
+                              pointerEvents: isLoading ? "none" : "auto",
+                              "&:hover": {
+                                transform: isLoading ? "none" : "scale(1.05)",
+                                boxShadow: isLoading
+                                  ? "none"
+                                  : `0 4px 8px rgba(0,0,0,0.2)`,
+                                zIndex: 1,
+                                fontWeight: isLoading ? 500 : 700,
+                              },
+                            }}
+                          >
+                            {formatHours(minutes)}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell
+                        align="center"
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: "0.95rem",
+                          backgroundColor: theme.palette.success.light,
+                          position: "sticky",
+                          right: 0,
+                          zIndex: 1,
+                          border: `2px solid ${theme.palette.divider}`,
+                          opacity: isLoading ? 0.6 : 1,
+                        }}
+                      >
+                        {formatHours(weekTotal)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Paper>
+
+      {/* Legend */}
+      <Box
+        sx={{
+          mt: 3,
+          p: 2,
+          backgroundColor: theme.palette.background.paper,
+          borderRadius: 2,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Typography variant="h6" gutterBottom>
+          Color Legend
+        </Typography>
+        <Box display="flex" gap={3} flexWrap="wrap">
+          <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 24,
+                height: 24,
+                backgroundColor: theme.palette.info.light,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+              }}
+            />
+            <Typography variant="body2">Approved</Typography>
+          </Box>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 24,
+                height: 24,
+                backgroundColor: theme.palette.success.light,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+              }}
+            />
+            <Typography variant="body2">7.5+ hours</Typography>
+          </Box>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 24,
+                height: 24,
+                backgroundColor: theme.palette.warning.light,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+              }}
+            />
+            <Typography variant="body2">4 - 7.5 hours</Typography>
+          </Box>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 24,
+                height: 24,
+                backgroundColor: theme.palette.error.light,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+              }}
+            />
+            <Typography variant="body2">Less than 4 hours</Typography>
+          </Box>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 24,
+                height: 24,
+                backgroundColor: theme.palette.grey[100],
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+              }}
+            />
+            <Typography variant="body2">No time logged</Typography>
+          </Box>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Box
+              sx={{
+                width: 24,
+                height: 24,
+                backgroundColor: theme.palette.grey[200],
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+              }}
+            />
+            <Typography variant="body2">Weekend</Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Timesheet Details Modal */}
+      <Dialog
+        open={modalOpen}
+        onClose={handleCloseModal}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            backgroundColor: theme.palette.primary.main,
+            color: theme.palette.primary.contrastText,
+          }}
+        >
+          <Box display="flex" alignItems="center" gap={2}>
+            <AccessTimeIcon />
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Timesheet Details
+              </Typography>
+              {selectedUser && selectedDay && (
+                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                  {selectedUser.firstName} {selectedUser.lastName} -{" "}
+                  {format(selectedDay, "EEEE, dd MMMM yyyy")}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+          <IconButton
+            onClick={handleCloseModal}
+            sx={{
+              color: theme.palette.primary.contrastText,
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1 }}>
+          {modalLoading ? (
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              minHeight="200px"
+            >
+              <Typography>Loading timesheet data...</Typography>
+            </Box>
+          ) : modalData && modalData.entries.length > 0 ? (
+            <Box>
+              {/* Summary Section */}
+              <Box
+                sx={{
+                  mb: 3,
+                  p: 2,
+                  backgroundColor: theme.palette.grey[100],
+                  borderRadius: 2,
+                  display: "flex",
+                  gap: 3,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Total Time
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {formatHours(modalData.totalMinutes)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Project Time
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {formatHours(modalData.projectMinutes)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Project %
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    {modalData.totalMinutes > 0
+                      ? Math.round(
+                          (modalData.projectMinutes / modalData.totalMinutes) *
+                            100
+                        )
+                      : 0}
+                    %
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Status
+                  </Typography>
+                  <Box sx={{ mt: 0.5 }}>
+                    {modalData.isApproved ? (
+                      <Chip
+                        label="Approved"
+                        color="info"
+                        size="small"
+                        icon={<CheckCircleIcon />}
+                        sx={{ fontWeight: 600 }}
+                      />
+                    ) : (
+                      <Chip
+                        label="Pending"
+                        color="warning"
+                        size="small"
+                        sx={{ fontWeight: 600 }}
+                      />
+                    )}
+                  </Box>
+                </Box>
+              </Box>
+
+              <Divider sx={{ mb: 2 }} />
+
+              {/* Entries Table */}
+              <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                Time Entries
+              </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Start</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>End</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Duration</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Project</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        Description
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {modalData.entries.map((entry, index) => {
+                      const [startHours, startMinutes] = entry.startTime
+                        .split(":")
+                        .map(Number);
+                      const [endHours, endMinutes] = entry.endTime
+                        .split(":")
+                        .map(Number);
+                      const startTotalMinutes = startHours * 60 + startMinutes;
+                      const endTotalMinutes = endHours * 60 + endMinutes;
+                      let duration = endTotalMinutes - startTotalMinutes;
+                      if (duration < 0) duration += 24 * 60;
+
+                      return (
+                        <TableRow
+                          key={index}
+                          sx={{
+                            "&:hover": {
+                              backgroundColor: theme.palette.action.hover,
+                            },
+                          }}
+                        >
+                          <TableCell>{entry.startTime}</TableCell>
+                          <TableCell>{entry.endTime}</TableCell>
+                          <TableCell>{formatHours(duration)}</TableCell>
+                          <TableCell>
+                            {entry.isBreak ? (
+                              <Chip
+                                label="Break"
+                                size="small"
+                                color="default"
+                              />
+                            ) : entry.isAdminWork ? (
+                              <Chip
+                                label="Admin"
+                                size="small"
+                                color="warning"
+                              />
+                            ) : (
+                              <Chip
+                                label="Project"
+                                size="small"
+                                color="success"
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {entry.projectId ? (
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 0.5,
+                                }}
+                              >
+                                <Link
+                                  component="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (entry.projectId) {
+                                      setSelectedProject(entry.projectId);
+                                      setProjectLogModalOpen(true);
+                                    }
+                                  }}
+                                  sx={{
+                                    color: theme.palette.primary.main,
+                                    textDecoration: "none",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    "&:hover": {
+                                      textDecoration: "underline",
+                                    },
+                                  }}
+                                >
+                                  {entry.projectId.projectID}
+                                </Link>
+                                <Typography component="span" variant="body2">
+                                  {" - "}
+                                  {entry.projectId.name}
+                                </Typography>
+                              </Box>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                          <TableCell>{entry.description || "-"}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : (
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              minHeight="200px"
+            >
+              <Typography variant="body1" color="text.secondary">
+                No timesheet entries for this day.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={handleCloseModal}
+            variant="outlined"
+            sx={{
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Close
+          </Button>
+          {selectedUser &&
+            selectedDay &&
+            modalData &&
+            !modalData.isApproved &&
+            modalData.entries.length > 0 && (
+              <Button
+                onClick={handleApproveTimesheet}
+                variant="contained"
+                color="success"
+                startIcon={<CheckCircleIcon />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 500,
+                }}
+              >
+                Approve Timesheet
+              </Button>
+            )}
+          {selectedUser && selectedDay && (
+            <Button
+              onClick={() => {
+                const formattedDate = format(selectedDay, "yyyy-MM-dd");
+                navigate(
+                  `/timesheets?date=${formattedDate}&userId=${selectedUser._id}`
+                );
+              }}
+              variant="contained"
+              sx={{
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              View Full Timesheet
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Report Generation Modal */}
       <Dialog
@@ -733,68 +1378,57 @@ const TimesheetReview = () => {
             pt: 3,
             display: "flex",
             alignItems: "center",
-            gap: 1,
-            backgroundColor: colors.primary[500],
-            color: "white",
+            gap: 2,
+            backgroundColor: theme.palette.info.main,
+            color: theme.palette.info.contrastText,
           }}
         >
-          <DateRangeIcon />
-          Generate Timesheet Report
+          <DescriptionIcon />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Generate Timesheet Report
+          </Typography>
         </DialogTitle>
 
-        <DialogContent sx={{ px: 3, py: 3 }}>
-          {reportError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {reportError}
-            </Alert>
-          )}
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1 }}>
+          <Box sx={{ mt: 2 }}>
+            <FormControl fullWidth sx={{ mb: 3 }}>
+              <InputLabel>Select Employee</InputLabel>
+              <Select
+                value={reportSelectedUser}
+                onChange={(e) => setReportSelectedUser(e.target.value)}
+                label="Select Employee"
+              >
+                {users.map((user) => (
+                  <MenuItem key={user._id} value={user._id}>
+                    {user.firstName} {user.lastName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <FormControl fullWidth required>
-                <InputLabel>Select User</InputLabel>
-                <Select
-                  value={reportUser}
-                  onChange={(e) => setReportUser(e.target.value)}
-                  label="Select User"
-                >
-                  {reportUsers.map((user) => (
-                    <MenuItem key={user._id} value={user._id}>
-                      {user.firstName} {user.lastName} ({user.email})
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+            <TextField
+              fullWidth
+              label="Start Date"
+              type="date"
+              value={reportStartDate}
+              onChange={(e) => setReportStartDate(e.target.value)}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              sx={{ mb: 2 }}
+            />
 
-            <Grid item xs={6}>
-              <TextField
-                fullWidth
-                label="Start Date"
-                type="date"
-                value={reportStartDate}
-                onChange={(e) => setReportStartDate(e.target.value)}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-                required
-              />
-            </Grid>
-
-            <Grid item xs={6}>
-              <TextField
-                fullWidth
-                label="End Date"
-                type="date"
-                value={reportEndDate}
-                onChange={(e) => setReportEndDate(e.target.value)}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-                required
-              />
-            </Grid>
-          </Grid>
+            <TextField
+              fullWidth
+              label="End Date"
+              type="date"
+              value={reportEndDate}
+              onChange={(e) => setReportEndDate(e.target.value)}
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
+          </Box>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
@@ -802,7 +1436,6 @@ const TimesheetReview = () => {
             onClick={handleCloseReportModal}
             variant="outlined"
             sx={{
-              minWidth: 100,
               borderRadius: 2,
               textTransform: "none",
               fontWeight: 500,
@@ -811,27 +1444,33 @@ const TimesheetReview = () => {
             Cancel
           </Button>
           <Button
-            onClick={generateReport}
+            onClick={handleGenerateReport}
             variant="contained"
-            disabled={
-              reportLoading || !reportUser || !reportStartDate || !reportEndDate
-            }
+            color="info"
             startIcon={<PrintIcon />}
+            disabled={reportLoading || !reportSelectedUser}
             sx={{
-              minWidth: 120,
               borderRadius: 2,
               textTransform: "none",
               fontWeight: 500,
-              backgroundColor: colors.primary[500],
-              "&:hover": {
-                backgroundColor: colors.primary[600],
-              },
             }}
           >
-            {reportLoading ? "Generating..." : "Print Report"}
+            {reportLoading ? "Generating..." : "Generate Report"}
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Project Log Modal */}
+      {projectLogModalOpen && selectedProject && (
+        <ProjectLogModalWrapper
+          open={projectLogModalOpen}
+          onClose={() => {
+            setProjectLogModalOpen(false);
+            setSelectedProject(null);
+          }}
+          project={selectedProject}
+        />
+      )}
     </Box>
   );
 };

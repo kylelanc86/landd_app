@@ -3,7 +3,12 @@ const mongoose = require('mongoose');
 const shiftSchema = new mongoose.Schema({
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AirMonitoringJob',
+    refPath: 'jobModel',
+    required: true
+  },
+  jobModel: {
+    type: String,
+    enum: ['AirMonitoringJob', 'AsbestosRemovalJob'],
     required: true
   },
   name: {
@@ -45,6 +50,13 @@ const shiftSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Sample'
   }],
+  sampleNumbers: [{
+    type: String
+  }],
+  submittedBy: {
+    type: String,
+    required: false
+  },
   samplesReceivedDate: {
     type: Date,
     required: false
@@ -71,11 +83,53 @@ const shiftSchema = new mongoose.Schema({
   },
   notes: {
     type: String
+  },
+  revision: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  sitePlan: {
+    type: Boolean,
+    default: false
+  },
+  sitePlanData: {
+    type: {
+      center: {
+        lat: { type: Number, required: true },
+        lng: { type: Number, required: true }
+      },
+      zoom: { type: Number, default: 15 },
+      markers: [{
+        position: {
+          lat: { type: Number, required: true },
+          lng: { type: Number, required: true }
+        },
+        label: { type: String, default: 'X' },
+        type: { 
+          type: String, 
+          enum: ['sampling_point', 'equipment', 'access_point', 'other'],
+          default: 'sampling_point'
+        },
+        description: { type: String }
+      }],
+      bounds: {
+        north: { type: Number },
+        south: { type: Number },
+        east: { type: Number },
+        west: { type: Number }
+      },
+      staticMapUrl: { type: String }
+    },
+    required: false
   }
 }, {
   timestamps: true,
   collection: 'air_monitoring_shifts'
 });
+
+// Index for better query performance
+shiftSchema.index({ job: 1 });
 
 // Add pre-find middleware to log queries
 shiftSchema.pre('find', function() {

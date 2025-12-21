@@ -1,5 +1,5 @@
 import React from "react";
-import { Box } from "@mui/material";
+import { Box, useMediaQuery } from "@mui/material";
 import Topbar from "../scenes/global/Topbar";
 import Sidebar from "../scenes/global/Sidebar";
 import PermissionDeniedNotification from "./PermissionDeniedNotification";
@@ -8,6 +8,14 @@ import { usePermissionDenied } from "../context/PermissionDeniedContext";
 const Layout = ({ children }) => {
   const { permissionDenied, hidePermissionDenied } = usePermissionDenied();
 
+  // Detect tablet and mobile screens - sidebar is hidden, so no margin needed
+  // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
+  const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
+
+  // When sidebar is hidden on tablet/mobile, no margin needed
+  // Otherwise, sidebar is 242px wide, use 232px margin for padding
+  const sidebarMargin = isMobileOrTablet ? 0 : 232;
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar />
@@ -15,8 +23,8 @@ const Layout = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          ml: "232px",
-          width: "calc(100% - 232px)",
+          ml: `${sidebarMargin}px`,
+          width: `calc(100% - ${sidebarMargin}px)`,
           minHeight: "100vh",
           backgroundColor: "#FAFAFA",
           display: "flex",

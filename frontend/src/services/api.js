@@ -4,8 +4,9 @@ import axios from 'axios';
 const config = {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
-  defaultUrl: process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api",
-  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api")
+  // Use 127.0.0.1 instead of localhost to avoid DNS resolution delays on Windows
+  defaultUrl: process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-dev-8h6ah.ondigitalocean.app/api",
+  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-dev-8h6ah.ondigitalocean.app/api")
 };
 // Create axios instance
 const api = axios.create({
@@ -13,8 +14,12 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
     "X-App-Version": process.env.REACT_APP_VERSION || "1.0.0",
+    // Note: "Connection: keep-alive" is blocked by browsers for security
+    // HTTP keep-alive is handled automatically by the browser
   },
-  withCredentials: true
+  withCredentials: true,
+  // Increase timeout for slow networks, but don't wait forever
+  timeout: 30000  // 30 seconds
 });
 
 // Add request interceptor
@@ -216,7 +221,8 @@ export const projectService = {
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.search) queryParams.append('search', params.search);
-    // Note: Status filtering is handled client-side, not on the backend
+    // Add status parameter for backend filtering
+    if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
     if (params.projectType) queryParams.append('projectType', params.projectType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
@@ -250,11 +256,23 @@ export const projectService = {
   delete: (id) => api.delete(`/projects/${id}`),
   checkDependencies: (id) => api.get(`/projects/${id}/dependencies`),
   getTimeLogs: (projectId) => api.get(`/projects/${projectId}/timelogs`),
+  // Get project IDs that have active jobs or reports (optimized for reports page)
+  getProjectIdsWithReportsOrJobs: () => api.get('/projects/with-reports-or-jobs/ids'),
+  // Get projects by array of IDs (optimized for reports page)
+  getProjectsByIds: (projectIds) => api.post('/projects/by-ids', { projectIds }),
 };
 
 // Job service
 export const jobService = {
-  getAll: () => api.get('/air-monitoring-jobs'),
+  getAll: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.excludeStatus) queryParams.append('excludeStatus', params.excludeStatus);
+    if (params.minimal) queryParams.append('minimal', params.minimal);
+    if (params.projectId) queryParams.append('projectId', params.projectId);
+    const queryString = queryParams.toString();
+    return api.get(`/air-monitoring-jobs${queryString ? `?${queryString}` : ''}`);
+  },
   getById: (id) => api.get(`/air-monitoring-jobs/${id}`),
   create: (data) => api.post('/air-monitoring-jobs', data),
   update: (id, data) => api.patch(`/air-monitoring-jobs/${id}`, data),
@@ -293,7 +311,13 @@ export const shiftService = {
   getByJobs: (jobIds) => api.post('/air-monitoring-shifts/jobs', { jobIds }),
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
-  delete: (id) => api.delete(`/air-monitoring-shifts/${id}`)
+  reopen: (id) => api.patch(`/air-monitoring-shifts/${id}/reopen`),
+  delete: (id) => api.delete(`/air-monitoring-shifts/${id}`),
+  sendForAuthorisation: (id) =>
+    api.post(`/air-monitoring-shifts/${id}/send-for-authorisation`),
+  // Site plan methods
+  getSitePlan: (id) => api.get(`/air-monitoring-shifts/${id}/site-plan`),
+  saveSitePlan: (id, data) => api.patch(`/air-monitoring-shifts/${id}/site-plan`, data)
 };
 
 // Invoice service
@@ -323,7 +347,8 @@ export const userService = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
-  sendPasswordResetEmail: (email) => api.post('/auth/admin-reset-password', { email })
+  sendPasswordResetEmail: (email) => api.post('/auth/admin-reset-password', { email }),
+  getAsbestosAssessors: () => api.get('/users/asbestos-assessors')
 };
 
 // User preferences service
@@ -460,7 +485,9 @@ export const clientSuppliedJobsService = {
   create: (data) => api.post('/client-supplied-jobs', data),
   update: (id, data) => api.put(`/client-supplied-jobs/${id}`, data),
   delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
-  getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`)
+  archive: (id) => api.put(`/client-supplied-jobs/${id}/archive`),
+  getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`),
+  sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`)
 };
 
 export default api; 

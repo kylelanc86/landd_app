@@ -15,12 +15,19 @@ const equipmentSchema = new mongoose.Schema(
         "Acetone Vaporiser",
         "Air pump",
         "Bubble flowmeter",
+        "Effective Filter Area",
+        "Filter Holder",
         "Fume Hood",
         "Furnace",
         "Graticule",
-        "Microscope",
+        "HSE Test Slide",
+        "Micrometer",
+        "Phase Contrast Microscope",
         "Pneumatic tester",
-        "Site flowmeter"
+        "Polarised Light Microscope",
+        "RI Liquids",
+        "Site flowmeter",
+        "Stereomicroscope"
       ],
     },
     section: {
@@ -39,20 +46,14 @@ const equipmentSchema = new mongoose.Schema(
       enum: ["active", "calibration due", "out-of-service"],
       default: "active",
     },
-    lastCalibration: {
-      type: Date,
-      required: true,
-    },
-    calibrationDue: {
-      type: Date,
-      required: true,
-    },
     calibrationFrequency: {
       type: Number,
-      required: true,
+      required: false,
       min: 1,
       max: 60, // Assuming max 60 months (5 years)
     },
+    // Note: Calibration data (lastCalibration, calibrationDue, flowrateCalibrations) 
+    // is now fetched dynamically from calibration records, not stored in Equipment model
   },
   {
     timestamps: true,

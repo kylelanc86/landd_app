@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -13,29 +13,34 @@ import {
   IconButton,
   Checkbox,
   FormControlLabel,
+  InputAdornment,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import {
-  sampleService,
-  shiftService,
-  jobService,
-  userService,
-} from "../../services/api";
+import { sampleService, shiftService, userService } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import airPumpService from "../../services/airPumpService";
 import { equipmentService } from "../../services/equipmentService";
+import { flowmeterCalibrationService } from "../../services/flowmeterCalibrationService";
+import { airPumpCalibrationService } from "../../services/airPumpCalibrationService";
 import { useAuth } from "../../context/AuthContext";
 import { formatDateForInput } from "../../utils/dateUtils";
+
+const FIELD_BLANK_LOCATION = "Field blank";
+const NEG_AIR_EXHAUST_LOCATION = "Neg air exhaust";
 
 const EditSample = () => {
   const theme = useTheme();
   const { shiftId, sampleId } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [users, setUsers] = useState([]);
+  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [airPumps, setAirPumps] = useState([]);
   const [flowmeters, setFlowmeters] = useState([]);
+  const [availableFlowrates, setAvailableFlowrates] = useState([]);
+  // Cache for calibration data to avoid re-fetching
+  const [pumpCalibrationsCache, setPumpCalibrationsCache] = useState(new Map());
   const [form, setForm] = useState({
     sampler: "",
     sampleNumber: "",
@@ -47,12 +52,14 @@ const EditSample = () => {
     filterSize: "",
     startTime: "",
     endTime: "",
+    nextDay: false,
     initialFlowrate: "",
     finalFlowrate: "",
     averageFlowrate: "",
     notes: "",
     date: formatDateForInput(new Date()),
     isFieldBlank: false,
+    isNegAirExhaust: false,
     status: "pending",
   });
   const [projectID, setProjectID] = useState(null);
@@ -61,55 +68,326 @@ const EditSample = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [insufficientSampleTime, setInsufficientSampleTime] = useState(false);
 
-  // Fetch users when component mounts
+  const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
+
+  // Fetch asbestos assessors when component mounts
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchAsbestosAssessors = async () => {
       try {
         const response = await userService.getAll();
-        setUsers(response.data);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-      }
-    };
-    fetchUsers();
-  }, []);
+        const users = response.data;
 
-  // Fetch active air pumps when component mounts
-  useEffect(() => {
-    const fetchActiveAirPumps = async () => {
-      try {
-        const response = await airPumpService.filterByStatus("Active");
-        setAirPumps(response.data || response);
-      } catch (error) {
-        console.error("Error fetching active air pumps:", error);
-      }
-    };
-    fetchActiveAirPumps();
-  }, []);
-
-  // Fetch active flowmeters when component mounts
-  useEffect(() => {
-    const fetchActiveFlowmeters = async () => {
-      try {
-        const response = await equipmentService.getAll();
-        console.log("Equipment response:", response);
-        const allEquipment = response.equipment || response.data || response;
-        console.log("All equipment:", allEquipment);
-        const flowmeters = allEquipment.filter(
-          (equipment) =>
-            (equipment.equipmentType === "Bubble flowmeter" ||
-              equipment.equipmentType === "Site flowmeter") &&
-            equipment.status === "active"
+        // Filter users who have Asbestos Assessor licenses
+        const assessors = users.filter(
+          (user) =>
+            user.isActive &&
+            user.licences &&
+            user.licences.some(
+              (licence) =>
+                licence.licenceType &&
+                licence.licenceType.toLowerCase().includes("asbestos assessor")
+            )
         );
-        console.log("Filtered flowmeters:", flowmeters);
-        setFlowmeters(flowmeters);
+
+        // Sort alphabetically by name
+        const sortedAssessors = assessors.sort((a, b) => {
+          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        setAsbestosAssessors(sortedAssessors);
       } catch (error) {
-        console.error("Error fetching active flowmeters:", error);
+        console.error("Error fetching asbestos assessors:", error);
       }
     };
-    fetchActiveFlowmeters();
+    fetchAsbestosAssessors();
   }, []);
+
+  // Calculate days until calibration is due
+  const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
+    if (!calibrationDue) return null;
+
+    const today = new Date();
+    const dueDate = new Date(calibrationDue);
+
+    // Reset time to start of day for accurate day calculation
+    today.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const timeDiff = dueDate.getTime() - today.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    return daysDiff;
+  }, []);
+
+  // Calculate the actual status based on calibration data and stored status
+  const calculateStatus = useCallback(
+    (equipment) => {
+      if (!equipment) {
+        return "Out-of-Service";
+      }
+
+      if (equipment.status === "out-of-service") {
+        return "Out-of-Service";
+      }
+
+      if (!equipment.lastCalibration || !equipment.calibrationDue) {
+        return "Out-of-Service";
+      }
+
+      const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
+      if (daysUntil !== null && daysUntil < 0) {
+        return "Calibration Overdue";
+      }
+
+      return "Active";
+    },
+    [calculateDaysUntilCalibration]
+  );
+
+  // Fetch equipment and calibrations in a single optimized call
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchEquipmentAndCalibrations = async () => {
+      try {
+        // Fetch equipment once
+        const response = await equipmentService.getAll();
+        const allEquipment = response.equipment || [];
+
+        if (!isMounted) return;
+
+        // Filter for Air pump equipment
+        const airPumps = allEquipment
+          .filter((eq) => eq.equipmentType === "Air pump")
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+
+        // Filter for Site flowmeter equipment
+        const siteFlowmeters = allEquipment.filter(
+          (equipment) => equipment.equipmentType === "Site flowmeter"
+        );
+
+        // Fetch calibration data for all pumps and flowmeters in parallel
+        const [pumpsWithCalibrations, flowmetersWithCalibrations] =
+          await Promise.all([
+            // Fetch pump calibrations
+            Promise.all(
+              airPumps.map(async (pump) => {
+                try {
+                  const calibrationResponse =
+                    await airPumpCalibrationService.getPumpCalibrations(
+                      pump._id,
+                      1,
+                      1000
+                    );
+                  const calibrations =
+                    calibrationResponse.data || calibrationResponse || [];
+
+                  const lastCalibration =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations.map((cal) =>
+                              new Date(cal.calibrationDate).getTime()
+                            )
+                          )
+                        )
+                      : null;
+
+                  const calibrationDue =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations
+                              .filter((cal) => cal.nextCalibrationDue)
+                              .map((cal) =>
+                                new Date(cal.nextCalibrationDue).getTime()
+                              )
+                          )
+                        )
+                      : null;
+
+                  return {
+                    ...pump,
+                    lastCalibration,
+                    calibrationDue,
+                    calibrations, // Store calibrations for later use
+                  };
+                } catch (err) {
+                  console.error(
+                    `Error fetching calibrations for ${pump.equipmentReference}:`,
+                    err
+                  );
+                  return {
+                    ...pump,
+                    lastCalibration: null,
+                    calibrationDue: null,
+                    calibrations: [],
+                  };
+                }
+              })
+            ),
+            // Fetch flowmeter calibrations
+            Promise.all(
+              siteFlowmeters.map(async (flowmeter) => {
+                try {
+                  const calibrationResponse =
+                    await flowmeterCalibrationService.getByFlowmeter(
+                      flowmeter.equipmentReference
+                    );
+                  const calibrations =
+                    calibrationResponse.data || calibrationResponse || [];
+
+                  const lastCalibration =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations.map((cal) =>
+                              new Date(cal.date).getTime()
+                            )
+                          )
+                        )
+                      : null;
+
+                  const calibrationDue =
+                    calibrations.length > 0
+                      ? new Date(
+                          Math.max(
+                            ...calibrations.map((cal) =>
+                              new Date(cal.nextCalibration).getTime()
+                            )
+                          )
+                        )
+                      : null;
+
+                  return {
+                    ...flowmeter,
+                    lastCalibration,
+                    calibrationDue,
+                  };
+                } catch (err) {
+                  console.error(
+                    `Error fetching calibrations for ${flowmeter.equipmentReference}:`,
+                    err
+                  );
+                  return {
+                    ...flowmeter,
+                    lastCalibration: null,
+                    calibrationDue: null,
+                  };
+                }
+              })
+            ),
+          ]);
+
+        if (!isMounted) return;
+
+        // Update cache with all pump calibrations (batch update after all data is fetched)
+        const newCache = new Map();
+        pumpsWithCalibrations.forEach((pump) => {
+          if (pump.calibrations && pump.calibrations.length > 0) {
+            newCache.set(pump._id, pump.calibrations);
+          }
+        });
+        if (newCache.size > 0) {
+          setPumpCalibrationsCache(newCache);
+        }
+
+        // Filter for active pumps using calculated status
+        const activePumps = pumpsWithCalibrations
+          .filter((equipment) => calculateStatus(equipment) === "Active")
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+
+        // Filter for active flowmeters using calculated status
+        const activeFlowmeters = flowmetersWithCalibrations
+          .filter((equipment) => calculateStatus(equipment) === "Active")
+          .sort((a, b) =>
+            a.equipmentReference.localeCompare(b.equipmentReference)
+          );
+
+        setAirPumps(activePumps);
+        setFlowmeters(activeFlowmeters);
+      } catch (error) {
+        console.error("Error fetching equipment and calibrations:", error);
+      }
+    };
+    fetchEquipmentAndCalibrations();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [calculateStatus]);
+
+  // Fetch available flowrates for selected pump (based on passed calibrations)
+  // Uses cached calibration data if available, otherwise fetches it
+  const fetchAvailableFlowrates = useCallback(
+    async (pumpEquipmentReference) => {
+      try {
+        // Find the pump by equipmentReference
+        const selectedPump = airPumps.find(
+          (p) => p.equipmentReference === pumpEquipmentReference
+        );
+
+        if (!selectedPump) {
+          setAvailableFlowrates([]);
+          return;
+        }
+
+        // Use cached calibrations if available, otherwise fetch
+        let calibrations = selectedPump.calibrations;
+        if (!calibrations || calibrations.length === 0) {
+          // Check cache first
+          const cached = pumpCalibrationsCache.get(selectedPump._id);
+          if (cached) {
+            calibrations = cached;
+          } else {
+            // Fetch if not in cache
+            const calibrationResponse =
+              await airPumpCalibrationService.getPumpCalibrations(
+                selectedPump._id,
+                1,
+                1000
+              );
+            calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+            // Cache for future use
+            const cache = new Map(pumpCalibrationsCache);
+            cache.set(selectedPump._id, calibrations);
+            setPumpCalibrationsCache(cache);
+          }
+        }
+
+        // Filter for passed calibrations and extract unique flowrates
+        // Convert setFlowrate from mL/min to L/min
+        const passedFlowrates = calibrations
+          .filter((cal) => cal.overallResult === "Pass")
+          .map((cal) => {
+            if (cal.testResults && cal.testResults.length > 0) {
+              // Get the setFlowrate from the first test result (all testResults in a calibration have the same setFlowrate)
+              const setFlowrateMlMin = cal.testResults[0].setFlowrate;
+              return setFlowrateMlMin / 1000; // Convert to L/min
+            }
+            return null;
+          })
+          .filter((flowrate) => flowrate != null)
+          .filter((value, index, self) => self.indexOf(value) === index) // Get unique values
+          .sort((a, b) => a - b); // Sort ascending
+
+        setAvailableFlowrates(passedFlowrates);
+      } catch (error) {
+        console.error("Error fetching available flowrates:", error);
+        setAvailableFlowrates([]);
+      }
+    },
+    [airPumps, pumpCalibrationsCache]
+  );
 
   // Fetch sample data
   useEffect(() => {
@@ -118,7 +396,6 @@ const EditSample = () => {
         setIsLoading(true);
         const response = await sampleService.getById(sampleId);
         const sampleData = response.data;
-        console.log("Fetched sample data:", sampleData);
 
         // Extract the sample number from fullSampleID
         const sampleNumber = sampleData.fullSampleID.split("-")[1];
@@ -128,33 +405,57 @@ const EditSample = () => {
           setProjectID(sampleData.job.projectId.projectID);
         } else {
           // If project is not populated, fetch the job to get project details
-          const jobResponse = await jobService.getById(sampleData.job);
+          const jobResponse = await asbestosRemovalJobService.getById(
+            sampleData.job
+          );
           if (jobResponse.data && jobResponse.data.projectId) {
             setProjectID(jobResponse.data.projectId.projectID);
           }
         }
 
+        const isFieldBlankSample =
+          !!sampleData.isFieldBlank ||
+          sampleData.location === FIELD_BLANK_LOCATION;
+        const isNegAirSample =
+          !isFieldBlankSample &&
+          (sampleData.isNegAirExhaust ||
+            sampleData.location === NEG_AIR_EXHAUST_LOCATION);
+
+        const flowmeterValue = sampleData.flowmeter || "";
         setForm({
           sampleNumber: sampleNumber,
-          type: sampleData.type,
-          location: sampleData.location,
+          type: isFieldBlankSample ? "-" : sampleData.type,
+          location: isFieldBlankSample
+            ? FIELD_BLANK_LOCATION
+            : isNegAirSample
+            ? sampleData.location || NEG_AIR_EXHAUST_LOCATION
+            : sampleData.location || "",
           pumpNo: sampleData.pumpNo || "",
-          flowmeter: sampleData.flowmeter || "",
-          cowlNo: sampleData.cowlNo || "",
+          flowmeter: flowmeterValue,
+          // Strip "C" prefix if it exists (InputAdornment will display it)
+          cowlNo: sampleData.cowlNo
+            ? sampleData.cowlNo.replace(/^C+/i, "")
+            : "",
           filterSize: sampleData.filterSize || "",
           startTime: sampleData.startTime || "",
           endTime: sampleData.endTime || "",
-          initialFlowrate: sampleData.initialFlowrate || "",
-          finalFlowrate: sampleData.finalFlowrate || "",
-          averageFlowrate: sampleData.averageFlowrate || "",
+          nextDay: sampleData.nextDay || false,
+          initialFlowrate: sampleData.initialFlowrate
+            ? parseFloat(sampleData.initialFlowrate).toFixed(1)
+            : "",
+          finalFlowrate: sampleData.finalFlowrate
+            ? parseFloat(sampleData.finalFlowrate).toFixed(1)
+            : "",
+          averageFlowrate: sampleData.averageFlowrate
+            ? parseFloat(sampleData.averageFlowrate).toFixed(1)
+            : "",
           notes: sampleData.notes || "",
           sampler: sampleData.collectedBy?._id || sampleData.collectedBy || "",
-          isFieldBlank:
-            sampleData.isFieldBlank || sampleData.location === "Field blank"
-              ? true
-              : false,
+          isFieldBlank: isFieldBlankSample,
+          isNegAirExhaust: isNegAirSample,
           status: sampleData.status || "pending",
         });
+
         setJob(sampleData.job);
         setError(null);
       } catch (err) {
@@ -168,6 +469,13 @@ const EditSample = () => {
     fetchSample();
   }, [sampleId]);
 
+  // Effect to fetch available flowrates when pump is set and airPumps are loaded
+  useEffect(() => {
+    if (form.pumpNo && airPumps.length > 0) {
+      fetchAvailableFlowrates(form.pumpNo);
+    }
+  }, [form.pumpNo, airPumps.length, fetchAvailableFlowrates]);
+
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
 
@@ -177,49 +485,229 @@ const EditSample = () => {
     }
 
     if (name === "isFieldBlank") {
+      setForm((prev) => {
+        const next = {
+          ...prev,
+          [name]: checked,
+          location: checked ? FIELD_BLANK_LOCATION : prev.location,
+          type: checked
+            ? "-"
+            : prev.type === "-"
+            ? "Background"
+            : prev.type || "Background",
+        };
+
+        if (checked) {
+          next.isNegAirExhaust = false;
+        }
+
+        return next;
+      });
+      return;
+    }
+
+    if (name === "isNegAirExhaust") {
       setForm((prev) => ({
         ...prev,
         [name]: checked,
-        location: checked ? "Field blank" : prev.location,
+        isFieldBlank: checked ? false : prev.isFieldBlank,
+        location:
+          checked && !prev.location ? NEG_AIR_EXHAUST_LOCATION : prev.location,
+        // Clear flowrate fields when checked
+        initialFlowrate: checked ? "" : prev.initialFlowrate,
+        finalFlowrate: checked ? "" : prev.finalFlowrate,
+        averageFlowrate: checked ? "" : prev.averageFlowrate,
       }));
-    } else {
-      setForm({ ...form, [name]: value });
+      return;
+    }
+
+    // Handle nextDay checkbox
+    if (name === "nextDay") {
+      setForm((prev) => ({
+        ...prev,
+        [name]: checked,
+      }));
+      return;
+    }
+
+    // Handle cowlNo to ensure "C" prefix is always present but not editable
+    // Store value without "C" in state (InputAdornment displays "C" visually)
+    if (name === "cowlNo") {
+      // Remove any "C" prefix if user types it (since InputAdornment shows it as non-editable prefix)
+      const cleanedValue = value.replace(/^C+/i, "");
+      setForm((prev) => ({
+        ...prev,
+        [name]: cleanedValue,
+      }));
+      return;
+    }
+
+    // Calculate average flowrate immediately when initial or final flowrate changes
+    if (name === "initialFlowrate" || name === "finalFlowrate") {
+      setForm((prev) => {
+        const newForm = {
+          ...prev,
+          [name]: value,
+        };
+
+        // Calculate average if both flowrates are present
+        if (newForm.initialFlowrate && newForm.finalFlowrate) {
+          const initial = parseFloat(newForm.initialFlowrate);
+          const final = parseFloat(newForm.finalFlowrate);
+
+          if (!isNaN(initial) && !isNaN(final)) {
+            const avg = (initial + final) / 2;
+            const newStatus =
+              Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+            return {
+              ...newForm,
+              averageFlowrate: avg.toFixed(1),
+              status: newStatus,
+            };
+          }
+        }
+
+        // Clear average if either flowrate is missing or invalid
+        return {
+          ...newForm,
+          averageFlowrate: "",
+          status: "pending",
+        };
+      });
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    // When pump changes, fetch available flowrates
+    if (name === "pumpNo" && value) {
+      fetchAvailableFlowrates(value);
+      // Clear flowrate fields when pump changes
+      setForm((prev) => ({
+        ...prev,
+        initialFlowrate: "",
+        finalFlowrate: "",
+        averageFlowrate: "",
+      }));
     }
   };
 
-  // Calculate average flowrate when initial or final flowrate changes
+  // Calculate average flowrate when initial or final flowrate changes (fallback)
   useEffect(() => {
-    // Don't run this effect if we're currently submitting or if there are any field errors
-    if (isSubmitting || Object.keys(fieldErrors).length > 0) return;
+    if (isSubmitting) return;
 
     if (form.initialFlowrate && form.finalFlowrate) {
-      const avg =
-        (parseFloat(form.initialFlowrate) + parseFloat(form.finalFlowrate)) / 2;
-
-      // Check if flowrates are equal to determine status
       const initial = parseFloat(form.initialFlowrate);
       const final = parseFloat(form.finalFlowrate);
-      const newStatus = Math.abs(initial - final) < 0.1 ? "pending" : "failed";
 
-      setForm((prev) => ({
-        ...prev,
-        averageFlowrate: Math.round(avg).toString(),
-        status: newStatus,
-      }));
+      if (!isNaN(initial) && !isNaN(final)) {
+        const avg = (initial + final) / 2;
+        const newStatus =
+          Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+
+        setForm((prev) => {
+          // Only update if the calculated values are different to avoid infinite loops
+          const currentAvg = parseFloat(prev.averageFlowrate);
+          if (Math.abs(currentAvg - avg) > 0.01 || prev.status !== newStatus) {
+            return {
+              ...prev,
+              averageFlowrate: avg.toFixed(1),
+              status: newStatus,
+            };
+          }
+          return prev;
+        });
+      }
     } else {
       // Clear average flowrate and status if either flowrate is missing
-      setForm((prev) => ({
-        ...prev,
-        averageFlowrate: "",
-        status: "pending",
-      }));
+      setForm((prev) => {
+        if (prev.averageFlowrate || prev.status !== "pending") {
+          return {
+            ...prev,
+            averageFlowrate: "",
+            status: "pending",
+          };
+        }
+        return prev;
+      });
     }
-  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting, fieldErrors]);
+  }, [form.initialFlowrate, form.finalFlowrate, isSubmitting]);
+
+  // Calculate minutes from start and end times
+  const calculateMinutes = (startTime, endTime, nextDay = false) => {
+    if (!startTime || !endTime) return null;
+
+    const [startHours, startMinutes] = startTime.split(":").map(Number);
+    const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    // Handle case where end time is next day (either explicitly checked or inferred)
+    let diffMinutes = endTotalMinutes - startTotalMinutes;
+    if (nextDay || diffMinutes < 0) {
+      diffMinutes += 24 * 60; // Add 24 hours
+    }
+
+    return diffMinutes;
+  };
+
+  // Validate sample time based on filter size
+  useEffect(() => {
+    if (isSimplifiedSample) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    if (!form.startTime || !form.endTime || !form.finalFlowrate) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    const minutes = calculateMinutes(
+      form.startTime,
+      form.endTime,
+      form.nextDay
+    );
+    if (minutes === null) {
+      setInsufficientSampleTime(false);
+      return;
+    }
+
+    const filterSize = form.filterSize || "25mm";
+    let isInsufficient = false;
+
+    if (filterSize === "25mm") {
+      const totalVolume = minutes * parseFloat(form.finalFlowrate);
+      isInsufficient = totalVolume < 360;
+    } else if (filterSize === "13mm") {
+      isInsufficient = minutes < 90;
+    }
+
+    setInsufficientSampleTime(isInsufficient);
+  }, [
+    form.startTime,
+    form.endTime,
+    form.nextDay,
+    form.finalFlowrate,
+    form.filterSize,
+    isSimplifiedSample,
+  ]);
 
   // Separate effect to ensure sample number is calculated when projectID is available
   useEffect(() => {
     const calculateSampleNumber = async () => {
       if (!projectID) return;
+      if (form.sampleNumber) {
+        console.debug(
+          "[EditSample] Skipping sample number recalculation; existing sample number present"
+        );
+        return;
+      }
 
       try {
         const allProjectSamplesResponse = await sampleService.getByProject(
@@ -241,27 +729,19 @@ const EditSample = () => {
         );
 
         const nextSampleNumber = `AM${highestNumber + 1}`;
-        console.log(
-          "Auto-calculated next sample number for edit:",
-          nextSampleNumber
-        );
 
         // Only update if we don't already have a sample number
-        if (!form.sampleNumber) {
-          setForm((prev) => ({
-            ...prev,
-            sampleNumber: nextSampleNumber.toString(),
-          }));
-        }
+        setForm((prev) => ({
+          ...prev,
+          sampleNumber: nextSampleNumber.toString(),
+        }));
       } catch (error) {
         console.error("Error auto-calculating sample number for edit:", error);
         // Set default if calculation fails and no sample number exists
-        if (!form.sampleNumber) {
-          setForm((prev) => ({
-            ...prev,
-            sampleNumber: "AM1",
-          }));
-        }
+        setForm((prev) => ({
+          ...prev,
+          sampleNumber: prev.sampleNumber || "AM1",
+        }));
       }
     };
 
@@ -287,11 +767,11 @@ const EditSample = () => {
       errors.sampleNumber = "Sample number is required";
     }
 
-    if (!form.flowmeter) {
+    if (!isSimplifiedSample && !form.flowmeter) {
       errors.flowmeter = "Flowmeter is required";
     }
 
-    if (!form.isFieldBlank) {
+    if (!isSimplifiedSample) {
       if (!form.location) {
         errors.location = "Location is required";
       }
@@ -301,8 +781,13 @@ const EditSample = () => {
       if (!form.startTime) {
         errors.startTime = "Start time is required";
       }
-      if (!form.initialFlowrate) {
+      if (!form.isNegAirExhaust && !form.initialFlowrate) {
         errors.initialFlowrate = "Initial flowrate is required";
+      }
+    } else if (form.isNegAirExhaust) {
+      // Neg air exhaust samples require location (field blanks have fixed location)
+      if (!form.location) {
+        errors.location = "Location is required";
       }
     }
 
@@ -311,24 +796,29 @@ const EditSample = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    // Prevent any default behavior if event is provided
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const logLabel = "[EditSample] handleSubmit";
+    console.time(`${logLabel} total`);
+    console.time(`${logLabel} validation`);
+
     setError("");
     setFieldErrors({});
 
-    // Validate form before submission
-    if (!validateForm()) {
+    const isValid = validateForm();
+    console.timeEnd(`${logLabel} validation`);
+    if (!isValid) {
+      console.timeEnd(`${logLabel} total`);
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      console.log("Starting sample update...");
-      console.log("Current user:", currentUser);
-      console.log("Form data:", form);
-      console.log("Project ID:", projectID);
-      console.log("Job:", job);
-
       if (!projectID) {
         throw new Error("Project ID is required");
       }
@@ -343,10 +833,10 @@ const EditSample = () => {
 
       // Generate full sample ID in the format: {projectID}-{sampleNumber}
       const fullSampleID = `${projectID}-${form.sampleNumber}`;
-      console.log("Generated full sample ID:", fullSampleID);
 
       // Map sample type to match backend enum
-      const sampleType = form.type;
+      // Field blanks should have type set to "-"
+      const sampleType = form.isFieldBlank ? "-" : form.type;
 
       // Format times to include seconds
       const formatTime = (time) => {
@@ -354,6 +844,16 @@ const EditSample = () => {
         return time.includes(":") ? time : `${time}:00`;
       };
 
+      // Ensure cowlNo has "C" prefix
+      const cowlNoWithPrefix =
+        form.cowlNo && !form.cowlNo.startsWith("C")
+          ? `C${form.cowlNo}`
+          : form.cowlNo || null;
+      // Ensure nextDay is a boolean
+      const nextDayValue =
+        form.nextDay === true ||
+        form.nextDay === "on" ||
+        form.nextDay === "true";
       const sampleData = {
         shift: shiftId,
         job: job._id,
@@ -363,7 +863,8 @@ const EditSample = () => {
         location: form.location || null,
         pumpNo: form.pumpNo || null,
         flowmeter: form.flowmeter || null,
-        cowlNo: form.cowlNo || null,
+        cowlNo: cowlNoWithPrefix,
+        nextDay: nextDayValue,
         sampler: form.sampler,
         filterSize: form.filterSize || null,
         startTime: form.startTime ? formatTime(form.startTime) : null,
@@ -382,7 +883,9 @@ const EditSample = () => {
         collectedBy: form.sampler,
       };
 
+      console.time(`${logLabel} update`);
       await sampleService.update(sampleId, sampleData);
+      console.timeEnd(`${logLabel} update`);
       navigate(`/air-monitoring/shift/${shiftId}/samples`);
     } catch (error) {
       console.error("Error updating sample:", error);
@@ -393,6 +896,11 @@ const EditSample = () => {
       );
     } finally {
       setIsSubmitting(false);
+      try {
+        console.timeEnd(`${logLabel} total`);
+      } catch (timerError) {
+        // ignore timer errors (e.g., already ended)
+      }
     }
   };
 
@@ -450,7 +958,7 @@ const EditSample = () => {
         Edit Sample
       </Typography>
 
-      <Box component="form" onSubmit={handleSubmit} noValidate>
+      <Box component="form" noValidate>
         <Stack spacing={3} sx={{ maxWidth: 600 }}>
           <FormControl fullWidth required error={!!fieldErrors.sampler}>
             <InputLabel>Sampler</InputLabel>
@@ -461,9 +969,9 @@ const EditSample = () => {
               label="Sampler"
               required
             >
-              {users.map((user) => (
-                <MenuItem key={user._id} value={user._id}>
-                  {user.firstName} {user.lastName}
+              {asbestosAssessors.map((assessor) => (
+                <MenuItem key={assessor._id} value={assessor._id}>
+                  {assessor.firstName} {assessor.lastName}
                 </MenuItem>
               ))}
             </Select>
@@ -492,17 +1000,29 @@ const EditSample = () => {
                 : "Loading job details..."
             }
           />
-          <FormControlLabel
-            control={
-              <Checkbox
-                name="isFieldBlank"
-                checked={form.isFieldBlank}
-                onChange={handleChange}
-              />
-            }
-            label="Field Blank"
-          />
-          {!form.isFieldBlank && (
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="isFieldBlank"
+                  checked={form.isFieldBlank}
+                  onChange={handleChange}
+                />
+              }
+              label="Field Blank"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="isNegAirExhaust"
+                  checked={form.isNegAirExhaust}
+                  onChange={handleChange}
+                />
+              }
+              label="Neg Air Exhaust"
+            />
+          </Box>
+          {!isSimplifiedSample && (
             <>
               <FormControl fullWidth required error={!!fieldErrors.type}>
                 <InputLabel>Type</InputLabel>
@@ -532,6 +1052,26 @@ const EditSample = () => {
                 error={!!fieldErrors.location}
                 helperText={fieldErrors.location}
               />
+            </>
+          )}
+          {isSimplifiedSample && (
+            <TextField
+              name="location"
+              label="Location"
+              autoComplete="off"
+              value={
+                form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
+              }
+              onChange={handleChange}
+              disabled={form.isFieldBlank}
+              required
+              fullWidth
+              error={!!fieldErrors.location}
+              helperText={fieldErrors.location}
+            />
+          )}
+          {!isSimplifiedSample && (
+            <>
               <FormControl fullWidth>
                 <InputLabel>Pump No.</InputLabel>
                 <Select
@@ -543,23 +1083,20 @@ const EditSample = () => {
                   <MenuItem value="">
                     <em>Select a pump</em>
                   </MenuItem>
-                  {airPumps.map((pump) => (
-                    <MenuItem key={pump._id} value={pump.pumpReference}>
-                      {pump.pumpReference} - {pump.pumpDetails}
+                  {airPumps.length > 0 ? (
+                    airPumps.map((pump) => (
+                      <MenuItem key={pump._id} value={pump.equipmentReference}>
+                        {pump.equipmentReference}
+                        {pump.brandModel ? ` - ${pump.brandModel}` : ""}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled value="">
+                      No active air pumps available
                     </MenuItem>
-                  ))}
+                  )}
                 </Select>
               </FormControl>
-              <TextField
-                name="cowlNo"
-                label="Cowl No."
-                value={form.cowlNo}
-                onChange={handleChange}
-                required
-                fullWidth
-                error={!!fieldErrors.cowlNo}
-                helperText={fieldErrors.cowlNo}
-              />
               <FormControl fullWidth>
                 <InputLabel>Filter Size</InputLabel>
                 <Select
@@ -572,38 +1109,66 @@ const EditSample = () => {
                   <MenuItem value="13mm">13mm</MenuItem>
                 </Select>
               </FormControl>
-              <FormControl
-                fullWidth
-                required={!form.isFieldBlank}
-                error={!!fieldErrors.flowmeter}
+            </>
+          )}
+          <TextField
+            name="cowlNo"
+            label="Cowl No."
+            value={form.cowlNo || ""}
+            onChange={handleChange}
+            required
+            fullWidth
+            error={!!fieldErrors.cowlNo}
+            helperText={fieldErrors.cowlNo}
+            autoComplete="off"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">C</InputAdornment>
+              ),
+            }}
+          />
+          {!isSimplifiedSample && (
+            <FormControl
+              fullWidth
+              required={!isSimplifiedSample}
+              error={!!fieldErrors.flowmeter}
+            >
+              <InputLabel>Flowmeter</InputLabel>
+              <Select
+                name="flowmeter"
+                value={form.flowmeter}
+                onChange={handleChange}
+                label="Flowmeter"
+                required={!isSimplifiedSample}
               >
-                <InputLabel>Flowmeter</InputLabel>
-                <Select
-                  name="flowmeter"
-                  value={form.flowmeter}
-                  onChange={handleChange}
-                  label="Flowmeter"
-                  required={!form.isFieldBlank}
-                >
-                  <MenuItem value="">
-                    <em>Select a flowmeter</em>
-                  </MenuItem>
-                  {flowmeters.map((flowmeter) => (
+                <MenuItem value="">
+                  <em>Select a flowmeter</em>
+                </MenuItem>
+                {flowmeters.length > 0 ? (
+                  flowmeters.map((flowmeter) => (
                     <MenuItem
                       key={flowmeter._id}
                       value={flowmeter.equipmentReference}
                     >
-                      {flowmeter.equipmentReference} - {flowmeter.brandModel} (
-                      {flowmeter.equipmentType})
+                      {flowmeter.equipmentReference}
+                      {flowmeter.brandModel ? ` - ${flowmeter.brandModel}` : ""}
                     </MenuItem>
-                  ))}
-                </Select>
-                {fieldErrors.flowmeter && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {fieldErrors.flowmeter}
-                  </Typography>
+                  ))
+                ) : (
+                  <MenuItem disabled value="">
+                    No active flowmeters available
+                  </MenuItem>
                 )}
-              </FormControl>
+              </Select>
+              {fieldErrors.flowmeter && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                  {fieldErrors.flowmeter}
+                </Typography>
+              )}
+            </FormControl>
+          )}
+          {!isSimplifiedSample && (
+            <>
               <Typography
                 variant="h6"
                 sx={{
@@ -636,18 +1201,43 @@ const EditSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
-              <TextField
-                name="initialFlowrate"
-                label="Initial Flowrate (L/min)"
-                type="number"
-                value={form.initialFlowrate}
-                onChange={handleChange}
-                required
+              <FormControl
                 fullWidth
+                required
                 error={!!fieldErrors.initialFlowrate}
-                helperText={fieldErrors.initialFlowrate}
-                inputProps={{ step: "0.1" }}
-              />
+              >
+                <InputLabel>Initial Flowrate (L/min)</InputLabel>
+                <Select
+                  name="initialFlowrate"
+                  value={form.initialFlowrate}
+                  onChange={handleChange}
+                  label="Initial Flowrate (L/min)"
+                  disabled={!form.pumpNo || availableFlowrates.length === 0}
+                >
+                  <MenuItem value="">
+                    <em>
+                      {!form.pumpNo
+                        ? "Select a pump first"
+                        : availableFlowrates.length === 0
+                        ? "No passed calibrations available"
+                        : "Select flowrate"}
+                    </em>
+                  </MenuItem>
+                  {availableFlowrates.map((flowrate) => {
+                    const flowrateStr = flowrate.toFixed(1);
+                    return (
+                      <MenuItem key={flowrateStr} value={flowrateStr}>
+                        {flowrateStr}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+                {fieldErrors.initialFlowrate && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.initialFlowrate}
+                  </Typography>
+                )}
+              </FormControl>
               <Typography
                 variant="h6"
                 sx={{
@@ -660,7 +1250,7 @@ const EditSample = () => {
               >
                 Air-monitor Collection
               </Typography>
-              <Box sx={{ display: "flex", gap: 1 }}>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
                 <TextField
                   name="endTime"
                   label="End Time"
@@ -670,6 +1260,10 @@ const EditSample = () => {
                   fullWidth
                   InputLabelProps={{ shrink: true }}
                   inputProps={{ step: 60 }}
+                  error={insufficientSampleTime}
+                  helperText={
+                    insufficientSampleTime ? "Insufficient sample time" : ""
+                  }
                 />
                 <IconButton
                   onClick={() => setCurrentTime("endTime")}
@@ -678,15 +1272,50 @@ const EditSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
-              <TextField
-                name="finalFlowrate"
-                label="Final Flowrate (L/min)"
-                type="number"
-                value={form.finalFlowrate}
-                onChange={handleChange}
-                fullWidth
-                inputProps={{ step: "0.1" }}
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="nextDay"
+                    checked={form.nextDay}
+                    onChange={handleChange}
+                  />
+                }
+                label="Next Day"
+                sx={{ mt: -1, mb: 1 }}
               />
+              <FormControl fullWidth error={!!fieldErrors.finalFlowrate}>
+                <InputLabel>Final Flowrate (L/min)</InputLabel>
+                <Select
+                  name="finalFlowrate"
+                  value={form.finalFlowrate}
+                  onChange={handleChange}
+                  label="Final Flowrate (L/min)"
+                  disabled={!form.pumpNo || availableFlowrates.length === 0}
+                >
+                  <MenuItem value="">
+                    <em>
+                      {!form.pumpNo
+                        ? "Select a pump first"
+                        : availableFlowrates.length === 0
+                        ? "No passed calibrations available"
+                        : "Select flowrate"}
+                    </em>
+                  </MenuItem>
+                  {availableFlowrates.map((flowrate) => {
+                    const flowrateStr = flowrate.toFixed(1);
+                    return (
+                      <MenuItem key={flowrateStr} value={flowrateStr}>
+                        {flowrateStr}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+                {fieldErrors.finalFlowrate && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.finalFlowrate}
+                  </Typography>
+                )}
+              </FormControl>
               <TextField
                 name="averageFlowrate"
                 label="Average Flowrate"
@@ -708,16 +1337,6 @@ const EditSample = () => {
               />
             </>
           )}
-          {form.isFieldBlank && (
-            <TextField
-              name="location"
-              label="Location"
-              value="Field blank"
-              disabled
-              required
-              fullWidth
-            />
-          )}
           <TextField
             name="notes"
             label="Notes"
@@ -732,16 +1351,21 @@ const EditSample = () => {
               Cancel
             </Button>
             <Button
-              type="submit"
+              type="button"
               variant="contained"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
               sx={{
                 backgroundColor: theme.palette.primary.main,
                 "&:hover": {
                   backgroundColor: theme.palette.primary.dark,
                 },
+                "&:disabled": {
+                  backgroundColor: theme.palette.grey[400],
+                },
               }}
             >
-              Save Changes
+              {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </Box>
         </Stack>

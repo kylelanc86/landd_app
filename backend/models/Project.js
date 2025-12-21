@@ -134,6 +134,16 @@ const projectSchema = new mongoose.Schema({
     ref: 'User',
     required: false
   }],
+  timesheetEntries: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Timesheet',
+    required: false
+  }],
+  budget: {
+    type: Number,
+    required: false,
+    default: 0
+  },
   updatedAt: {
     type: Date,
     default: Date.now

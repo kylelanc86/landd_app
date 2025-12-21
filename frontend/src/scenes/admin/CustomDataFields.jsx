@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
   Typography,
@@ -19,8 +20,6 @@ import {
   useTheme,
   Breadcrumbs,
   Link,
-  Alert,
-  Snackbar,
   MenuItem,
 } from "@mui/material";
 import {
@@ -54,6 +53,7 @@ const CustomDataFields = () => {
   const navigate = useNavigate();
   const { refreshStatuses } = useProjectStatuses();
   const [tabValue, setTabValue] = useState(0);
+  const [itemDescriptionsTabValue, setItemDescriptionsTabValue] = useState(0); // For nested tabs within Item Descriptions
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [locationDescriptions, setLocationDescriptions] = useState([]);
   const [materialsDescriptions, setMaterialsDescriptions] = useState([]);
@@ -69,11 +69,7 @@ const CustomDataFields = () => {
   const [newStatusColor, setNewStatusColor] = useState("#1976d2");
   const [currentTab, setCurrentTab] = useState("");
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { showSnackbar } = useSnackbar();
 
   const handleBackToAdmin = () => {
     navigate("/admin");
@@ -126,21 +122,6 @@ const CustomDataFields = () => {
     fetchAllData();
   }, [fetchAllData]);
 
-  const showSnackbar = (message, severity = "success") => {
-    setSnackbar({
-      open: true,
-      message,
-      severity,
-    });
-  };
-
-  const closeSnackbar = () => {
-    setSnackbar({
-      ...snackbar,
-      open: false,
-    });
-  };
-
   // Helper function to sort data alphabetically
   const sortDataAlphabetically = (data) => {
     return [...data].sort((a, b) => {
@@ -157,6 +138,14 @@ const CustomDataFields = () => {
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
+    // Reset nested tab when switching away from Item Descriptions
+    if (newValue !== 1) {
+      setItemDescriptionsTabValue(0);
+    }
+  };
+
+  const handleItemDescriptionsTabChange = (event, newValue) => {
+    setItemDescriptionsTabValue(newValue);
   };
 
   const getCurrentData = () => {
@@ -169,30 +158,36 @@ const CustomDataFields = () => {
             title: "Asbestos Removalists",
           };
         case 1:
-          return {
-            data: roomAreas,
-            setter: setRoomAreas,
-            title: "Room/Area",
-          };
+          // Item Descriptions tab - use nested tab value
+          switch (itemDescriptionsTabValue) {
+            case 0:
+              return {
+                data: roomAreas,
+                setter: setRoomAreas,
+                title: "Room/Area",
+              };
+            case 1:
+              return {
+                data: locationDescriptions,
+                setter: setLocationDescriptions,
+                title: "Location Descriptions",
+              };
+            case 2:
+              return {
+                data: materialsDescriptions,
+                setter: setMaterialsDescriptions,
+                title: "Materials Descriptions",
+              };
+            default:
+              return { data: [], setter: () => {}, title: "" };
+          }
         case 2:
-          return {
-            data: locationDescriptions,
-            setter: setLocationDescriptions,
-            title: "Location Descriptions",
-          };
-        case 3:
-          return {
-            data: materialsDescriptions,
-            setter: setMaterialsDescriptions,
-            title: "Materials Descriptions",
-          };
-        case 4:
           return {
             data: legislation,
             setter: setLegislation,
             title: "Legislation",
           };
-        case 5:
+        case 3:
           return {
             data: Array.isArray(projectStatuses)
               ? projectStatuses
@@ -238,17 +233,27 @@ const CustomDataFields = () => {
   const handleDeleteItem = async (itemId) => {
     const { data, setter, title } = getCurrentData();
     try {
-      // For project statuses, we need to update the backend group
-      if (title === "Projects Status") {
-        // Get the current project status group
+      // For all custom data field types, we need to update the backend group
+      if (
+        [
+          "Projects Status",
+          "Legislation",
+          "Asbestos Removalists",
+          "Room/Area",
+          "Location Descriptions",
+          "Materials Descriptions",
+        ].includes(title)
+      ) {
+        // Get the current group
+        const groupType = getTypeFromTitle(title);
         const group = await customDataFieldGroupService.getGroupByType(
-          "project_status"
+          groupType
         );
 
-        console.log("Project status group response:", group);
+        console.log(`${title} group response:`, group);
 
         if (!group) {
-          showSnackbar("Project status group not found", "error");
+          showSnackbar(`${title} group not found`, "error");
           return;
         }
 
@@ -264,8 +269,12 @@ const CustomDataFields = () => {
           fields: updatedFields,
         });
 
-        // Refresh the project statuses context to update all UI components
-        refreshStatuses();
+        // For project statuses, refresh the project statuses context
+        if (title === "Projects Status") {
+          refreshStatuses();
+          // Sync hardcoded colors with database after deletion
+          await projectStatusService.syncHardcodedColorsWithDatabase();
+        }
 
         // Refresh the data from backend
         await fetchAllData();
@@ -285,6 +294,26 @@ const CustomDataFields = () => {
     }
   };
 
+  // Map title to API type
+  const getTypeFromTitle = (title) => {
+    switch (title) {
+      case "Asbestos Removalists":
+        return "asbestos_removalist";
+      case "Room/Area":
+        return "room_area";
+      case "Location Descriptions":
+        return "location_description";
+      case "Materials Descriptions":
+        return "materials_description";
+      case "Legislation":
+        return "legislation";
+      case "Projects Status":
+        return "project_status";
+      default:
+        return "asbestos_removalist";
+    }
+  };
+
   const handleSaveItem = async () => {
     if (!newItemText.trim()) return;
 
@@ -293,26 +322,6 @@ const CustomDataFields = () => {
     if (currentTab === "Legislation" && !newJurisdiction.trim()) return;
 
     const { data, setter, title } = getCurrentData();
-
-    // Map title to API type
-    const getTypeFromTitle = (title) => {
-      switch (title) {
-        case "Asbestos Removalists":
-          return "asbestos_removalist";
-        case "Room/Area":
-          return "room_area";
-        case "Location Descriptions":
-          return "location_description";
-        case "Materials Descriptions":
-          return "materials_description";
-        case "Legislation":
-          return "legislation";
-        case "Projects Status":
-          return "project_status";
-        default:
-          return "asbestos_removalist";
-      }
-    };
 
     if (editingItem) {
       // Edit existing item
@@ -331,46 +340,56 @@ const CustomDataFields = () => {
           updateData.statusColor = newStatusColor;
         }
 
-        // For project statuses, update the backend group
-        if (title === "Projects Status") {
-          try {
-            // Get the current project status group
-            const group = await customDataFieldGroupService.getGroupByType(
-              "project_status"
-            );
+        // For all custom data field types, update the backend group
+        if (
+          [
+            "Projects Status",
+            "Legislation",
+            "Asbestos Removalists",
+            "Room/Area",
+            "Location Descriptions",
+            "Materials Descriptions",
+          ].includes(title)
+        ) {
+          // Get the current group
+          const groupType = getTypeFromTitle(title);
+          const group = await customDataFieldGroupService.getGroupByType(
+            groupType
+          );
 
-            if (!group) {
-              showSnackbar("Project status group not found", "error");
-              return;
+          if (!group) {
+            showSnackbar(`${title} group not found`, "error");
+            return;
+          }
+
+          // Update the specific field in the group's fields array
+          const updatedFields = group.fields.map((field) => {
+            if (field._id.toString() === editingItem._id.toString()) {
+              return {
+                ...field,
+                ...updateData,
+                updatedAt: new Date(),
+              };
             }
+            return field;
+          });
 
-            // Update the specific field in the group's fields array
-            const updatedFields = group.fields.map((field) => {
-              if (field._id.toString() === editingItem._id.toString()) {
-                return {
-                  ...field,
-                  ...updateData,
-                  updatedAt: new Date(),
-                };
-              }
-              return field;
-            });
+          // Update the group with the new fields array
+          await customDataFieldGroupService.updateGroup(group._id, {
+            name: group.name,
+            description: group.description,
+            fields: updatedFields,
+          });
 
-            // Update the group with the new fields array
-            await customDataFieldGroupService.updateGroup(group._id, {
-              name: group.name,
-              description: group.description,
-              fields: updatedFields,
-            });
+          // Update local state
+          const updatedItem = { ...editingItem, ...updateData };
+          const updatedData = data.map((item) =>
+            item._id === editingItem._id ? updatedItem : item
+          );
+          setter(updatedData);
 
-            // Update local state
-            const updatedItem = { ...editingItem, ...updateData };
-            const updatedData = data.map((item) =>
-              item._id === editingItem._id ? updatedItem : item
-            );
-            setter(updatedData);
-
-            // Refresh project statuses context
+          // For project statuses, refresh the project statuses context
+          if (title === "Projects Status") {
             refreshStatuses();
 
             // Update hardcoded colors when status color is changed
@@ -381,12 +400,14 @@ const CustomDataFields = () => {
               projectStatusService.updateHardcodedColors(colorUpdate);
             }
 
-            showSnackbar(`${title} updated successfully`);
-          } catch (error) {
-            console.error(`Error updating ${title} in backend:`, error);
-            showSnackbar(`Failed to update ${title} in backend`, "error");
-            return;
+            // Sync hardcoded colors with database to ensure consistency
+            await projectStatusService.syncHardcodedColorsWithDatabase();
           }
+
+          // Refresh the data from backend
+          await fetchAllData();
+
+          showSnackbar(`${title} updated successfully`);
         } else {
           // For other types, just update local state
           const updatedItem = { ...editingItem, ...updateData };
@@ -398,8 +419,8 @@ const CustomDataFields = () => {
           showSnackbar(`${title} updated in display`);
         }
       } catch (error) {
-        console.error(`Error updating ${title} in display:`, error);
-        showSnackbar(`Failed to update ${title} in display`, "error");
+        console.error(`Error updating ${title}:`, error);
+        showSnackbar(`Failed to update ${title}`, "error");
         return;
       }
     } else {
@@ -423,28 +444,49 @@ const CustomDataFields = () => {
           newItemData.statusColor = newStatusColor;
         }
 
-        // For project statuses, add to the backend group
-        if (title === "Projects Status") {
+        // For all custom data field types, add to the backend group
+        if (
+          [
+            "Projects Status",
+            "Legislation",
+            "Asbestos Removalists",
+            "Room/Area",
+            "Location Descriptions",
+            "Materials Descriptions",
+          ].includes(title)
+        ) {
           try {
-            // Get the current project status group
+            // Get the current group
+            const groupType = getTypeFromTitle(title);
             const group = await customDataFieldGroupService.getGroupByType(
-              "project_status"
+              groupType
             );
 
             if (!group) {
-              showSnackbar("Project status group not found", "error");
+              showSnackbar(`${title} group not found`, "error");
               return;
             }
 
             // Create new field with proper structure
             const newField = {
               text: newItemData.text,
-              isActiveStatus: newItemData.isActiveStatus,
-              statusColor: newItemData.statusColor,
               order: group.fields.length, // Add to end
               isActive: true,
-              createdBy: "currentUser", // This will be replaced by the backend
-              createdAt: new Date(),
+              // Don't include createdBy - let the backend handle it
+              // Don't include createdAt - let the backend handle it
+              // Add type-specific fields
+              ...(newItemData.legislationTitle && {
+                legislationTitle: newItemData.legislationTitle,
+              }),
+              ...(newItemData.jurisdiction && {
+                jurisdiction: newItemData.jurisdiction,
+              }),
+              ...(newItemData.isActiveStatus !== undefined && {
+                isActiveStatus: newItemData.isActiveStatus,
+              }),
+              ...(newItemData.statusColor && {
+                statusColor: newItemData.statusColor,
+              }),
             };
 
             // Add the new field to the group's fields array
@@ -468,14 +510,22 @@ const CustomDataFields = () => {
             const updatedData = [...data, newItem];
             setter(updatedData);
 
-            // Refresh project statuses context
-            refreshStatuses();
+            // For project statuses, refresh the project statuses context
+            if (title === "Projects Status") {
+              refreshStatuses();
 
-            // Update hardcoded colors when new status color is added
-            if (newItemData.statusColor) {
-              const colorUpdate = { [newItem.text]: newItemData.statusColor };
-              projectStatusService.updateHardcodedColors(colorUpdate);
+              // Update hardcoded colors when new status color is added
+              if (newItemData.statusColor) {
+                const colorUpdate = { [newItem.text]: newItemData.statusColor };
+                projectStatusService.updateHardcodedColors(colorUpdate);
+              }
+
+              // Sync hardcoded colors with database to ensure consistency
+              await projectStatusService.syncHardcodedColorsWithDatabase();
             }
+
+            // Refresh the data from backend
+            await fetchAllData();
 
             showSnackbar(`${title} added successfully`);
           } catch (error) {
@@ -483,19 +533,6 @@ const CustomDataFields = () => {
             showSnackbar(`Failed to add ${title} to backend`, "error");
             return;
           }
-        } else {
-          // For other types, just add to local state
-          const newItem = {
-            _id: Date.now().toString(), // Temporary ID
-            ...newItemData,
-            isActive: true,
-            createdBy: { firstName: "User", lastName: "User" },
-            createdAt: new Date(),
-          };
-          const updatedData = [...data, newItem];
-          setter(updatedData);
-
-          showSnackbar(`${title} added to display`);
         }
       } catch (error) {
         console.error(`Error adding new ${title} to display:`, error);
@@ -1012,9 +1049,7 @@ const CustomDataFields = () => {
             sx={{ borderBottom: 1, borderColor: "divider" }}
           >
             <Tab label="Asbestos Removalists" />
-            <Tab label="Room/Area" />
-            <Tab label="Location Descriptions" />
-            <Tab label="Materials Descriptions" />
+            <Tab label="Item Descriptions" />
             <Tab label="Legislation" />
             <Tab label="Projects Status" />
           </Tabs>
@@ -1024,22 +1059,43 @@ const CustomDataFields = () => {
           </TabPanel>
 
           <TabPanel value={tabValue} index={1}>
-            {renderTabContent(roomAreas, "Room/Area")}
+            <Box>
+              <Tabs
+                value={itemDescriptionsTabValue}
+                onChange={handleItemDescriptionsTabChange}
+                aria-label="item descriptions tabs"
+                sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}
+              >
+                <Tab label="Room/Area" />
+                <Tab label="Location Descriptions" />
+                <Tab label="Materials Descriptions" />
+              </Tabs>
+
+              <TabPanel value={itemDescriptionsTabValue} index={0}>
+                {renderTabContent(roomAreas, "Room/Area")}
+              </TabPanel>
+
+              <TabPanel value={itemDescriptionsTabValue} index={1}>
+                {renderTabContent(
+                  locationDescriptions,
+                  "Location Descriptions"
+                )}
+              </TabPanel>
+
+              <TabPanel value={itemDescriptionsTabValue} index={2}>
+                {renderTabContent(
+                  materialsDescriptions,
+                  "Materials Descriptions"
+                )}
+              </TabPanel>
+            </Box>
           </TabPanel>
 
           <TabPanel value={tabValue} index={2}>
-            {renderTabContent(locationDescriptions, "Location Descriptions")}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={3}>
-            {renderTabContent(materialsDescriptions, "Materials Descriptions")}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={4}>
             {renderTabContent(legislation, "Legislation")}
           </TabPanel>
 
-          <TabPanel value={tabValue} index={5}>
+          <TabPanel value={tabValue} index={3}>
             {renderProjectStatusContent()}
           </TabPanel>
         </Paper>
@@ -1173,22 +1229,6 @@ const CustomDataFields = () => {
             </Button>
           </DialogActions>
         </Dialog>
-
-        {/* Snackbar for notifications */}
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={closeSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        >
-          <Alert
-            onClose={closeSnackbar}
-            severity={snackbar.severity}
-            sx={{ width: "100%" }}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
       </Box>
     </Box>
   );

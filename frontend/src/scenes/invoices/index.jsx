@@ -106,18 +106,6 @@ const Invoices = () => {
           return;
         }
 
-        console.log(
-          `Frontend received ${invoicesRes.data.length} invoices from backend`
-        );
-        console.log(
-          `First few invoice IDs:`,
-          invoicesRes.data.slice(0, 5).map((inv) => inv.invoiceID)
-        );
-        console.log(
-          `Last few invoice IDs:`,
-          invoicesRes.data.slice(-5).map((inv) => inv.invoiceID)
-        );
-
         setInvoices(invoicesRes.data);
         setProjects(
           Array.isArray(projectsRes.data?.data) ? projectsRes.data.data : []
@@ -556,31 +544,8 @@ const Invoices = () => {
   };
 
   const getFilteredInvoices = useCallback(() => {
-    // Apply search filtering first
+    // Backend now only returns draft and awaiting_approval invoices
     let filtered = [...invoices];
-
-    console.log(
-      `getFilteredInvoices: Starting with ${filtered.length} invoices`
-    );
-    console.log(`User role: ${currentUser?.role}`);
-
-    // For employee users, only show draft and awaiting_approval invoices
-    // Admin and manager users can see all invoices including unpaid ones
-    if (currentUser?.role === "employee") {
-      const beforeFilter = filtered.length;
-      filtered = filtered.filter(
-        (invoice) =>
-          invoice.status === "draft" || invoice.status === "awaiting_approval"
-      );
-      console.log(
-        `Employee filtering: ${beforeFilter} -> ${filtered.length} invoices`
-      );
-    } else {
-      console.log(
-        `Admin/Manager: No role-based filtering applied, keeping all ${filtered.length} invoices`
-      );
-    }
-    // Admin and manager users see all invoices (no additional filtering needed)
 
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();

@@ -8,13 +8,17 @@ const clientSuppliedJobSchema = new mongoose.Schema({
   },
   jobNumber: {
     type: String,
-    required: true,
-    unique: true
+    trim: true
   },
   status: {
     type: String,
-    enum: ['In Progress', 'Completed'],
+    enum: ['In Progress', 'Analysis Complete', 'Completed'],
     default: 'In Progress'
+  },
+  jobType: {
+    type: String,
+    enum: ['Fibre ID', 'Fibre Count'],
+    default: 'Fibre ID'
   },
   analyst: {
     type: String,
@@ -27,6 +31,95 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  sampleReceiptDate: {
+    type: Date,
+    required: true
+  },
+  archived: {
+    type: Boolean,
+    default: false
+  },
+  archivedAt: {
+    type: Date
+  },
+  reportApprovedBy: {
+    type: String,
+    required: false
+  },
+  reportIssueDate: {
+    type: Date,
+    required: false
+  },
+  revision: {
+    type: Number,
+    default: 0
+  },
+  chainOfCustody: {
+    fileName: {
+      type: String,
+      trim: true
+    },
+    fileType: {
+      type: String,
+      trim: true
+    },
+    uploadedAt: {
+      type: Date
+    },
+    data: {
+      type: String
+    }
+  },
+  samples: [{
+    labReference: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    clientReference: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    cowlNumber: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    sampleDescription: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    ashingReference: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    analysisResult: {
+      type: String,
+      default: 'Pending'
+    },
+    analysisData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
+    analyzedBy: {
+      type: mongoose.Schema.Types.Mixed,
+      ref: 'User'
+    },
+    analyzedAt: {
+      type: Date
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   createdAt: {
     type: Date,
     default: Date.now
@@ -40,12 +133,26 @@ const clientSuppliedJobSchema = new mongoose.Schema({
 // Update the updatedAt timestamp before saving
 clientSuppliedJobSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
+
+  if (this.jobNumber === null || this.jobNumber === undefined || this.jobNumber === '') {
+    this.jobNumber = undefined;
+  }
+
   next();
 });
 
 // Create indexes
 clientSuppliedJobSchema.index({ projectId: 1 });
-clientSuppliedJobSchema.index({ jobNumber: 1 });
 clientSuppliedJobSchema.index({ status: 1 });
+clientSuppliedJobSchema.index(
+  { jobNumber: 1 },
+  {
+    unique: true,
+    name: 'clientSuppliedJob_jobNumber_unique',
+    partialFilterExpression: {
+      jobNumber: { $exists: true, $type: 'string', $ne: '' }
+    }
+  }
+);
 
 module.exports = mongoose.model('ClientSuppliedJob', clientSuppliedJobSchema); 

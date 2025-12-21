@@ -105,10 +105,10 @@
 
       .header-line {
         width: calc(100% - 96px);
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin: 8px auto 0 auto;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .content {
@@ -142,7 +142,7 @@
 
       .paragraph {
         font-size: 0.8rem;
-        margin-bottom: 12px;
+        margin-bottom: 8px;
         color: #222;
         line-height: 1.5;
         text-align: justify;
@@ -156,20 +156,28 @@
       }
 
       .bullets {
-        margin: 16px 0 16px 24px;
-        padding: 0;
-        font-size: 0.8rem;
-        color: #222;
+        margin: 0 0 8px 0 !important;
+        padding: 0 0 0 40px !important;
+        font-size: 0.8rem !important;
+        color: #222 !important;
         page-break-inside: avoid;
+        text-align: left !important;
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
       }
 
       .bullets li {
-        margin-bottom: 8px;
-        margin-top: 4px;
-        line-height: 1.4;
-        word-break: keep-all;
-        overflow-wrap: normal;
-        hyphens: none;
+        margin-bottom: 0 !important;
+        margin-top: 4px !important;
+        line-height: 1.4 !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+        hyphens: none !important;
+        text-align: left !important;
+        display: list-item !important;
+        list-style-type: disc !important;
+        list-style-position: outside !important;
       }
 
       .table-container {
@@ -208,6 +216,14 @@
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
+      }
+
+      .half-line-spacing {
+        margin-top: 0.5em;
+        margin-bottom: 0;
+        padding: 0;
+        height: 0;
+        line-height: 0;
       }
 
       .signature-line {
@@ -281,22 +297,25 @@
         text-align: justify;
         font-size: 0.75rem;
         color: #222;
+      }
+
+      .footer-content {
+        width: 100%;
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
       }
 
-      .footer-content {
-        flex: 1;
-        width: 100%;
-      }
-
       .footer-border-line {
-        width: 100% !important;
-        height: 4px;
+        width: 100%;
+        height: 1.5px;
         background: #16b12b;
         margin-bottom: 6px;
-        border-radius: 2px;
+        border-radius: 0;
+      }
+
+      .footer-text {
+        flex: 1;
       }
 
       .page-number {
@@ -323,7 +342,7 @@
         <div class="section-header first-section">
           [INSPECTION_DETAILS_TITLE]
         </div>
-        <div class="paragraph">[INSPECTION_DETAILS_CONTENT]</div>
+        [INSPECTION_DETAILS_CONTENT]
 
         <div class="table-container">
           <div class="table-title">Table 1: Asbestos Removal Items</div>
@@ -340,19 +359,17 @@
         </div>
 
         <div class="section-header">[INSPECTION_EXCLUSIONS_TITLE]</div>
-        <div class="paragraph">[INSPECTION_EXCLUSIONS_CONTENT]</div>
+        [INSPECTION_EXCLUSIONS_CONTENT]
 
         <div class="section-header">[CLEARANCE_CERTIFICATION_TITLE]</div>
-        <div class="paragraph">[CLEARANCE_CERTIFICATION_CONTENT]</div>
-
-        <div class="paragraph">[SIGN_OFF_CONTENT]</div>
+        [CLEARANCE_CERTIFICATION_CONTENT] [SIGN_OFF_CONTENT]
       </div>
       <div class="footer has-page-number">
+        <div class="footer-border-line"></div>
         <div class="footer-content">
-          <div class="footer-border-line"></div>
-          Asbestos Removal Clearance Certificate: [SITE_ADDRESS]
+          <div class="footer-text">[FOOTER_TEXT]</div>
+          <div class="page-number">1</div>
         </div>
-        <div class="page-number">1</div>
       </div>
     </div>
   </body>

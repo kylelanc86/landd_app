@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -29,23 +29,32 @@ import {
 } from "@mui/material";
 import {
   Search as SearchIcon,
-  Visibility as ViewIcon,
   ArrowBack as ArrowBackIcon,
   PictureAsPdf as PdfIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  Archive as ArchiveIcon,
+  Mail as MailIcon,
+  UploadFile as UploadFileIcon,
+  Description as DescriptionIcon,
+  Download as DownloadIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
-import {
-  clientSuppliedJobsService,
-  sampleItemsService,
-  projectService,
-} from "../../services/api";
+import { useNavigate, useLocation } from "react-router-dom";
+import { clientSuppliedJobsService, projectService } from "../../services/api";
+import { generateShiftReport } from "../../utils/generateShiftReport";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
+import { useSnackbar } from "../../context/SnackbarContext";
+import { useAuth } from "../../context/AuthContext";
+import { hasPermission } from "../../config/permissions";
+import { compressImage } from "../../utils/imageCompression";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { showSnackbar } = useSnackbar();
+  const { currentUser } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [sampleCounts, setSampleCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -56,11 +65,27 @@ const ClientSuppliedJobs = () => {
   const [jobToDelete, setJobToDelete] = useState(null);
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedJobType, setSelectedJobType] = useState("");
+  const [sampleReceiptDate, setSampleReceiptDate] = useState("");
   const [creatingJob, setCreatingJob] = useState(false);
+  const [sampleReceiptDateError, setSampleReceiptDateError] = useState(false);
+  const [completingJobs, setCompletingJobs] = useState({});
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [jobToArchive, setJobToArchive] = useState(null);
+  const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
+  const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
+  const [closingJobs, setClosingJobs] = useState({});
+  const [cocDialogOpen, setCocDialogOpen] = useState(false);
+  const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
+  const [selectedJobForCOC, setSelectedJobForCOC] = useState(null);
+  const [uploadingCOC, setUploadingCOC] = useState({});
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   useEffect(() => {
     fetchClientSuppliedJobs();
     fetchProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refresh data when component comes into focus (e.g., when returning from samples page)
@@ -161,28 +186,54 @@ const ClientSuppliedJobs = () => {
 
   const fetchSampleCounts = async (jobsArray) => {
     const counts = {};
-    for (const job of jobsArray) {
-      try {
-        const response = await sampleItemsService.getAll({
-          projectId: job.projectId._id || job.projectId,
-        });
-        counts[job._id] = response.data?.length || 0;
-      } catch (error) {
-        console.error(`Error fetching sample count for job ${job._id}:`, error);
-        counts[job._id] = 0;
-      }
-    }
+    // Samples are now embedded in the job, so count them directly
+    jobsArray.forEach((job) => {
+      counts[job._id] = job.samples?.length || 0;
+    });
     setSampleCounts(counts);
   };
 
   const handleCreateJob = async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !selectedJobType) return;
+
+    if (!sampleReceiptDate || sampleReceiptDate.trim() === "") {
+      setSampleReceiptDateError(true);
+      return;
+    }
 
     try {
+      setSampleReceiptDateError(false);
       setCreatingJob(true);
-      await clientSuppliedJobsService.create({
+
+      // Validate project ID
+      if (!selectedProject._id) {
+        throw new Error("Invalid project selected. Please select a project.");
+      }
+
+      // Validate job type
+      if (selectedJobType !== "Fibre ID" && selectedJobType !== "Fibre Count") {
+        throw new Error(
+          "Invalid job type. Please select either 'Fibre ID' or 'Fibre Count'."
+        );
+      }
+
+      const jobData = {
         projectId: selectedProject._id,
-      });
+        jobType: selectedJobType,
+      };
+
+      // Add sample receipt date if provided (and not empty)
+      if (sampleReceiptDate && sampleReceiptDate.trim() !== "") {
+        jobData.sampleReceiptDate = sampleReceiptDate;
+      }
+
+      // Explicitly do NOT include sampleCount - it's calculated from samples array
+
+      const response = await clientSuppliedJobsService.create(jobData);
+
+      if (!response || !response.data) {
+        throw new Error("Invalid response from server");
+      }
 
       // Refresh the jobs list
       await fetchClientSuppliedJobs();
@@ -190,8 +241,17 @@ const ClientSuppliedJobs = () => {
       // Close dialog and reset form
       setCreateDialogOpen(false);
       setSelectedProject(null);
+      setSelectedJobType("");
+      setSampleReceiptDate("");
+      setSampleReceiptDateError(false);
     } catch (error) {
       console.error("Error creating client supplied job:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to create job. Please ensure all fields are filled correctly.";
+      alert(`Failed to create job: ${errorMessage}`);
     } finally {
       setCreatingJob(false);
     }
@@ -224,31 +284,39 @@ const ClientSuppliedJobs = () => {
 
   const filteredJobs = (Array.isArray(jobs) ? jobs : []).filter(
     (job) =>
-      // Exclude completed jobs from the table
-      job.status !== "Completed" &&
-      (job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.projectId?.client?.name
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        job.projectId?.projectID
-          ?.toLowerCase()
-          .includes(searchTerm.toLowerCase()))
+      // Filter by search term only (show all jobs including completed)
+      job.projectId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.projectId?.client?.name
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      job.projectId?.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleViewJob = (jobId) => {
     // Ensure we're passing a string ID, not an object
     const actualJobId = typeof jobId === "object" ? jobId._id : jobId;
-    navigate(`/fibre-id/client-supplied/${actualJobId}/samples`);
+    // Use the appropriate route based on current location
+    const basePath = location.pathname.startsWith("/client-supplied")
+      ? "/client-supplied"
+      : "/fibre-id/client-supplied";
+    navigate(`${basePath}/${actualJobId}/samples`);
   };
 
   const handleBackToHome = () => {
-    navigate("/fibre-id");
+    // Navigate back based on current location
+    if (location.pathname.startsWith("/client-supplied")) {
+      navigate("/client-supplied");
+    } else {
+      navigate("/fibre-id");
+    }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
       case "In Progress":
         return "info";
+      case "Analysis Complete":
+        return "warning";
       case "Completed":
         return "success";
       default:
@@ -256,27 +324,460 @@ const ClientSuppliedJobs = () => {
     }
   };
 
+  const handleCompleteJob = async (jobId) => {
+    try {
+      setCompletingJobs((prev) => ({ ...prev, [jobId]: true }));
+
+      await clientSuppliedJobsService.update(jobId, {
+        status: "Completed",
+      });
+
+      // Update the local jobs state
+      setJobs((prevJobs) =>
+        prevJobs.map((job) =>
+          job._id === jobId ? { ...job, status: "Completed" } : job
+        )
+      );
+
+      showSnackbar("Job completed successfully!", "success");
+      console.log("Job completed successfully");
+    } catch (error) {
+      console.error("Error completing job:", error);
+      showSnackbar(`Error completing job: ${error.message}`, "error");
+    } finally {
+      setCompletingJobs((prev) => ({ ...prev, [jobId]: false }));
+    }
+  };
+
+  const handleArchiveJob = (job) => {
+    setJobToArchive(job);
+    setArchiveDialogOpen(true);
+  };
+
+  const confirmArchiveJob = async () => {
+    if (!jobToArchive) return;
+
+    try {
+      // Archive the job via API
+      await clientSuppliedJobsService.archive(jobToArchive._id);
+
+      // Remove the job from the local state
+      setJobs((prevJobs) =>
+        prevJobs.filter((job) => job._id !== jobToArchive._id)
+      );
+
+      showSnackbar("Job archived successfully!", "success");
+      setArchiveDialogOpen(false);
+      setJobToArchive(null);
+    } catch (error) {
+      console.error("Error archiving job:", error);
+      showSnackbar(
+        `Error archiving job: ${
+          error.response?.data?.message || error.message
+        }`,
+        "error"
+      );
+    }
+  };
+
+  const cancelArchiveJob = () => {
+    setArchiveDialogOpen(false);
+    setJobToArchive(null);
+  };
+
+  const handleCloseJob = async (jobId) => {
+    try {
+      setClosingJobs((prev) => ({ ...prev, [jobId]: true }));
+
+      // Archive the job via API (this removes it from the table)
+      await clientSuppliedJobsService.archive(jobId);
+
+      // Remove the job from the local state
+      setJobs((prevJobs) => prevJobs.filter((job) => job._id !== jobId));
+
+      showSnackbar("Job closed successfully!", "success");
+    } catch (error) {
+      console.error("Error closing job:", error);
+      showSnackbar(
+        `Error closing job: ${error.response?.data?.message || error.message}`,
+        "error"
+      );
+    } finally {
+      setClosingJobs((prev) => ({ ...prev, [jobId]: false }));
+    }
+  };
+
+  const compressFile = async (file) => {
+    const fileSizeKB = file.size / 1024;
+
+    // If file is under 50KB, return as is
+    if (fileSizeKB <= 50) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // If it's an image, use the image compression utility
+    if (file.type.startsWith("image/")) {
+      try {
+        return await compressImage(file, {
+          maxWidth: 1200,
+          maxHeight: 1200,
+          quality: 0.75,
+          maxSizeKB: 50,
+        });
+      } catch (error) {
+        console.error("Error compressing image:", error);
+        throw error;
+      }
+    }
+
+    // For PDFs and other files over 50KB, we'll still upload but warn the user
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleCOCUpload = async (event, jobId) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+    ];
+    if (!validTypes.includes(file.type)) {
+      showSnackbar(
+        "Please upload a PDF or image file (JPEG, PNG, WEBP)",
+        "error"
+      );
+      return;
+    }
+
+    // Validate file size (max 5MB before compression)
+    const maxSizeMB = 5;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      showSnackbar(
+        `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
+        "error"
+      );
+      return;
+    }
+
+    try {
+      setUploadingCOC((prev) => ({ ...prev, [jobId]: true }));
+      const compressedFile = await compressFile(file);
+
+      // Update job with COC data
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: {
+          fileName: file.name,
+          fileType: file.type,
+          uploadedAt: new Date().toISOString(),
+          data: compressedFile,
+        },
+      });
+
+      // Refresh jobs list to show the uploaded COC
+      await fetchClientSuppliedJobs();
+
+      showSnackbar("Chain of Custody form uploaded successfully", "success");
+      setCocDialogOpen(false);
+      setSelectedJobForCOC(null);
+    } catch (error) {
+      console.error("Error uploading COC:", error);
+      showSnackbar("Failed to upload Chain of Custody form", "error");
+    } finally {
+      setUploadingCOC((prev) => ({ ...prev, [jobId]: false }));
+      // Reset the file input
+      event.target.value = "";
+    }
+  };
+
+  const handleDownloadCOC = (job) => {
+    if (!job?.chainOfCustody?.data) return;
+
+    try {
+      // Convert base64 to blob
+      const byteString = atob(job.chainOfCustody.data.split(",")[1]);
+      const mimeString = job.chainOfCustody.data
+        .split(",")[0]
+        .split(":")[1]
+        .split(";")[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = job.chainOfCustody.fileName || "chain-of-custody.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading COC:", error);
+      showSnackbar("Failed to download Chain of Custody form", "error");
+    }
+  };
+
+  const handleDeleteCOC = async (jobId) => {
+    try {
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: null,
+      });
+
+      // Refresh jobs list
+      await fetchClientSuppliedJobs();
+
+      showSnackbar("Chain of Custody form removed", "success");
+      setCocDialogOpen(false);
+      setSelectedJobForCOC(null);
+    } catch (error) {
+      console.error("Error deleting COC:", error);
+      showSnackbar("Failed to remove Chain of Custody form", "error");
+    }
+  };
+
+  const handleOpenCOCDialog = (job) => {
+    setSelectedJobForCOC(job);
+    setCocDialogOpen(true);
+  };
+
+  // Check if all samples in a job have been analyzed (have analysisData)
+  const areAllSamplesAnalyzed = (job) => {
+    if (!job || !job.samples || job.samples.length === 0) {
+      return false;
+    }
+
+    // For Fibre ID jobs, check if all samples have isAnalyzed === true
+    if (job.jobType === "Fibre ID") {
+      return job.samples.every((sample) => {
+        return (
+          sample.analysisData &&
+          sample.analysisData.isAnalyzed === true &&
+          sample.analyzedAt
+        );
+      });
+    }
+
+    // For Fibre Count jobs, check if all samples have fieldsCounted
+    return job.samples.every((sample) => {
+      return (
+        sample.analysisData &&
+        sample.analysisData.fieldsCounted !== undefined &&
+        sample.analyzedAt
+      );
+    });
+  };
+
   const handleGeneratePDF = async (job) => {
     try {
       setGeneratingPDF((prev) => ({ ...prev, [job._id]: true }));
 
-      // Fetch sample items for this job
-      const response = await sampleItemsService.getAll({
-        projectId: job.projectId._id || job.projectId,
-      });
-      const sampleItems = response.data || [];
+      // Fetch the job with full population to get client and project data
+      const jobResponse = await clientSuppliedJobsService.getById(job._id);
+      const fullJob = jobResponse.data;
 
-      // Generate the PDF using pdfMake
-      await generateFibreIDReport({
-        job: job,
-        sampleItems: sampleItems,
-        openInNewTab: false,
-      });
+      // Samples are now embedded in the job
+      const sampleItems = fullJob.samples || [];
+
+      // Get analyst from first analyzed sample or job analyst
+      let analyst = null;
+      const analyzedSample = sampleItems.find((s) => s.analyzedBy);
+      if (analyzedSample?.analyzedBy) {
+        if (
+          typeof analyzedSample.analyzedBy === "object" &&
+          analyzedSample.analyzedBy.firstName
+        ) {
+          analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
+        } else if (typeof analyzedSample.analyzedBy === "string") {
+          analyst = analyzedSample.analyzedBy;
+        }
+      } else if (fullJob.analyst) {
+        analyst = fullJob.analyst;
+      }
+
+      // If no analyst found, default to "Unknown Analyst"
+      if (!analyst) {
+        analyst = "Unknown Analyst";
+      }
+
+      // Handle Fibre ID jobs differently from Fibre Count jobs
+      if (fullJob.jobType === "Fibre ID") {
+        // Transform samples to match the format expected by generateFibreIDReport
+        const sampleItemsForReport = sampleItems
+          .filter(
+            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+          )
+          .map((item, index) => ({
+            itemNumber: index + 1,
+            sampleReference: item.labReference || `Sample ${index + 1}`,
+            labReference: item.labReference || `Sample ${index + 1}`,
+            locationDescription:
+              item.clientReference || item.sampleDescription || "N/A",
+            clientReference: item.clientReference,
+            analysisData: item.analysisData,
+          }));
+
+        // Create an assessment-like object for the report generator
+        const assessmentForReport = {
+          _id: fullJob._id,
+          projectId: fullJob.projectId,
+          jobType: fullJob.jobType,
+          status: fullJob.status,
+          analysisDate: fullJob.analysisDate,
+          sampleReceiptDate: fullJob.sampleReceiptDate,
+          revision: fullJob.revision || 0,
+        };
+
+        // Generate the Fibre ID report
+        await generateFibreIDReport({
+          assessment: assessmentForReport,
+          sampleItems: sampleItemsForReport,
+          analyst: analyst || "Unknown Analyst",
+          openInNewTab: !fullJob.reportApprovedBy, // open if not approved, download if approved
+          returnPdfData: false,
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        });
+        setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+      } else {
+        // Fibre Count jobs - use existing logic
+        // Transform sample items to match air monitoring format
+        const transformedSamples = sampleItems.map((item, index) => {
+          return {
+            fullSampleID: item.labReference || `Sample-${index + 1}`,
+            sampleID: item.labReference || `Sample-${index + 1}`,
+            location: item.clientReference || item.locationDescription || "N/A",
+            // No time or flowrate for client supplied
+            startTime: null,
+            endTime: null,
+            averageFlowrate: null,
+            // Use analysisData from sample item
+            analysis: item.analysisData
+              ? {
+                  fieldsCounted: item.analysisData.fieldsCounted,
+                  fibresCounted: item.analysisData.fibresCounted,
+                  edgesDistribution: item.analysisData.edgesDistribution,
+                  backgroundDust: item.analysisData.backgroundDust,
+                  // No reported concentration for client supplied
+                  reportedConcentration: null,
+                }
+              : null,
+          };
+        });
+
+        // Create a mock shift-like object for PDF generation
+        const mockShift = {
+          descriptionOfWorks:
+            fullJob.projectId?.name || "Client Supplied Fibre Count",
+          date: fullJob.sampleReceiptDate || new Date(),
+          analysedBy: analyst || "N/A",
+          analysisDate: fullJob.analysisDate || new Date(),
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        };
+
+        // Create a job-like object with projectId populated
+        const jobForPDF = {
+          projectId: fullJob.projectId,
+          asbestosRemovalist: null, // Not applicable for client supplied
+        };
+
+        // Generate the PDF using air monitoring format
+        await generateShiftReport({
+          shift: mockShift,
+          job: jobForPDF,
+          samples: transformedSamples,
+          project: fullJob.projectId,
+          openInNewTab: !fullJob.reportApprovedBy, // open if not approved, download if approved
+          isClientSupplied: true, // Flag to indicate we want fibre count format
+        });
+        setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+      }
     } catch (error) {
       console.error("Error generating PDF:", error);
-      // You might want to show a snackbar or alert here
+      showSnackbar("Failed to generate report.", "error");
     } finally {
       setGeneratingPDF((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
+  const handleApproveReport = async (job) => {
+    try {
+      const now = new Date().toISOString();
+      const approver =
+        currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser?.name || currentUser?.email || "Unknown";
+
+      // Update the job with report approval and set status to Completed
+      const response = await clientSuppliedJobsService.update(job._id, {
+        reportApprovedBy: approver,
+        reportIssueDate: now,
+        status: "Completed",
+      });
+
+      console.log("Report approved successfully:", response);
+
+      // Refresh the jobs list
+      await fetchClientSuppliedJobs();
+
+      // Generate and download the approved report
+      try {
+        await handleGeneratePDF(job);
+        showSnackbar("Report approved and downloaded successfully.", "success");
+      } catch (reportError) {
+        console.error("Error generating approved report:", reportError);
+        showSnackbar(
+          "Report approved but failed to generate download.",
+          "warning"
+        );
+      }
+    } catch (error) {
+      console.error("Error approving report:", error);
+      showSnackbar("Failed to approve report. Please try again.", "error");
+    }
+  };
+
+  const handleSendForApproval = async (job) => {
+    try {
+      setSendingApprovalEmails((prev) => ({ ...prev, [job._id]: true }));
+
+      const response = await clientSuppliedJobsService.sendForApproval(job._id);
+
+      showSnackbar(
+        response.data?.message ||
+          `Approval request emails sent successfully to ${
+            response.data?.recipients?.length || 0
+          } signatory user(s)`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error sending approval request emails:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to send approval request emails. Please try again.",
+        "error"
+      );
+    } finally {
+      setSendingApprovalEmails((prev) => ({ ...prev, [job._id]: false }));
     }
   };
 
@@ -288,19 +789,6 @@ const ClientSuppliedJobs = () => {
           open={Object.values(generatingPDF).some(Boolean)}
           message="Generating Fibre ID Report PDF..."
         />
-        {/* Breadcrumbs */}
-        <Breadcrumbs sx={{ mb: 3 }}>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Fibre ID Home
-          </Link>
-          <Typography color="text.primary">Client Supplied Jobs</Typography>
-        </Breadcrumbs>
 
         <Box
           sx={{
@@ -314,10 +802,6 @@ const ClientSuppliedJobs = () => {
             <Typography variant="h4" component="h1" gutterBottom>
               Client Supplied Jobs
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              View and manage client supplied jobs for fibre identification
-              analysis
-            </Typography>
           </Box>
           <Button
             variant="contained"
@@ -330,66 +814,52 @@ const ClientSuppliedJobs = () => {
           </Button>
         </Box>
 
-        {/* Search Bar */}
-        <Box sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search by project name, client, or project ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-
         {/* Jobs Table */}
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                  <TableCell sx={{ fontWeight: "bold", width: "115px" }}>
                     Project ID
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
-                    Sample Date
+                  <TableCell sx={{ fontWeight: "bold", width: "110px" }}>
+                    Job Type
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "150px" }}>
-                    Client
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "70px" }}>
-                    Samples
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "135px" }}>
+                    Sample Receipt Date
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "290px" }}>
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={6} align="center">
                       Loading jobs...
                     </TableCell>
                   </TableRow>
                 ) : filteredJobs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
-                      No client supplied jobs found
+                    <TableCell colSpan={6} align="center">
+                      No ACTIVE client supplied jobs found
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredJobs.map((job) => (
-                    <TableRow key={job._id} hover>
-                      <TableCell>
+                    <TableRow
+                      key={job._id}
+                      hover
+                      onClick={() => handleViewJob(job._id)}
+                      sx={{ cursor: "pointer" }}
+                    >
+                      <TableCell sx={{ width: "115px" }}>
                         <Typography
                           variant="body2"
                           sx={{ fontWeight: "medium" }}
@@ -402,61 +872,219 @@ const ClientSuppliedJobs = () => {
                           {job.projectId?.name || "Unnamed Project"}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ width: "110px" }}>
+                        <Chip
+                          label={job.jobType || "Fibre ID"}
+                          color={
+                            job.jobType === "Fibre ID"
+                              ? "primary"
+                              : job.jobType === "Fibre Count"
+                              ? "secondary"
+                              : "default"
+                          }
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell sx={{ width: "135px" }}>
                         <Typography variant="body2">
-                          {job.projectId?.d_Date
-                            ? new Date(job.projectId.d_Date).toLocaleDateString(
-                                "en-GB"
-                              )
+                          {job.sampleReceiptDate
+                            ? new Date(
+                                job.sampleReceiptDate
+                              ).toLocaleDateString("en-GB")
                             : "N/A"}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {job.projectId?.client?.name || "N/A"}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {sampleCounts[job._id] || 0}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ width: "150px" }}>
                         <Chip
                           label={job.status || "In Progress"}
                           color={getStatusColor(job.status)}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: "flex", gap: 1 }}>
-                          <Button
-                            onClick={() => handleViewJob(job._id)}
-                            color="primary"
-                            size="small"
+                      <TableCell
+                        onClick={(e) => e.stopPropagation()}
+                        sx={{ minWidth: "290px" }}
+                      >
+                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "flex-start",
+                            }}
                           >
-                            Items
-                          </Button>
-                          <Button
-                            onClick={() => handleGeneratePDF(job)}
-                            color="secondary"
-                            size="small"
-                            startIcon={<PdfIcon />}
-                            disabled={
-                              generatingPDF[job._id] ||
-                              (sampleCounts[job._id] || 0) === 0
-                            }
-                          >
-                            {generatingPDF[job._id] ? "..." : "PDF"}
-                          </Button>
-                          <IconButton
-                            onClick={() => handleDeleteJob(job._id)}
-                            color="error"
-                            size="small"
-                            title="Delete Job"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGeneratePDF(job);
+                              }}
+                              color="secondary"
+                              size="small"
+                              startIcon={<PdfIcon />}
+                              disabled={
+                                generatingPDF[job._id] ||
+                                (sampleCounts[job._id] || 0) === 0 ||
+                                !areAllSamplesAnalyzed(job)
+                              }
+                            >
+                              {generatingPDF[job._id] ? "..." : "PDF"}
+                            </Button>
+                            {!job.reportApprovedBy &&
+                              job.status === "Analysis Complete" && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "error.main",
+                                    fontSize: "0.7rem",
+                                    mt: 0.5,
+                                    ml: 0.5,
+                                  }}
+                                >
+                                  Not approved
+                                </Typography>
+                              )}
+                          </Box>
+                          {(() => {
+                            const conditions = {
+                              notApproved: !job.reportApprovedBy,
+                              reportViewed: reportViewedJobIds.has(job._id),
+                              hasAdminPermission: hasPermission(
+                                currentUser,
+                                "admin.view"
+                              ),
+                              isLabSignatory: currentUser?.labSignatory,
+                            };
+                            const showButton =
+                              conditions.notApproved &&
+                              conditions.reportViewed &&
+                              conditions.hasAdminPermission &&
+                              conditions.isLabSignatory;
+                            return showButton;
+                          })() && (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              color="success"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApproveReport(job);
+                              }}
+                              sx={{
+                                backgroundColor: "#4caf50",
+                                color: "white",
+                                "&:hover": {
+                                  backgroundColor: "#45a049",
+                                },
+                              }}
+                            >
+                              Approve
+                            </Button>
+                          )}
+                          {job.status === "Analysis Complete" &&
+                            !job.reportApprovedBy &&
+                            !currentUser?.labSignatory && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="primary"
+                                startIcon={<MailIcon />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendForApproval(job);
+                                }}
+                                disabled={sendingApprovalEmails[job._id]}
+                              >
+                                {sendingApprovalEmails[job._id]
+                                  ? "Sending..."
+                                  : "Send for Approval"}
+                              </Button>
+                            )}
+                          {job.status === "Analysis Complete" &&
+                            job.reportApprovedBy && (
+                              <Button
+                                variant="contained"
+                                color="success"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCompleteJob(job._id);
+                                }}
+                                disabled={completingJobs[job._id]}
+                              >
+                                {completingJobs[job._id]
+                                  ? "Completing..."
+                                  : "Complete"}
+                              </Button>
+                            )}
+                          {job.status === "Completed" && (
+                            <>
+                              {!job.chainOfCustody ? (
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1,
+                                  }}
+                                >
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={<UploadFileIcon />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenCOCDialog(job);
+                                    }}
+                                    sx={{
+                                      textTransform: "none",
+                                    }}
+                                  >
+                                    Upload COC
+                                  </Button>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color: "text.secondary",
+                                      fontSize: "0.7rem",
+                                      fontStyle: "italic",
+                                    }}
+                                  >
+                                    Upload COC to close job
+                                  </Typography>
+                                </Box>
+                              ) : (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCloseJob(job._id);
+                                  }}
+                                  disabled={closingJobs[job._id]}
+                                  sx={{
+                                    textTransform: "none",
+                                  }}
+                                >
+                                  {closingJobs[job._id]
+                                    ? "Closing..."
+                                    : "Close Job"}
+                                </Button>
+                              )}
+                            </>
+                          )}
+                          {hasPermission(currentUser, "clientSup.delete") && (
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteJob(job._id);
+                              }}
+                              color="error"
+                              size="small"
+                              title="Delete Job"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -473,6 +1101,8 @@ const ClientSuppliedJobs = () => {
           onClose={() => {
             setCreateDialogOpen(false);
             setSelectedProject(null);
+            setSelectedJobType("");
+            setSampleReceiptDate("");
           }}
           maxWidth="sm"
           fullWidth
@@ -513,73 +1143,130 @@ const ClientSuppliedJobs = () => {
             </Typography>
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mt: 2 }}>
+            <Box
+              sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 3 }}
+            >
               {Array.isArray(projects) && projects.length > 0 ? (
-                <Autocomplete
-                  options={projects}
-                  getOptionLabel={(option) => {
-                    return `${option.projectID || "N/A"} - ${
-                      option.name || "Unnamed Project"
-                    }`;
-                  }}
-                  value={selectedProject}
-                  onChange={(event, newValue) => {
-                    setSelectedProject(newValue);
-                  }}
-                  isOptionEqualToValue={(option, value) => {
-                    return option._id === value._id;
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Select Project"
-                      placeholder="Search for a project..."
-                      required
-                      fullWidth
-                    />
+                <>
+                  <Autocomplete
+                    options={projects}
+                    getOptionLabel={(option) => {
+                      return `${option.projectID || "N/A"} - ${
+                        option.name || "Unnamed Project"
+                      }`;
+                    }}
+                    value={selectedProject}
+                    onChange={(event, newValue) => {
+                      setSelectedProject(newValue);
+                    }}
+                    isOptionEqualToValue={(option, value) => {
+                      return option._id === value._id;
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Select Project"
+                        placeholder="Search for a project..."
+                        required
+                        fullWidth
+                      />
+                    )}
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props}>
+                          <Box>
+                            <Typography variant="body1">
+                              {option.projectID || "N/A"} -{" "}
+                              {option.name || "Unnamed Project"}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Client: {option.client?.name || "Not specified"}
+                            </Typography>
+                          </Box>
+                        </li>
+                      );
+                    }}
+                    filterOptions={(options, { inputValue }) => {
+                      if (!Array.isArray(options)) {
+                        return [];
+                      }
+
+                      // If no input, show all options
+                      if (!inputValue || inputValue.length === 0) {
+                        return options;
+                      }
+
+                      // If input is less than 2 characters, show all options
+                      if (inputValue.length < 2) {
+                        return options;
+                      }
+
+                      // Filter based on input
+                      const filterValue = inputValue.toLowerCase();
+                      const filtered = options.filter(
+                        (option) =>
+                          option.projectID
+                            ?.toLowerCase()
+                            .includes(filterValue) ||
+                          option.name?.toLowerCase().includes(filterValue) ||
+                          option.client?.name
+                            ?.toLowerCase()
+                            .includes(filterValue)
+                      );
+
+                      return filtered;
+                    }}
+                  />
+                  <FormControl fullWidth required>
+                    <InputLabel>Job Type</InputLabel>
+                    <Select
+                      value={selectedJobType}
+                      onChange={(e) => setSelectedJobType(e.target.value)}
+                      label="Job Type"
+                    >
+                      <MenuItem value="Fibre ID">Fibre ID</MenuItem>
+                      <MenuItem value="Fibre Count">Fibre Count</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    fullWidth
+                    label="Sample Receipt Date"
+                    type="date"
+                    value={sampleReceiptDate}
+                    onChange={(e) => {
+                      setSampleReceiptDate(e.target.value);
+                      if (sampleReceiptDateError) {
+                        setSampleReceiptDateError(false);
+                      }
+                    }}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    error={sampleReceiptDateError}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              setSampleReceiptDate(
+                                new Date().toISOString().split("T")[0]
+                              )
+                            }
+                            sx={{ textTransform: "none", minWidth: "auto" }}
+                          >
+                            Today
+                          </Button>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  {sampleReceiptDateError && (
+                    <Typography variant="body2" sx={{ color: "error.main" }}>
+                      Enter the sample receipt date to create the new job.
+                    </Typography>
                   )}
-                  renderOption={(props, option) => {
-                    return (
-                      <li {...props}>
-                        <Box>
-                          <Typography variant="body1">
-                            {option.projectID || "N/A"} -{" "}
-                            {option.name || "Unnamed Project"}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Client: {option.client?.name || "Not specified"}
-                          </Typography>
-                        </Box>
-                      </li>
-                    );
-                  }}
-                  filterOptions={(options, { inputValue }) => {
-                    if (!Array.isArray(options)) {
-                      return [];
-                    }
-
-                    // If no input, show all options
-                    if (!inputValue || inputValue.length === 0) {
-                      return options;
-                    }
-
-                    // If input is less than 2 characters, show all options
-                    if (inputValue.length < 2) {
-                      return options;
-                    }
-
-                    // Filter based on input
-                    const filterValue = inputValue.toLowerCase();
-                    const filtered = options.filter(
-                      (option) =>
-                        option.projectID?.toLowerCase().includes(filterValue) ||
-                        option.name?.toLowerCase().includes(filterValue) ||
-                        option.client?.name?.toLowerCase().includes(filterValue)
-                    );
-
-                    return filtered;
-                  }}
-                />
+                </>
               ) : (
                 <Box sx={{ textAlign: "center", py: 2 }}>
                   <Typography variant="body2" color="text.secondary">
@@ -596,6 +1283,8 @@ const ClientSuppliedJobs = () => {
               onClick={() => {
                 setCreateDialogOpen(false);
                 setSelectedProject(null);
+                setSelectedJobType("");
+                setSampleReceiptDate("");
               }}
               variant="outlined"
               sx={{
@@ -612,6 +1301,7 @@ const ClientSuppliedJobs = () => {
               variant="contained"
               disabled={
                 !selectedProject ||
+                !selectedJobType ||
                 creatingJob ||
                 !Array.isArray(projects) ||
                 projects.length === 0
@@ -709,6 +1399,336 @@ const ClientSuppliedJobs = () => {
               Delete Job
             </Button>
           </DialogActions>
+        </Dialog>
+
+        {/* Archive Confirmation Dialog */}
+        <Dialog
+          open={archiveDialogOpen}
+          onClose={cancelArchiveJob}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <ArchiveIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Archive Job
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
+              Are you sure you want to archive this client supplied job?
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              This job will be removed from the client supplied jobs table. You
+              can access archived jobs in the Project Reports section.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={cancelArchiveJob}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmArchiveJob}
+              variant="contained"
+              color="primary"
+              startIcon={<ArchiveIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                boxShadow: "0 4px 12px rgba(25, 118, 210, 0.3)",
+              }}
+            >
+              Archive
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* COC View/Edit Dialog */}
+        <Dialog
+          open={cocDialogOpen}
+          onClose={() => {
+            setCocDialogOpen(false);
+            setSelectedJobForCOC(null);
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="h6">Chain of Custody</Typography>
+              <IconButton
+                onClick={() => {
+                  setCocDialogOpen(false);
+                  setSelectedJobForCOC(null);
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {selectedJobForCOC?.chainOfCustody
+                ? `File: ${selectedJobForCOC.chainOfCustody.fileName}`
+                : "No Chain of Custody file uploaded yet."}
+              <br />
+              {selectedJobForCOC?.chainOfCustody?.uploadedAt &&
+                `Uploaded: ${new Date(
+                  selectedJobForCOC.chainOfCustody.uploadedAt
+                ).toLocaleString("en-GB")}`}
+            </Typography>
+
+            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+              {/* Action Buttons - Left Side */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1.5,
+                  minWidth: "160px",
+                }}
+              >
+                {selectedJobForCOC?.chainOfCustody && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => handleDownloadCOC(selectedJobForCOC)}
+                      size="small"
+                    >
+                      Download
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => {
+                        handleDeleteCOC(selectedJobForCOC._id);
+                      }}
+                      size="small"
+                    >
+                      Remove
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileIcon />}
+                  disabled={uploadingCOC[selectedJobForCOC?._id]}
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingCOC[selectedJobForCOC?._id]
+                    ? "Uploading..."
+                    : selectedJobForCOC?.chainOfCustody
+                    ? "Replace"
+                    : "Upload File"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  disabled={uploadingCOC[selectedJobForCOC?._id]}
+                  size="small"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  {uploadingCOC[selectedJobForCOC?._id]
+                    ? "Uploading..."
+                    : "Take Photo"}
+                </Button>
+              </Box>
+
+              {/* Preview - Right Side */}
+              {selectedJobForCOC?.chainOfCustody && (
+                <Box sx={{ flex: 1, minWidth: "220px" }}>
+                  {/* Preview COC if it's an image */}
+                  {selectedJobForCOC.chainOfCustody.fileType?.startsWith(
+                    "image/"
+                  ) && (
+                    <Box
+                      sx={{
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        overflow: "hidden",
+                        maxHeight: "400px",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          opacity: 0.9,
+                        },
+                      }}
+                      onClick={() => setCocFullScreenOpen(true)}
+                      title="Click to view full size"
+                    >
+                      <img
+                        src={selectedJobForCOC.chainOfCustody.data}
+                        alt="Chain of Custody"
+                        style={{
+                          maxHeight: "400px",
+                          maxWidth: "100%",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                    </Box>
+                  )}
+
+                  {/* Show PDF icon for PDFs */}
+                  {selectedJobForCOC.chainOfCustody.fileType ===
+                    "application/pdf" && (
+                    <Box
+                      sx={{
+                        p: 4,
+                        border: "1px solid #ddd",
+                        borderRadius: 1,
+                        textAlign: "center",
+                        backgroundColor: "#f5f5f5",
+                        cursor: "pointer",
+                        "&:hover": {
+                          backgroundColor: "#e8e8e8",
+                        },
+                      }}
+                      onClick={() => handleDownloadCOC(selectedJobForCOC)}
+                      title="Click to download PDF"
+                    >
+                      <DescriptionIcon
+                        sx={{ fontSize: 60, color: "#1976d2", mb: 1 }}
+                      />
+                      <Typography variant="body2">
+                        PDF Document
+                        <br />
+                        Click to download
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+
+            <input
+              type="file"
+              hidden
+              ref={fileInputRef}
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => {
+                if (selectedJobForCOC) {
+                  handleCOCUpload(e, selectedJobForCOC._id);
+                }
+              }}
+            />
+            <input
+              type="file"
+              hidden
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                if (selectedJobForCOC) {
+                  handleCOCUpload(e, selectedJobForCOC._id);
+                }
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+
+        {/* Full Screen COC Viewer */}
+        <Dialog
+          open={cocFullScreenOpen}
+          onClose={() => setCocFullScreenOpen(false)}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "90vh",
+              maxHeight: "90vh",
+            },
+          }}
+        >
+          <DialogTitle>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="h6">
+                Chain of Custody - {selectedJobForCOC?.chainOfCustody?.fileName}
+              </Typography>
+              <IconButton onClick={() => setCocFullScreenOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              p: 2,
+            }}
+          >
+            {selectedJobForCOC?.chainOfCustody?.fileType?.startsWith(
+              "image/"
+            ) && (
+              <img
+                src={selectedJobForCOC.chainOfCustody.data}
+                alt="Chain of Custody Full Size"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                }}
+              />
+            )}
+          </DialogContent>
         </Dialog>
       </Box>
     </Container>

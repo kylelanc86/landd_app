@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -16,7 +16,8 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import WarningIcon from "@mui/icons-material/Warning";
 
 import { DataGrid } from "@mui/x-data-grid";
 
@@ -39,49 +40,44 @@ const Users = () => {
   const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
 
+  const [loading, setLoading] = useState(true);
+
   // Fetch users from the API on mount
   useEffect(() => {
+    let cancelled = false;
     const fetchUsers = async () => {
       try {
+        setLoading(true);
+        const startTime = performance.now();
         const response = await userService.getAll(showInactive);
-        console.log("Users data from API:", response.data);
-        // Transform the data to ensure role is properly set
-        const transformedUsers = response.data.map((user) => ({
-          ...user,
-          role: user.role || "employee",
-        }));
-        setUsers(transformedUsers);
+        const fetchTime = performance.now() - startTime;
+
+        if (!cancelled) {
+          // Backend already returns role, no need to transform
+          setUsers(response.data || []);
+          console.log(
+            `[USERS] Loaded ${
+              response.data?.length || 0
+            } users in ${fetchTime.toFixed(0)}ms`
+          );
+        }
       } catch (error) {
-        console.error("Error fetching users:", error);
+        if (!cancelled) {
+          console.error("Error fetching users:", error);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     fetchUsers();
+
+    // Cleanup function to prevent state updates if component unmounts
+    return () => {
+      cancelled = true;
+    };
   }, [showInactive]);
-
-  const handleEditUser = (user) => {
-    navigate(`/users/edit/${user._id}`);
-  };
-
-  const handleStatusChange = (userId, newStatus) => {
-    // Check if trying to deactivate the last admin
-    if (!newStatus) {
-      const userToDeactivate = users.find((u) => u._id === userId);
-      if (userToDeactivate.role === "admin") {
-        const activeAdmins = users.filter(
-          (u) => u.isActive && u.role === "admin"
-        );
-        if (activeAdmins.length <= 1) {
-          setStatusDialogOpen(true);
-          setStatusChangeId(userId);
-          setStatusChangeType(newStatus);
-          return;
-        }
-      }
-    }
-    setStatusChangeId(userId);
-    setStatusChangeType(newStatus);
-    setStatusDialogOpen(true);
-  };
 
   const confirmStatusChange = async () => {
     const userToDeactivate = users.find((u) => u._id === statusChangeId);
@@ -112,142 +108,164 @@ const Users = () => {
     }
   };
 
-  const handleViewTimesheets = (userId) => {
-    navigate(`/timesheets/review?userId=${userId}`);
-  };
-
-  const columns = [
-    {
-      field: "firstName",
-      headerName: "Name",
-      flex: 1.5,
-      maxWidth: 180,
-      renderCell: (params) => {
-        const fullName = `${params.row.firstName || ""} ${
-          params.row.lastName || ""
-        }`.trim();
-        return <TruncatedCell value={fullName} />;
-      },
+  const handleEditUser = useCallback(
+    (user) => {
+      navigate(`/users/edit/${user._id}`);
     },
-    {
-      field: "email",
-      headerName: "Email",
-      flex: 1,
-      renderCell: (params) => <TruncatedCell value={params.value} />,
-    },
-    {
-      field: "role",
-      headerName: "User Level",
-      flex: 1,
-      minWidth: 120,
-      renderCell: (params) => {
-        const role = params.row.role || "employee";
-        const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+    [navigate]
+  );
 
-        // Define colors for different user levels
-        let roleColor;
-        switch (role.toLowerCase()) {
-          case "admin":
-            roleColor = "#d32f2f"; // Red
-            break;
-          case "manager":
-            roleColor = "#ed6c02"; // Orange
-            break;
-          case "employee":
-          default:
-            roleColor = "#1976d2"; // Blue
-            break;
+  const handleStatusChange = useCallback(
+    (userId, newStatus) => {
+      // Check if trying to deactivate the last admin
+      if (!newStatus) {
+        const userToDeactivate = users.find((u) => u._id === userId);
+        if (userToDeactivate?.role === "admin") {
+          const activeAdmins = users.filter(
+            (u) => u.isActive && u.role === "admin"
+          );
+          if (activeAdmins.length <= 1) {
+            setStatusDialogOpen(true);
+            setStatusChangeId(userId);
+            setStatusChangeType(newStatus);
+            return;
+          }
         }
+      }
+      setStatusChangeId(userId);
+      setStatusChangeType(newStatus);
+      setStatusDialogOpen(true);
+    },
+    [users]
+  );
 
-        return (
+  // Memoize columns to prevent unnecessary re-renders
+  const columns = useMemo(
+    () => [
+      {
+        field: "firstName",
+        headerName: "Name",
+        flex: 1.5,
+        maxWidth: 180,
+        renderCell: (params) => {
+          const fullName = `${params.row.firstName || ""} ${
+            params.row.lastName || ""
+          }`.trim();
+          return <TruncatedCell value={fullName} />;
+        },
+      },
+      {
+        field: "email",
+        headerName: "Email",
+        flex: 1,
+        renderCell: (params) => <TruncatedCell value={params.value} />,
+      },
+      {
+        field: "role",
+        headerName: "User Level",
+        flex: 1,
+        minWidth: 120,
+        renderCell: (params) => {
+          const role = params.row.role || "employee";
+          const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+
+          // Define colors for different user levels
+          let roleColor;
+          switch (role.toLowerCase()) {
+            case "admin":
+              roleColor = "#d32f2f"; // Red
+              break;
+            case "manager":
+              roleColor = "#ed6c02"; // Orange
+              break;
+            case "employee":
+            default:
+              roleColor = "#1976d2"; // Blue
+              break;
+          }
+
+          return (
+            <Chip
+              label={formattedRole}
+              sx={{
+                backgroundColor: roleColor,
+                color: "white",
+              }}
+            />
+          );
+        },
+      },
+      {
+        field: "licences",
+        headerName: "Licences",
+        flex: 1.5,
+        minWidth: 150,
+        renderCell: (params) => {
+          const licences = params.row.licences || [];
+          if (licences.length === 0) {
+            return (
+              <Typography variant="body2" color="textSecondary">
+                No licences
+              </Typography>
+            );
+          }
+          return (
+            <Box>
+              {licences.map((licence, index) => (
+                <Typography key={index} variant="body2">
+                  {licence.licenceType}
+                </Typography>
+              ))}
+            </Box>
+          );
+        },
+      },
+
+      {
+        field: "isActive",
+        headerName: "Status",
+        flex: 1,
+        maxWidth: 100,
+        renderCell: (params) => (
           <Chip
-            label={formattedRole}
+            label={params.value ? "Active" : "Inactive"}
+            color={params.value ? "success" : "error"}
             sx={{
-              backgroundColor: roleColor,
+              backgroundColor: params.value ? "green" : "red",
               color: "white",
             }}
           />
-        );
+        ),
       },
-    },
-    {
-      field: "licences",
-      headerName: "Licences",
-      flex: 1.5,
-      minWidth: 150,
-      renderCell: (params) => {
-        const licences = params.row.licences || [];
-        if (licences.length === 0) {
-          return (
-            <Typography variant="body2" color="textSecondary">
-              No licences
-            </Typography>
-          );
-        }
-        return (
+      {
+        field: "actions",
+        headerName: "Actions",
+        flex: 1,
+        minWidth: 150,
+        renderCell: (params) => (
           <Box>
-            {licences.map((licence, index) => (
-              <Typography key={index} variant="body2">
-                {licence.licenceType}
-              </Typography>
-            ))}
-          </Box>
-        );
-      },
-    },
-
-    {
-      field: "isActive",
-      headerName: "Status",
-      flex: 1,
-      maxWidth: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value ? "Active" : "Inactive"}
-          color={params.value ? "success" : "error"}
-          sx={{
-            backgroundColor: params.value ? "green" : "red",
-            color: "white",
-          }}
-        />
-      ),
-    },
-    {
-      field: "actions",
-      headerName: "Actions",
-      flex: 1,
-      minWidth: 150,
-      renderCell: (params) => (
-        <Box>
-          {/* Only show edit button for admin users */}
-          {currentUser.role === "admin" && (
-            <IconButton onClick={() => handleEditUser(params.row)}>
-              <EditIcon />
-            </IconButton>
-          )}
-          <IconButton
-            onClick={() =>
-              handleStatusChange(params.row._id, !params.row.isActive)
-            }
-            title={params.row.isActive ? "Deactivate User" : "Activate User"}
-          >
-            {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
-          </IconButton>
-          {hasPermission(currentUser, "timesheets.approve") &&
-            params.row._id !== currentUser._id && (
-              <IconButton
-                onClick={() => handleViewTimesheets(params.row._id)}
-                title="View Timesheets"
-              >
-                <AccessTimeIcon />
+            {/* Only show edit button for admin users */}
+            {currentUser.role === "admin" && (
+              <IconButton onClick={() => handleEditUser(params.row)}>
+                <EditIcon />
               </IconButton>
             )}
-        </Box>
-      ),
-      sortable: false,
-      filterable: false,
-    },
-  ];
+            <IconButton
+              onClick={() =>
+                handleStatusChange(params.row._id, !params.row.isActive)
+              }
+              title={params.row.isActive ? "Deactivate User" : "Activate User"}
+            >
+              {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
+            </IconButton>
+          </Box>
+        ),
+        sortable: false,
+        filterable: false,
+      },
+    ],
+    [currentUser, handleEditUser, handleStatusChange]
+  );
 
   // Users are filtered by the backend API based on showInactive state
   const filteredUsers = users;
@@ -258,20 +276,37 @@ const Users = () => {
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
           User Management
         </Typography>
-        {/* Only show Add User button for admin users */}
-        {currentUser.role === "admin" && (
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => navigate("/users/add")}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              "&:hover": { backgroundColor: theme.palette.secondary.dark },
-            }}
-          >
-            Add User
-          </Button>
-        )}
+        <Box display="flex" gap={2}>
+          {/* Show Timesheet Review button for users with timesheet approval permission */}
+          {hasPermission(currentUser, "timesheets.approve") && (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate("/timesheets/review")}
+              startIcon={<AssignmentIcon />}
+              sx={{
+                backgroundColor: theme.palette.success.main,
+                "&:hover": { backgroundColor: theme.palette.success.dark },
+              }}
+            >
+              Timesheet Review
+            </Button>
+          )}
+          {/* Only show Add User button for admin users */}
+          {currentUser.role === "admin" && (
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={() => navigate("/users/add")}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                "&:hover": { backgroundColor: theme.palette.secondary.dark },
+              }}
+            >
+              Add User
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* Users Table with Toggle */}
@@ -335,9 +370,17 @@ const Users = () => {
             getRowId={(row) => row._id}
             pageSize={10}
             rowsPerPageOptions={[10]}
+            loading={loading}
             autoHeight
             disableSelectionOnClick
             sortingOrder={["desc", "asc"]}
+            disableColumnMenu
+            disableDensitySelector
+            disableColumnFilter
+            disableRowSelectionOnClick
+            hideFooterSelectedRowCount
+            disableVirtualization={filteredUsers.length < 100} // Disable virtualization for small datasets
+            experimentalFeatures={{ ariaV7: false }} // Disable experimental features that add overhead
           />
         </Box>
       </Box>
@@ -381,7 +424,7 @@ const Users = () => {
             {statusChangeType ? (
               <CheckCircleIcon sx={{ fontSize: 20 }} />
             ) : (
-              <AccessTimeIcon sx={{ fontSize: 20 }} />
+              <WarningIcon sx={{ fontSize: 20 }} />
             )}
           </Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
@@ -421,7 +464,7 @@ const Users = () => {
               variant="contained"
               color={statusChangeType ? "success" : "error"}
               startIcon={
-                statusChangeType ? <CheckCircleIcon /> : <AccessTimeIcon />
+                statusChangeType ? <CheckCircleIcon /> : <WarningIcon />
               }
               sx={{
                 minWidth: 120,
