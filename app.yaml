@@ -1,4 +1,4 @@
-name: landd-app
+name: landd-app-prod
 region: sgp  # Change to your preferred region (nyc, sfo, sgp, lon, fra, tor, blr, ams)
 
 # App-level environment variables (shared across all components)
@@ -16,7 +16,7 @@ services:
   - name: backend
     github:
       repo: your-username/your-repo-name  # Update with your actual repo
-      branch: development
+      branch: main  # Use main branch for production
       deploy_on_push: true
     dockerfile_path: ./backend/Dockerfile
     dockerfile_context: ./backend
@@ -46,13 +46,13 @@ services:
       - key: PORT
         value: "5000"
       - key: FRONTEND_URL
-        value: https://landd-app-dev-8h6ah.ondigitalocean.app  # DigitalOcean frontend URL
+        value: https://app.landd.com.au  # Production frontend URL
 
   # Frontend service (Node.js)
   - name: frontend
     github:
       repo: your-username/your-repo-name  # Update with your actual repo
-      branch: development
+      branch: main  # Use main branch for production
       deploy_on_push: true
     source_dir: /
     build_command: npm run build
@@ -73,7 +73,7 @@ services:
       # Component-level variables (specific to frontend service)
       # These override app-level variables with the same name
       - key: REACT_APP_API_URL
-        value: https://landd-app-dev-8h6ah.ondigitalocean.app/api
+        value: https://app.landd.com.au/api  # Production API URL
         scope: BUILD_TIME  # Required for React - env vars are embedded at build time
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
         scope: RUN_TIME
