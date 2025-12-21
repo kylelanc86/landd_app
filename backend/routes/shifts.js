@@ -457,10 +457,40 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
 // Delete a shift
 router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
-    const shift = await Shift.findByIdAndDelete(req.params.id);
+    const shift = await Shift.findById(req.params.id);
     if (!shift) {
       return res.status(404).json({ message: 'Shift not found' });
     }
+    
+    // Rename orphaned samples before deleting the shift
+    // Append 'X' to fullSampleID and sampleNumber to prevent duplicate key errors
+    const samples = await Sample.find({ shift: req.params.id });
+    for (const sample of samples) {
+      try {
+        const currentFullSampleID = sample.fullSampleID;
+        const currentSampleNumber = sample.sampleNumber;
+        sample.fullSampleID = currentFullSampleID + 'X';
+        sample.sampleNumber = currentSampleNumber + 'X';
+        await sample.save();
+        console.log(`Renamed sample from ${currentFullSampleID} to ${sample.fullSampleID}`);
+      } catch (saveError) {
+        // If there's a duplicate key error, try appending another X
+        if (saveError.message.includes('duplicate key') || saveError.code === 11000) {
+          sample.fullSampleID = sample.fullSampleID + 'X';
+          sample.sampleNumber = sample.sampleNumber + 'X';
+          try {
+            await sample.save();
+          } catch (retryError) {
+            console.error(`Failed to rename sample ${sample.fullSampleID} even after retry:`, retryError);
+          }
+        } else {
+          console.error(`Failed to rename sample ${sample.fullSampleID}:`, saveError);
+        }
+      }
+    }
+    
+    await Shift.findByIdAndDelete(req.params.id);
+    
     if (
       shift.job &&
       (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)

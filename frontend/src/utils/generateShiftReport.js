@@ -115,6 +115,11 @@ const formatSampleLocation = (sample) => {
 const formatReportedConcentration = (sample) => {
   if (!sample.analysis) return '-';
   
+  // Check for uncountable due to dust first (handle both boolean true and string "true")
+  if (sample.analysis.uncountableDueToDust === true || sample.analysis.uncountableDueToDust === 'true') {
+    return 'UDD';
+  }
+  
   // If sample is uncountable
   if (sample.analysis.edgesDistribution === 'fail' || sample.analysis.backgroundDust === 'fail') {
     return { text: 'Uncountable', color: 'red' };
@@ -537,20 +542,38 @@ pdfMake.fonts = {
                         fontSize: 9,
                       },
                       {
-                        stack: isClientSupplied
-                          ? [
+                        stack: (() => {
+                          // Check if any sample has uncountableDueToDust set to true (handle both boolean and string)
+                          const hasUDDSample = samples && samples.some(sample => 
+                            sample.analysis?.uncountableDueToDust === true || 
+                            sample.analysis?.uncountableDueToDust === 'true'
+                          );
+                          
+                          if (isClientSupplied) {
+                            const notes = [
                               { text: '1. The analysed samples covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of the samples collected or the accompanying descriptions.', style: 'notes' },
                               { text: '2. Report must not be reproduced except in full.', style: 'notes' },
                               { text: '3. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
-                            ]
-                          : [
+                            ];
+                            if (hasUDDSample) {
+                              notes.push({ text: '* UDD = sample was uncountable due to heavy dust loading', style: 'notes' });
+                            }
+                            return notes;
+                          } else {
+                            const notes = [
                               { text: '1. Samples taken from the direct flow of negative air units are reported as a fibre count only', style: 'notes' },
                               { text: '2. The NOHSC: 3003 (2005) recommended Control Level for all forms of asbestos is 0.01 fibres/mL', style: 'notes' },
                               { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
                               { text: '4. AFC = air fibre concentration (fibres/ml)', style: 'notes' },
                               { text: '5. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
                               { text: '6. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
-                            ],
+                            ];
+                            if (hasUDDSample) {
+                              notes.push({ text: '* UDD = sample was uncountable due to heavy dust loading', style: 'notes' });
+                            }
+                            return notes;
+                          }
+                        })(),
                         margin: [0, 0, 0, 3],
                       }
                     ]
@@ -607,21 +630,23 @@ pdfMake.fonts = {
                     ],
                 ...sortedSamples.map(sample => {
                   if (isClientSupplied) {
+                    const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
                     return [
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
-                      { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
-                      { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' }
+                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A'), style: 'tableContent' },
+                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A'), style: 'tableContent' }
                     ];
                   } else {
+                    const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
                     return [
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
                       { text: sample.startTime ? formatTime(sample.startTime) : '-', style: 'tableContent' },
                       { text: sample.endTime ? formatTime(sample.endTime) : '-', style: 'tableContent' },
                       { text: sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-', style: 'tableContent' },
-                      { text: (sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A', style: 'tableContent' },
-                      { text: (sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A', style: 'tableContent' },
+                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A'), style: 'tableContent' },
+                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A'), style: 'tableContent' },
                       { 
                         text: formatReportedConcentration(sample),
                         style: 'tableContent',

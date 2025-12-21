@@ -89,15 +89,30 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosClearance');
     const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
-    const versionControlTemplate = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
+    const versionControlTemplateWithUrl = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
     const inspectionDetailsTemplate = fs.readFileSync(path.join(templateDir, 'InspectionDetails.html'), 'utf8');
     const backgroundInformationTemplate = fs.readFileSync(path.join(templateDir, 'BackgroundInformation.html'), 'utf8');
-    const appendixACoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
+    const appendixACoverTemplateWithUrl = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
     // photographsTemplate no longer used - photos generated independently
     const photoItemTemplate = fs.readFileSync(path.join(templateDir, 'PhotoItem.html'), 'utf8');
     const photoPageTemplate = fs.readFileSync(path.join(templateDir, 'PhotoPage.html'), 'utf8');
     const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
     const appendixCCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixCCover.html'), 'utf8');
+    
+    // Get frontend URL from environment variable (fallback to localhost for development)
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    
+    // Replace [FRONTEND_URL] placeholder in all templates with actual frontend URL
+    const replaceFrontendUrl = (template) => template.replace(/\[FRONTEND_URL\]/g, frontendUrl);
+    const coverTemplateWithUrl = replaceFrontendUrl(coverTemplate);
+    const versionControlTemplateWithUrlWithUrl = replaceFrontendUrl(versionControlTemplateWithUrl);
+    const inspectionDetailsTemplateWithUrl = replaceFrontendUrl(inspectionDetailsTemplate);
+    const backgroundInformationTemplateWithUrl = replaceFrontendUrl(backgroundInformationTemplate);
+    const appendixACoverTemplateWithUrlWithUrl = replaceFrontendUrl(appendixACoverTemplateWithUrl);
+    const photoItemTemplateWithUrl = replaceFrontendUrl(photoItemTemplate);
+    const photoPageTemplateWithUrl = replaceFrontendUrl(photoPageTemplate);
+    const appendixBCoverTemplateWithUrl = replaceFrontendUrl(appendixBCoverTemplate);
+    const appendixCCoverTemplateWithUrl = replaceFrontendUrl(appendixCCoverTemplate);
     
     // Load logo, background, and watermark images
     const logoPath = path.join(__dirname, '../assets/logo.png');
@@ -200,7 +215,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     }
 
     // Populate cover template with data
-    const populatedCover = coverTemplate
+    const populatedCover = coverTemplateWithUrl
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[REPORT_TITLE\]/g, reportTitle)
       .replace(/\[SITE_ADDRESS\]/g, siteAddress)
@@ -311,7 +326,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     }
     
     // Populate version control template with data
-    const populatedVersionControl = versionControlTemplate
+    const populatedVersionControl = versionControlTemplateWithUrl
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[REPORT_TITLE\]/g, versionControlTitle)
       .replace(/\[SITE_ADDRESS\]/g, siteAddress)
@@ -489,7 +504,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
                 levelFloor: item.levelFloor,
                 roomArea: item.roomArea,
                 materialDescription: itemDescription,
-                locationDescription: item.locationDescription || item.materialDescription || 'Unknown Location'
+                locationDescription: item.locationDescription || item.materialDescription || 'Unknown Location',
+                description: photo.description // Include stored description if available
               });
             }
           });
@@ -512,20 +528,25 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         const photoItems = pagePhotos.map((photo, pageIndex) => {
           const photoNumber = i + pageIndex + 1;
           
-          // For Vehicle/Equipment, show only materialDescription, not "N/A - description"
-          // For other clearance types, use expressive format: "Photograph after removal of [material] to [room]"
+          // Use stored description if available, otherwise generate default
           let photoLocation;
-          if (clearanceData.clearanceType === 'Vehicle/Equipment') {
-            photoLocation = photo.materialDescription || 'Unknown Item';
+          if (photo.description) {
+            // Use the stored custom description
+            photoLocation = photo.description;
           } else {
-            const roomArea = (photo.roomArea || 'unknown room/area').toLowerCase();
-            const materialDesc = (photo.locationDescription || photo.materialDescription || 'unknown material').toLowerCase();
-            photoLocation = `Photograph after removal of ${materialDesc} to ${roomArea}`;
+            // Generate default description based on clearance type
+            if (clearanceData.clearanceType === 'Vehicle/Equipment') {
+              photoLocation = photo.materialDescription || 'Unknown Item';
+            } else {
+              const roomArea = (photo.roomArea || 'unknown room/area').toLowerCase();
+              const materialDesc = (photo.locationDescription || photo.materialDescription || 'unknown material').toLowerCase();
+              photoLocation = `Photograph after removal of ${materialDesc} to ${roomArea}`;
+            }
           }
           
           // IMPORTANT: Replace the combined placeholder FIRST before individual placeholders
           // Otherwise the individual replacements happen first and the combined won't match
-          let photoItem = photoItemTemplate
+          let photoItem = photoItemTemplateWithUrl
             .replace(/\[PHOTO_URL\]/g, photo.photoUrl)
             .replace(/\[PHOTO_NUMBER\]/g, photoNumber.toString())
             .replace(/\[LEVEL_FLOOR\]/g, photo.levelFloor || 'Not specified')
@@ -543,7 +564,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         }).join('');
         
         // Use the photo page template and replace all placeholders
-        const page = photoPageTemplate
+        const page = photoPageTemplateWithUrl
           .replace(/\[PHOTO_ITEMS\]/g, photoItems)
           .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
           .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
@@ -574,7 +595,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const signOffContent = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
 
     // Populate inspection details template with data
-    const populatedInspectionDetails = inspectionDetailsTemplate
+    const populatedInspectionDetails = inspectionDetailsTemplateWithUrl
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
@@ -623,7 +644,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     }
 
     // Populate background information template with data
-    const populatedBackgroundInformation = backgroundInformationTemplate
+    const populatedBackgroundInformation = backgroundInformationTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -659,7 +680,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     // Include Appendix A only if we have photographs
     if (hasPhotographs) {
       // For Appendix A cover, we need to keep the CSS
-      const populatedAppendixACover = appendixACoverTemplate
+      const populatedAppendixACover = appendixACoverTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -684,7 +705,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     if (hasSitePlan) {
       // Site Plan exists - add as Appendix B
         const populatedAppendixBCover = extractPageContent(
-        appendixBCoverTemplate
+        appendixBCoverTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -719,7 +740,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     if (hasAirMonitoring) {
         // Both Site Plan and Air Monitoring exist - add Air Monitoring as Appendix C
         const populatedAppendixCCover = extractPageContent(
-          appendixCCoverTemplate
+          appendixCCoverTemplateWithUrl
             .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
             .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
             .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -735,7 +756,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     } else if (hasAirMonitoring) {
       // No Site Plan but Air Monitoring exists - add Air Monitoring as Appendix B
       const populatedAppendixBCover = extractPageContent(
-        appendixBCoverTemplate
+        appendixBCoverTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -2040,6 +2061,20 @@ const generateAssessmentHTML = async (assessmentData) => {
     const appendixACoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
     const appendixBCoverTemplate = fs.readFileSync(path.join(templateDir, 'AppendixBCover.html'), 'utf8');
     
+    // Get frontend URL from environment variable (fallback to localhost for development)
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    
+    // Replace [FRONTEND_URL] placeholder in all templates with actual frontend URL
+    const replaceFrontendUrl = (template) => template.replace(/\[FRONTEND_URL\]/g, frontendUrl);
+    const coverTemplateWithUrl = replaceFrontendUrl(coverTemplate);
+    const versionControlTemplateWithUrl = replaceFrontendUrl(versionControlTemplate);
+    const asbestosItem1TemplateWithUrl = replaceFrontendUrl(asbestosItem1Template);
+    const asbestosSampleItemTemplateWithUrl = replaceFrontendUrl(asbestosSampleItemTemplate);
+    const asbestosDiscussionConclusionsTemplateWithUrl = replaceFrontendUrl(asbestosDiscussionConclusionsTemplate);
+    const asbestosAdditionalSectionsTemplateWithUrl = replaceFrontendUrl(asbestosAdditionalSectionsTemplate);
+    const appendixACoverTemplateWithUrl = replaceFrontendUrl(appendixACoverTemplate);
+    const appendixBCoverTemplateWithUrl = replaceFrontendUrl(appendixBCoverTemplate);
+    
     // Load logo and background images
     const logoPath = path.join(__dirname, '../assets/logo.png');
     const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
@@ -2088,7 +2123,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     
 
     // Populate cover template with data
-    const populatedCover = coverTemplate
+    const populatedCover = coverTemplateWithUrl
       .replace(/\[REPORT_TYPE\]/g, 'Asbestos Assessment')
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
@@ -2099,7 +2134,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`);
 
     // Populate version control template with data
-    const populatedVersionControl = versionControlTemplate
+    const populatedVersionControl = versionControlTemplateWithUrl
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
       .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
@@ -2112,7 +2147,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     const scopeBulletCount = assessmentItems.length;
     const shouldMoveFirstItemToNewPage = scopeBulletCount > 5;
     const firstSampleItem = assessmentItems.length > 0 ? assessmentItems[0] : null;
-    const firstSampleTable = firstSampleItem ? asbestosSampleItemTemplate
+    const firstSampleTable = firstSampleItem ? asbestosSampleItemTemplateWithUrl
       .replace(/\[PHOTO_URL\]/g, firstSampleItem.photograph || '')
       .replace(/\[SAMPLE_REFERENCE\]/g, firstSampleItem.sampleReference || 'Sample 1')
       .replace(/\[LOCATION_DESCRIPTION\]/g, firstSampleItem.locationDescription || 'Unknown Location')
@@ -2134,7 +2169,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       for (let i = 0; i < itemsForSeparatePages.length; i += 2) {
         const pageItems = itemsForSeparatePages.slice(i, i + 2);
         const pageContent = pageItems.map((item, pageIndex) => {
-          const sampleTable = asbestosSampleItemTemplate
+          const sampleTable = asbestosSampleItemTemplateWithUrl
             .replace(/\[PHOTO_URL\]/g, item.photograph || '')
             .replace(/\[SAMPLE_REFERENCE\]/g, item.sampleReference || `Sample ${i + pageIndex + 1}`)
             .replace(/\[LOCATION_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location')
@@ -2183,7 +2218,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       for (let i = 0; i < remainingItems.length; i += 2) {
         const pageItems = remainingItems.slice(i, i + 2);
         const pageContent = pageItems.map((item, pageIndex) => {
-          const sampleTable = asbestosSampleItemTemplate
+          const sampleTable = asbestosSampleItemTemplateWithUrl
             .replace(/\[PHOTO_URL\]/g, item.photograph || '')
             .replace(/\[SAMPLE_REFERENCE\]/g, item.sampleReference || `Sample ${i + pageIndex + 2}`)
             .replace(/\[LOCATION_DESCRIPTION\]/g, item.locationDescription || 'Unknown Location')
@@ -2229,7 +2264,7 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     
     // Populate AsbestosItem1 template with dynamic content
-    const populatedAsbestosItem1 = asbestosItem1Template
+    const populatedAsbestosItem1 = asbestosItem1TemplateWithUrl
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
@@ -2249,7 +2284,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? identifiedAsbestosItems.map(item => `<li>${item.locationDescription || 'Unknown Location'} - ${item.materialType || 'Unknown Material'} (${item.asbestosContent || 'Unknown Content'})</li>`).join('')
       : '<li>No asbestos-containing materials were identified during this assessment.</li>';
 
-    const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplate
+    const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[IDENTIFIED_ASBESTOS_ITEMS\]/g, identifiedAsbestosList)
       .replace(/\[SIGNATURE_IMAGE\]/g, '') // Placeholder for signature - can be added later if needed
@@ -2348,12 +2383,12 @@ const generateAssessmentHTML = async (assessmentData) => {
       `<div class="section-header">${section.title}</div>${convertContentToHtml(section.content)}`
     ).join('');
 
-    const populatedAdditionalSectionsPage1 = asbestosAdditionalSectionsTemplate
+    const populatedAdditionalSectionsPage1 = asbestosAdditionalSectionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[ADDITIONAL_SECTIONS_CONTENT\]/g, firstPageContent)
       .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site');
 
-    const populatedAdditionalSectionsPage2 = asbestosAdditionalSectionsTemplate
+    const populatedAdditionalSectionsPage2 = asbestosAdditionalSectionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[ADDITIONAL_SECTIONS_CONTENT\]/g, secondPageContent)
       .replace(/\[SITE_NAME\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site');
@@ -2363,7 +2398,7 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     // Add Certificate of Analysis cover page if there are asbestos items
     if (assessmentItems.length > 0) {
-      const populatedAppendixACover = appendixACoverTemplate
+      const populatedAppendixACover = appendixACoverTemplateWithUrl
         .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`);
 

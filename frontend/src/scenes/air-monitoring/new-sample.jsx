@@ -631,7 +631,11 @@ const NewSample = () => {
         const next = {
           ...prev,
           [name]: checked,
-          location: checked ? FIELD_BLANK_LOCATION : prev.location,
+          location: checked
+            ? FIELD_BLANK_LOCATION
+            : prev.location === FIELD_BLANK_LOCATION
+            ? ""
+            : prev.location,
           type: checked
             ? "-"
             : prev.type === "-"
@@ -986,6 +990,16 @@ const NewSample = () => {
         form.cowlNo && !form.cowlNo.startsWith("C")
           ? `C${form.cowlNo}`
           : form.cowlNo || "";
+      // Normalize type: if isFieldBlank is false but type is "-", set to "Background"
+      let normalizedType = form.isFieldBlank ? "-" : form.type;
+      if (!form.isFieldBlank && normalizedType === "-") {
+        normalizedType = "Background";
+      }
+      // Normalize location: if isFieldBlank is false but location is "Field blank", clear it
+      let normalizedLocation = form.location;
+      if (!form.isFieldBlank && normalizedLocation === FIELD_BLANK_LOCATION) {
+        normalizedLocation = "";
+      }
       const sampleData = {
         ...form,
         shift: shiftId,
@@ -994,7 +1008,9 @@ const NewSample = () => {
         fullSampleID: `${projectID}-${form.sampleNumber}`,
         sampler: form.sampler,
         collectedBy: form.sampler,
-        type: form.isFieldBlank ? "-" : form.type, // Set type to "-" for field blanks
+        isFieldBlank: form.isFieldBlank || false, // Explicitly set boolean
+        type: normalizedType, // Set type to "-" for field blanks, normalize otherwise
+        location: normalizedLocation, // Clear "Field blank" location if not a field blank
         flowmeter: form.flowmeter || null, // Explicitly include flowmeter
         cowlNo: cowlNoWithPrefix, // Ensure "C" prefix is included
         nextDay: form.nextDay || false, // Ensure boolean value
@@ -1027,11 +1043,17 @@ const NewSample = () => {
         }
       }
       console.error("Error creating sample:", error);
-      setError(
-        error.response?.data?.message ||
-          error.message ||
-          "Failed to create sample"
-      );
+      
+      // Check for duplicate key error
+      const errorMessage = error.response?.data?.message || error.message || "Failed to create sample";
+      if (errorMessage.includes("duplicate key") || errorMessage.includes("E11000")) {
+        const attemptedFullSampleID = projectID ? `${projectID}-${form.sampleNumber}` : form.sampleNumber;
+        setError(
+          `Sample number ${attemptedFullSampleID} already exists. This may occur if samples exist from a deleted job/shift. Please refresh the page to recalculate the next available sample number.`
+        );
+      } else {
+        setError(errorMessage);
+      }
       setIsSubmitting(false);
     } finally {
       try {

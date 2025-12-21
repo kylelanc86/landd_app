@@ -2030,6 +2030,20 @@ const AsbestosRemovalJobDetails = () => {
                               color: "white",
                             }}
                           />
+                          {shift.reportApprovedBy && (
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              sx={{
+                                mt: 0.5,
+                                fontWeight: "medium",
+                                color: "#2e7d32",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              ✓ Authorised by {shift.reportApprovedBy}
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell>
                           {shift.sampleNumbers && shift.sampleNumbers.length > 0
@@ -2351,6 +2365,20 @@ const AsbestosRemovalJobDetails = () => {
                               color: "white",
                             }}
                           />
+                          {clearance.reportApprovedBy && (
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              sx={{
+                                mt: 0.5,
+                                fontWeight: "medium",
+                                color: "#2e7d32",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              ✓ Authorised by {clearance.reportApprovedBy}
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell>
                           <IconButton

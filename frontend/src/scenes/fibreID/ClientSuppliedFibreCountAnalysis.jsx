@@ -222,7 +222,9 @@ const SampleSummary = React.memo(
                     component="span"
                     sx={{ fontWeight: "medium" }}
                   >
-                    {analysis.fibresCounted || 0}
+                    {analysis.uncountableDueToDust
+                      ? "-"
+                      : analysis.fibresCounted || 0}
                   </Typography>
                 </Box>
                 <Box>
@@ -238,7 +240,9 @@ const SampleSummary = React.memo(
                     component="span"
                     sx={{ fontWeight: "medium" }}
                   >
-                    {analysis.fieldsCounted || 0}
+                    {analysis.uncountableDueToDust
+                      ? "-"
+                      : analysis.fieldsCounted || 0}
                   </Typography>
                 </Box>
               </Box>
@@ -336,9 +340,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
             Object.keys(sample.analysisData).length > 0
           ) {
             const ad = sample.analysisData;
+            const uncountableDueToDust = ad.uncountableDueToDust || false;
             initialAnalyses[sampleKey] = {
               edgesDistribution: ad.edgesDistribution || "",
               backgroundDust: ad.backgroundDust || "",
+              uncountableDueToDust: uncountableDueToDust,
               fibreCounts:
                 Array.isArray(ad.fibreCounts) && ad.fibreCounts.length === 5
                   ? ad.fibreCounts.map((row) =>
@@ -349,13 +355,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
                   : Array(5)
                       .fill()
                       .map(() => Array(20).fill("")),
-              fibresCounted: ad.fibresCounted || 0,
-              fieldsCounted: ad.fieldsCounted || 0,
+              fibresCounted: uncountableDueToDust ? "-" : ad.fibresCounted || 0,
+              fieldsCounted: uncountableDueToDust ? "-" : ad.fieldsCounted || 0,
             };
           } else {
             initialAnalyses[sampleKey] = {
               edgesDistribution: "",
               backgroundDust: "",
+              uncountableDueToDust: false,
               fibreCounts: Array(5)
                 .fill()
                 .map(() => Array(20).fill("")),
@@ -884,13 +891,39 @@ const ClientSuppliedFibreCountAnalysis = () => {
 
   // Memoize handlers to prevent unnecessary re-renders
   const handleSampleAnalysisChange = useCallback((sampleId, field, value) => {
-    setSampleAnalyses((prev) => ({
-      ...prev,
-      [sampleId]: {
-        ...prev[sampleId],
-        [field]: value,
-      },
-    }));
+    setSampleAnalyses((prev) => {
+      const newAnalyses = { ...prev };
+      const currentAnalysis = newAnalyses[sampleId] || {};
+      
+      // If backgroundDust is being set to "fail", automatically set uncountableDueToDust to true
+      // and set fibresCounted and fieldsCounted to '-'
+      // If backgroundDust is being changed from "fail" to something else, set uncountableDueToDust to false
+      if (field === "backgroundDust") {
+        if (value === "fail") {
+          newAnalyses[sampleId] = {
+            ...currentAnalysis,
+            [field]: value,
+            uncountableDueToDust: true,
+            fibresCounted: '-',
+            fieldsCounted: '-',
+          };
+        } else {
+          // If changing from fail to something else, clear uncountableDueToDust
+          newAnalyses[sampleId] = {
+            ...currentAnalysis,
+            [field]: value,
+            uncountableDueToDust: false,
+          };
+        }
+      } else {
+        newAnalyses[sampleId] = {
+          ...currentAnalysis,
+          [field]: value,
+        };
+      }
+      
+      return newAnalyses;
+    });
   }, []);
 
   const handleFibreCountChange = useCallback(
@@ -1052,7 +1085,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
     const analysis = sampleAnalyses[sampleId];
     return (
       analysis?.edgesDistribution === "fail" ||
-      analysis?.backgroundDust === "fail"
+      analysis?.backgroundDust === "fail" ||
+      analysis?.uncountableDueToDust === true
     );
   };
 
@@ -1185,6 +1219,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
   };
 
   const getReportedConcentration = (sampleId) => {
+    const analysis = sampleAnalyses[sampleId];
+    // Check for uncountable due to dust first
+    if (analysis?.uncountableDueToDust === true) {
+      return "UDD";
+    }
     // For client supplied, we might not have flowrate/time, so return N/A for now
     // This can be enhanced later if needed
     return "N/A";
@@ -1223,7 +1262,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
       // If filter is uncountable, skip fibre counts
       if (
         analysis.edgesDistribution === "fail" ||
-        analysis.backgroundDust === "fail"
+        analysis.backgroundDust === "fail" ||
+        analysis.uncountableDueToDust === true
       ) {
         return false;
       }
@@ -1249,6 +1289,13 @@ const ClientSuppliedFibreCountAnalysis = () => {
         if (analysis) {
           // Remove _id we added before saving
           const { _id, ...sampleWithoutId } = sample;
+          // If uncountable due to dust, set counts to '-' and reported concentration to 'UDD'
+          const fibresCounted = analysis.uncountableDueToDust
+            ? "-"
+            : analysis.fibresCounted;
+          const fieldsCounted = analysis.uncountableDueToDust
+            ? "-"
+            : analysis.fieldsCounted;
           return {
             ...sampleWithoutId,
             analysisData: {
@@ -1257,9 +1304,10 @@ const ClientSuppliedFibreCountAnalysis = () => {
               testSlideLines: analysisDetails.testSlideLines,
               edgesDistribution: analysis.edgesDistribution,
               backgroundDust: analysis.backgroundDust,
+              uncountableDueToDust: analysis.uncountableDueToDust || false,
               fibreCounts: analysis.fibreCounts,
-              fibresCounted: analysis.fibresCounted,
-              fieldsCounted: analysis.fieldsCounted,
+              fibresCounted: fibresCounted,
+              fieldsCounted: fieldsCounted,
             },
             analyzedBy: analysedBy || sample.analyzedBy,
             analyzedAt: sample.analyzedAt || new Date(),
@@ -1317,6 +1365,13 @@ const ClientSuppliedFibreCountAnalysis = () => {
         if (analysis) {
           // Remove _id we added before saving
           const { _id, ...sampleWithoutId } = sample;
+          // If uncountable due to dust, set counts to '-' and reported concentration to 'UDD'
+          const fibresCounted = analysis.uncountableDueToDust
+            ? "-"
+            : analysis.fibresCounted;
+          const fieldsCounted = analysis.uncountableDueToDust
+            ? "-"
+            : analysis.fieldsCounted;
           return {
             ...sampleWithoutId,
             analysisData: {
@@ -1325,9 +1380,10 @@ const ClientSuppliedFibreCountAnalysis = () => {
               testSlideLines: analysisDetails.testSlideLines,
               edgesDistribution: analysis.edgesDistribution,
               backgroundDust: analysis.backgroundDust,
+              uncountableDueToDust: analysis.uncountableDueToDust || false,
               fibreCounts: analysis.fibreCounts,
-              fibresCounted: analysis.fibresCounted,
-              fieldsCounted: analysis.fieldsCounted,
+              fibresCounted: fibresCounted,
+              fieldsCounted: fieldsCounted,
             },
             analyzedBy: analysedBy,
             analyzedAt: new Date(),
@@ -1407,6 +1463,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
     setFibreCountModalOpen(false);
     setActiveSampleId(null);
   };
+
 
   if (loading) {
     return (
@@ -1710,21 +1767,29 @@ const ClientSuppliedFibreCountAnalysis = () => {
                 "Spacebar" = 10 zeros, "/" = half fibre
               </Typography>
 
-              {jobStatus !== "Completed" && (
-                <Button
-                  startIcon={<ClearIcon />}
-                  onClick={() => {
-                    handleClearTable(activeSampleId);
-                    handleCloseFibreCountModal();
-                  }}
-                  disabled={isFilterUncountable(activeSampleId)}
-                  size="small"
-                  color="error"
-                  sx={{ mb: 2 }}
-                >
-                  Clear Table
-                </Button>
-              )}
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  mb: 2,
+                }}
+              >
+                {jobStatus !== "Completed" && (
+                  <Button
+                    startIcon={<ClearIcon />}
+                    onClick={() => {
+                      handleClearTable(activeSampleId);
+                      handleCloseFibreCountModal();
+                    }}
+                    disabled={isFilterUncountable(activeSampleId)}
+                    size="small"
+                    color="error"
+                  >
+                    Clear Table
+                  </Button>
+                )}
+              </Box>
 
               <Box sx={{ position: "relative" }}>
                 {isFilterUncountable(activeSampleId) && (
@@ -1840,13 +1905,19 @@ const ClientSuppliedFibreCountAnalysis = () => {
                           >
                             <Typography>
                               Fibres Counted:{" "}
-                              {sampleAnalyses[activeSampleId].fibresCounted ||
-                                0}
+                              {sampleAnalyses[activeSampleId]
+                                .uncountableDueToDust
+                                ? "-"
+                                : sampleAnalyses[activeSampleId]
+                                    .fibresCounted || 0}
                             </Typography>
                             <Typography>
                               Fields Counted:{" "}
-                              {sampleAnalyses[activeSampleId].fieldsCounted ||
-                                0}
+                              {sampleAnalyses[activeSampleId]
+                                .uncountableDueToDust
+                                ? "-"
+                                : sampleAnalyses[activeSampleId]
+                                    .fieldsCounted || 0}
                             </Typography>
                           </Stack>
                         </TableCell>

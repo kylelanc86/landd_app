@@ -138,6 +138,15 @@ const asbestosClearanceService = {
     return response.data;
   },
 
+  // Update photo description
+  updatePhotoDescription: async (clearanceId, itemId, photoId, description) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/description`,
+      { description }
+    );
+    return response.data;
+  },
+
   // Authorise clearance report
   authorise: async (id) => {
     const response = await axios.post(`${API_BASE_URL}/${id}/authorise`);

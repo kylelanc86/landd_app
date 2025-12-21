@@ -33,7 +33,7 @@ import {
   TableRow,
   Collapse,
 } from "@mui/material";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, Link, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ErrorIcon from "@mui/icons-material/Error";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -114,6 +114,7 @@ const renderStatusMenuItem = (status, statusColors, onStatusSelect) => {
 const ProjectInformation = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser } = useAuth();
   const { can, isAdmin, isManager } = usePermissions();
   const canWriteOff = can("clients.write_off");
@@ -1064,20 +1065,35 @@ const ProjectInformation = () => {
     }));
   };
 
+  // Helper function to determine return path based on navigation source
+  const getReturnPath = () => {
+    // Check if user came from dashboard
+    if (location.state?.from === "dashboard") {
+      return "/";
+    }
+    // Default to projects list
+    return "/projects";
+  };
+
   // Override navigate function to check for unsaved changes
   const safeNavigate = (path) => {
+    // If path is "/projects", use conditional return path
+    const targetPath = path === "/projects" ? getReturnPath() : path;
+
     console.log("🔍 safeNavigate called:", {
       path,
+      targetPath,
       hasUnsavedChanges,
       isEditMode,
+      from: location.state?.from,
     });
     if (hasUnsavedChanges) {
       console.log("🔍 Showing unsaved changes dialog");
-      setPendingNavigation(path);
+      setPendingNavigation(targetPath);
       setUnsavedChangesDialogOpen(true);
     } else {
       console.log("🔍 Navigating directly");
-      navigate(path);
+      navigate(targetPath);
     }
   };
 
@@ -1087,7 +1103,11 @@ const ProjectInformation = () => {
     setHasUnsavedChanges(false);
 
     // Navigate to the pending location (either local or global)
-    const targetPath = pendingNavigation || window.pendingNavigation;
+    // If pending navigation is "/projects", use conditional return path
+    let targetPath = pendingNavigation || window.pendingNavigation;
+    if (targetPath === "/projects") {
+      targetPath = getReturnPath();
+    }
     if (targetPath) {
       navigate(targetPath);
       setPendingNavigation(null);
@@ -1325,9 +1345,9 @@ const ProjectInformation = () => {
         setOriginalForm(JSON.parse(JSON.stringify(form)));
         // Refresh audit trail after update
         await fetchAuditTrail(form._id);
-        // Navigate to projects page after successful update if shouldNavigate is true
+        // Navigate to projects page or dashboard after successful update if shouldNavigate is true
         if (shouldNavigate) {
-          navigate("/projects");
+          navigate(getReturnPath());
         }
       }
     } catch (error) {
@@ -1452,8 +1472,8 @@ const ProjectInformation = () => {
         console.error("Error updating cache after delete:", cacheError);
       }
 
-      // Success - navigate to projects list
-      navigate("/projects");
+      // Success - navigate to projects list or dashboard depending on source
+      navigate(getReturnPath());
     } catch (error) {
       console.error("❌ PROJECT DELETE ERROR", {
         projectId: id,

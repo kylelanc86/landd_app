@@ -70,6 +70,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const [fibres, setFibres] = useState([]);
   const [finalResult, setFinalResult] = useState("");
   const [noFibreDetected, setNoFibreDetected] = useState(false);
+  const [traceAsbestos, setTraceAsbestos] = useState("no");
+  const [traceCount, setTraceCount] = useState("");
   const [analysisDate, setAnalysisDate] = useState(new Date());
   const [analysts, setAnalysts] = useState([]);
   const [analyst, setAnalyst] = useState("");
@@ -179,6 +181,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setCrucibleNo(savedData.crucibleNo || "");
         setFibres(savedData.fibres || []);
         setFinalResult(savedData.finalResult || "");
+        setTraceAsbestos(savedData.traceAsbestos || "no");
+        setTraceCount(savedData.traceCount || "");
         setAnalysisDate(
           savedData.analyzedAt ? new Date(savedData.analyzedAt) : new Date()
         );
@@ -211,6 +215,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
             crucibleNo: savedData?.crucibleNo || "",
             fibres: savedData?.fibres || [],
             finalResult: savedData?.finalResult || "",
+            traceAsbestos: savedData?.traceAsbestos || "no",
+            traceCount: savedData?.traceCount || "",
             noFibreDetected: wasNoFibreDetected,
             analysisDate: savedData?.analyzedAt
               ? new Date(savedData.analyzedAt)
@@ -237,6 +243,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setCrucibleNo("");
         setFibres([]);
         setFinalResult("");
+        setTraceAsbestos("no");
+        setTraceCount("");
         setAnalysisDate(new Date());
 
         // Set default analyst if available
@@ -256,6 +264,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
             crucibleNo: "",
             fibres: [],
             finalResult: "",
+            traceAsbestos: "no",
+            traceCount: "",
             noFibreDetected: false,
             analysisDate: new Date(),
             analyst: analysts.length > 0 ? analysts[0]._id : "",
@@ -565,6 +575,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres.map((fibre) => ({ ...fibre })), // Deep copy fibres array
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        traceAsbestos,
+        traceCount: traceAsbestos === "yes" ? traceCount : null,
         isAnalyzed: analysisComplete,
         analyzedAt: analysisDate,
       };
@@ -661,6 +673,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres.map((fibre) => ({ ...fibre })), // Deep copy fibres array
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        traceAsbestos,
+        traceCount: traceAsbestos === "yes" ? traceCount : null,
         isAnalyzed: analysisComplete,
         analyzedAt: analysisDate,
       };
@@ -725,6 +739,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         crucibleNo,
         fibres: fibres.map((f) => ({ ...f })),
         finalResult,
+        traceAsbestos,
+        traceCount,
         noFibreDetected,
         analysisDate,
         analyst,
@@ -777,6 +793,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres.map((fibre) => ({ ...fibre })), // Deep copy fibres array
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        traceAsbestos,
+        traceCount: traceAsbestos === "yes" ? traceCount : null,
         isAnalyzed: true,
         analyzedAt: analysisDate,
       };
@@ -841,6 +859,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         crucibleNo,
         fibres: fibres.map((f) => ({ ...f })),
         finalResult,
+        traceAsbestos,
+        traceCount,
         noFibreDetected,
         analysisDate,
         analyst,
@@ -873,6 +893,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres.map((fibre) => ({ ...fibre })), // Deep copy fibres array
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        traceAsbestos,
+        traceCount: traceAsbestos === "yes" ? traceCount : null,
         isAnalyzed: false,
         analyzedAt: null,
       };
@@ -955,6 +977,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
       crucibleNo,
       fibres: fibres.map((f) => ({ ...f })),
       finalResult,
+      traceAsbestos,
+      traceCount,
       noFibreDetected,
       analysisDate,
       analyst,
@@ -991,6 +1015,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
     crucibleNo,
     fibres,
     finalResult,
+    traceAsbestos,
+    traceCount,
     noFibreDetected,
     analysisDate,
     analyst,
@@ -2110,6 +2136,76 @@ const ClientSuppliedFibreIDAnalysis = () => {
           )}
         </Paper>
       )}
+
+      {/* Trace Analysis Box */}
+      <Paper sx={{ mb: 2, p: 3 }}>
+        <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+          Trace Analysis
+        </Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <FormControl component="fieldset">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Trace asbestos?
+              </Typography>
+              <RadioGroup
+                value={traceAsbestos}
+                onChange={(e) => {
+                  setTraceAsbestos(e.target.value);
+                  if (e.target.value === "no") {
+                    setTraceCount("");
+                  }
+                }}
+                row
+                disabled={isSampleAnalyzed()}
+              >
+                <FormControlLabel
+                  value="yes"
+                  control={<Radio />}
+                  label="Yes"
+                />
+                <FormControlLabel
+                  value="no"
+                  control={<Radio />}
+                  label="No"
+                />
+              </RadioGroup>
+            </FormControl>
+          </Grid>
+          {traceAsbestos === "yes" && (
+            <Grid item xs={12}>
+              <FormControl component="fieldset">
+                <RadioGroup
+                  value={traceCount}
+                  onChange={(e) => setTraceCount(e.target.value)}
+                  disabled={isSampleAnalyzed()}
+                >
+                  <FormControlLabel
+                    value="< 5 unequivocal fibres"
+                    control={<Radio />}
+                    label="< 5 unequivocal fibres"
+                  />
+                  <FormControlLabel
+                    value="5-19 unequivocal"
+                    control={<Radio />}
+                    label="5-19 unequivocal"
+                  />
+                  <FormControlLabel
+                    value="20-100 unequivocal"
+                    control={<Radio />}
+                    label="20-100 unequivocal"
+                  />
+                  <FormControlLabel
+                    value=">100 unequivocal"
+                    control={<Radio />}
+                    label=">100 unequivocal"
+                  />
+                </RadioGroup>
+              </FormControl>
+            </Grid>
+          )}
+        </Grid>
+      </Paper>
 
       {/* Final Result Box */}
       <Paper sx={{ mb: 2, p: 3 }}>

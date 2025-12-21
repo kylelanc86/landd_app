@@ -318,15 +318,27 @@ pdfMake.fonts = {
           // Notes
           { text: 'NOTES', style: 'tableHeader', margin: [0, 10, 0, 2] },
           {
-            stack: [
-              { text: '1. The detection of asbestos in certain materials may be difficult due to the nature of the matrix. Independent analytical techniques should be used to confirm the presence or absence of asbestos.', style: 'notes' },
-              { text: '2. This report must not be reproduced except in full.', style: 'notes' },
-              { text: '3. The practical detection limit for asbestos fibre identification is 0.01-0.1% (0.1-1g/kg).', style: 'notes' },
-              { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
-              { text: '5. Unknown Mineral Fibres (UMF) are reported as detected. Further analysis is required to confirm the identity of these fibres.', style: 'notes' },
-              { text: '6. The analysed samples detailed within this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details nor the quality of the supplied samples.', style: 'notes' },
-              { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
-            ],
+            stack: (() => {
+              // Check if any sampleItem has uncountableDueToDust set to true (handle both boolean and string)
+              const hasUDDSample = sampleItems && sampleItems.some(item => 
+                item.analysisData?.uncountableDueToDust === true || 
+                item.analysisData?.uncountableDueToDust === 'true'
+              );
+              
+              const notes = [
+                { text: '1. The detection of asbestos in certain materials may be difficult due to the nature of the matrix. Independent analytical techniques should be used to confirm the presence or absence of asbestos.', style: 'notes' },
+                { text: '2. This report must not be reproduced except in full.', style: 'notes' },
+                { text: '3. The practical detection limit for asbestos fibre identification is 0.01-0.1% (0.1-1g/kg).', style: 'notes' },
+                { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
+                { text: '5. Unknown Mineral Fibres (UMF) are reported as detected. Further analysis is required to confirm the identity of these fibres.', style: 'notes' },
+                { text: '6. The analysed samples detailed within this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details nor the quality of the supplied samples.', style: 'notes' },
+                { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
+              ];
+              if (hasUDDSample) {
+                notes.push({ text: '8. UDD = sample was uncountable due to heavy dust loading', style: 'notes' });
+              }
+              return notes;
+            })(),
             margin: [0, 0, 0, 10],
           },
         ]

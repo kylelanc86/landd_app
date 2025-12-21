@@ -131,6 +131,10 @@ const asbestosClearanceSchema = new mongoose.Schema(
           type: Number,
           required: false,
         },
+        description: {
+          type: String,
+          required: false,
+        },
       }],
       notes: {
         type: String,

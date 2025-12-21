@@ -282,6 +282,34 @@ router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) =
     // Store job status for dashboard stats update
     const jobStatus = job.status;
     
+    // Rename orphaned samples before deleting the job
+    // Append 'X' to fullSampleID and sampleNumber to prevent duplicate key errors
+    const Sample = require('../models/Sample');
+    const samples = await Sample.find({ job: req.params.id });
+    for (const sample of samples) {
+      try {
+        const currentFullSampleID = sample.fullSampleID;
+        const currentSampleNumber = sample.sampleNumber;
+        sample.fullSampleID = currentFullSampleID + 'X';
+        sample.sampleNumber = currentSampleNumber + 'X';
+        await sample.save();
+        console.log(`Renamed sample from ${currentFullSampleID} to ${sample.fullSampleID}`);
+      } catch (saveError) {
+        // If there's a duplicate key error, try appending another X
+        if (saveError.message.includes('duplicate key') || saveError.code === 11000) {
+          sample.fullSampleID = sample.fullSampleID + 'X';
+          sample.sampleNumber = sample.sampleNumber + 'X';
+          try {
+            await sample.save();
+          } catch (retryError) {
+            console.error(`Failed to rename sample ${sample.fullSampleID} even after retry:`, retryError);
+          }
+        } else {
+          console.error(`Failed to rename sample ${sample.fullSampleID}:`, saveError);
+        }
+      }
+    }
+    
     // Delete the job
     await AirMonitoringJob.findByIdAndDelete(req.params.id);
     

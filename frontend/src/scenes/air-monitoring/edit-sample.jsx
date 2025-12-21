@@ -413,23 +413,36 @@ const EditSample = () => {
           }
         }
 
-        const isFieldBlankSample =
-          !!sampleData.isFieldBlank ||
-          sampleData.location === FIELD_BLANK_LOCATION;
+        // Only check isFieldBlank flag, not location, to avoid false positives
+        // If location is "Field blank" but isFieldBlank is false, it's not a field blank
+        const isFieldBlankSample = !!sampleData.isFieldBlank;
         const isNegAirSample =
           !isFieldBlankSample &&
           (sampleData.isNegAirExhaust ||
             sampleData.location === NEG_AIR_EXHAUST_LOCATION);
 
+        // Normalize type: if type is "-" but it's not a field blank, set to "Background"
+        // This handles edge cases where a sample was saved with type "-" but isFieldBlank is false
+        let normalizedType = isFieldBlankSample ? "-" : sampleData.type;
+        if (!isFieldBlankSample && normalizedType === "-") {
+          normalizedType = "Background";
+        }
+
+        // Normalize location: if location is "Field blank" but it's not a field blank, clear it
+        let normalizedLocation = sampleData.location;
+        if (!isFieldBlankSample && normalizedLocation === FIELD_BLANK_LOCATION) {
+          normalizedLocation = "";
+        }
+
         const flowmeterValue = sampleData.flowmeter || "";
         setForm({
           sampleNumber: sampleNumber,
-          type: isFieldBlankSample ? "-" : sampleData.type,
+          type: normalizedType,
           location: isFieldBlankSample
             ? FIELD_BLANK_LOCATION
             : isNegAirSample
-            ? sampleData.location || NEG_AIR_EXHAUST_LOCATION
-            : sampleData.location || "",
+            ? normalizedLocation || NEG_AIR_EXHAUST_LOCATION
+            : normalizedLocation || "",
           pumpNo: sampleData.pumpNo || "",
           flowmeter: flowmeterValue,
           // Strip "C" prefix if it exists (InputAdornment will display it)
@@ -489,7 +502,11 @@ const EditSample = () => {
         const next = {
           ...prev,
           [name]: checked,
-          location: checked ? FIELD_BLANK_LOCATION : prev.location,
+          location: checked
+            ? FIELD_BLANK_LOCATION
+            : prev.location === FIELD_BLANK_LOCATION
+            ? ""
+            : prev.location,
           type: checked
             ? "-"
             : prev.type === "-"
@@ -836,7 +853,17 @@ const EditSample = () => {
 
       // Map sample type to match backend enum
       // Field blanks should have type set to "-"
-      const sampleType = form.isFieldBlank ? "-" : form.type;
+      // Normalize type: if isFieldBlank is false but type is "-", set to "Background"
+      let sampleType = form.isFieldBlank ? "-" : form.type;
+      if (!form.isFieldBlank && sampleType === "-") {
+        sampleType = "Background";
+      }
+
+      // Normalize location: if isFieldBlank is false but location is "Field blank", clear it
+      let normalizedLocation = form.location;
+      if (!form.isFieldBlank && normalizedLocation === FIELD_BLANK_LOCATION) {
+        normalizedLocation = "";
+      }
 
       // Format times to include seconds
       const formatTime = (time) => {
@@ -859,8 +886,9 @@ const EditSample = () => {
         job: job._id,
         sampleNumber: form.sampleNumber,
         fullSampleID: fullSampleID,
+        isFieldBlank: form.isFieldBlank || false, // Explicitly set boolean
         type: sampleType || null,
-        location: form.location || null,
+        location: normalizedLocation || null,
         pumpNo: form.pumpNo || null,
         flowmeter: form.flowmeter || null,
         cowlNo: cowlNoWithPrefix,

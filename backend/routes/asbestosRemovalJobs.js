@@ -638,10 +638,39 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
 // Delete asbestos removal job
 router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res) => {
   try {
-    const job = await AsbestosRemovalJob.findByIdAndDelete(req.params.id);
+    const job = await AsbestosRemovalJob.findById(req.params.id);
     if (!job) {
       return res.status(404).json({ message: "Asbestos removal job not found" });
     }
+
+    // Rename orphaned samples before deleting the job
+    // Append 'X' to fullSampleID and sampleNumber to prevent duplicate key errors
+    const samples = await Sample.find({ job: req.params.id });
+    for (const sample of samples) {
+      try {
+        const currentFullSampleID = sample.fullSampleID;
+        const currentSampleNumber = sample.sampleNumber;
+        sample.fullSampleID = currentFullSampleID + 'X';
+        sample.sampleNumber = currentSampleNumber + 'X';
+        await sample.save();
+        console.log(`Renamed sample from ${currentFullSampleID} to ${sample.fullSampleID}`);
+      } catch (saveError) {
+        // If there's a duplicate key error, try appending another X
+        if (saveError.message.includes('duplicate key') || saveError.code === 11000) {
+          sample.fullSampleID = sample.fullSampleID + 'X';
+          sample.sampleNumber = sample.sampleNumber + 'X';
+          try {
+            await sample.save();
+          } catch (retryError) {
+            console.error(`Failed to rename sample ${sample.fullSampleID} even after retry:`, retryError);
+          }
+        } else {
+          console.error(`Failed to rename sample ${sample.fullSampleID}:`, saveError);
+        }
+      }
+    }
+
+    await AsbestosRemovalJob.findByIdAndDelete(req.params.id);
 
     res.json({ message: "Asbestos removal job deleted successfully" });
   } catch (error) {

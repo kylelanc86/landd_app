@@ -536,12 +536,12 @@ const Timesheets = () => {
         editingEntryId,
       } = pendingCrossDayEntry;
 
-      // Create first entry: from startTime to 23:59 on the first day
+      // Create first entry: from startTime to 24:00 (midnight) on the first day
       const firstEntryData = {
         date,
         userId,
         startTime,
-        endTime: "23:59",
+        endTime: "24:00",
         description: description || "",
         isAdminWork,
         isBreak,
@@ -1615,7 +1615,8 @@ const Timesheets = () => {
               const duration = eventInfo.event.end - eventInfo.event.start;
               const isShortEntry = duration <= 30 * 60 * 1000; // Entries 30 minutes or less get reduced text size
               const isVeryShortEntry = duration < 15 * 60 * 1000; // Entries less than 15 minutes get no vertical padding
-              const isMediumEntry = duration > 30 * 60 * 1000 && duration <= 60 * 60 * 1000; // Entries 30-60 minutes use compact multi-line layout
+              const isMediumEntry =
+                duration > 30 * 60 * 1000 && duration <= 60 * 60 * 1000; // Entries 30-60 minutes use compact multi-line layout
               // Use populated project data from extendedProps if available, otherwise lookup in projects array
               const project =
                 eventInfo.event.extendedProps.projectData ||
@@ -2561,7 +2562,7 @@ const Timesheets = () => {
               Option 1: Automatic Split (Recommended)
             </Typography>
             <Typography variant="body2" sx={{ mb: 1 }}>
-              • First entry: {pendingCrossDayEntry?.startTime} to 23:59 on{" "}
+              • First entry: {pendingCrossDayEntry?.startTime} to 24:00 on{" "}
               {format(selectedDate, "dd/MM/yyyy")}
             </Typography>
             <Typography variant="body2">

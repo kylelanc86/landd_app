@@ -788,6 +788,37 @@ router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission(
   }
 });
 
+// Update photo description
+router.patch("/:id/items/:itemId/photos/:photoId/description", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { description } = req.body;
+
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    photo.description = description !== undefined ? description : photo.description;
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+
+    res.json({ message: "Photo description updated successfully", item });
+  } catch (error) {
+    console.error("Error updating photo description:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Authorise clearance report
 router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {

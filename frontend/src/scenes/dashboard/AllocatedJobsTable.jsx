@@ -629,9 +629,7 @@ const AllocatedJobsTable = () => {
         alignItems="center"
         sx={{ mb: 2 }}
       >
-        <Typography variant="h5">
-          MY ACTIVE PROJECTS
-        </Typography>
+        <Typography variant="h5">MY ACTIVE PROJECTS</Typography>
         <Button
           onClick={handleRefresh}
           disabled={isRefreshing || loading}
@@ -674,7 +672,11 @@ const AllocatedJobsTable = () => {
         paginationModel={paginationModel}
         onPaginationModelChange={handlePaginationModelChange}
         pageSizeOptions={[10, 25, 50]}
-        onRowClick={(params) => navigate(`/projects/${params.row.id}`)}
+        onRowClick={(params) =>
+          navigate(`/projects/${params.row.id}`, {
+            state: { from: "dashboard" },
+          })
+        }
         autoHeight
         rowBuffer={5}
         rowThreshold={100}

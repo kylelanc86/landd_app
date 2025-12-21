@@ -241,6 +241,7 @@ const Projects = ({ initialFilters = {} }) => {
   const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [dependencyInfo, setDependencyInfo] = useState(null);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
@@ -901,6 +902,13 @@ const Projects = ({ initialFilters = {} }) => {
         return;
       }
 
+      // Validate confirmation text
+      const expectedText = `delete${selectedProject?.projectID || ""}`;
+      if (deleteConfirmationText !== expectedText) {
+        setError("Confirmation text does not match. Please type 'delete' followed by the project ID.");
+        return;
+      }
+
       // First check for dependencies
       let dependencyCheckTime = 0;
       try {
@@ -918,6 +926,7 @@ const Projects = ({ initialFilters = {} }) => {
             message: dependencyResponse.data.message,
           });
           setDeleteDialogOpen(false);
+          setDeleteConfirmationText(""); // Clear confirmation text
           setDependencyDialogOpen(true);
           return;
         }
@@ -935,6 +944,7 @@ const Projects = ({ initialFilters = {} }) => {
         // Permission denied - don't update the state, just close the dialog
         setDeleteDialogOpen(false);
         setSelectedProject(null);
+        setDeleteConfirmationText(""); // Clear confirmation text
         return;
       }
 
@@ -980,6 +990,7 @@ const Projects = ({ initialFilters = {} }) => {
 
       setDeleteDialogOpen(false);
       setSelectedProject(null);
+      setDeleteConfirmationText(""); // Clear confirmation text after successful deletion
     } catch (error) {
       // Check if this is a dependency error (400 with dependencies)
       if (
@@ -992,9 +1003,11 @@ const Projects = ({ initialFilters = {} }) => {
           message: error.response.data.message,
         });
         setDeleteDialogOpen(false);
+        setDeleteConfirmationText(""); // Clear confirmation text
         setDependencyDialogOpen(true);
       } else {
         setError("Failed to delete project");
+        setDeleteConfirmationText(""); // Clear confirmation text on error
       }
     }
   };
@@ -1037,6 +1050,7 @@ const Projects = ({ initialFilters = {} }) => {
     const dialogStartTime = performance.now();
 
     setSelectedProject(project);
+    setDeleteConfirmationText(""); // Clear confirmation text when opening dialog
     setDeleteDialogOpen(true); // Show dialog immediately
 
     // Log dialog open time
@@ -2657,7 +2671,10 @@ const Projects = ({ initialFilters = {} }) => {
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setDeleteConfirmationText(""); // Clear confirmation text when closing
+        }}
         maxWidth="sm"
         fullWidth
         PaperProps={{
@@ -2701,15 +2718,43 @@ const Projects = ({ initialFilters = {} }) => {
         </DialogTitle>
 
         <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-          <Typography variant="body1" sx={{ color: "text.primary" }}>
+          <Typography variant="body1" sx={{ color: "text.primary", mb: 2 }}>
             Are you sure you want to delete the project "{selectedProject?.name}
             "? This action cannot be undone.
           </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+            To confirm deletion, please type <strong>delete{selectedProject?.projectID || ""}</strong> below:
+          </Typography>
+          <TextField
+            fullWidth
+            value={deleteConfirmationText}
+            onChange={(e) => {
+              setDeleteConfirmationText(e.target.value);
+              // Clear any previous error when user starts typing
+              if (error) setError(null);
+            }}
+            placeholder={`delete${selectedProject?.projectID || ""}`}
+            autoFocus
+            error={
+              deleteConfirmationText !== "" &&
+              deleteConfirmationText !== `delete${selectedProject?.projectID || ""}`
+            }
+            helperText={
+              deleteConfirmationText !== "" &&
+              deleteConfirmationText !== `delete${selectedProject?.projectID || ""}`
+                ? "Confirmation text does not match"
+                : ""
+            }
+            sx={{ mt: 1 }}
+          />
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
           <Button
-            onClick={() => setDeleteDialogOpen(false)}
+            onClick={() => {
+              setDeleteDialogOpen(false);
+              setDeleteConfirmationText(""); // Clear confirmation text when canceling
+            }}
             variant="outlined"
             sx={{
               minWidth: 100,
@@ -2725,6 +2770,9 @@ const Projects = ({ initialFilters = {} }) => {
             variant="contained"
             color="error"
             startIcon={<DeleteIcon />}
+            disabled={
+              deleteConfirmationText !== `delete${selectedProject?.projectID || ""}`
+            }
             sx={{
               minWidth: 120,
               borderRadius: 2,
@@ -2733,6 +2781,10 @@ const Projects = ({ initialFilters = {} }) => {
               boxShadow: "0 4px 12px rgba(211, 47, 47, 0.3)",
               "&:hover": {
                 boxShadow: "0 6px 16px rgba(211, 47, 47, 0.4)",
+              },
+              "&:disabled": {
+                boxShadow: "none",
+                opacity: 0.5,
               },
             }}
           >

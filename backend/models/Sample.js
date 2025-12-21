@@ -97,9 +97,13 @@ const sampleSchema = new mongoose.Schema({
     testSlideLines: String,
     edgesDistribution: String,
     backgroundDust: String,
+    uncountableDueToDust: {
+      type: Boolean,
+      default: false
+    },
     fibreCounts: [[Number]],
-    fibresCounted: Number,
-    fieldsCounted: Number,
+    fibresCounted: mongoose.Schema.Types.Mixed, // Can be Number or String ('-')
+    fieldsCounted: mongoose.Schema.Types.Mixed, // Can be Number or String ('-')
     reportedConcentration: String
   },
   analyzedBy: {

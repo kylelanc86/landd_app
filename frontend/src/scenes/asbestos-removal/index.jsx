@@ -512,8 +512,14 @@ const AsbestosRemoval = () => {
     setDeleteLoading(true);
     try {
       await asbestosRemovalJobService.delete(jobToDelete.id);
-      // Refresh the jobs list
-      await fetchAsbestosRemovalJobs({ force: true });
+      // Clear cache to prevent showing deleted job when navigating back
+      clearJobsCache();
+      // Remove the deleted job from state immediately
+      setAsbestosRemovalJobs((prev) =>
+        prev.filter((job) => job.id !== jobToDelete.id)
+      );
+      // Refresh the jobs list to update cache with fresh data
+      await fetchAsbestosRemovalJobs({ force: true, silent: true });
       setDeleteDialogOpen(false);
       setJobToDelete(null);
     } catch (err) {

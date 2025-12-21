@@ -85,6 +85,8 @@ const ClearanceItems = () => {
   const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
   const [localPhotoChanges, setLocalPhotoChanges] = useState({}); // Track local changes
   const [photosToDelete, setPhotosToDelete] = useState(new Set()); // Track photos to delete
+  const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({}); // Track local description changes
+  const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] = useState(null); // Track which photo description is being edited
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
   const [compressionStatus, setCompressionStatus] = useState(null);
@@ -1220,6 +1222,8 @@ const ClearanceItems = () => {
     setCompressionStatus(null);
     setLocalPhotoChanges({}); // Clear any unsaved changes
     setPhotosToDelete(new Set()); // Clear any photos marked for deletion
+    setLocalPhotoDescriptions({}); // Clear any unsaved description changes
+    setEditingDescriptionPhotoId(null); // Clear editing state
 
     // Refresh the main table data to update photo counts
     await fetchData();
@@ -1345,9 +1349,47 @@ const ClearanceItems = () => {
     return photo?.includeInReport ?? true;
   };
 
+  // Generate default photo description based on clearance type and item data
+  const generateDefaultPhotoDescription = (item, clearanceType) => {
+    if (clearanceType === "Vehicle/Equipment") {
+      return item.materialDescription || "Unknown Item";
+    } else {
+      const roomArea = (item.roomArea || "unknown room/area").toLowerCase();
+      const materialDesc = (item.locationDescription || item.materialDescription || "unknown material").toLowerCase();
+      return `Photograph after removal of ${materialDesc} to ${roomArea}`;
+    }
+  };
+
+  // Get current photo description (including local changes or default)
+  const getCurrentPhotoDescription = (photoId, item) => {
+    // Check if there's a local change
+    if (localPhotoDescriptions[photoId] !== undefined) {
+      return localPhotoDescriptions[photoId];
+    }
+    
+    // Check if photo has a stored description
+    const photo = selectedItemForPhotos?.photographs?.find((p) => p._id === photoId);
+    if (photo?.description) {
+      return photo.description;
+    }
+    
+    // Generate default description
+    return generateDefaultPhotoDescription(item, clearance?.clearanceType);
+  };
+
+  // Handle description change
+  const handleDescriptionChange = (photoId, newDescription) => {
+    setLocalPhotoDescriptions((prev) => ({
+      ...prev,
+      [photoId]: newDescription,
+    }));
+  };
+
   // Helper function to check if there are unsaved changes
   const hasUnsavedChanges = () => {
-    return Object.keys(localPhotoChanges).length > 0 || photosToDelete.size > 0;
+    return Object.keys(localPhotoChanges).length > 0 || 
+           photosToDelete.size > 0 || 
+           Object.keys(localPhotoDescriptions).length > 0;
   };
 
   // Helper function to apply local changes to photo state
@@ -1369,7 +1411,9 @@ const ClearanceItems = () => {
   const savePhotoChanges = async () => {
     try {
       const togglePromises = [];
+      const descriptionPromises = [];
       let toggleResults = [];
+      let descriptionResults = [];
       let deletionResults = [];
 
       // Handle photo inclusion changes (can be done in parallel)
@@ -1390,9 +1434,28 @@ const ClearanceItems = () => {
         }
       );
 
+      // Handle photo description changes (can be done in parallel)
+      Object.entries(localPhotoDescriptions).forEach(
+        ([photoId, description]) => {
+          descriptionPromises.push(
+            asbestosClearanceService.updatePhotoDescription(
+              clearanceId,
+              selectedItemForPhotos._id,
+              photoId,
+              description
+            )
+          );
+        }
+      );
+
       // Process toggle operations in parallel
       if (togglePromises.length > 0) {
         toggleResults = await Promise.allSettled(togglePromises);
+      }
+
+      // Process description updates in parallel
+      if (descriptionPromises.length > 0) {
+        descriptionResults = await Promise.allSettled(descriptionPromises);
       }
 
       // Handle photo deletions sequentially to avoid backend race conditions
@@ -1412,7 +1475,7 @@ const ClearanceItems = () => {
       }
 
       // Combine results
-      const allResults = [...toggleResults, ...deletionResults];
+      const allResults = [...toggleResults, ...descriptionResults, ...deletionResults];
       const failures = allResults.filter((r) => r.status === "rejected");
       const successes = allResults.filter((r) => r.status === "fulfilled");
 
@@ -1448,6 +1511,7 @@ const ClearanceItems = () => {
       if (successes.length > 0) {
         setLocalPhotoChanges({});
         setPhotosToDelete(new Set());
+        setLocalPhotoDescriptions({});
       }
 
       // Refresh data to get updated state
@@ -4186,17 +4250,85 @@ const ClearanceItems = () => {
                           <CardContent sx={{ py: 1 }}>
                             <Box
                               display="flex"
-                              alignItems="center"
-                              justifyContent="space-between"
-                              flexWrap="wrap"
+                              flexDirection="column"
                               gap={1}
                             >
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
+                                sx={{ fontWeight: 500 }}
                               >
                                 Photo {index + 1}
                               </Typography>
+                              {editingDescriptionPhotoId === photo._id ? (
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  value={getCurrentPhotoDescription(photo._id, selectedItemForPhotos)}
+                                  onChange={(e) => handleDescriptionChange(photo._id, e.target.value)}
+                                  onBlur={() => setEditingDescriptionPhotoId(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      setEditingDescriptionPhotoId(null);
+                                    }
+                                    if (e.key === "Escape") {
+                                      setEditingDescriptionPhotoId(null);
+                                      // Revert to original description
+                                      setLocalPhotoDescriptions((prev) => {
+                                        const newState = { ...prev };
+                                        delete newState[photo._id];
+                                        return newState;
+                                      });
+                                    }
+                                  }}
+                                  autoFocus
+                                  multiline
+                                  maxRows={3}
+                                  variant="outlined"
+                                  placeholder="Enter photo description..."
+                                  sx={{
+                                    "& .MuiOutlinedInput-root": {
+                                      fontSize: "0.75rem",
+                                    },
+                                  }}
+                                />
+                              ) : (
+                                <Box
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingDescriptionPhotoId(photo._id);
+                                  }}
+                                  sx={{
+                                    cursor: "pointer",
+                                    p: 1,
+                                    borderRadius: 1,
+                                    backgroundColor: "grey.50",
+                                    "&:hover": {
+                                      backgroundColor: "grey.100",
+                                    },
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{
+                                      display: "block",
+                                      wordBreak: "break-word",
+                                      fontStyle: photo.description || localPhotoDescriptions[photo._id] ? "normal" : "italic",
+                                    }}
+                                  >
+                                    {getCurrentPhotoDescription(photo._id, selectedItemForPhotos)}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.disabled"
+                                    sx={{ fontSize: "0.65rem", mt: 0.5, display: "block" }}
+                                  >
+                                    Click to edit
+                                  </Typography>
+                                </Box>
+                              )}
                             </Box>
                           </CardContent>
                         </Card>

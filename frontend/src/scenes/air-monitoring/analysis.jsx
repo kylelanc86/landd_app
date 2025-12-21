@@ -257,7 +257,7 @@ const SampleSummary = React.memo(
                     Fibres Counted
                   </Typography>
                   <Typography variant="h6">
-                    {analysis.fibresCounted || 0}
+                    {analysis.uncountableDueToDust ? '-' : (analysis.fibresCounted || 0)}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -265,7 +265,7 @@ const SampleSummary = React.memo(
                     Fields Counted
                   </Typography>
                   <Typography variant="h6">
-                    {analysis.fieldsCounted || 0}
+                    {analysis.uncountableDueToDust ? '-' : (analysis.fieldsCounted || 0)}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -273,7 +273,7 @@ const SampleSummary = React.memo(
                     Actual Concentration
                   </Typography>
                   <Typography variant="h6">
-                    {calculateConcentration(sample._id) || "N/A"} fibres/mL
+                    {analysis.uncountableDueToDust ? 'N/A' : (calculateConcentration(sample._id) || "N/A")} {!analysis.uncountableDueToDust && calculateConcentration(sample._id) && 'fibres/mL'}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -281,7 +281,7 @@ const SampleSummary = React.memo(
                     Reported Concentration
                   </Typography>
                   <Typography variant="h6">
-                    {getReportedConcentration(sample._id) || "N/A"} fibres/mL
+                    {getReportedConcentration(sample._id) || "N/A"} {!analysis.uncountableDueToDust && getReportedConcentration(sample._id) !== "UDD" && "fibres/mL"}
                   </Typography>
                 </Box>
               </Stack>
@@ -404,12 +404,14 @@ const Analysis = () => {
         const initialAnalyses = {};
         sortedSamples.forEach((sample) => {
           if (sample.analysis) {
+            const uncountableDueToDust = sample.analysis.uncountableDueToDust || false;
             initialAnalyses[sample._id] = {
               microscope: sample.analysis.microscope || "",
               testSlide: sample.analysis.testSlide || "",
               testSlideLines: sample.analysis.testSlideLines || "",
               edgesDistribution: sample.analysis.edgesDistribution || "",
               backgroundDust: sample.analysis.backgroundDust || "",
+              uncountableDueToDust: uncountableDueToDust,
               fibreCounts:
                 Array.isArray(sample.analysis.fibreCounts) &&
                 sample.analysis.fibreCounts.length === 5
@@ -421,8 +423,8 @@ const Analysis = () => {
                   : Array(5)
                       .fill()
                       .map(() => Array(20).fill("")),
-              fibresCounted: sample.analysis.fibresCounted || 0,
-              fieldsCounted: sample.analysis.fieldsCounted || 0,
+              fibresCounted: uncountableDueToDust ? '-' : (sample.analysis.fibresCounted || 0),
+              fieldsCounted: uncountableDueToDust ? '-' : (sample.analysis.fieldsCounted || 0),
             };
           } else {
             initialAnalyses[sample._id] = {
@@ -431,6 +433,7 @@ const Analysis = () => {
               testSlideLines: "",
               edgesDistribution: "",
               backgroundDust: "",
+              uncountableDueToDust: false,
               fibreCounts: Array(5)
                 .fill()
                 .map(() => Array(20).fill("")),
@@ -909,13 +912,39 @@ const Analysis = () => {
 
   // Memoize handlers to prevent unnecessary re-renders
   const handleSampleAnalysisChange = useCallback((sampleId, field, value) => {
-    setSampleAnalyses((prev) => ({
-      ...prev,
-      [sampleId]: {
-        ...prev[sampleId],
-        [field]: value,
-      },
-    }));
+    setSampleAnalyses((prev) => {
+      const newAnalyses = { ...prev };
+      const currentAnalysis = newAnalyses[sampleId] || {};
+      
+      // If backgroundDust is being set to "fail", automatically set uncountableDueToDust to true
+      // and set fibresCounted and fieldsCounted to '-'
+      // If backgroundDust is being changed from "fail" to something else, set uncountableDueToDust to false
+      if (field === "backgroundDust") {
+        if (value === "fail") {
+          newAnalyses[sampleId] = {
+            ...currentAnalysis,
+            [field]: value,
+            uncountableDueToDust: true,
+            fibresCounted: '-',
+            fieldsCounted: '-',
+          };
+        } else {
+          // If changing from fail to something else, clear uncountableDueToDust
+          newAnalyses[sampleId] = {
+            ...currentAnalysis,
+            [field]: value,
+            uncountableDueToDust: false,
+          };
+        }
+      } else {
+        newAnalyses[sampleId] = {
+          ...currentAnalysis,
+          [field]: value,
+        };
+      }
+      
+      return newAnalyses;
+    });
   }, []);
 
   const handleFibreCountChange = useCallback(
@@ -1097,7 +1126,8 @@ const Analysis = () => {
     const analysis = sampleAnalyses[sampleId];
     return (
       analysis?.edgesDistribution === "fail" ||
-      analysis?.backgroundDust === "fail"
+      analysis?.backgroundDust === "fail" ||
+      analysis?.uncountableDueToDust === true
     );
   };
 
@@ -1366,6 +1396,12 @@ const Analysis = () => {
 
   const getReportedConcentration = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
+    
+    // Check for uncountable due to dust first
+    if (analysis?.uncountableDueToDust === true) {
+      return "UDD";
+    }
+    
     const calculatedConc = parseFloat(calculateConcentration(sampleId));
 
     if (!calculatedConc) return "N/A";
@@ -1483,6 +1519,10 @@ const Analysis = () => {
       const updatePromises = samples.map(async (sample) => {
         const analysis = sampleAnalyses[sample._id];
         if (analysis) {
+          // If uncountable due to dust, set counts to '-' and reported concentration to 'UDD'
+          const fibresCounted = analysis.uncountableDueToDust ? '-' : analysis.fibresCounted;
+          const fieldsCounted = analysis.uncountableDueToDust ? '-' : analysis.fieldsCounted;
+          
           const analysisData = {
             analysis: {
               microscope: analysisDetails.microscope,
@@ -1490,9 +1530,10 @@ const Analysis = () => {
               testSlideLines: analysisDetails.testSlideLines,
               edgesDistribution: analysis.edgesDistribution,
               backgroundDust: analysis.backgroundDust,
+              uncountableDueToDust: analysis.uncountableDueToDust || false,
               fibreCounts: analysis.fibreCounts,
-              fibresCounted: analysis.fibresCounted,
-              fieldsCounted: analysis.fieldsCounted,
+              fibresCounted: fibresCounted,
+              fieldsCounted: fieldsCounted,
               reportedConcentration: getReportedConcentration(sample._id),
             },
           };
@@ -1693,6 +1734,7 @@ const Analysis = () => {
     }
   };
 
+
   // Check if all microscope calibration fields are selected and microscope has valid calibration date
   const isCalibrationComplete = () => {
     // Check if all three calibration fields are filled
@@ -1758,7 +1800,8 @@ const Analysis = () => {
       // If filter is uncountable, skip fibre counts
       if (
         analysis.edgesDistribution === "fail" ||
-        analysis.backgroundDust === "fail"
+        analysis.backgroundDust === "fail" ||
+        analysis.uncountableDueToDust === true
       ) {
         console.log(
           `Sample ${sample.fullSampleID} is uncountable, skipping fibre counts`
@@ -2177,18 +2220,19 @@ const Analysis = () => {
                     "Spacebar" = 10 zeros, "/" = half fibre
                   </Typography>
 
-                  {shiftStatus !== "analysis_complete" && (
-                    <Button
-                      startIcon={<ClearIcon />}
-                      onClick={handleClearTableInModal}
-                      disabled={isFilterUncountable(activeSampleId)}
-                      size="small"
-                      color="error"
-                      sx={{ mb: 2 }}
-                    >
-                      Clear Table
-                    </Button>
-                  )}
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                    {shiftStatus !== "analysis_complete" && (
+                      <Button
+                        startIcon={<ClearIcon />}
+                        onClick={handleClearTableInModal}
+                        disabled={isFilterUncountable(activeSampleId)}
+                        size="small"
+                        color="error"
+                      >
+                        Clear Table
+                      </Button>
+                    )}
+                  </Box>
 
                   {isFilterUncountable(activeSampleId) && (
                     <Box
@@ -2334,13 +2378,15 @@ const Analysis = () => {
                             >
                               <Typography>
                                 Fibres Counted:{" "}
-                                {sampleAnalyses[activeSampleId].fibresCounted ||
-                                  0}
+                                {sampleAnalyses[activeSampleId].uncountableDueToDust
+                                  ? '-'
+                                  : (sampleAnalyses[activeSampleId].fibresCounted || 0)}
                               </Typography>
                               <Typography>
                                 Fields Counted:{" "}
-                                {sampleAnalyses[activeSampleId].fieldsCounted ||
-                                  0}
+                                {sampleAnalyses[activeSampleId].uncountableDueToDust
+                                  ? '-'
+                                  : (sampleAnalyses[activeSampleId].fieldsCounted || 0)}
                               </Typography>
                             </Stack>
                           </TableCell>

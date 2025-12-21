@@ -51,25 +51,11 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Find all jobs (both types) that reference this project
-    const [airMonitoringJobs, asbestosRemovalJobs] = await Promise.all([
-      AirMonitoringJob.find({ projectId: project._id }).select('_id'),
-      AsbestosRemovalJob.find({ projectId: project._id }).select('_id')
-    ]);
-
-    // Combine job IDs
-    const jobIds = [
-      ...airMonitoringJobs.map(job => job._id),
-      ...asbestosRemovalJobs.map(job => job._id)
-    ];
-
-    if (jobIds.length === 0) {
-      // No jobs found for this project, return empty array
-      return res.json([]);
-    }
-
-    // Find samples that reference these jobs and populate necessary fields
-    const samples = await Sample.find({ job: { $in: jobIds } })
+    // Query samples by fullSampleID pattern to include ALL samples for this project,
+    // including orphaned samples (where job/shift may have been deleted)
+    // This ensures we don't create duplicate sample numbers
+    const fullSampleIDPattern = new RegExp(`^${req.params.projectId}-AM\\d+$`);
+    const allSamples = await Sample.find({ fullSampleID: fullSampleIDPattern })
       .populate('collectedBy')
       .populate('sampler')
       .populate('analyzedBy')
@@ -81,7 +67,7 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
       })
       .sort({ createdAt: -1 });
 
-    res.json(samples);
+    res.json(allSamples);
   } catch (err) {
     console.error('Error getting samples by project:', err);
     res.status(500).json({ message: err.message });
@@ -159,20 +145,33 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
       return res.status(404).json({ message: 'Sample not found' });
     }
 
-    // Handle nested analysis data
-    if (req.body.analysis) {
-      try {
-        // Keep reportedConcentration as a string
-        if (req.body.analysis.reportedConcentration === 'N/A') {
-          req.body.analysis.reportedConcentration = null;
-        }
+        // Handle nested analysis data
+        if (req.body.analysis) {
+          try {
+            // Keep reportedConcentration as a string
+            if (req.body.analysis.reportedConcentration === 'N/A') {
+              req.body.analysis.reportedConcentration = null;
+            }
 
-        // Convert fibresCounted and fieldsCounted to numbers
-        req.body.analysis.fibresCounted = parseInt(req.body.analysis.fibresCounted) || 0;
-        req.body.analysis.fieldsCounted = parseInt(req.body.analysis.fieldsCounted) || 0;
+            // Handle uncountableDueToDust - ensure it's a boolean
+            if (req.body.analysis.uncountableDueToDust !== undefined) {
+              req.body.analysis.uncountableDueToDust = req.body.analysis.uncountableDueToDust === true || req.body.analysis.uncountableDueToDust === 'true';
+            }
 
-        console.log('Processed analysis data:', JSON.stringify(req.body.analysis, null, 2));
-        sample.analysis = req.body.analysis;
+            // Convert fibresCounted and fieldsCounted to numbers, but preserve '-' if uncountableDueToDust is true
+            if (req.body.analysis.uncountableDueToDust === true) {
+              // When uncountableDueToDust is true, keep '-' as a string (will be stored in DB)
+              // MongoDB will store '-' as a string, which is fine for display purposes
+              req.body.analysis.fibresCounted = req.body.analysis.fibresCounted === '-' ? '-' : (parseInt(req.body.analysis.fibresCounted) || 0);
+              req.body.analysis.fieldsCounted = req.body.analysis.fieldsCounted === '-' ? '-' : (parseInt(req.body.analysis.fieldsCounted) || 0);
+            } else {
+              // Convert to numbers for normal samples
+              req.body.analysis.fibresCounted = parseInt(req.body.analysis.fibresCounted) || 0;
+              req.body.analysis.fieldsCounted = parseInt(req.body.analysis.fieldsCounted) || 0;
+            }
+
+            console.log('Processed analysis data:', JSON.stringify(req.body.analysis, null, 2));
+            sample.analysis = req.body.analysis;
       } catch (err) {
         console.error('Error processing analysis data:', err);
         return res.status(400).json({ 
@@ -229,4 +228,5 @@ router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) =
   }
 });
 
+// Export the helper function for use in other routes
 module.exports = router;
