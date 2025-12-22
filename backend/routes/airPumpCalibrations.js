@@ -44,7 +44,8 @@ router.get('/pump/:pumpId', auth, checkPermission(['calibrations.view']), async 
       .skip(skip)
       .limit(parseInt(limit))
       .populate('calibratedBy', 'firstName lastName')
-      .populate('pumpId', 'pumpReference pumpDetails equipmentReference brandModel');
+      .populate('pumpId', 'pumpReference pumpDetails equipmentReference brandModel')
+      .populate('flowmeterId', 'equipmentReference brandModel');
 
     const response = {
       data: calibrations.map(cal => ({
@@ -59,6 +60,7 @@ router.get('/pump/:pumpId', auth, checkPermission(['calibrations.view']), async 
         averagePercentError: cal.averagePercentError,
         testsPassed: cal.testsPassed,
         totalTests: cal.totalTests,
+        flowmeterId: cal.flowmeterId,
         createdAt: cal.createdAt,
         updatedAt: cal.updatedAt
       })),
@@ -82,7 +84,8 @@ router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res
   try {
     const calibration = await AirPumpCalibration.findById(req.params.id)
       .populate('calibratedBy', 'firstName lastName')
-      .populate('pumpId', 'pumpReference pumpDetails');
+      .populate('pumpId', 'pumpReference pumpDetails')
+      .populate('flowmeterId', 'equipmentReference brandModel');
 
     if (!calibration) {
       return res.status(404).json({ message: 'Calibration record not found' });
@@ -100,6 +103,7 @@ router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res
       averagePercentError: calibration.averagePercentError,
       testsPassed: calibration.testsPassed,
       totalTests: calibration.totalTests,
+      flowmeterId: calibration.flowmeterId,
       createdAt: calibration.createdAt,
       updatedAt: calibration.updatedAt
     };
@@ -197,7 +201,8 @@ router.put('/:id', auth, checkPermission(['calibrations.edit']), async (req, res
 
     const populatedCalibration = await AirPumpCalibration.findById(updatedCalibration._id)
       .populate('calibratedBy', 'firstName lastName')
-      .populate('pumpId', 'pumpReference pumpDetails');
+      .populate('pumpId', 'pumpReference pumpDetails')
+      .populate('flowmeterId', 'equipmentReference brandModel');
 
     res.json(populatedCalibration);
   } catch (error) {

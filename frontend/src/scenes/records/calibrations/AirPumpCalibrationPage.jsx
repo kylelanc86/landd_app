@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -21,27 +21,27 @@ import {
   MenuItem,
   Chip,
   IconButton,
-  Grid,
-  Card,
-  CardContent,
   Alert,
   CircularProgress,
   TablePagination,
-  Divider,
+  Tabs,
+  Tab,
+  Stack,
 } from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { useNavigate, useParams } from "react-router-dom";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
 import { equipmentService } from "../../../services/equipmentService";
-import { formatDate } from "../../../utils/dateFormat";
+import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
+import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
+import userService from "../../../services/userService";
 
 const AirPumpCalibrationPage = () => {
   const theme = useTheme();
@@ -50,7 +50,9 @@ const AirPumpCalibrationPage = () => {
 
   const [calibrations, setCalibrations] = useState([]);
   const [pump, setPump] = useState(null);
-  const [stats, setStats] = useState(null);
+  const [flowmeters, setFlowmeters] = useState([]);
+  const [labSignatories, setLabSignatories] = useState([]);
+  const [labSignatoriesLoading, setLabSignatoriesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -59,32 +61,147 @@ const AirPumpCalibrationPage = () => {
   const [editingCalibration, setEditingCalibration] = useState(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [confirmCloseDialog, setConfirmCloseDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  // Track active tab for each date group in the table
+  const [activeDateTabs, setActiveDateTabs] = useState({});
 
-  // Form states
-  const [formData, setFormData] = useState({
-    calibrationDate: new Date().toISOString().split("T")[0],
+  // Static form data (shared across all calibrations)
+  const [staticFormData, setStaticFormData] = useState({
+    calibrationDate: formatDateForInput(new Date()),
     notes: "",
-    testResults: [],
+    flowmeterId: "",
+    technicianId: "",
+    technicianName: "",
   });
+
+  // Array of calibration test results (one per flowrate)
+  const [calibrationTests, setCalibrationTests] = useState([]);
+
+  // Available flowrates
+  const availableFlowrates = ["1", "1.5", "2", "3", "4"];
 
   // Pagination
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
 
-  // Test result form
-  const [testResult, setTestResult] = useState({
-    setFlowrate: "",
-    actualFlowrate: "",
-  });
-
-  const setFlowrateOptions = [1000, 1500, 2000, 3000, 4000];
+  // Fetch lab signatories
+  const fetchLabSignatories = useCallback(async () => {
+    try {
+      setLabSignatoriesLoading(true);
+      const response = await userService.getAll();
+      const users = response.data || response || [];
+      const signatories = users.filter(
+        (user) => user.role === "lab-signatory" || user.role === "admin"
+      );
+      setLabSignatories(signatories);
+    } catch (err) {
+      console.error("Error fetching lab signatories:", err);
+      setLabSignatories([]);
+    } finally {
+      setLabSignatoriesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (pumpId) {
       loadData();
+      loadFlowmeters();
+      fetchLabSignatories();
     }
-  }, [pumpId, page, rowsPerPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pumpId, page, rowsPerPage, fetchLabSignatories]);
+
+  const loadFlowmeters = async () => {
+    try {
+      const response = await equipmentService.getAll();
+      const allEquipment = response.equipment || [];
+
+      // Filter for Site flowmeter equipment
+      const siteFlowmeters = allEquipment
+        .filter((equipment) => equipment.equipmentType === "Site flowmeter")
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference)
+        );
+
+      // Fetch calibration data for each flowmeter
+      const flowmetersWithCalibrations = await Promise.all(
+        siteFlowmeters.map(async (flowmeter) => {
+          try {
+            const calibrationResponse =
+              await flowmeterCalibrationService.getByFlowmeter(
+                flowmeter.equipmentReference
+              );
+            const calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+
+            const lastCalibration =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) => new Date(cal.date).getTime())
+                    )
+                  )
+                : null;
+
+            const calibrationDue =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) =>
+                        new Date(cal.nextCalibration).getTime()
+                      )
+                    )
+                  )
+                : null;
+
+            return {
+              ...flowmeter,
+              lastCalibration,
+              calibrationDue,
+            };
+          } catch (err) {
+            console.error(
+              `Error fetching calibrations for ${flowmeter.equipmentReference}:`,
+              err
+            );
+            return {
+              ...flowmeter,
+              lastCalibration: null,
+              calibrationDue: null,
+            };
+          }
+        })
+      );
+
+      // Filter for active/calibrated flowmeters
+      const activeFlowmeters = flowmetersWithCalibrations
+        .filter((equipment) => {
+          if (!equipment) return false;
+          if (equipment.status === "out-of-service") return false;
+          if (!equipment.lastCalibration || !equipment.calibrationDue)
+            return false;
+          const today = new Date();
+          const dueDate = new Date(equipment.calibrationDue);
+          today.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
+          const daysUntil = Math.ceil(
+            (dueDate.getTime() - today.getTime()) / (1000 * 3600 * 24)
+          );
+          return daysUntil >= 0;
+        })
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference)
+        );
+
+      setFlowmeters(activeFlowmeters);
+    } catch (err) {
+      console.error("Error fetching flowmeters:", err);
+      setFlowmeters([]);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -93,7 +210,8 @@ const AirPumpCalibrationPage = () => {
 
       // Load pump details from Equipment model
       const pumpData = await equipmentService.getById(pumpId);
-      setPump(pumpData.data || pumpData);
+      // Backend returns { equipment: {...} }, so extract the equipment object
+      setPump(pumpData.equipment || pumpData.data || pumpData);
 
       // Load calibrations using Equipment ID
       const calibrationsData =
@@ -102,14 +220,13 @@ const AirPumpCalibrationPage = () => {
           page + 1,
           rowsPerPage
         );
-      setCalibrations(calibrationsData.data || calibrationsData || []);
+      const calibrationsList = calibrationsData.data || calibrationsData || [];
+      setCalibrations(calibrationsList);
       setTotal(calibrationsData.pagination?.total || 0);
 
-      // Load statistics
+      // Load statistics (optional, not displayed but may be used in future)
       try {
-        const statsData =
-          await airPumpCalibrationService.getPumpCalibrationStats(pumpId);
-        setStats(statsData);
+        await airPumpCalibrationService.getPumpCalibrationStats(pumpId);
       } catch (statsErr) {
         console.warn("Could not load statistics:", statsErr);
         // Statistics are optional, so don't fail the whole page
@@ -124,50 +241,231 @@ const AirPumpCalibrationPage = () => {
     }
   };
 
-  const handleAddTestResult = () => {
-    if (testResult.setFlowrate && testResult.actualFlowrate) {
-      const percentError = Math.abs(
-        ((testResult.actualFlowrate - testResult.setFlowrate) /
-          testResult.setFlowrate) *
-          100
-      );
-      const passed = percentError < 5;
+  // Check if there are unsaved changes
+  const checkUnsavedChanges = useCallback(() => {
+    const hasStaticData =
+      staticFormData.calibrationDate !== formatDateForInput(new Date()) ||
+      staticFormData.technicianId ||
+      staticFormData.flowmeterId ||
+      staticFormData.notes;
 
-      const newTestResult = {
-        setFlowrate: parseInt(testResult.setFlowrate),
-        actualFlowrate: parseFloat(testResult.actualFlowrate),
-        percentError,
-        passed,
-      };
+    const hasCalibrations =
+      calibrationTests.length > 0 &&
+      calibrationTests.some((cal) => cal.flowRate || cal.actualFlow);
 
-      setFormData((prev) => ({
-        ...prev,
-        testResults: [...prev.testResults, newTestResult],
-      }));
+    return hasStaticData || hasCalibrations;
+  }, [staticFormData, calibrationTests]);
 
-      setTestResult({ setFlowrate: "", actualFlowrate: "" });
+  // Handle dialog close with confirmation
+  const handleDialogClose = (confirmed = false) => {
+    if (!confirmed && checkUnsavedChanges()) {
+      setConfirmCloseDialog(true);
+      return;
     }
+    setOpenDialog(false);
+    setError(null);
+    setHasUnsavedChanges(false);
+    setConfirmCloseDialog(false);
+    setEditingCalibration(null);
+    // Reset form
+    setStaticFormData({
+      calibrationDate: formatDateForInput(new Date()),
+      notes: "",
+      flowmeterId: "",
+      technicianId: "",
+      technicianName: "",
+    });
+    setCalibrationTests([]);
+    setActiveTab(0);
   };
 
-  const handleRemoveTestResult = (index) => {
-    setFormData((prev) => ({
+  // Add a new calibration tab
+  const handleAddCalibration = () => {
+    const usedFlowrates = calibrationTests
+      .map((cal) => cal.flowRate)
+      .filter(Boolean);
+    const nextFlowrate = availableFlowrates.find(
+      (rate) => !usedFlowrates.includes(rate)
+    );
+
+    if (!nextFlowrate) {
+      setError("All flowrates have been calibrated");
+      return;
+    }
+
+    setCalibrationTests((prev) => [
       ...prev,
-      testResults: prev.testResults.filter((_, i) => i !== index),
-    }));
+      {
+        flowRate: nextFlowrate,
+        actualFlow: "",
+        errorPercent: "",
+        status: "",
+      },
+    ]);
+    setActiveTab(calibrationTests.length);
+    setHasUnsavedChanges(true);
   };
+
+  // Remove a calibration
+  const handleRemoveCalibration = (index) => {
+    setCalibrationTests((prev) => prev.filter((_, i) => i !== index));
+    if (activeTab >= calibrationTests.length - 1) {
+      setActiveTab(Math.max(0, calibrationTests.length - 2));
+    }
+    setHasUnsavedChanges(true);
+  };
+
+  // Update calibration data
+  const handleCalibrationChange = (index, field, value) => {
+    setCalibrationTests((prev) => {
+      const updated = [...prev];
+      const calibration = { ...updated[index] };
+
+      if (field === "flowRate") {
+        calibration.flowRate = value;
+        // Recalculate if actualFlow exists
+        if (calibration.actualFlow && value) {
+          const actualFlowNum = parseFloat(calibration.actualFlow);
+          const flowRateNum = parseFloat(value);
+          if (
+            !isNaN(actualFlowNum) &&
+            !isNaN(flowRateNum) &&
+            flowRateNum !== 0
+          ) {
+            const errorValue = Math.abs(
+              ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+            );
+            calibration.errorPercent = errorValue.toFixed(2);
+            calibration.status = errorValue < 5 ? "Pass" : "Fail";
+          }
+        }
+      } else if (field === "actualFlow") {
+        calibration.actualFlow = value;
+        // Recalculate if flowRate exists
+        if (calibration.flowRate && value) {
+          const actualFlowNum = parseFloat(value);
+          const flowRateNum = parseFloat(calibration.flowRate);
+          if (
+            !isNaN(actualFlowNum) &&
+            !isNaN(flowRateNum) &&
+            flowRateNum !== 0
+          ) {
+            const errorValue = Math.abs(
+              ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+            );
+            calibration.errorPercent = errorValue.toFixed(2);
+            calibration.status = errorValue < 5 ? "Pass" : "Fail";
+          }
+        }
+      } else {
+        calibration[field] = value;
+      }
+
+      updated[index] = calibration;
+      return updated;
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  // Track unsaved changes
+  useEffect(() => {
+    const hasChanges = checkUnsavedChanges();
+    setHasUnsavedChanges(hasChanges);
+  }, [staticFormData, calibrationTests, checkUnsavedChanges]);
+
+  // Handle browser navigation and refresh
+  useEffect(() => {
+    if (!openDialog || !hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue =
+        "You have unsaved calibration data. Are you sure you want to leave?";
+      return "You have unsaved calibration data. Are you sure you want to leave?";
+    };
+
+    const handlePopState = (e) => {
+      if (hasUnsavedChanges) {
+        window.history.pushState(null, "", window.location.pathname);
+        setConfirmCloseDialog(true);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [openDialog, hasUnsavedChanges]);
 
   const handleSubmit = async () => {
     try {
-      if (formData.testResults.length === 0) {
-        setError("At least one test result is required");
+      setError(null);
+
+      if (!staticFormData.calibrationDate) {
+        setError("Calibration date is required");
         return;
       }
 
+      if (calibrationTests.length === 0) {
+        setError("Please add at least one calibration");
+        return;
+      }
+
+      // Validate all calibrations
+      for (let i = 0; i < calibrationTests.length; i++) {
+        const cal = calibrationTests[i];
+        if (!cal.flowRate || !cal.actualFlow) {
+          setError(
+            `Calibration ${
+              i + 1
+            } is incomplete. Please fill in flowrate and actual flow.`
+          );
+          return;
+        }
+      }
+
+      // Create test results for all calibrations
+      const testResults = calibrationTests.map((cal) => {
+        const setFlowrateMlMin = Math.round(parseFloat(cal.flowRate) * 1000);
+        const actualFlowrateMlMin = parseFloat(cal.actualFlow) * 1000;
+
+        // Validate setFlowrate is in the allowed enum values
+        const allowedFlowrates = [1000, 1500, 2000, 3000, 4000];
+        if (!allowedFlowrates.includes(setFlowrateMlMin)) {
+          throw new Error(`Invalid flowrate: ${cal.flowRate} L/min`);
+        }
+
+        // Calculate percent error
+        const percentError = Math.abs(
+          ((actualFlowrateMlMin - setFlowrateMlMin) / setFlowrateMlMin) * 100
+        );
+
+        // Determine if test passed
+        const passed = percentError < 5;
+
+        return {
+          setFlowrate: setFlowrateMlMin,
+          actualFlowrate: actualFlowrateMlMin,
+          percentError: percentError,
+          passed: passed,
+        };
+      });
+
+      // Determine overall result (pass if all tests passed)
+      const overallResult = testResults.every((result) => result.passed)
+        ? "Pass"
+        : "Fail";
+
       const calibrationData = {
         pumpId,
-        calibrationDate: formData.calibrationDate,
-        notes: formData.notes,
-        testResults: formData.testResults,
+        calibrationDate: new Date(staticFormData.calibrationDate),
+        testResults: testResults,
+        overallResult: overallResult,
+        notes: staticFormData.notes || "",
+        flowmeterId: staticFormData.flowmeterId || null,
       };
 
       if (editingCalibration) {
@@ -179,28 +477,110 @@ const AirPumpCalibrationPage = () => {
         await airPumpCalibrationService.createCalibration(calibrationData);
       }
 
-      setOpenDialog(false);
-      setEditingCalibration(null);
-      setFormData({
-        calibrationDate: new Date().toISOString().split("T")[0],
-        notes: "",
-        testResults: [],
-      });
+      handleDialogClose(true);
       loadData();
     } catch (err) {
       setError(err.message || "Failed to save calibration");
     }
   };
 
-  const handleEdit = (calibration) => {
+  const handleEdit = async (calibration) => {
     setEditingCalibration(calibration);
-    setFormData({
+
+    // Ensure flowmeters and lab signatories are loaded before opening dialog
+    if (flowmeters.length === 0) {
+      await loadFlowmeters();
+    }
+    if (labSignatories.length === 0) {
+      await fetchLabSignatories();
+    }
+
+    // Extract flowmeterId - handle both string ID and populated object
+    let flowmeterId = "";
+    if (calibration.flowmeterId) {
+      if (typeof calibration.flowmeterId === "object") {
+        flowmeterId = String(
+          calibration.flowmeterId._id || calibration.flowmeterId.id || ""
+        );
+      } else {
+        flowmeterId = String(calibration.flowmeterId);
+      }
+    }
+
+    // Extract technicianId from calibratedBy
+    let technicianId = "";
+    let technicianName = "";
+    if (calibration.calibratedBy) {
+      if (typeof calibration.calibratedBy === "object") {
+        technicianId = String(calibration.calibratedBy._id || "");
+        technicianName =
+          calibration.calibratedBy.firstName &&
+          calibration.calibratedBy.lastName
+            ? `${calibration.calibratedBy.firstName} ${calibration.calibratedBy.lastName}`
+            : "";
+      } else {
+        technicianId = String(calibration.calibratedBy);
+      }
+    }
+
+    // Convert testResults to calibrationTests format (mL/min to L/min)
+    const calibrationTestsData = (calibration.testResults || []).map(
+      (testResult) => {
+        const flowRateLMin = (testResult.setFlowrate / 1000).toString();
+        const actualFlowLMin = (testResult.actualFlowrate / 1000).toFixed(2);
+        return {
+          flowRate: flowRateLMin,
+          actualFlow: actualFlowLMin,
+          errorPercent: testResult.percentError
+            ? testResult.percentError.toFixed(2)
+            : "",
+          status: testResult.passed ? "Pass" : "Fail",
+        };
+      }
+    );
+
+    setStaticFormData({
       calibrationDate: new Date(calibration.calibrationDate)
         .toISOString()
         .split("T")[0],
       notes: calibration.notes || "",
-      testResults: calibration.testResults,
+      flowmeterId: flowmeterId,
+      technicianId: technicianId,
+      technicianName: technicianName,
     });
+    setCalibrationTests(calibrationTestsData);
+    setActiveTab(0);
+    setHasUnsavedChanges(false);
+    setOpenDialog(true);
+  };
+
+  const handleTechnicianChange = (technicianId) => {
+    const selectedTechnician = labSignatories.find(
+      (t) => t._id === technicianId
+    );
+    setStaticFormData((prev) => ({
+      ...prev,
+      technicianId: technicianId,
+      technicianName: selectedTechnician
+        ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
+        : "",
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleAdd = () => {
+    setEditingCalibration(null);
+    const todayDate = formatDateForInput(new Date());
+    setStaticFormData({
+      calibrationDate: todayDate,
+      notes: "",
+      flowmeterId: "",
+      technicianId: "",
+      technicianName: "",
+    });
+    setCalibrationTests([]);
+    setActiveTab(0);
+    setHasUnsavedChanges(false);
     setOpenDialog(true);
   };
 
@@ -215,10 +595,6 @@ const AirPumpCalibrationPage = () => {
     } catch (err) {
       setError(err.message || "Failed to delete calibration");
     }
-  };
-
-  const getResultColor = (result) => {
-    return result === "Pass" ? "success" : "error";
   };
 
   if (loading) {
@@ -257,19 +633,13 @@ const AirPumpCalibrationPage = () => {
         </Typography>
       </Box>
 
-      {/* Pump Info */}
+      {/* Equipment Reference */}
       {pump && (
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              {pump.equipmentReference}
-              {pump.brandModel ? ` - ${pump.brandModel}` : ""}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Section: {pump.section || "N/A"} | Status: {pump.status || "N/A"}
-            </Typography>
-          </CardContent>
-        </Card>
+        <Box mb={2}>
+          <Typography variant="h5" sx={{ fontWeight: "bold" }}>
+            {pump.equipmentReference || "N/A"}
+          </Typography>
+        </Box>
       )}
 
       {/* Actions */}
@@ -280,11 +650,7 @@ const AirPumpCalibrationPage = () => {
         mb={2}
       >
         <Typography variant="h6">Calibration Records</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenDialog(true)}
-        >
+        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
           Add Calibration
         </Button>
       </Box>
@@ -301,13 +667,10 @@ const AirPumpCalibrationPage = () => {
                 Calibrated By
               </TableCell>
               <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                Tests
+                Flowmeter
               </TableCell>
               <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                Result
-              </TableCell>
-              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                Avg Error
+                Flowrates
               </TableCell>
               <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                 Next Due
@@ -318,92 +681,252 @@ const AirPumpCalibrationPage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {calibrations.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <Typography variant="body2" color="text.secondary">
-                    No calibration records found
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              calibrations.map((calibration) => (
-                <TableRow key={calibration._id} hover>
-                  <TableCell>
-                    {calibration.calibrationDate
-                      ? formatDate(calibration.calibrationDate)
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    {calibration.calibratedBy
-                      ? `${calibration.calibratedBy.firstName || ""} ${
-                          calibration.calibratedBy.lastName || ""
-                        }`.trim() || "N/A"
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    {calibration.testsPassed !== undefined &&
-                    calibration.totalTests !== undefined
-                      ? `${calibration.testsPassed}/${calibration.totalTests} passed`
-                      : calibration.testResults?.length
-                      ? `${
-                          calibration.testResults.filter((t) => t.passed).length
-                        }/${calibration.testResults.length} passed`
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={calibration.overallResult || "N/A"}
-                      color={getResultColor(calibration.overallResult)}
-                      size="small"
-                      icon={
-                        calibration.overallResult === "Pass" ? (
-                          <CheckCircleIcon />
-                        ) : (
-                          <CancelIcon />
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {calibration.averagePercentError !== undefined
-                      ? `${calibration.averagePercentError.toFixed(2)}%`
-                      : calibration.testResults?.length
-                      ? `${(
-                          calibration.testResults.reduce(
-                            (sum, t) => sum + (t.percentError || 0),
-                            0
-                          ) / calibration.testResults.length
-                        ).toFixed(2)}%`
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    {calibration.nextCalibrationDue
-                      ? formatDate(calibration.nextCalibrationDue)
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleEdit(calibration)}
-                      color="primary"
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setCalibrationToDelete(calibration);
-                        setDeleteDialog(true);
-                      }}
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            {(() => {
+              // Group calibrations by date
+              const groupedByDate = {};
+              calibrations.forEach((calibration) => {
+                const dateKey = calibration.calibrationDate
+                  ? new Date(calibration.calibrationDate)
+                      .toISOString()
+                      .split("T")[0]
+                  : "unknown";
+                if (!groupedByDate[dateKey]) {
+                  groupedByDate[dateKey] = [];
+                }
+                groupedByDate[dateKey].push(calibration);
+              });
+
+              // Convert to array and sort by date (most recent first)
+              const dateGroups = Object.entries(groupedByDate)
+                .map(([dateKey, calList]) => ({
+                  dateKey,
+                  date: calList[0].calibrationDate,
+                  calibrations: calList,
+                }))
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+              if (dateGroups.length === 0) {
+                return (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center">
+                      <Typography variant="body2" color="text.secondary">
+                        No calibration records found
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+
+              return dateGroups.map((dateGroup) => {
+                // Get common info from first calibration (they should all be the same for same date)
+                const firstCal = dateGroup.calibrations[0];
+                const flowmeter = firstCal.flowmeterId
+                  ? flowmeters.find(
+                      (fm) =>
+                        fm._id === firstCal.flowmeterId ||
+                        (typeof firstCal.flowmeterId === "object" &&
+                          firstCal.flowmeterId._id === fm._id)
+                    )
+                  : null;
+
+                // Extract all test results from all calibrations for this date
+                const allTestResults = [];
+                dateGroup.calibrations.forEach((cal) => {
+                  if (cal.testResults && cal.testResults.length > 0) {
+                    cal.testResults.forEach((testResult) => {
+                      allTestResults.push({
+                        ...testResult,
+                        calibrationId: cal._id,
+                        overallResult: cal.overallResult,
+                      });
+                    });
+                  }
+                });
+
+                // Group test results by flowrate
+                const flowrateGroups = {};
+                allTestResults.forEach((testResult) => {
+                  const flowrateLMin = (
+                    testResult.setFlowrate / 1000
+                  ).toString();
+                  if (!flowrateGroups[flowrateLMin]) {
+                    flowrateGroups[flowrateLMin] = [];
+                  }
+                  flowrateGroups[flowrateLMin].push(testResult);
+                });
+
+                const flowrateKeys = Object.keys(flowrateGroups).sort(
+                  (a, b) => parseFloat(a) - parseFloat(b)
+                );
+
+                // Get active tab for this date group
+                const dateKey = dateGroup.dateKey;
+                const activeTabIndex = activeDateTabs[dateKey] || 0;
+
+                return (
+                  <TableRow key={dateKey} hover>
+                    <TableCell>
+                      {firstCal.calibrationDate
+                        ? formatDate(firstCal.calibrationDate)
+                        : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      {firstCal.calibratedBy
+                        ? `${firstCal.calibratedBy.firstName || ""} ${
+                            firstCal.calibratedBy.lastName || ""
+                          }`.trim() || "N/A"
+                        : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      {flowmeter
+                        ? flowmeter.equipmentReference
+                        : firstCal.flowmeterId
+                        ? typeof firstCal.flowmeterId === "object" &&
+                          firstCal.flowmeterId.equipmentReference
+                          ? firstCal.flowmeterId.equipmentReference
+                          : "N/A"
+                        : "-"}
+                    </TableCell>
+                    <TableCell>
+                      {flowrateKeys.length > 0 ? (
+                        <Box>
+                          <Tabs
+                            value={activeTabIndex}
+                            onChange={(e, newValue) => {
+                              setActiveDateTabs((prev) => ({
+                                ...prev,
+                                [dateKey]: newValue,
+                              }));
+                            }}
+                            variant="scrollable"
+                            scrollButtons="auto"
+                            sx={{ minHeight: "auto" }}
+                          >
+                            {flowrateKeys.map((flowrate, index) => {
+                              const tests = flowrateGroups[flowrate];
+                              const allPassed = tests.every((t) => t.passed);
+                              const status = allPassed ? "Pass" : "Fail";
+                              return (
+                                <Tab
+                                  key={flowrate}
+                                  label={
+                                    <Box
+                                      display="flex"
+                                      alignItems="center"
+                                      gap={0.5}
+                                    >
+                                      <span>{flowrate} L/min</span>
+                                      <Chip
+                                        label={status}
+                                        size="small"
+                                        sx={{
+                                          backgroundColor:
+                                            status === "Pass"
+                                              ? theme.palette.success.main
+                                              : theme.palette.error.main,
+                                          color: "white",
+                                          height: "18px",
+                                          fontSize: "0.65rem",
+                                          minWidth: "40px",
+                                        }}
+                                      />
+                                    </Box>
+                                  }
+                                  sx={{
+                                    minHeight: "auto",
+                                    padding: "6px 12px",
+                                  }}
+                                />
+                              );
+                            })}
+                          </Tabs>
+                          {flowrateKeys.map((flowrate, index) => {
+                            if (index !== activeTabIndex) return null;
+                            const tests = flowrateGroups[flowrate];
+                            return (
+                              <Box key={flowrate} sx={{ mt: 1, p: 1 }}>
+                                <Box sx={{ mt: 0.5 }}>
+                                  {tests.map((test, testIndex) => (
+                                    <Box
+                                      key={testIndex}
+                                      sx={{
+                                        display: "flex",
+                                        gap: 1,
+                                        alignItems: "center",
+                                        mb: 0.5,
+                                      }}
+                                    >
+                                      <Typography variant="caption">
+                                        Actual:{" "}
+                                        {(test.actualFlowrate / 1000).toFixed(
+                                          2
+                                        )}{" "}
+                                        L/min
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                      >
+                                        Error:{" "}
+                                        {test.percentError?.toFixed(2) ||
+                                          "0.00"}
+                                        %
+                                      </Typography>
+                                      <Chip
+                                        label={test.passed ? "Pass" : "Fail"}
+                                        size="small"
+                                        sx={{
+                                          backgroundColor: test.passed
+                                            ? theme.palette.success.main
+                                            : theme.palette.error.main,
+                                          color: "white",
+                                          height: "16px",
+                                          fontSize: "0.6rem",
+                                        }}
+                                      />
+                                    </Box>
+                                  ))}
+                                </Box>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No test results
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {firstCal.nextCalibrationDue
+                        ? formatDate(firstCal.nextCalibrationDue)
+                        : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEdit(firstCal)}
+                        color="primary"
+                        title="Edit Calibration"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setCalibrationToDelete(firstCal);
+                          setDeleteDialog(true);
+                        }}
+                        color="error"
+                        title="Delete Calibration"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              });
+            })()}
           </TableBody>
         </Table>
         <TablePagination
@@ -422,143 +945,437 @@ const AirPumpCalibrationPage = () => {
       {/* Add/Edit Dialog */}
       <Dialog
         open={openDialog}
-        onClose={() => setOpenDialog(false)}
-        maxWidth="md"
+        onClose={() => handleDialogClose()}
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>
-          {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">
+              {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
+            </Typography>
+            <IconButton onClick={() => handleDialogClose()}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Calibration Date"
-                type="date"
-                value={formData.calibrationDate}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    calibrationDate: e.target.value,
-                  }))
-                }
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12}>
+        <Box
+          component="form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+        >
+          <DialogContent>
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
+            <Stack spacing={3} sx={{ mt: 1 }}>
+              {/* Static Fields */}
+              <Box>
+                <Typography
+                  variant="subtitle1"
+                  sx={{ mb: 2, fontWeight: "bold" }}
+                >
+                  Calibration Details
+                </Typography>
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  <TextField
+                    fullWidth
+                    label="Calibration Date"
+                    type="date"
+                    value={staticFormData.calibrationDate}
+                    onChange={(e) => {
+                      setStaticFormData({
+                        ...staticFormData,
+                        calibrationDate: e.target.value,
+                      });
+                      setHasUnsavedChanges(true);
+                    }}
+                    InputLabelProps={{ shrink: true }}
+                    required
+                  />
+                  <FormControl fullWidth required>
+                    <InputLabel>Technician</InputLabel>
+                    <Select
+                      value={staticFormData.technicianId}
+                      onChange={(e) => handleTechnicianChange(e.target.value)}
+                      label="Technician"
+                      disabled={labSignatoriesLoading}
+                    >
+                      <MenuItem value="">
+                        <em>Select a technician</em>
+                      </MenuItem>
+                      {labSignatories.length > 0 ? (
+                        labSignatories.map((technician) => (
+                          <MenuItem key={technician._id} value={technician._id}>
+                            {technician.firstName} {technician.lastName}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>
+                          {labSignatoriesLoading
+                            ? "Loading..."
+                            : "No technicians found"}
+                        </MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>Flowmeter</InputLabel>
+                    <Select
+                      value={staticFormData.flowmeterId}
+                      onChange={(e) => {
+                        setStaticFormData({
+                          ...staticFormData,
+                          flowmeterId: e.target.value,
+                        });
+                        setHasUnsavedChanges(true);
+                      }}
+                      label="Flowmeter"
+                      disabled={flowmeters.length === 0}
+                    >
+                      <MenuItem value="">
+                        <em>Select a flowmeter (optional)</em>
+                      </MenuItem>
+                      {flowmeters.length > 0 ? (
+                        flowmeters.map((flowmeter) => (
+                          <MenuItem
+                            key={flowmeter._id}
+                            value={String(flowmeter._id)}
+                          >
+                            {flowmeter.equipmentReference}
+                            {flowmeter.brandModel
+                              ? ` - ${flowmeter.brandModel}`
+                              : ""}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>
+                          {loading
+                            ? "Loading flowmeters..."
+                            : "No calibrated flowmeters available"}
+                        </MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </Box>
+
+              {/* Flowrate Indicators */}
+              {calibrationTests.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Calibrated Flowrates:
+                  </Typography>
+                  <Box display="flex" gap={1} flexWrap="wrap">
+                    {calibrationTests.map((cal, index) => {
+                      if (!cal.flowRate) return null;
+                      // Only show status if calibration is complete (has actualFlow and errorPercent)
+                      const isComplete = cal.actualFlow && cal.errorPercent;
+                      const statusColor = isComplete
+                        ? cal.status === "Pass"
+                          ? theme.palette.success.main
+                          : theme.palette.error.main
+                        : theme.palette.grey[400];
+                      return (
+                        <Chip
+                          key={index}
+                          label={
+                            isComplete
+                              ? `${cal.flowRate} L/min: ${cal.status}`
+                              : `${cal.flowRate} L/min`
+                          }
+                          sx={{
+                            backgroundColor: statusColor,
+                            color: "white",
+                            fontWeight: "bold",
+                          }}
+                        />
+                      );
+                    })}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Calibration Tabs */}
+              <Box>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
+                  <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                    Test Results
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddCalibration}
+                    disabled={
+                      calibrationTests.length >= availableFlowrates.length
+                    }
+                    size="small"
+                  >
+                    Add Flowrate
+                  </Button>
+                </Box>
+
+                {calibrationTests.length === 0 ? (
+                  <Alert severity="info">
+                    Click "Add Flowrate" to start adding calibration test
+                    results.
+                  </Alert>
+                ) : (
+                  <Box>
+                    <Tabs
+                      value={activeTab}
+                      onChange={(e, newValue) => setActiveTab(newValue)}
+                      variant="scrollable"
+                      scrollButtons="auto"
+                    >
+                      {calibrationTests.map((cal, index) => {
+                        // Only show status if calibration is complete (has actualFlow and errorPercent)
+                        const isComplete = cal.actualFlow && cal.errorPercent;
+                        return (
+                          <Tab
+                            key={index}
+                            label={
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <span>{cal.flowRate || "New"} L/min</span>
+                                {isComplete && cal.status && (
+                                  <Chip
+                                    label={cal.status}
+                                    size="small"
+                                    sx={{
+                                      backgroundColor:
+                                        cal.status === "Pass"
+                                          ? theme.palette.success.main
+                                          : theme.palette.error.main,
+                                      color: "white",
+                                      height: "20px",
+                                      fontSize: "0.7rem",
+                                    }}
+                                  />
+                                )}
+                              </Box>
+                            }
+                          />
+                        );
+                      })}
+                    </Tabs>
+
+                    {calibrationTests.map((cal, index) => (
+                      <Box
+                        key={index}
+                        role="tabpanel"
+                        hidden={activeTab !== index}
+                        sx={{ mt: 2 }}
+                      >
+                        {activeTab === index && (
+                          <Stack spacing={2}>
+                            <Box
+                              display="flex"
+                              justifyContent="space-between"
+                              alignItems="center"
+                            >
+                              <Typography variant="h6">
+                                Flowrate: {cal.flowRate || "Not selected"} L/min
+                              </Typography>
+                              {calibrationTests.length > 1 && (
+                                <IconButton
+                                  color="error"
+                                  onClick={() => handleRemoveCalibration(index)}
+                                  size="small"
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              )}
+                            </Box>
+                            <Box display="flex" gap={2}>
+                              <FormControl fullWidth required>
+                                <InputLabel>Flowrate (L/min)</InputLabel>
+                                <Select
+                                  value={cal.flowRate}
+                                  onChange={(e) =>
+                                    handleCalibrationChange(
+                                      index,
+                                      "flowRate",
+                                      e.target.value
+                                    )
+                                  }
+                                  label="Flowrate (L/min)"
+                                >
+                                  <MenuItem value="">
+                                    <em>Select flowrate</em>
+                                  </MenuItem>
+                                  {availableFlowrates.map((rate) => {
+                                    const isUsed = calibrationTests.some(
+                                      (c, i) =>
+                                        i !== index && c.flowRate === rate
+                                    );
+                                    return (
+                                      <MenuItem
+                                        key={rate}
+                                        value={rate}
+                                        disabled={isUsed}
+                                      >
+                                        {rate} L/min{" "}
+                                        {isUsed && "(Already used)"}
+                                      </MenuItem>
+                                    );
+                                  })}
+                                </Select>
+                              </FormControl>
+                              <TextField
+                                fullWidth
+                                label="Actual Flow (L/min)"
+                                type="number"
+                                value={cal.actualFlow}
+                                onChange={(e) =>
+                                  handleCalibrationChange(
+                                    index,
+                                    "actualFlow",
+                                    e.target.value
+                                  )
+                                }
+                                inputProps={{ step: "0.01", min: "0" }}
+                                required
+                                sx={{
+                                  "& input[type=number]": {
+                                    "-moz-appearance": "textfield",
+                                  },
+                                  "& input[type=number]::-webkit-outer-spin-button":
+                                    {
+                                      "-webkit-appearance": "none",
+                                      margin: 0,
+                                    },
+                                  "& input[type=number]::-webkit-inner-spin-button":
+                                    {
+                                      "-webkit-appearance": "none",
+                                      margin: 0,
+                                    },
+                                }}
+                              />
+                            </Box>
+                            <TextField
+                              fullWidth
+                              label="Error (%)"
+                              value={
+                                cal.errorPercent ? `${cal.errorPercent}%` : ""
+                              }
+                              InputLabelProps={{ shrink: true }}
+                              disabled
+                            />
+                            <Box>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mb: 1,
+                                  fontSize: "16px",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                Status:
+                              </Typography>
+                              {cal.errorPercent ? (
+                                <Typography
+                                  variant="h5"
+                                  sx={{
+                                    color:
+                                      cal.status === "Pass"
+                                        ? theme.palette.success.main
+                                        : theme.palette.error.main,
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {cal.status}
+                                </Typography>
+                              ) : (
+                                <Typography variant="h5" color="text.secondary">
+                                  N/A
+                                </Typography>
+                              )}
+                            </Box>
+                          </Stack>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+
               <TextField
                 fullWidth
                 label="Notes"
+                value={staticFormData.notes}
+                onChange={(e) => {
+                  setStaticFormData({
+                    ...staticFormData,
+                    notes: e.target.value,
+                  });
+                  setHasUnsavedChanges(true);
+                }}
                 multiline
                 rows={3}
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                }
               />
-            </Grid>
-
-            <Grid item xs={12}>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Test Results
-              </Typography>
-
-              {/* Add Test Result Form */}
-              <Box display="flex" gap={2} mb={2}>
-                <FormControl sx={{ minWidth: 150 }}>
-                  <InputLabel>Set Flowrate</InputLabel>
-                  <Select
-                    value={testResult.setFlowrate}
-                    onChange={(e) =>
-                      setTestResult((prev) => ({
-                        ...prev,
-                        setFlowrate: e.target.value,
-                      }))
-                    }
-                    label="Set Flowrate"
-                  >
-                    {setFlowrateOptions.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Actual Flowrate"
-                  type="number"
-                  value={testResult.actualFlowrate}
-                  onChange={(e) =>
-                    setTestResult((prev) => ({
-                      ...prev,
-                      actualFlowrate: e.target.value,
-                    }))
-                  }
-                  sx={{ minWidth: 150 }}
-                />
-                <Button
-                  variant="outlined"
-                  onClick={handleAddTestResult}
-                  disabled={
-                    !testResult.setFlowrate || !testResult.actualFlowrate
-                  }
-                >
-                  Add Test
-                </Button>
-              </Box>
-
-              {/* Test Results Table */}
-              {formData.testResults.length > 0 && (
-                <TableContainer component={Paper} sx={{ mb: 2 }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Set Flowrate</TableCell>
-                        <TableCell>Actual Flowrate</TableCell>
-                        <TableCell>% Error</TableCell>
-                        <TableCell>Result</TableCell>
-                        <TableCell>Action</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {formData.testResults.map((result, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{result.setFlowrate}</TableCell>
-                          <TableCell>{result.actualFlowrate}</TableCell>
-                          <TableCell>
-                            {result.percentError.toFixed(2)}%
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={result.passed ? "Pass" : "Fail"}
-                              color={result.passed ? "success" : "error"}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <IconButton
-                              size="small"
-                              onClick={() => handleRemoveTestResult(index)}
-                              color="error"
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => handleDialogClose()}>Cancel</Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={
+                loading ||
+                !staticFormData.calibrationDate ||
+                !staticFormData.technicianId ||
+                calibrationTests.length === 0 ||
+                calibrationTests.some((cal) => !cal.flowRate || !cal.actualFlow)
+              }
+            >
+              {loading ? (
+                <CircularProgress size={24} />
+              ) : editingCalibration ? (
+                "Update Calibration"
+              ) : (
+                "Save All Calibrations"
               )}
-            </Grid>
-          </Grid>
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      {/* Confirmation Dialog for Unsaved Changes */}
+      <Dialog
+        open={confirmCloseDialog}
+        onClose={() => setConfirmCloseDialog(false)}
+      >
+        <DialogTitle>Unsaved Changes</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You have unsaved calibration data. Are you sure you want to leave?
+            All unsaved data will be lost.
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingCalibration ? "Update" : "Save"}
+          <Button onClick={() => setConfirmCloseDialog(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              handleDialogClose(true);
+            }}
+            variant="contained"
+            color="error"
+          >
+            Discard Changes
           </Button>
         </DialogActions>
       </Dialog>

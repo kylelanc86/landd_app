@@ -43,6 +43,11 @@ const airPumpCalibrationSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  flowmeterId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Equipment',
+    required: false
+  },
   nextCalibrationDue: {
     type: Date
   }

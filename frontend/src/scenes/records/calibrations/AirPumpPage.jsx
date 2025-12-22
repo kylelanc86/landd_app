@@ -28,14 +28,19 @@ import {
   Select,
   MenuItem,
   Stack,
+  Tabs,
+  Tab,
+  Chip,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import HistoryIcon from "@mui/icons-material/History";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
 import { equipmentService } from "../../../services/equipmentService";
+import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
 import userService from "../../../services/userService";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { useAuth } from "../../../context/AuthContext";
@@ -46,24 +51,34 @@ const AirPumpPage = () => {
   const { currentUser } = useAuth();
   const [pumps, setPumps] = useState([]);
   const [pumpsLoading, setPumpsLoading] = useState(false);
+  const [flowmeters, setFlowmeters] = useState([]);
+  const [flowmetersLoading, setFlowmetersLoading] = useState(false);
   const [labSignatories, setLabSignatories] = useState([]);
   const [labSignatoriesLoading, setLabSignatoriesLoading] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showOutOfService, setShowOutOfService] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [confirmCloseDialog, setConfirmCloseDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Static form data (shared across all calibrations)
+  const [staticFormData, setStaticFormData] = useState({
     pumpId: "",
     pumpEquipmentId: "",
     date: formatDateForInput(new Date()),
     technicianId: "",
     technicianName: "",
-    flowRate: "",
-    actualFlow: "",
-    errorPercent: "",
-    status: "Pass",
+    flowmeterId: "",
     notes: "",
   });
+
+  // Array of calibration test results (one per flowrate)
+  const [calibrations, setCalibrations] = useState([]);
+
+  // Available flowrates
+  const availableFlowrates = ["1", "1.5", "2", "3", "4"];
 
   // Calculate days until calibration is due
   const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
@@ -164,31 +179,61 @@ const AirPumpPage = () => {
             const flowrateCalibrations = {};
             calibrations.forEach((cal) => {
               if (cal.testResults && cal.testResults.length > 0) {
-                // Get the setFlowrate from the first test result (all testResults in a calibration have the same setFlowrate)
-                const setFlowrateMlMin = cal.testResults[0].setFlowrate;
-                const flowrateLMin = (setFlowrateMlMin / 1000).toString();
+                // Iterate through all test results (each can have a different flowrate)
+                cal.testResults.forEach((testResult) => {
+                  const setFlowrateMlMin = testResult.setFlowrate;
+                  const flowrateLMin = (setFlowrateMlMin / 1000).toString();
 
-                // Use overallResult as the status for this flowrate
-                if (
-                  !flowrateCalibrations[flowrateLMin] ||
-                  new Date(cal.calibrationDate) >
-                    new Date(
-                      flowrateCalibrations[flowrateLMin].lastCalibrationDate
-                    )
-                ) {
-                  flowrateCalibrations[flowrateLMin] = {
-                    status: cal.overallResult || "Fail",
-                    lastCalibrationDate: cal.calibrationDate,
-                  };
-                }
+                  // Use the test result's passed status, or overallResult as fallback
+                  const testStatus = testResult.passed ? "Pass" : "Fail";
+
+                  // Use overallResult as the status for this flowrate
+                  if (
+                    !flowrateCalibrations[flowrateLMin] ||
+                    new Date(cal.calibrationDate) >
+                      new Date(
+                        flowrateCalibrations[flowrateLMin].lastCalibrationDate
+                      )
+                  ) {
+                    flowrateCalibrations[flowrateLMin] = {
+                      status: testStatus,
+                      lastCalibrationDate: cal.calibrationDate,
+                    };
+                  }
+                });
               }
             });
+
+            // Get the most recent flowmeter used (from most recent calibration with a flowmeter)
+            let mostRecentFlowmeter = null;
+            const calibrationsWithFlowmeter = calibrations
+              .filter((cal) => cal.flowmeterId)
+              .sort(
+                (a, b) =>
+                  new Date(b.calibrationDate) - new Date(a.calibrationDate)
+              );
+
+            if (calibrationsWithFlowmeter.length > 0) {
+              const mostRecentCal = calibrationsWithFlowmeter[0];
+              // Handle both populated object and ID
+              if (
+                typeof mostRecentCal.flowmeterId === "object" &&
+                mostRecentCal.flowmeterId.equipmentReference
+              ) {
+                mostRecentFlowmeter =
+                  mostRecentCal.flowmeterId.equipmentReference;
+              } else if (mostRecentCal.flowmeterId) {
+                // If it's just an ID, we'll need to look it up later or store the ID
+                mostRecentFlowmeter = mostRecentCal.flowmeterId;
+              }
+            }
 
             return {
               ...pump,
               lastCalibration,
               calibrationDue,
               flowrateCalibrations,
+              mostRecentFlowmeter,
             };
           } catch (err) {
             console.error(
@@ -234,10 +279,91 @@ const AirPumpPage = () => {
     }
   }, []);
 
+  // Fetch calibrated site flowmeters
+  const fetchFlowmeters = useCallback(async () => {
+    try {
+      setFlowmetersLoading(true);
+      const response = await equipmentService.getAll();
+      const allEquipment = response.equipment || [];
+
+      // Filter for Site flowmeter equipment
+      const siteFlowmeters = allEquipment
+        .filter((equipment) => equipment.equipmentType === "Site flowmeter")
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference)
+        );
+
+      // Fetch calibration data for each flowmeter
+      const flowmetersWithCalibrations = await Promise.all(
+        siteFlowmeters.map(async (flowmeter) => {
+          try {
+            const calibrationResponse =
+              await flowmeterCalibrationService.getByFlowmeter(
+                flowmeter.equipmentReference
+              );
+            const calibrations =
+              calibrationResponse.data || calibrationResponse || [];
+
+            const lastCalibration =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) => new Date(cal.date).getTime())
+                    )
+                  )
+                : null;
+
+            const calibrationDue =
+              calibrations.length > 0
+                ? new Date(
+                    Math.max(
+                      ...calibrations.map((cal) =>
+                        new Date(cal.nextCalibration).getTime()
+                      )
+                    )
+                  )
+                : null;
+
+            return {
+              ...flowmeter,
+              lastCalibration,
+              calibrationDue,
+            };
+          } catch (err) {
+            console.error(
+              `Error fetching calibrations for ${flowmeter.equipmentReference}:`,
+              err
+            );
+            return {
+              ...flowmeter,
+              lastCalibration: null,
+              calibrationDue: null,
+            };
+          }
+        })
+      );
+
+      // Filter for active/calibrated flowmeters
+      const activeFlowmeters = flowmetersWithCalibrations
+        .filter((equipment) => calculateStatus(equipment) === "Active")
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference)
+        );
+
+      setFlowmeters(activeFlowmeters);
+    } catch (err) {
+      console.error("Error fetching flowmeters:", err);
+      setFlowmeters([]);
+    } finally {
+      setFlowmetersLoading(false);
+    }
+  }, [calculateStatus]);
+
   useEffect(() => {
     fetchPumps();
     fetchLabSignatories();
-  }, [fetchPumps, fetchLabSignatories]);
+    fetchFlowmeters();
+  }, [fetchPumps, fetchLabSignatories, fetchFlowmeters]);
 
   // Listen for equipment data updates
   useEffect(() => {
@@ -255,91 +381,209 @@ const AirPumpPage = () => {
     };
   }, [fetchPumps]);
 
-  const handleAdd = () => {
+  // Check if there are unsaved changes
+  const checkUnsavedChanges = useCallback(() => {
+    const hasStaticData =
+      staticFormData.pumpEquipmentId ||
+      staticFormData.date !== formatDateForInput(new Date()) ||
+      staticFormData.technicianId ||
+      staticFormData.flowmeterId ||
+      staticFormData.notes;
+
+    const hasCalibrations =
+      calibrations.length > 0 &&
+      calibrations.some((cal) => cal.flowRate || cal.actualFlow);
+
+    return hasStaticData || hasCalibrations;
+  }, [staticFormData, calibrations]);
+
+  // Handle dialog close with confirmation
+  const handleDialogClose = (confirmed = false) => {
+    if (!confirmed && checkUnsavedChanges()) {
+      setConfirmCloseDialog(true);
+      return;
+    }
+    setAddDialogOpen(false);
+    setError(null);
+    setHasUnsavedChanges(false);
+    setConfirmCloseDialog(false);
+    // Reset form
     const todayDate = formatDateForInput(new Date());
-    setFormData({
+    setStaticFormData({
       pumpId: "",
       pumpEquipmentId: "",
       date: todayDate,
       technicianId: "",
       technicianName: "",
-      flowRate: "",
-      actualFlow: "",
-      errorPercent: "",
-      status: "Pass",
+      flowmeterId: "",
       notes: "",
     });
+    setCalibrations([]);
+    setActiveTab(0);
+  };
+
+  const handleAdd = () => {
+    const todayDate = formatDateForInput(new Date());
+    setStaticFormData({
+      pumpId: "",
+      pumpEquipmentId: "",
+      date: todayDate,
+      technicianId: "",
+      technicianName: "",
+      flowmeterId: "",
+      notes: "",
+    });
+    setCalibrations([]);
+    setActiveTab(0);
+    setHasUnsavedChanges(false);
     setAddDialogOpen(true);
   };
 
   const handlePumpChange = (pumpEquipmentId) => {
     const selectedPump = pumps.find((p) => p._id === pumpEquipmentId);
-
-    setFormData((prev) => ({
+    setStaticFormData((prev) => ({
       ...prev,
       pumpEquipmentId: pumpEquipmentId,
       pumpId: selectedPump ? selectedPump.equipmentReference : "",
     }));
-
     setError(null);
+    setHasUnsavedChanges(true);
   };
 
   const handleTechnicianChange = (technicianId) => {
     const selectedTechnician = labSignatories.find(
       (t) => t._id === technicianId
     );
-    setFormData((prev) => ({
+    setStaticFormData((prev) => ({
       ...prev,
       technicianId: technicianId,
       technicianName: selectedTechnician
         ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
         : "",
     }));
+    setHasUnsavedChanges(true);
   };
 
-  const handleFlowRateChange = (flowRate) => {
-    setFormData((prev) => {
-      const newData = { ...prev, flowRate };
-      // Recalculate error if actualFlow exists
-      if (newData.actualFlow && flowRate) {
-        const actualFlowNum = parseFloat(newData.actualFlow);
-        const flowRateNum = parseFloat(flowRate);
-        if (!isNaN(actualFlowNum) && !isNaN(flowRateNum) && flowRateNum !== 0) {
-          const errorValue = Math.abs(
-            ((actualFlowNum - flowRateNum) / flowRateNum) * 100
-          );
-          newData.errorPercent = errorValue.toFixed(2);
-          newData.status = errorValue < 5 ? "Pass" : "Fail";
-        } else {
-          newData.errorPercent = "";
+  // Add a new calibration tab
+  const handleAddCalibration = () => {
+    const usedFlowrates = calibrations
+      .map((cal) => cal.flowRate)
+      .filter(Boolean);
+    const nextFlowrate = availableFlowrates.find(
+      (rate) => !usedFlowrates.includes(rate)
+    );
+
+    if (!nextFlowrate) {
+      setError("All flowrates have been calibrated");
+      return;
+    }
+
+    setCalibrations((prev) => [
+      ...prev,
+      {
+        flowRate: nextFlowrate,
+        actualFlow: "",
+        errorPercent: "",
+        status: "",
+      },
+    ]);
+    setActiveTab(calibrations.length);
+    setHasUnsavedChanges(true);
+  };
+
+  // Remove a calibration
+  const handleRemoveCalibration = (index) => {
+    setCalibrations((prev) => prev.filter((_, i) => i !== index));
+    if (activeTab >= calibrations.length - 1) {
+      setActiveTab(Math.max(0, calibrations.length - 2));
+    }
+    setHasUnsavedChanges(true);
+  };
+
+  // Update calibration data
+  const handleCalibrationChange = (index, field, value) => {
+    setCalibrations((prev) => {
+      const updated = [...prev];
+      const calibration = { ...updated[index] };
+
+      if (field === "flowRate") {
+        calibration.flowRate = value;
+        // Recalculate if actualFlow exists
+        if (calibration.actualFlow && value) {
+          const actualFlowNum = parseFloat(calibration.actualFlow);
+          const flowRateNum = parseFloat(value);
+          if (
+            !isNaN(actualFlowNum) &&
+            !isNaN(flowRateNum) &&
+            flowRateNum !== 0
+          ) {
+            const errorValue = Math.abs(
+              ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+            );
+            calibration.errorPercent = errorValue.toFixed(2);
+            calibration.status = errorValue < 5 ? "Pass" : "Fail";
+          }
         }
-      }
-      return newData;
-    });
-  };
-
-  const handleActualFlowChange = (actualFlow) => {
-    setFormData((prev) => {
-      const newData = { ...prev, actualFlow };
-      // Calculate error percentage
-      if (newData.flowRate && actualFlow) {
-        const actualFlowNum = parseFloat(actualFlow);
-        const flowRateNum = parseFloat(newData.flowRate);
-        if (!isNaN(actualFlowNum) && !isNaN(flowRateNum) && flowRateNum !== 0) {
-          const errorValue = Math.abs(
-            ((actualFlowNum - flowRateNum) / flowRateNum) * 100
-          );
-          newData.errorPercent = errorValue.toFixed(2);
-          newData.status = errorValue < 5 ? "Pass" : "Fail";
-        } else {
-          newData.errorPercent = "";
+      } else if (field === "actualFlow") {
+        calibration.actualFlow = value;
+        // Recalculate if flowRate exists
+        if (calibration.flowRate && value) {
+          const actualFlowNum = parseFloat(value);
+          const flowRateNum = parseFloat(calibration.flowRate);
+          if (
+            !isNaN(actualFlowNum) &&
+            !isNaN(flowRateNum) &&
+            flowRateNum !== 0
+          ) {
+            const errorValue = Math.abs(
+              ((actualFlowNum - flowRateNum) / flowRateNum) * 100
+            );
+            calibration.errorPercent = errorValue.toFixed(2);
+            calibration.status = errorValue < 5 ? "Pass" : "Fail";
+          }
         }
       } else {
-        newData.errorPercent = "";
+        calibration[field] = value;
       }
-      return newData;
+
+      updated[index] = calibration;
+      return updated;
     });
+    setHasUnsavedChanges(true);
   };
+
+  // Track unsaved changes
+  useEffect(() => {
+    const hasChanges = checkUnsavedChanges();
+    setHasUnsavedChanges(hasChanges);
+  }, [staticFormData, calibrations, checkUnsavedChanges]);
+
+  // Handle browser navigation and refresh
+  useEffect(() => {
+    if (!addDialogOpen || !hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue =
+        "You have unsaved calibration data. Are you sure you want to leave?";
+      return "You have unsaved calibration data. Are you sure you want to leave?";
+    };
+
+    const handlePopState = (e) => {
+      if (hasUnsavedChanges) {
+        window.history.pushState(null, "", window.location.pathname);
+        setConfirmCloseDialog(true);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [addDialogOpen, hasUnsavedChanges]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -352,60 +596,85 @@ const AirPumpPage = () => {
       }
 
       if (
-        !formData.pumpEquipmentId ||
-        !formData.date ||
-        !formData.technicianId ||
-        !formData.flowRate ||
-        !formData.actualFlow
+        !staticFormData.pumpEquipmentId ||
+        !staticFormData.date ||
+        !staticFormData.technicianId
       ) {
-        setError("Please fill in all required fields");
+        setError(
+          "Please fill in all required static fields (Pump, Date, Technician)"
+        );
         return;
       }
 
-      // Convert flowrate from L/min to mL/min (multiply by 1000)
-      const setFlowrateMlMin = Math.round(parseFloat(formData.flowRate) * 1000);
-      const actualFlowrateMlMin = parseFloat(formData.actualFlow) * 1000;
-
-      // Validate setFlowrate is in the allowed enum values
-      const allowedFlowrates = [1000, 1500, 2000, 3000, 4000];
-      if (!allowedFlowrates.includes(setFlowrateMlMin)) {
-        setError(`Invalid flowrate. Must be one of: 1, 1.5, 2, 3, or 4 L/min`);
+      if (calibrations.length === 0) {
+        setError("Please add at least one calibration");
         return;
       }
 
-      // Calculate percent error
-      const percentError = Math.abs(
-        ((actualFlowrateMlMin - setFlowrateMlMin) / setFlowrateMlMin) * 100
-      );
+      // Validate all calibrations
+      for (let i = 0; i < calibrations.length; i++) {
+        const cal = calibrations[i];
+        if (!cal.flowRate || !cal.actualFlow) {
+          setError(
+            `Calibration ${
+              i + 1
+            } is incomplete. Please fill in flowrate and actual flow.`
+          );
+          return;
+        }
+      }
 
-      // Determine if test passed
-      const passed = percentError < 5;
+      // Create test results for all calibrations
+      const testResults = calibrations.map((cal) => {
+        const setFlowrateMlMin = Math.round(parseFloat(cal.flowRate) * 1000);
+        const actualFlowrateMlMin = parseFloat(cal.actualFlow) * 1000;
+
+        // Validate setFlowrate is in the allowed enum values
+        const allowedFlowrates = [1000, 1500, 2000, 3000, 4000];
+        if (!allowedFlowrates.includes(setFlowrateMlMin)) {
+          throw new Error(`Invalid flowrate: ${cal.flowRate} L/min`);
+        }
+
+        // Calculate percent error
+        const percentError = Math.abs(
+          ((actualFlowrateMlMin - setFlowrateMlMin) / setFlowrateMlMin) * 100
+        );
+
+        // Determine if test passed
+        const passed = percentError < 5;
+
+        return {
+          setFlowrate: setFlowrateMlMin,
+          actualFlowrate: actualFlowrateMlMin,
+          percentError: percentError,
+          passed: passed,
+        };
+      });
+
+      // Determine overall result (pass if all tests passed)
+      const overallResult = testResults.every((result) => result.passed)
+        ? "Pass"
+        : "Fail";
 
       const backendData = {
-        pumpId: formData.pumpEquipmentId, // Use equipment ID
-        calibrationDate: new Date(formData.date),
-        testResults: [
-          {
-            setFlowrate: setFlowrateMlMin,
-            actualFlowrate: actualFlowrateMlMin,
-            percentError: percentError,
-            passed: passed,
-          },
-        ],
-        overallResult: formData.status,
-        notes: formData.notes || "",
+        pumpId: staticFormData.pumpEquipmentId,
+        calibrationDate: new Date(staticFormData.date),
+        testResults: testResults,
+        overallResult: overallResult,
+        notes: staticFormData.notes || "",
+        flowmeterId: staticFormData.flowmeterId || null,
       };
 
       console.log("Sending calibration data:", backendData);
 
       await airPumpCalibrationService.createCalibration(backendData);
 
-      setAddDialogOpen(false);
+      handleDialogClose(true);
       fetchPumps();
 
       window.dispatchEvent(
         new CustomEvent("equipmentDataUpdated", {
-          detail: { equipmentId: formData.pumpEquipmentId },
+          detail: { equipmentId: staticFormData.pumpEquipmentId },
         })
       );
     } catch (err) {
@@ -519,10 +788,10 @@ const AirPumpPage = () => {
               <TableRow>
                 <TableCell>Equipment Ref</TableCell>
                 <TableCell>Brand/Model</TableCell>
-                <TableCell>Section</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Last Calibration</TableCell>
                 <TableCell>Calibration Due</TableCell>
+                <TableCell>Flowmeter</TableCell>
                 <TableCell>Flowrates (L/min)</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -562,7 +831,6 @@ const AirPumpPage = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>{pump.brandModel || "-"}</TableCell>
-                      <TableCell>{pump.section || "-"}</TableCell>
                       <TableCell>
                         <Box
                           sx={{
@@ -627,6 +895,7 @@ const AirPumpPage = () => {
                             })()
                           : "-"}
                       </TableCell>
+                      <TableCell>{pump.mostRecentFlowmeter || "-"}</TableCell>
                       <TableCell>
                         {(() => {
                           // Handle both Map and object formats (MongoDB Maps are converted to objects in JSON)
@@ -705,11 +974,8 @@ const AirPumpPage = () => {
       {/* Add Calibration Dialog */}
       <Dialog
         open={addDialogOpen}
-        onClose={() => {
-          setAddDialogOpen(false);
-          setError(null);
-        }}
-        maxWidth="md"
+        onClose={() => handleDialogClose()}
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>
@@ -719,12 +985,7 @@ const AirPumpPage = () => {
             alignItems="center"
           >
             <Typography variant="h6">Add New Calibration</Typography>
-            <IconButton
-              onClick={() => {
-                setAddDialogOpen(false);
-                setError(null);
-              }}
-            >
+            <IconButton onClick={() => handleDialogClose()}>
               <CloseIcon />
             </IconButton>
           </Box>
@@ -737,229 +998,425 @@ const AirPumpPage = () => {
               </Alert>
             )}
             <Stack spacing={3} sx={{ mt: 1 }}>
-              <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Pump</InputLabel>
-                  <Select
-                    value={formData.pumpEquipmentId}
-                    onChange={(e) => handlePumpChange(e.target.value)}
-                    label="Pump"
-                    disabled={pumpsLoading}
-                  >
-                    <MenuItem value="">
-                      <em>Select a pump</em>
-                    </MenuItem>
-                    {pumps.length > 0 ? (
-                      pumps.map((pump) => (
-                        <MenuItem key={pump._id} value={pump._id}>
-                          {pump.equipmentReference} - {pump.brandModel}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {pumpsLoading ? "Loading..." : "No pumps found"}
+              {/* Static Fields */}
+              <Box>
+                <Typography
+                  variant="subtitle1"
+                  sx={{ mb: 2, fontWeight: "bold" }}
+                >
+                  Calibration Details
+                </Typography>
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  <FormControl fullWidth required>
+                    <InputLabel>Pump</InputLabel>
+                    <Select
+                      value={staticFormData.pumpEquipmentId}
+                      onChange={(e) => handlePumpChange(e.target.value)}
+                      label="Pump"
+                      disabled={pumpsLoading}
+                    >
+                      <MenuItem value="">
+                        <em>Select a pump</em>
                       </MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
-                <TextField
-                  fullWidth
-                  label="Calibration Date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) =>
-                    setFormData({ ...formData, date: e.target.value })
-                  }
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-                <FormControl fullWidth required>
-                  <InputLabel>Technician</InputLabel>
-                  <Select
-                    value={formData.technicianId}
-                    onChange={(e) => handleTechnicianChange(e.target.value)}
-                    label="Technician"
-                    disabled={labSignatoriesLoading}
-                  >
-                    <MenuItem value="">
-                      <em>Select a technician</em>
-                    </MenuItem>
-                    {labSignatories.length > 0 ? (
-                      labSignatories.map((technician) => (
-                        <MenuItem key={technician._id} value={technician._id}>
-                          {technician.firstName} {technician.lastName}
+                      {pumps.length > 0 ? (
+                        pumps.map((pump) => (
+                          <MenuItem key={pump._id} value={pump._id}>
+                            {pump.equipmentReference} - {pump.brandModel}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>
+                          {pumpsLoading ? "Loading..." : "No pumps found"}
                         </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {labSignatoriesLoading
-                          ? "Loading..."
-                          : "No technicians found"}
+                      )}
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    fullWidth
+                    label="Calibration Date"
+                    type="date"
+                    value={staticFormData.date}
+                    onChange={(e) => {
+                      setStaticFormData({
+                        ...staticFormData,
+                        date: e.target.value,
+                      });
+                      setHasUnsavedChanges(true);
+                    }}
+                    InputLabelProps={{ shrink: true }}
+                    required
+                  />
+                  <FormControl fullWidth required>
+                    <InputLabel>Technician</InputLabel>
+                    <Select
+                      value={staticFormData.technicianId}
+                      onChange={(e) => handleTechnicianChange(e.target.value)}
+                      label="Technician"
+                      disabled={labSignatoriesLoading}
+                    >
+                      <MenuItem value="">
+                        <em>Select a technician</em>
                       </MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
+                      {labSignatories.length > 0 ? (
+                        labSignatories.map((technician) => (
+                          <MenuItem key={technician._id} value={technician._id}>
+                            {technician.firstName} {technician.lastName}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>
+                          {labSignatoriesLoading
+                            ? "Loading..."
+                            : "No technicians found"}
+                        </MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>Flowmeter</InputLabel>
+                    <Select
+                      value={staticFormData.flowmeterId}
+                      onChange={(e) => {
+                        setStaticFormData({
+                          ...staticFormData,
+                          flowmeterId: e.target.value,
+                        });
+                        setHasUnsavedChanges(true);
+                      }}
+                      label="Flowmeter"
+                      disabled={flowmetersLoading}
+                    >
+                      <MenuItem value="">
+                        <em>Select a flowmeter (optional)</em>
+                      </MenuItem>
+                      {flowmeters.length > 0 ? (
+                        flowmeters.map((flowmeter) => (
+                          <MenuItem key={flowmeter._id} value={flowmeter._id}>
+                            {flowmeter.equipmentReference}
+                            {flowmeter.brandModel
+                              ? ` - ${flowmeter.brandModel}`
+                              : ""}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem disabled>
+                          {flowmetersLoading
+                            ? "Loading..."
+                            : "No calibrated flowmeters available"}
+                        </MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                </Box>
               </Box>
-              <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Flowrate (L/min)</InputLabel>
-                  <Select
-                    value={formData.flowRate}
-                    onChange={(e) => handleFlowRateChange(e.target.value)}
-                    label="Flowrate (L/min)"
-                  >
-                    <MenuItem value="">
-                      <em>Select flowrate</em>
-                    </MenuItem>
-                    <MenuItem value="1">1 L/min</MenuItem>
-                    <MenuItem value="1.5">1.5 L/min</MenuItem>
-                    <MenuItem value="2">2 L/min</MenuItem>
-                    <MenuItem value="3">3 L/min</MenuItem>
-                    <MenuItem value="4">4 L/min</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  fullWidth
-                  label="Actual Flow (L/min)"
-                  type="number"
-                  value={formData.actualFlow}
-                  onChange={(e) => handleActualFlowChange(e.target.value)}
-                  inputProps={{ step: "0.01", min: "0" }}
-                  sx={{
-                    "& input[type=number]": {
-                      "-moz-appearance": "textfield",
-                    },
-                    "& input[type=number]::-webkit-outer-spin-button": {
-                      "-webkit-appearance": "none",
-                      margin: 0,
-                    },
-                    "& input[type=number]::-webkit-inner-spin-button": {
-                      "-webkit-appearance": "none",
-                      margin: 0,
-                    },
-                  }}
-                  required
-                />
-              </Box>
-              {(() => {
-                // Calculate error percentage and status
-                let errorPercent = "";
-                let calculatedStatus = "";
 
-                if (formData.flowRate && formData.actualFlow) {
-                  const flowRateNum = parseFloat(formData.flowRate);
-                  const actualFlowNum = parseFloat(formData.actualFlow);
-
-                  if (
-                    !isNaN(flowRateNum) &&
-                    !isNaN(actualFlowNum) &&
-                    flowRateNum !== 0
-                  ) {
-                    const errorValue = Math.abs(
-                      ((actualFlowNum - flowRateNum) / flowRateNum) * 100
-                    );
-                    errorPercent = errorValue.toFixed(2);
-                    calculatedStatus = errorValue < 5 ? "Pass" : "Fail";
-
-                    // Update status in formData if it changed
-                    if (calculatedStatus !== formData.status) {
-                      setFormData((prev) => ({
-                        ...prev,
-                        status: calculatedStatus,
-                        errorPercent: errorPercent,
-                      }));
-                    } else if (formData.errorPercent !== errorPercent) {
-                      // Update errorPercent if status hasn't changed
-                      setFormData((prev) => ({
-                        ...prev,
-                        errorPercent: errorPercent,
-                      }));
-                    }
-                  }
-                }
-
-                return (
-                  <>
-                    <TextField
-                      fullWidth
-                      label="Error (%)"
-                      value={
-                        errorPercent
-                          ? `${errorPercent}%`
-                          : formData.errorPercent
-                          ? `${formData.errorPercent}%`
-                          : ""
-                      }
-                      InputLabelProps={{ shrink: true }}
-                      disabled
-                    />
-                    <Box>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ mb: 1, fontSize: "16px", fontWeight: "600" }}
-                      >
-                        Status:
-                      </Typography>
-                      {errorPercent || formData.errorPercent ? (
-                        <Typography
-                          variant="h5"
+              {/* Flowrate Indicators */}
+              {calibrations.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Calibrated Flowrates:
+                  </Typography>
+                  <Box display="flex" gap={1} flexWrap="wrap">
+                    {calibrations.map((cal, index) => {
+                      if (!cal.flowRate) return null;
+                      // Only show status if calibration is complete (has actualFlow and errorPercent)
+                      const isComplete = cal.actualFlow && cal.errorPercent;
+                      const statusColor = isComplete
+                        ? cal.status === "Pass"
+                          ? theme.palette.success.main
+                          : theme.palette.error.main
+                        : theme.palette.grey[400];
+                      return (
+                        <Chip
+                          key={index}
+                          label={
+                            isComplete
+                              ? `${cal.flowRate} L/min: ${cal.status}`
+                              : `${cal.flowRate} L/min`
+                          }
                           sx={{
-                            color:
-                              (calculatedStatus || formData.status) === "Pass"
-                                ? theme.palette.success.main
-                                : theme.palette.error.main,
+                            backgroundColor: statusColor,
+                            color: "white",
                             fontWeight: "bold",
                           }}
-                        >
-                          {calculatedStatus || formData.status}
-                        </Typography>
-                      ) : (
-                        <Typography variant="h5" color="text.secondary">
-                          N/A
-                        </Typography>
-                      )}
-                    </Box>
-                  </>
-                );
-              })()}
+                        />
+                      );
+                    })}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Calibration Tabs */}
+              <Box>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
+                  <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                    Test Results
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddCalibration}
+                    disabled={calibrations.length >= availableFlowrates.length}
+                    size="small"
+                  >
+                    Add Flowrate
+                  </Button>
+                </Box>
+
+                {calibrations.length === 0 ? (
+                  <Alert severity="info">
+                    Click "Add Flowrate" to start adding calibration test
+                    results.
+                  </Alert>
+                ) : (
+                  <Box>
+                    <Tabs
+                      value={activeTab}
+                      onChange={(e, newValue) => setActiveTab(newValue)}
+                      variant="scrollable"
+                      scrollButtons="auto"
+                    >
+                      {calibrations.map((cal, index) => {
+                        // Only show status if calibration is complete (has actualFlow and errorPercent)
+                        const isComplete = cal.actualFlow && cal.errorPercent;
+                        return (
+                          <Tab
+                            key={index}
+                            label={
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <span>{cal.flowRate || "New"} L/min</span>
+                                {isComplete && cal.status && (
+                                  <Chip
+                                    label={cal.status}
+                                    size="small"
+                                    sx={{
+                                      backgroundColor:
+                                        cal.status === "Pass"
+                                          ? theme.palette.success.main
+                                          : theme.palette.error.main,
+                                      color: "white",
+                                      height: "20px",
+                                      fontSize: "0.7rem",
+                                    }}
+                                  />
+                                )}
+                              </Box>
+                            }
+                          />
+                        );
+                      })}
+                    </Tabs>
+
+                    {calibrations.map((cal, index) => (
+                      <Box
+                        key={index}
+                        role="tabpanel"
+                        hidden={activeTab !== index}
+                        sx={{ mt: 2 }}
+                      >
+                        {activeTab === index && (
+                          <Stack spacing={2}>
+                            <Box
+                              display="flex"
+                              justifyContent="space-between"
+                              alignItems="center"
+                            >
+                              <Typography variant="h6">
+                                Flowrate: {cal.flowRate || "Not selected"} L/min
+                              </Typography>
+                              {calibrations.length > 1 && (
+                                <IconButton
+                                  color="error"
+                                  onClick={() => handleRemoveCalibration(index)}
+                                  size="small"
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              )}
+                            </Box>
+                            <Box display="flex" gap={2}>
+                              <FormControl fullWidth required>
+                                <InputLabel>Flowrate (L/min)</InputLabel>
+                                <Select
+                                  value={cal.flowRate}
+                                  onChange={(e) =>
+                                    handleCalibrationChange(
+                                      index,
+                                      "flowRate",
+                                      e.target.value
+                                    )
+                                  }
+                                  label="Flowrate (L/min)"
+                                >
+                                  <MenuItem value="">
+                                    <em>Select flowrate</em>
+                                  </MenuItem>
+                                  {availableFlowrates.map((rate) => {
+                                    const isUsed = calibrations.some(
+                                      (c, i) =>
+                                        i !== index && c.flowRate === rate
+                                    );
+                                    return (
+                                      <MenuItem
+                                        key={rate}
+                                        value={rate}
+                                        disabled={isUsed}
+                                      >
+                                        {rate} L/min{" "}
+                                        {isUsed && "(Already used)"}
+                                      </MenuItem>
+                                    );
+                                  })}
+                                </Select>
+                              </FormControl>
+                              <TextField
+                                fullWidth
+                                label="Actual Flow (L/min)"
+                                type="number"
+                                value={cal.actualFlow}
+                                onChange={(e) =>
+                                  handleCalibrationChange(
+                                    index,
+                                    "actualFlow",
+                                    e.target.value
+                                  )
+                                }
+                                inputProps={{ step: "0.01", min: "0" }}
+                                required
+                                sx={{
+                                  "& input[type=number]": {
+                                    "-moz-appearance": "textfield",
+                                  },
+                                  "& input[type=number]::-webkit-outer-spin-button":
+                                    {
+                                      "-webkit-appearance": "none",
+                                      margin: 0,
+                                    },
+                                  "& input[type=number]::-webkit-inner-spin-button":
+                                    {
+                                      "-webkit-appearance": "none",
+                                      margin: 0,
+                                    },
+                                }}
+                              />
+                            </Box>
+                            <TextField
+                              fullWidth
+                              label="Error (%)"
+                              value={
+                                cal.errorPercent ? `${cal.errorPercent}%` : ""
+                              }
+                              InputLabelProps={{ shrink: true }}
+                              disabled
+                            />
+                            <Box>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  mb: 1,
+                                  fontSize: "16px",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                Status:
+                              </Typography>
+                              {cal.errorPercent ? (
+                                <Typography
+                                  variant="h5"
+                                  sx={{
+                                    color:
+                                      cal.status === "Pass"
+                                        ? theme.palette.success.main
+                                        : theme.palette.error.main,
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {cal.status}
+                                </Typography>
+                              ) : (
+                                <Typography variant="h5" color="text.secondary">
+                                  N/A
+                                </Typography>
+                              )}
+                            </Box>
+                          </Stack>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+
               <TextField
                 fullWidth
                 label="Notes"
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData({ ...formData, notes: e.target.value })
-                }
+                value={staticFormData.notes}
+                onChange={(e) => {
+                  setStaticFormData({
+                    ...staticFormData,
+                    notes: e.target.value,
+                  });
+                  setHasUnsavedChanges(true);
+                }}
                 multiline
                 rows={3}
               />
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button
-              onClick={() => {
-                setAddDialogOpen(false);
-                setError(null);
-              }}
-            >
-              Cancel
-            </Button>
+            <Button onClick={() => handleDialogClose()}>Cancel</Button>
             <Button
               type="submit"
               variant="contained"
               disabled={
                 loading ||
-                !formData.pumpEquipmentId ||
-                !formData.date ||
-                !formData.technicianId ||
-                !formData.flowRate ||
-                !formData.actualFlow
+                !staticFormData.pumpEquipmentId ||
+                !staticFormData.date ||
+                !staticFormData.technicianId ||
+                calibrations.length === 0 ||
+                calibrations.some((cal) => !cal.flowRate || !cal.actualFlow)
               }
             >
-              {loading ? <CircularProgress size={24} /> : "Save"}
+              {loading ? (
+                <CircularProgress size={24} />
+              ) : (
+                "Save All Calibrations"
+              )}
             </Button>
           </DialogActions>
         </Box>
+      </Dialog>
+
+      {/* Confirmation Dialog for Unsaved Changes */}
+      <Dialog
+        open={confirmCloseDialog}
+        onClose={() => setConfirmCloseDialog(false)}
+      >
+        <DialogTitle>Unsaved Changes</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You have unsaved calibration data. Are you sure you want to leave?
+            All unsaved data will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmCloseDialog(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              handleDialogClose(true);
+            }}
+            variant="contained"
+            color="error"
+          >
+            Discard Changes
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
