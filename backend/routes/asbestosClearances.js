@@ -859,6 +859,119 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
 
     const updatedClearance = await clearance.save();
 
+    // Send notification email to the user who requested authorisation
+    if (updatedClearance.authorisationRequestedBy) {
+      try {
+        const { sendMail } = require("../services/mailer");
+        const User = require("../models/User");
+
+        // Get requester user details
+        const requester = await User.findById(updatedClearance.authorisationRequestedBy)
+          .select("firstName lastName email");
+        
+        if (requester && requester.email) {
+          const projectName = clearance.projectId?.name || "Unknown Project";
+          const projectID = clearance.projectId?.projectID || "N/A";
+          const clientName = clearance.projectId?.client?.name || "the client";
+          const clearanceDate = clearance.clearanceDate
+            ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
+            : "N/A";
+          const clearanceType = clearance.clearanceType || "Asbestos Clearance";
+          const approverName = approver;
+          const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+          
+          // Use direct link if available, otherwise fall back to finding the job
+          let jobId = null;
+          if (clearance.asbestosRemovalJobId) {
+            jobId = clearance.asbestosRemovalJobId.toString();
+          } else {
+            // Fallback for existing clearances that don't have the direct link
+            const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+            const projectId = clearance.projectId?._id?.toString() || clearance.projectId?.toString();
+            
+            if (projectId) {
+              const jobs = await AsbestosRemovalJob.find({ 
+                projectId,
+                $or: [
+                  { clearance: true },
+                  { jobType: { $in: ["clearance", "air_monitoring_and_clearance"] } }
+                ]
+              })
+              .select("_id asbestosRemovalist createdAt")
+              .sort({ createdAt: -1 })
+              .lean();
+              
+              if (jobs.length === 1) {
+                jobId = jobs[0]._id.toString();
+              } else if (jobs.length > 1) {
+                const matchingJob = jobs.find(job => 
+                  job.asbestosRemovalist === clearance.asbestosRemovalist
+                );
+                jobId = matchingJob 
+                  ? matchingJob._id.toString() 
+                  : jobs[0]._id.toString();
+              } else {
+                const anyJob = await AsbestosRemovalJob.findOne({ projectId })
+                  .select("_id")
+                  .sort({ createdAt: -1 })
+                  .lean();
+                jobId = anyJob?._id?.toString();
+              }
+            }
+          }
+          
+          const clearanceUrl = jobId
+            ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`
+            : `${frontendUrl}/projects`;
+
+          await sendMail({
+            to: requester.email,
+            subject: `Report Authorised - ${projectID}: ${clearanceType}`,
+            text: `
+The asbestos clearance report you requested for authorisation has been authorised.
+
+Project: ${projectName} (${projectID})
+Client: ${clientName}
+Clearance Type: ${clearanceType}
+Clearance Date: ${clearanceDate}
+Authorised by: ${approverName}
+
+View the report at: ${clearanceUrl}
+            `.trim(),
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                <div style="margin-bottom: 30px;">
+                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+                </div>
+                <div style="color: #333; line-height: 1.6;">
+                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
+                  <p>Hello ${requester.firstName},</p>
+                  <p>The asbestos clearance report you requested for authorisation has been authorised:</p>
+                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                    <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
+                    <p style="margin: 5px 0;"><strong>Clearance Type:</strong> ${clearanceType}</p>
+                    <p style="margin: 5px 0;"><strong>Clearance Date:</strong> ${clearanceDate}</p>
+                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${clearanceUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
+                  </div>
+                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+                </div>
+              </div>
+            `,
+          });
+        }
+      } catch (emailError) {
+        // Log error but don't fail the request
+        console.error("Error sending authorisation notification email:", emailError);
+      }
+    }
+
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate({
         path: "projectId",
@@ -932,6 +1045,11 @@ router.post("/:id/send-for-authorisation", auth, checkPermission("asbestos.edit"
       req.user?.firstName && req.user?.lastName
         ? `${req.user.firstName} ${req.user.lastName}`
         : req.user?.email || "A user";
+
+    // Store who requested authorisation
+    clearance.authorisationRequestedBy = req.user._id;
+    clearance.authorisationRequestedByEmail = req.user.email;
+    await clearance.save();
 
     const clearanceDate = clearance.clearanceDate
       ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")

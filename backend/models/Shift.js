@@ -77,6 +77,15 @@ const shiftSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  authorisationRequestedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  authorisationRequestedByEmail: {
+    type: String,
+    required: false
+  },
   descriptionOfWorks: {
     type: String,
     required: false

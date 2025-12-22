@@ -371,19 +371,23 @@ const NewSample = () => {
 
       // Filter for passed calibrations and extract unique flowrates
       // Convert setFlowrate from mL/min to L/min
-      const passedFlowrates = calibrations
+      const passedFlowrates = [];
+      calibrations
         .filter((cal) => cal.overallResult === "Pass")
-        .map((cal) => {
+        .forEach((cal) => {
           if (cal.testResults && cal.testResults.length > 0) {
-            // Get the setFlowrate from the first test result (all testResults in a calibration have the same setFlowrate)
-            const setFlowrateMlMin = cal.testResults[0].setFlowrate;
-            return setFlowrateMlMin / 1000; // Convert to L/min
+            // Iterate through all test results (each can have a different flowrate)
+            cal.testResults.forEach((testResult) => {
+              const setFlowrateMlMin = testResult.setFlowrate;
+              const flowrateLMin = setFlowrateMlMin / 1000; // Convert to L/min
+              if (!passedFlowrates.includes(flowrateLMin)) {
+                passedFlowrates.push(flowrateLMin);
+              }
+            });
           }
-          return null;
-        })
-        .filter((flowrate) => flowrate != null)
-        .filter((value, index, self) => self.indexOf(value) === index) // Get unique values
-        .sort((a, b) => a - b); // Sort ascending
+        });
+      // Sort ascending
+      passedFlowrates.sort((a, b) => a - b);
 
       setAvailableFlowrates(passedFlowrates);
     } catch (error) {
