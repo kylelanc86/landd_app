@@ -235,7 +235,8 @@ export const projectService = {
     const queryParams = new URLSearchParams();
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
-    // Note: Status filtering is handled client-side, not on the backend
+    // Status filtering is handled on the backend
+    if (params.status) queryParams.append('status', params.status);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 

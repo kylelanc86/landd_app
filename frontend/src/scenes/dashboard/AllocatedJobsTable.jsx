@@ -33,7 +33,6 @@ const AllocatedJobsTable = () => {
   });
   const [rowCount, setRowCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [dataFromCache, setDataFromCache] = useState(false);
   const theme = useTheme();
   // Prevent multiple simultaneous fetches
   const fetchInProgressRef = React.useRef(false);
@@ -58,9 +57,10 @@ const AllocatedJobsTable = () => {
           timestamp,
           pagination,
         } = JSON.parse(cached);
-        // Check if cache is less than 5 minutes old (optional: you can adjust this)
+        // Check if cache is less than 2 minutes old
+        // Reduced from 5 minutes to minimize stale data when project statuses change
         const cacheAge = Date.now() - timestamp;
-        const maxAge = 5 * 60 * 1000; // 5 minutes
+        const maxAge = 2 * 60 * 1000; // 2 minutes
         if (cacheAge < maxAge) {
           return { data, rowCount: cachedRowCount, pagination };
         }
@@ -166,7 +166,6 @@ const AllocatedJobsTable = () => {
           setJobs(cached.data);
           setRowCount(cached.rowCount);
           setLoading(false);
-          setDataFromCache(true);
           return;
         }
       }
@@ -178,7 +177,6 @@ const AllocatedJobsTable = () => {
       const timeSinceMount = fetchStartTime - mountTime;
 
       setTimingMetrics((prev) => ({ ...prev, dataFetchStart: timeSinceMount }));
-      setDataFromCache(false);
 
       if (forceRefresh) {
         setIsRefreshing(true);
@@ -367,25 +365,42 @@ const AllocatedJobsTable = () => {
   }, []);
 
   // Memoize formatted jobs to prevent unnecessary re-renders
+  // Also filter out inactive projects as a safety net (backend should handle this, but cache might serve stale data)
   const formattedJobs = useMemo(() => {
     const formatStart = performance.now();
-    const formatted = jobs.map((job) => ({
-      id: job._id || job.id,
-      projectID: job.projectID,
-      name: job.name,
-      status: job.status,
-      d_Date: job.d_Date,
-    }));
+    const formatted = jobs
+      .filter((job) => {
+        // Safety net: Filter out inactive projects
+        // This ensures that even if cache serves stale data, inactive projects won't show
+        if (activeStatuses.length > 0) {
+          return activeStatuses.includes(job.status);
+        }
+        // If activeStatuses isn't loaded yet, allow all (backend filtering should handle it)
+        return true;
+      })
+      .map((job) => ({
+        id: job._id || job.id,
+        projectID: job.projectID,
+        name: job.name,
+        status: job.status,
+        d_Date: job.d_Date,
+      }));
     const formatTime = performance.now() - formatStart;
     if (jobs.length > 0) {
+      const filteredCount = jobs.length - formatted.length;
+      if (filteredCount > 0) {
+        console.warn(
+          `⚠️  [RENDER] Filtered out ${filteredCount} inactive project(s) from display`
+        );
+      }
       console.log(
         `⏱️  [RENDER] Job formatting: ${formatTime.toFixed(2)}ms for ${
           jobs.length
-        } jobs`
+        } jobs (${formatted.length} active)`
       );
     }
     return formatted;
-  }, [jobs]);
+  }, [jobs, activeStatuses]);
 
   // Track first render completion
   React.useEffect(() => {
