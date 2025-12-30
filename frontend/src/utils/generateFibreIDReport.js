@@ -262,13 +262,19 @@ pdfMake.fonts = {
                       { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Report Completion Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
                     stack: [
                       { text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Samples Received: ', bold: true }, { text: (() => {
+                        // For client supplied jobs, use sampleReceiptDate first
+                        if (isClientSupplied && assessment?.sampleReceiptDate) {
+                          const date = new Date(assessment.sampleReceiptDate);
+                          return !isNaN(date.getTime()) ? formatDate(assessment.sampleReceiptDate) : 'Date invalid';
+                        }
+                        // For regular jobs, use project dates
                         if (assessment?.projectId?.d_Date) {
                           const date = new Date(assessment.projectId.d_Date);
                           return !isNaN(date.getTime()) ? formatDate(assessment.projectId.d_Date) : 'Date invalid';

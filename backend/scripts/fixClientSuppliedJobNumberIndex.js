@@ -24,47 +24,86 @@ const fixJobNumberIndex = async () => {
       name: idx.name,
       key: idx.key,
       partialFilterExpression: idx.partialFilterExpression,
+      sparse: idx.sparse,
     }))
   );
 
-  const legacyIndex = existingIndexes.find(
+  // Find ALL indexes on jobNumber (regardless of name)
+  const jobNumberIndexes = existingIndexes.filter(
     (index) =>
-      index.name === "jobNumber_1" &&
-      (!index.partialFilterExpression ||
-        !index.partialFilterExpression.jobNumber)
+      index.key && index.key.jobNumber === 1
   );
 
-  if (legacyIndex) {
-    console.log("🧹 Dropping legacy unique index on jobNumber_1");
-    await collection.dropIndex(legacyIndex.name);
-    console.log("✅ Dropped legacy jobNumber_1 index");
-  } else {
-    console.log("ℹ️ No legacy jobNumber_1 index found (or already partial).");
-  }
+  console.log(`Found ${jobNumberIndexes.length} index(es) on jobNumber field`);
 
-  const desiredIndexName = "clientSuppliedJob_jobNumber_unique";
-  const updatedIndexes = await collection.indexes();
-  const desiredIndex = updatedIndexes.find(
-    (index) => index.name === desiredIndexName
-  );
-
-  if (desiredIndex) {
-    console.log("✅ Desired partial unique index already exists.");
-    return;
-  }
-
-  console.log("🛠 Creating partial unique index on jobNumber");
-  await collection.createIndex(
-    { jobNumber: 1 },
-    {
-      unique: true,
-      name: desiredIndexName,
-      partialFilterExpression: {
-        jobNumber: { $exists: true, $type: "string", $ne: "" },
-      },
+  // Drop ALL jobNumber indexes - we'll recreate the correct one
+  for (const index of jobNumberIndexes) {
+    console.log(`🧹 Dropping index: ${index.name}`);
+    try {
+      await collection.dropIndex(index.name);
+      console.log(`✅ Successfully dropped index: ${index.name}`);
+    } catch (error) {
+      console.log(`⚠️ Could not drop index ${index.name}:`, error.message);
+      // If it's a different error code, still try to continue
+      if (error.code !== 27) { // 27 = IndexNotFound
+        throw error;
+      }
     }
+  }
+
+  // Wait a moment for indexes to be fully dropped
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Verify indexes are dropped
+  const updatedIndexes = await collection.indexes();
+  const remainingJobNumberIndexes = updatedIndexes.filter(
+    (index) => index.key && index.key.jobNumber === 1
   );
-  console.log("✅ Created partial unique jobNumber index.");
+  
+  if (remainingJobNumberIndexes.length > 0) {
+    console.log(`⚠️ Warning: ${remainingJobNumberIndexes.length} jobNumber index(es) still exist`);
+    remainingJobNumberIndexes.forEach(idx => console.log(`  - ${idx.name}`));
+  } else {
+    console.log("✅ All jobNumber indexes have been dropped");
+  }
+
+  // Create the correct index with partial filter (cannot use $ne in partial indexes)
+  // Use $gt "" to ensure non-empty strings
+  console.log("🛠 Creating new partial unique index on jobNumber with proper null exclusion");
+  try {
+    await collection.createIndex(
+      { jobNumber: 1 },
+      {
+        unique: true,
+        name: "clientSuppliedJob_jobNumber_unique",
+        partialFilterExpression: {
+          $and: [
+            { jobNumber: { $exists: true } },
+            { jobNumber: { $type: "string" } },
+            { jobNumber: { $gt: "" } }
+          ]
+        },
+      }
+    );
+    console.log("✅ Created partial unique jobNumber index with null exclusion.");
+  } catch (error) {
+    console.error("❌ Failed to create index:", error.message);
+    throw error;
+  }
+
+  // Verify the new index
+  const finalIndexes = await collection.indexes();
+  const newIndex = finalIndexes.find(
+    (index) => index.name === "clientSuppliedJob_jobNumber_unique"
+  );
+  
+  if (newIndex) {
+    console.log("✅ Verification: New index exists");
+    console.log("   - Unique:", newIndex.unique);
+    console.log("   - Partial Filter:", JSON.stringify(newIndex.partialFilterExpression));
+  } else {
+    console.log("⚠️ Warning: New index not found after creation");
+  }
 };
 
 const main = async () => {

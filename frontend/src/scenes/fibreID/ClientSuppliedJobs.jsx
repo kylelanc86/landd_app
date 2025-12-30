@@ -74,6 +74,8 @@ const ClientSuppliedJobs = () => {
   const [jobToArchive, setJobToArchive] = useState(null);
   const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
   const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
+  const [authorisingReports, setAuthorisingReports] = useState({});
+  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] = useState({});
   const [closingJobs, setClosingJobs] = useState({});
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
@@ -126,12 +128,11 @@ const ClientSuppliedJobs = () => {
       let response;
       let projectsData = [];
 
-      // First try: getAll with parameters (this should get ALL active projects)
+      // First try: getAll with all_active status (this should get ALL active projects)
       try {
         response = await projectService.getAll({
           limit: 1000,
-          status:
-            "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent",
+          status: "all_active",
         });
 
         if (response && response.data) {
@@ -140,12 +141,12 @@ const ClientSuppliedJobs = () => {
             : response.data.data || [];
         }
       } catch (error) {
+        console.error("Error fetching with all_active status:", error);
         // Second try: getAssignedToMe (fallback to user's projects)
         try {
           response = await projectService.getAssignedToMe({
             limit: 1000,
-            status:
-              "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent",
+            status: "all_active",
           });
 
           if (response && response.data) {
@@ -154,9 +155,12 @@ const ClientSuppliedJobs = () => {
               : response.data.data || [];
           }
         } catch (error2) {
+          console.error("Error fetching assigned projects:", error2);
           // Third try: simple getAll without parameters
           try {
-            response = await projectService.getAll();
+            response = await projectService.getAll({
+              limit: 1000,
+            });
 
             if (response && response.data) {
               projectsData = Array.isArray(response.data)
@@ -781,6 +785,59 @@ const ClientSuppliedJobs = () => {
     }
   };
 
+  const handleAuthoriseReport = async (job) => {
+    try {
+      setAuthorisingReports((prev) => ({ ...prev, [job._id]: true }));
+
+      const response = await clientSuppliedJobsService.authorise(job._id);
+
+      // Refresh the jobs list
+      await fetchClientSuppliedJobs();
+
+      // Generate and download the authorised report
+      try {
+        await handleGeneratePDF(job);
+        showSnackbar("Report authorised and downloaded successfully.", "success");
+      } catch (reportError) {
+        console.error("Error generating authorised report:", reportError);
+        showSnackbar(
+          "Report authorised but failed to generate download.",
+          "warning"
+        );
+      }
+    } catch (error) {
+      console.error("Error authorising report:", error);
+      showSnackbar("Failed to authorise report. Please try again.", "error");
+    } finally {
+      setAuthorisingReports((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
+  const handleSendForAuthorisation = async (job) => {
+    try {
+      setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: true }));
+
+      const response = await clientSuppliedJobsService.sendForAuthorisation(job._id);
+
+      showSnackbar(
+        response.data?.message ||
+          `Authorisation request emails sent successfully to ${
+            response.data?.recipients?.length || 0
+          } report proofer user(s)`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Error sending authorisation request emails:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to send authorisation request emails. Please try again.",
+        "error"
+      );
+    } finally {
+      setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -953,53 +1010,75 @@ const ClientSuppliedJobs = () => {
                                 currentUser,
                                 "admin.view"
                               ),
-                              isLabSignatory: currentUser?.labSignatory,
+                              hasEditPermission: hasPermission(
+                                currentUser,
+                                "clientSup.edit"
+                              ),
+                              isReportProofer: Boolean(
+                                currentUser?.reportProofer
+                              ),
                             };
-                            const showButton =
+                            const baseVisible =
                               conditions.notApproved &&
-                              conditions.reportViewed &&
-                              conditions.hasAdminPermission &&
-                              conditions.isLabSignatory;
-                            return showButton;
-                          })() && (
-                            <Button
-                              variant="contained"
-                              size="small"
-                              color="success"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleApproveReport(job);
-                              }}
-                              sx={{
-                                backgroundColor: "#4caf50",
-                                color: "white",
-                                "&:hover": {
-                                  backgroundColor: "#45a049",
-                                },
-                              }}
-                            >
-                              Approve
-                            </Button>
-                          )}
-                          {job.status === "Analysis Complete" &&
-                            !job.reportApprovedBy &&
-                            !currentUser?.labSignatory && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                color="primary"
-                                startIcon={<MailIcon />}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSendForApproval(job);
-                                }}
-                                disabled={sendingApprovalEmails[job._id]}
-                              >
-                                {sendingApprovalEmails[job._id]
-                                  ? "Sending..."
-                                  : "Send for Approval"}
-                              </Button>
-                            )}
+                              conditions.reportViewed;
+                            const visibility = {
+                              showAuthorise:
+                                baseVisible &&
+                                conditions.hasAdminPermission &&
+                                conditions.isReportProofer,
+                              showSend:
+                                baseVisible &&
+                                !conditions.isReportProofer &&
+                                conditions.hasEditPermission,
+                            };
+                            return (
+                              <>
+                                {visibility.showAuthorise && (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    color="success"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAuthoriseReport(job);
+                                    }}
+                                    disabled={
+                                      authorisingReports[job._id] ||
+                                      generatingPDF[job._id]
+                                    }
+                                    sx={{
+                                      backgroundColor: "#4caf50",
+                                      color: "white",
+                                      "&:hover": {
+                                        backgroundColor: "#45a049",
+                                      },
+                                    }}
+                                  >
+                                    {authorisingReports[job._id]
+                                      ? "Authorising..."
+                                      : "Authorise Report"}
+                                  </Button>
+                                )}
+                                {visibility.showSend && (
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    color="primary"
+                                    startIcon={<MailIcon />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSendForAuthorisation(job);
+                                    }}
+                                    disabled={sendingAuthorisationRequests[job._id]}
+                                  >
+                                    {sendingAuthorisationRequests[job._id]
+                                      ? "Sending..."
+                                      : "Send for Authorisation"}
+                                  </Button>
+                                )}
+                              </>
+                            );
+                          })()}
                           {job.status === "Analysis Complete" &&
                             job.reportApprovedBy && (
                               <Button

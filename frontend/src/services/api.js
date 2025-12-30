@@ -487,7 +487,9 @@ export const clientSuppliedJobsService = {
   delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
   archive: (id) => api.put(`/client-supplied-jobs/${id}/archive`),
   getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`),
-  sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`)
+  sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`),
+  authorise: (id) => api.post(`/client-supplied-jobs/${id}/authorise`),
+  sendForAuthorisation: (id) => api.post(`/client-supplied-jobs/${id}/send-for-authorisation`)
 };
 
 export default api; 

@@ -50,6 +50,15 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  authorisationRequestedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
+  authorisationRequestedByEmail: {
+    type: String,
+    required: false
+  },
   revision: {
     type: Number,
     default: 0
@@ -150,7 +159,11 @@ clientSuppliedJobSchema.index(
     unique: true,
     name: 'clientSuppliedJob_jobNumber_unique',
     partialFilterExpression: {
-      jobNumber: { $exists: true, $type: 'string', $ne: '' }
+      $and: [
+        { jobNumber: { $exists: true } },
+        { jobNumber: { $type: 'string' } },
+        { jobNumber: { $gt: '' } }
+      ]
     }
   }
 );

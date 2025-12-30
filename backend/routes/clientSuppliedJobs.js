@@ -392,5 +392,228 @@ Please review and approve the report at: ${jobUrl}
   }
 });
 
+// POST /api/client-supplied-jobs/:id/authorise - authorise report
+router.post('/:id/authorise', auth, checkPermission('clientSup.edit'), async (req, res) => {
+  try {
+    const job = await ClientSuppliedJob.findById(req.params.id)
+      .populate({
+        path: 'projectId',
+        select: 'name projectID',
+        populate: {
+          path: 'client',
+          select: 'name'
+        }
+      });
+
+    if (!job) {
+      return res.status(404).json({ message: 'Client supplied job not found' });
+    }
+
+    if (job.status !== 'Analysis Complete') {
+      return res.status(400).json({
+        message: 'Job must be finalized before authorising the report'
+      });
+    }
+
+    if (job.reportApprovedBy) {
+      return res.status(400).json({
+        message: 'Report has already been authorised'
+      });
+    }
+
+    const approver =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || 'Unknown';
+
+    job.reportApprovedBy = approver;
+    job.reportIssueDate = new Date();
+    job.updatedAt = new Date();
+
+    const updatedJob = await job.save();
+
+    // Send notification email to the user who requested authorisation
+    if (updatedJob.authorisationRequestedBy) {
+      try {
+        const requester = await User.findById(updatedJob.authorisationRequestedBy)
+          .select('firstName lastName email');
+        
+        if (requester && requester.email) {
+          const projectName = job.projectId?.name || 'Unknown Project';
+          const projectID = job.projectId?.projectID || 'N/A';
+          const jobType = job.jobType || 'Analysis';
+          const approverName = approver;
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+          const basePath = '/client-supplied';
+          const jobUrl = `${frontendUrl}${basePath}`;
+
+          await sendMail({
+            to: requester.email,
+            subject: `Report Authorised - ${projectID}: ${jobType} Report`,
+            text: `
+The ${jobType} report you requested for authorisation has been authorised.
+
+Project: ${projectName} (${projectID})
+Job Type: ${jobType}
+Authorised by: ${approverName}
+
+View the report at: ${jobUrl}
+            `,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                <div style="margin-bottom: 30px;">
+                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+                </div>
+                <div style="color: #333; line-height: 1.6;">
+                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
+                  <p>Hello ${requester.firstName},</p>
+                  <p>The ${jobType} report you requested for authorisation has been authorised:</p>
+                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                    <p style="margin: 5px 0;"><strong>Job Type:</strong> ${jobType}</p>
+                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
+                  </div>
+                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+                </div>
+              </div>
+            `
+          });
+        }
+      } catch (emailError) {
+        console.error('Error sending authorisation notification email:', emailError);
+        // Don't fail the request if email fails
+      }
+    }
+
+    res.json(updatedJob);
+  } catch (err) {
+    console.error('Error authorising report:', err);
+    res.status(500).json({ message: 'Failed to authorise report', error: err.message });
+  }
+});
+
+// POST /api/client-supplied-jobs/:id/send-for-authorisation - send authorisation request emails
+router.post('/:id/send-for-authorisation', auth, checkPermission('clientSup.edit'), async (req, res) => {
+  try {
+    const job = await ClientSuppliedJob.findById(req.params.id)
+      .populate({
+        path: 'projectId',
+        select: 'name projectID',
+        populate: {
+          path: 'client',
+          select: 'name'
+        }
+      });
+
+    if (!job) {
+      return res.status(404).json({ message: 'Client supplied job not found' });
+    }
+
+    if (job.status !== 'Analysis Complete') {
+      return res.status(400).json({
+        message: 'Job must be finalized before sending for authorisation'
+      });
+    }
+
+    if (job.reportApprovedBy) {
+      return res.status(400).json({
+        message: 'Report has already been authorised'
+      });
+    }
+
+    // Get all users with report proofer approval
+    const reportProoferUsers = await User.find({
+      reportProofer: true,
+      isActive: true
+    }).select('firstName lastName email');
+
+    if (reportProoferUsers.length === 0) {
+      return res.status(400).json({
+        message: 'No report proofer users found'
+      });
+    }
+
+    const requesterName =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || 'A user';
+
+    // Store who requested authorisation
+    job.authorisationRequestedBy = req.user._id;
+    job.authorisationRequestedByEmail = req.user.email;
+    await job.save();
+
+    const projectName = job.projectId?.name || 'Unknown Project';
+    const projectID = job.projectId?.projectID || 'N/A';
+    const jobType = job.jobType || 'Analysis';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const basePath = '/client-supplied';
+    const jobUrl = `${frontendUrl}${basePath}`;
+
+    // Send email to all report proofer users
+    const emailPromises = reportProoferUsers.map(async (user) => {
+      try {
+        await sendMail({
+          to: user.email,
+          subject: `Report Authorisation Required - ${projectID}: ${jobType} Report`,
+          text: `
+A ${jobType} report is ready for authorisation.
+
+Project: ${projectName} (${projectID})
+Job Type: ${jobType}
+Requested by: ${requesterName}
+
+Please review and authorise the report at: ${jobUrl}
+          `,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="margin-bottom: 30px;">
+                <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+              </div>
+              <div style="color: #333; line-height: 1.6;">
+                <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>A ${jobType} report is ready for your authorisation:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                  <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                  <p style="margin: 5px 0;"><strong>Job Type:</strong> ${jobType}</p>
+                  <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                </div>
+                <p>Please review and authorise the report at your earliest convenience.</p>
+                <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          `
+        });
+      } catch (emailError) {
+        console.error(`Failed to send email to ${user.email}:`, emailError);
+        throw emailError;
+      }
+    });
+
+    await Promise.all(emailPromises);
+
+    res.json({
+      message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
+      recipients: reportProoferUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` }))
+    });
+  } catch (err) {
+    console.error('Error sending authorisation request emails:', err);
+    res.status(500).json({ message: 'Failed to send authorisation request emails', error: err.message });
+  }
+});
+
 
 module.exports = router; 

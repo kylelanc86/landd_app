@@ -531,8 +531,14 @@ const Sidebar = () => {
               to="/timesheets/monthly"
               icon={<AccessTimeIcon />}
             />
+            
+          <Item
+            title="Clients"
+            to="/clients"
+            icon={<PeopleOutlinedIcon />}
+          />
 
-            <Item title="Projects" to="/projects" icon={<StorageIcon />} />
+            
           </PermissionGate>
 
           {/* Collapsible Sections */}
@@ -547,12 +553,9 @@ const Sidebar = () => {
           </PermissionGate> */}
 
           <SectionDivider />
+          
+          <CollapsibleSection title="Projects" to="/projects" icon={<StorageIcon />} />
 
-          <CollapsibleSection
-            title="Clients"
-            to="/clients"
-            icon={<PeopleOutlinedIcon />}
-          />
           <CollapsibleSection
             title="Invoices"
             to="/invoices"

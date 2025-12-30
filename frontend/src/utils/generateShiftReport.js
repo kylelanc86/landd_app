@@ -483,7 +483,7 @@ pdfMake.fonts = {
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: shift?.reportIssueDate ? formatDate(shift.reportIssueDate) : formatDate(new Date()) } ],
+                        text: [ { text: 'Report Completion Date: ', bold: true }, { text: shift?.reportIssueDate ? formatDate(shift.reportIssueDate) : formatDate(new Date()) } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
