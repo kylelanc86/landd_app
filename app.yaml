@@ -46,7 +46,12 @@ services:
       - key: PORT
         value: "5000"
       - key: FRONTEND_URL
-        value: https://app.landd.com.au  # Production frontend URL
+        value: https://app.landd.com.au  # Production frontend URL - Set this per environment
+        # For development: https://plankton-app-npflt.ondigitalocean.app
+        # For production: https://app.landd.com.au
+      # Optional: Add CORS_ORIGINS if you need additional allowed origins (comma-separated)
+      # - key: CORS_ORIGINS
+      #   value: https://example.com,https://another-domain.com
 
   # Frontend service (Node.js)
   - name: frontend
@@ -73,7 +78,10 @@ services:
       # Component-level variables (specific to frontend service)
       # These override app-level variables with the same name
       - key: REACT_APP_API_URL
-        value: https://app.landd.com.au/api  # Production API URL
+        value: https://app.landd.com.au/api  # Production API URL - Set this per environment
+        # For development: https://plankton-app-npflt.ondigitalocean.app/api
+        # For production: https://app.landd.com.au/api
+        # IMPORTANT: This must match the backend service URL + /api
         scope: BUILD_TIME  # Required for React - env vars are embedded at build time
       - key: REACT_APP_GOOGLE_MAPS_API_KEY
         scope: RUN_TIME

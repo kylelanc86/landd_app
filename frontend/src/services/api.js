@@ -5,9 +5,16 @@ const config = {
   nodeEnv: process.env.NODE_ENV,
   apiUrl: process.env.REACT_APP_API_URL,
   // Use 127.0.0.1 instead of localhost to avoid DNS resolution delays on Windows
-  defaultUrl: process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-dev-8h6ah.ondigitalocean.app/api",
-  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : "https://landd-app-dev-8h6ah.ondigitalocean.app/api")
+  // Default to localhost for development, otherwise use environment variable
+  defaultUrl: process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : undefined,
+  currentUrl: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://127.0.0.1:5000/api" : undefined)
 };
+
+// Validate that API URL is set in production
+if (process.env.NODE_ENV === 'production' && !config.currentUrl) {
+  console.error('REACT_APP_API_URL must be set in production environment');
+}
+
 // Create axios instance
 const api = axios.create({
   baseURL: config.currentUrl,

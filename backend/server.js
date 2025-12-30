@@ -46,27 +46,39 @@ dotenv.config();
 const app = express();
 
 // CORS configuration
+// Build allowed origins from environment variables
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',  // Added for Windows DNS optimization
+];
+
+// Add FRONTEND_URL if set
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
+// Add CORS_ORIGINS if set (comma-separated list)
+if (process.env.CORS_ORIGINS) {
+  const additionalOrigins = process.env.CORS_ORIGINS.split(',').map(origin => origin.trim()).filter(origin => origin);
+  allowedOrigins.push(...additionalOrigins);
+}
+
+// Remove duplicates
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
 const corsOptions = {
   origin: function (origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',  // Added for Windows DNS optimization
-      'https://app.landd.com.au',
-      'https://landd-app-dev-front.onrender.com',
-      'https://landd-app-dev-8h6ah.ondigitalocean.app',  // DigitalOcean frontend
-    ];
-    
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
       return callback(null, true);
     }
     
     // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
+    if (uniqueOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
-      console.log('Allowed origins:', allowedOrigins);
+      console.log('Allowed origins:', uniqueOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
