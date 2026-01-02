@@ -2436,116 +2436,122 @@ const AsbestosRemovalJobDetails = () => {
                                     ? "Authorising..."
                                     : "Download Report"}
                                 </Button>
-                              ) : !reportViewedClearanceIds.has(
-                                  clearance._id
-                                ) ? (
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  onClick={(e) =>
-                                    handleViewClearanceReport(clearance, e)
-                                  }
-                                  disabled={generatingPDF}
-                                  sx={{
-                                    borderColor: theme.palette.success.main,
-                                    color: theme.palette.success.main,
-                                    "&:hover": {
-                                      borderColor: theme.palette.success.dark,
-                                      backgroundColor:
-                                        theme.palette.success.light,
-                                    },
-                                    mr: 1,
-                                  }}
-                                >
-                                  View Report
-                                </Button>
                               ) : (
                                 <>
-                                  {currentUser?.reportProofer &&
-                                    hasPermission(currentUser, "admin.view") &&
-                                    !clearance.reportApprovedBy && (
-                                      <Button
-                                        variant="contained"
-                                        size="small"
-                                        color="success"
-                                        onClick={(e) =>
-                                          handleAuthoriseClearanceReport(
-                                            clearance,
-                                            e
-                                          )
-                                        }
-                                        disabled={
-                                          authorisingClearanceReports[
-                                            clearance._id
-                                          ] || generatingPDF
-                                        }
-                                        startIcon={
-                                          authorisingClearanceReports[
-                                            clearance._id
-                                          ] ? (
-                                            <CircularProgress
-                                              size={16}
-                                              color="inherit"
-                                            />
-                                          ) : null
-                                        }
-                                        sx={{
-                                          backgroundColor:
-                                            theme.palette.success.main,
-                                          color: theme.palette.common.white,
-                                          "&:hover": {
-                                            backgroundColor:
-                                              theme.palette.success.dark,
-                                          },
-                                          "&:disabled": {
-                                            backgroundColor:
-                                              theme.palette.success.main,
-                                            opacity: 0.7,
-                                          },
-                                          mr: 1,
-                                        }}
-                                      >
-                                        {authorisingClearanceReports[
-                                          clearance._id
-                                        ]
-                                          ? "Authorising..."
-                                          : "Authorise Report"}
-                                      </Button>
-                                    )}
-                                  {(!currentUser?.reportProofer ||
-                                    !hasPermission(
-                                      currentUser,
-                                      "admin.view"
-                                    )) &&
-                                    hasPermission(
-                                      currentUser,
-                                      "asbestos.edit"
-                                    ) && (
-                                      <Button
-                                        variant="outlined"
-                                        size="small"
-                                        color="primary"
-                                        startIcon={<MailIcon />}
-                                        onClick={(e) =>
-                                          handleSendClearanceForAuthorisation(
-                                            clearance,
-                                            e
-                                          )
-                                        }
-                                        disabled={Boolean(
-                                          sendingClearanceAuthorisationRequests[
-                                            clearance._id
-                                          ]
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={(e) =>
+                                      handleViewClearanceReport(clearance, e)
+                                    }
+                                    disabled={generatingPDF}
+                                    sx={{
+                                      borderColor: theme.palette.success.main,
+                                      color: theme.palette.success.main,
+                                      "&:hover": {
+                                        borderColor: theme.palette.success.dark,
+                                        backgroundColor:
+                                          theme.palette.success.light,
+                                      },
+                                      mr: 1,
+                                    }}
+                                  >
+                                    View Report
+                                  </Button>
+                                  {reportViewedClearanceIds.has(
+                                    clearance._id
+                                  ) && (
+                                    <>
+                                      {currentUser?.reportProofer &&
+                                        hasPermission(
+                                          currentUser,
+                                          "admin.view"
+                                        ) &&
+                                        !clearance.reportApprovedBy && (
+                                          <Button
+                                            variant="contained"
+                                            size="small"
+                                            color="success"
+                                            onClick={(e) =>
+                                              handleAuthoriseClearanceReport(
+                                                clearance,
+                                                e
+                                              )
+                                            }
+                                            disabled={
+                                              authorisingClearanceReports[
+                                                clearance._id
+                                              ] || generatingPDF
+                                            }
+                                            startIcon={
+                                              authorisingClearanceReports[
+                                                clearance._id
+                                              ] ? (
+                                                <CircularProgress
+                                                  size={16}
+                                                  color="inherit"
+                                                />
+                                              ) : null
+                                            }
+                                            sx={{
+                                              backgroundColor:
+                                                theme.palette.success.main,
+                                              color: theme.palette.common.white,
+                                              "&:hover": {
+                                                backgroundColor:
+                                                  theme.palette.success.dark,
+                                              },
+                                              "&:disabled": {
+                                                backgroundColor:
+                                                  theme.palette.success.main,
+                                                opacity: 0.7,
+                                              },
+                                              mr: 1,
+                                            }}
+                                          >
+                                            {authorisingClearanceReports[
+                                              clearance._id
+                                            ]
+                                              ? "Authorising..."
+                                              : "Authorise Report"}
+                                          </Button>
                                         )}
-                                        sx={{ mr: 1 }}
-                                      >
-                                        {sendingClearanceAuthorisationRequests[
-                                          clearance._id
-                                        ]
-                                          ? "Sending..."
-                                          : "Send for Authorisation"}
-                                      </Button>
-                                    )}
+                                      {(!currentUser?.reportProofer ||
+                                        !hasPermission(
+                                          currentUser,
+                                          "admin.view"
+                                        )) &&
+                                        hasPermission(
+                                          currentUser,
+                                          "asbestos.edit"
+                                        ) && (
+                                          <Button
+                                            variant="outlined"
+                                            size="small"
+                                            color="primary"
+                                            startIcon={<MailIcon />}
+                                            onClick={(e) =>
+                                              handleSendClearanceForAuthorisation(
+                                                clearance,
+                                                e
+                                              )
+                                            }
+                                            disabled={Boolean(
+                                              sendingClearanceAuthorisationRequests[
+                                                clearance._id
+                                              ]
+                                            )}
+                                            sx={{ mr: 1 }}
+                                          >
+                                            {sendingClearanceAuthorisationRequests[
+                                              clearance._id
+                                            ]
+                                              ? "Sending..."
+                                              : "Send for Authorisation"}
+                                          </Button>
+                                        )}
+                                    </>
+                                  )}
                                 </>
                               )}
                             </>

@@ -331,17 +331,47 @@ pdfMake.fonts = {
                 item.analysisData?.uncountableDueToDust === 'true'
               );
               
+              // Check if any sample has "Unidentified Mineral Fibre" in standard fibre analysis
+              const hasUMFInFibres = sampleItems && sampleItems.some(item => {
+                if (item.analysisData?.fibres && Array.isArray(item.analysisData.fibres)) {
+                  return item.analysisData.fibres.some(fibre => 
+                    fibre?.result === 'Unidentified Mineral Fibre'
+                  );
+                }
+                return false;
+              });
+              
+              // Check if any sample has "Unidentified Mineral Fibre" in trace analysis
+              // (excluding cases where trace count is "< 5 unequivocal")
+              const hasUMFInTrace = sampleItems && sampleItems.some(item => {
+                const hasTraceAnalysis = 
+                  item.analysisData?.traceAsbestos === "yes" && 
+                  item.analysisData?.traceCount && 
+                  item.analysisData?.traceAsbestosContent;
+                
+                if (hasTraceAnalysis) {
+                  const isUMF = item.analysisData.traceAsbestosContent === 'Unidentified Mineral Fibre';
+                  const isNotLessThan5 = item.analysisData.traceCount !== '< 5 unequivocal';
+                  return isUMF && isNotLessThan5;
+                }
+                return false;
+              });
+              
+              const hasUMF = hasUMFInFibres || hasUMFInTrace;
+              
               const notes = [
                 { text: '1. The detection of asbestos in certain materials may be difficult due to the nature of the matrix. Independent analytical techniques should be used to confirm the presence or absence of asbestos.', style: 'notes' },
                 { text: '2. This report must not be reproduced except in full.', style: 'notes' },
                 { text: '3. The practical detection limit for asbestos fibre identification is 0.01-0.1% (0.1-1g/kg).', style: 'notes' },
                 { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
-                { text: '5. Unknown Mineral Fibres (UMF) are reported as detected. Further analysis is required to confirm the identity of these fibres.', style: 'notes' },
-                { text: '6. The analysed samples detailed within this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details nor the quality of the supplied samples.', style: 'notes' },
-                { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
+                { text: '5. The analysed samples detailed within this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details nor the quality of the supplied samples.', style: 'notes' },
+                { text: '6. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
               ];
               if (hasUDDSample) {
                 notes.push({ text: '8. UDD = sample was uncountable due to heavy dust loading', style: 'notes' });
+              }
+              if (hasUMF) {
+                notes.push({ text: '* Unknown Mineral Fibres (UMF) have been detected. Further analysis is required to confirm the identity of these fibres.', style: 'notes' });
               }
               return notes;
             })(),
@@ -389,7 +419,7 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
-              widths: ['11%', '16.8%', '11%', '17.2%', '12%', '15%', '17%'],
+              widths: ['11%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '20.45%'],
               body: [
                 [
                   { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
@@ -398,7 +428,7 @@ pdfMake.fonts = {
                   { text: 'Sample Description', style: 'tableHeader', fontSize: 8 },
                   { text: 'Mass/Dimensions', style: 'tableHeader', fontSize: 8 },
                   { text: 'Non-Asbestos Fibres', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Asbestos Fibres', style: 'tableHeader', fontSize: 8 }
+                  { text: 'Reported Result', style: 'tableHeader', fontSize: 8 }
                 ],
                 ...sortedSampleItems.map((item, index) => {
                   // DEBUG: Log all item data to find NaN source
@@ -465,42 +495,74 @@ pdfMake.fonts = {
                     console.log('=== FIBRE RESULTS DEBUG ===');
                     console.log('item.analysisData:', item.analysisData);
                     console.log('item.analysisData.fibres:', item.analysisData?.fibres);
+                    console.log('item.analysisData.traceAsbestos:', item.analysisData?.traceAsbestos);
+                    console.log('item.analysisData.finalResult:', item.analysisData?.finalResult);
                     
-                    if (!item.analysisData || !item.analysisData.fibres || !Array.isArray(item.analysisData.fibres)) {
-                      console.log('No fibres data, returning defaults');
-                      return { nonAsbestos: 'None', asbestos: 'No Asbestos Detected' };
+                    // First, process fibre analysis to get non-asbestos results
+                    // This is needed even when trace analysis is present
+                    let nonAsbestosResults = [];
+                    let asbestosResultsFromFibres = [];
+                    
+                    if (item.analysisData?.fibres && Array.isArray(item.analysisData.fibres)) {
+                      const fibres = item.analysisData.fibres;
+                      console.log('Raw fibres array:', fibres);
+                      
+                      // Ensure fibres is an array and has valid items
+                      if (Array.isArray(fibres) && fibres.length > 0) {
+                        fibres.forEach((fibre, fibreIndex) => {
+                          console.log(`Fibre ${fibreIndex}:`, fibre);
+                          console.log(`Fibre result:`, fibre.result, 'type:', typeof fibre.result);
+                          
+                          if (fibre && fibre.result && fibre.result.trim() !== '' && fibre.result !== 'undefined' && fibre.result !== 'null') {
+                            if (fibre.result.includes('Asbestos')) {
+                              asbestosResultsFromFibres.push(fibre.result);
+                              console.log('Added to asbestos results from fibres');
+                            } else {
+                              nonAsbestosResults.push(fibre.result);
+                              console.log('Added to non-asbestos results');
+                            }
+                          } else {
+                            console.log('Skipping invalid fibre result');
+                          }
+                        });
+                      } else {
+                        console.log('No valid fibres array found');
+                      }
                     }
                     
-                    const fibres = item.analysisData.fibres;
-                    console.log('Raw fibres array:', fibres);
-                    const nonAsbestosResults = [];
-                    const asbestosResults = [];
+                    // Check if trace analysis is present and has results
+                    const hasTraceAnalysis = 
+                      item.analysisData?.traceAsbestos === "yes" && 
+                      item.analysisData?.traceCount && 
+                      item.analysisData?.traceAsbestosContent;
                     
-                    // Ensure fibres is an array and has valid items
-                    if (Array.isArray(fibres) && fibres.length > 0) {
-                      fibres.forEach((fibre, fibreIndex) => {
-                        console.log(`Fibre ${fibreIndex}:`, fibre);
-                        console.log(`Fibre result:`, fibre.result, 'type:', typeof fibre.result);
-                        
-                        if (fibre && fibre.result && fibre.result.trim() !== '' && fibre.result !== 'undefined' && fibre.result !== 'null') {
-                          if (fibre.result.includes('Asbestos')) {
-                            asbestosResults.push(fibre.result);
-                            console.log('Added to asbestos results');
-                          } else {
-                            nonAsbestosResults.push(fibre.result);
-                            console.log('Added to non-asbestos results');
-                          }
-                        } else {
-                          console.log('Skipping invalid fibre result');
-                        }
-                      });
-                    } else {
-                      console.log('No valid fibres array found');
+                    // Determine asbestos result - trace analysis takes priority
+                    let asbestosResult = 'No Asbestos Detected';
+                    
+                    if (item.analysisData?.finalResult) {
+                      const finalResult = item.analysisData.finalResult;
+                      
+                      // Use finalResult if:
+                      // 1. Trace analysis is present (hasTraceAnalysis)
+                      // 2. Result is "No asbestos detected" (from trace < 5 or "No fibres detected" checkbox)
+                      // 3. Result contains "Trace" (trace analysis results)
+                      if (hasTraceAnalysis || 
+                          finalResult === "No asbestos detected" || 
+                          finalResult.includes("Trace")) {
+                        console.log('Using finalResult for asbestos column:', finalResult);
+                        asbestosResult = finalResult;
+                      } else if (asbestosResultsFromFibres.length > 0) {
+                        // Fall back to fibre analysis results if no trace analysis
+                        asbestosResult = asbestosResultsFromFibres.join('\n\n');
+                      }
+                    } else if (asbestosResultsFromFibres.length > 0) {
+                      // Use fibre analysis results if no finalResult
+                      asbestosResult = asbestosResultsFromFibres.join('\n\n');
                     }
                     
                     const result = {
-                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join(' ') : 'None',
-                      asbestos: asbestosResults.length > 0 ? asbestosResults.join(' ') : 'No Asbestos Detected'
+                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join('\n\n') : 'None',
+                      asbestos: asbestosResult
                     };
                     
                     // Ensure we never return undefined values
