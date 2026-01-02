@@ -39,13 +39,11 @@ import { useAuth } from "../../../context/AuthContext";
 import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 
-const CACHE_KEY = "residentialAsbestosJobsCache";
+const CACHE_KEY = "commercialAsbestosJobsCache";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const loadJobsCache = () => {
-  if (typeof window === "undefined" || !window.sessionStorage) {
-    return null;
-  }
+  if (typeof window === "undefined" || !window.sessionStorage) return null;
   try {
     const cachedRaw = window.sessionStorage.getItem(CACHE_KEY);
     if (!cachedRaw) return null;
@@ -61,7 +59,7 @@ const loadJobsCache = () => {
     }
     return parsed;
   } catch (error) {
-    console.warn("[Residential Asbestos] Failed to parse jobs cache", error);
+    console.warn("[Commercial Asbestos] Failed to parse jobs cache", error);
     return null;
   }
 };
@@ -72,7 +70,7 @@ const saveJobsCache = (jobs) => {
     const payload = JSON.stringify({ jobs, timestamp: Date.now() });
     window.sessionStorage.setItem(CACHE_KEY, payload);
   } catch (error) {
-    console.warn("[Residential Asbestos] Failed to write jobs cache", error);
+    console.warn("[Commercial Asbestos] Failed to write jobs cache", error);
   }
 };
 
@@ -81,11 +79,11 @@ const clearJobsCache = () => {
   try {
     window.sessionStorage.removeItem(CACHE_KEY);
   } catch (error) {
-    console.warn("[Residential Asbestos] Failed to clear jobs cache", error);
+    console.warn("[Commercial Asbestos] Failed to clear jobs cache", error);
   }
 };
 
-const ResidentialAsbestosAssessment = () => {
+const CommercialAsbestosAssessment = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
@@ -324,7 +322,7 @@ const ResidentialAsbestosAssessment = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Surveys Home
           </Link>
-          <Typography color="text.primary">Residential Asbestos Surveys</Typography>
+          <Typography color="text.primary">Commercial Asbestos Surveys</Typography>
         </Breadcrumbs>
 
         <Box
@@ -338,7 +336,7 @@ const ResidentialAsbestosAssessment = () => {
           }}
         >
           <Typography variant="h4" component="h1" gutterBottom>
-            Residential Asbestos Surveys
+            Commercial Asbestos Surveys
           </Typography>
           <Button
             variant="contained"
@@ -469,7 +467,7 @@ const ResidentialAsbestosAssessment = () => {
       <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
         <DialogTitle>
           <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">New Residential Asbestos Survey</Typography>
+            <Typography variant="h6">New Commercial Asbestos Survey</Typography>
             <IconButton onClick={handleCloseModal}>
               <CloseIcon />
             </IconButton>
@@ -572,7 +570,7 @@ const ResidentialAsbestosAssessment = () => {
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">Delete Residential Asbestos Survey</Typography>
+            <Typography variant="h6">Delete Commercial Asbestos Survey</Typography>
             <IconButton onClick={() => setDeleteDialogOpen(false)}>
               <CloseIcon />
             </IconButton>
@@ -619,4 +617,5 @@ const ResidentialAsbestosAssessment = () => {
   );
 };
 
-export default ResidentialAsbestosAssessment;
+export default CommercialAsbestosAssessment;
+

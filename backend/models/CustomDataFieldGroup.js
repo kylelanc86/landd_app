@@ -13,7 +13,7 @@ const CustomDataFieldGroupSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status'],
+    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status', 'recommendation'],
     index: true
   },
   fields: [{
@@ -42,6 +42,17 @@ const CustomDataFieldGroupSchema = new mongoose.Schema({
       trim: true
     },
     jurisdiction: {
+      type: String,
+      trim: true
+    },
+    // For materials descriptions
+    asbestosType: {
+      type: String,
+      trim: true,
+      enum: ['Friable', 'Non-friable']
+    },
+    // For recommendations
+    name: {
       type: String,
       trim: true
     },
@@ -160,7 +171,9 @@ CustomDataFieldGroupSchema.statics.getFieldsByType = async function(type) {
         isActiveStatus: field.isActiveStatus,
         statusColor: field.statusColor,
         legislationTitle: field.legislationTitle,
-        jurisdiction: field.jurisdiction
+        jurisdiction: field.jurisdiction,
+        asbestosType: field.asbestosType,
+        name: field.name
       }));
   } catch (error) {
     console.error(`Error getting fields for type ${type}:`, error);

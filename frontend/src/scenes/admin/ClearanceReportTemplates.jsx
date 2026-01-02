@@ -26,6 +26,8 @@ import {
   OutlinedInput,
   Tabs,
   Tab,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import {
   Edit as EditIcon,
@@ -33,18 +35,21 @@ import {
   Cancel as CancelIcon,
   Preview as PreviewIcon,
   Download as DownloadIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import PermissionGate from "../../components/PermissionGate";
 import reportTemplateService from "../../services/reportTemplateService";
 import customDataFieldService from "../../services/customDataFieldService";
 import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
 
-const ReportTemplates = () => {
+const ClearanceReportTemplates = () => {
   const theme = useTheme();
   const colors = tokens;
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [selectedTemplate, setSelectedTemplate] = useState(
     "asbestosClearanceNonFriable"
@@ -763,28 +768,6 @@ const ReportTemplates = () => {
     const currentTemplate = templates[selectedTemplate];
     const sectionData = currentTemplate[editingSection];
 
-    if (editingSection === "companyDetails") {
-      return (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {Object.keys(sectionData).map((key) => (
-            <TextField
-              key={key}
-              label={
-                key.charAt(0).toUpperCase() +
-                key.slice(1).replace(/([A-Z])/g, " $1")
-              }
-              value={editData[key] || ""}
-              onChange={(e) =>
-                setEditData((prev) => ({ ...prev, [key]: e.target.value }))
-              }
-              fullWidth
-              variant="outlined"
-            />
-          ))}
-        </Box>
-      );
-    }
-
     if (editingSection === "standardSections") {
       return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -893,6 +876,18 @@ const ReportTemplates = () => {
               <Typography variant="h6" color="black">
                 {sectionName}
               </Typography>
+              <IconButton
+                onClick={() =>
+                  handleDetailedEdit(
+                    fields[0],
+                    template.standardSections?.[fields[0]] || ""
+                  )
+                }
+                size="small"
+                sx={{ color: "#4caf50" }}
+              >
+                <EditIcon />
+              </IconButton>
             </Box>
             <Grid container spacing={2}>
               {fields.map((field) => (
@@ -900,35 +895,10 @@ const ReportTemplates = () => {
                   <Box
                     sx={{
                       p: 2,
-                      border: `1px solid ${colors.grey[700]}`,
                       borderRadius: 1,
                       position: "relative",
                     }}
                   >
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        mb: 1,
-                      }}
-                    >
-                      <Typography variant="subtitle2" color="black">
-                        {field.charAt(0).toUpperCase() +
-                          field.slice(1).replace(/([A-Z])/g, " $1")}
-                      </Typography>
-                      <IconButton
-                        onClick={() =>
-                          handleDetailedEdit(
-                            field,
-                            template.standardSections?.[field] || ""
-                          )
-                        }
-                        size="small"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Box>
                     <Typography
                       variant="body2"
                       color="black"
@@ -950,38 +920,71 @@ const ReportTemplates = () => {
   const renderDetailedEditor = () => {
     if (!editingSection) return null;
 
-    // Available placeholders for reference
-    const availablePlaceholders = [
-      "CLIENT_NAME",
-      "ASBESTOS_TYPE",
-      "SITE_NAME",
-      "ASBESTOS_REMOVALIST",
-      "LAA_NAME",
-      "LAA_LICENSE",
-      "INSPECTION_TIME",
-      "INSPECTION_DATE",
-      "REPORT_TYPE",
-      "PROJECT_NAME",
-      "PROJECT_NUMBER",
-      "SITE_ADDRESS",
-      "REMOVAL_CONTRACTOR",
-      "REMOVAL_LICENSE",
-      "INSPECTOR_NAME",
-      "INSPECTOR_LICENSE",
-      "INSPECTION_DATETIME",
-      "CLEARANCE_DATE",
-      "CLEARANCE_TIME",
-      "SIGNATURE_IMAGE",
-      "LEGISLATION",
+    // Available placeholders with descriptions
+    const placeholderDescriptions = [
+      {
+        name: "CLIENT_NAME",
+        description: "The name of the client for the project",
+      },
+      {
+        name: "ASBESTOS_TYPE",
+        description: "Type of asbestos (e.g., Friable, Non-friable)",
+      },
+      { name: "SITE_NAME", description: "The name or address of the site" },
+      {
+        name: "ASBESTOS_REMOVALIST",
+        description: "Name of the asbestos removal contractor",
+      },
+      {
+        name: "LAA_NAME",
+        description: "Name of the Licensed Asbestos Assessor",
+      },
+      {
+        name: "LAA_LICENSE",
+        description: "License number of the Licensed Asbestos Assessor",
+      },
+      {
+        name: "LAA_LICENCE_STATE",
+        description: "State where the LAA license was issued",
+      },
+      {
+        name: "INSPECTION_TIME",
+        description: "Time when the inspection was conducted",
+      },
+      {
+        name: "INSPECTION_DATE",
+        description: "Date when the inspection was conducted",
+      },
+      {
+        name: "REPORT_TYPE",
+        description: "Type of clearance report (e.g., Non-Friable, Friable)",
+      },
+      { name: "PROJECT_NAME", description: "Name of the project" },
+      { name: "PROJECT_NUMBER", description: "Project reference number" },
+      { name: "SITE_ADDRESS", description: "Full address of the site" },
+      { name: "CLEARANCE_DATE", description: "Date when clearance was issued" },
+      { name: "CLEARANCE_TIME", description: "Time when clearance was issued" },
+      {
+        name: "SIGNATURE_IMAGE",
+        description: "Digital signature image of the LAA",
+      },
+      {
+        name: "LEGISLATION",
+        description: "Selected legislation items (formatted as bullet points)",
+      },
     ];
 
     // Available formatting placeholders
-    const availableFormatting = [
-      "[BR] - Full line break",
-      "[HALF_BR] - Half-height line break",
-      "{HALF_BR} - Half-height line break (alternative)",
-      "**text** - Bold text",
-      "[UNDERLINE]text[/UNDERLINE] - Underlined text",
+    const formattingOptions = [
+      { code: "[BR]", description: "Full line break" },
+      { code: "[HALF_BR]", description: "Half-height line break" },
+      {
+        code: "[BULLET]",
+        description:
+          "Bullet point (use at start of line to create a bullet list)",
+      },
+      { code: "**text**", description: "Bold text (wrap text with **)" },
+      { code: "[UNDERLINE]text[/UNDERLINE]", description: "Underlined text" },
     ];
 
     return (
@@ -1000,19 +1003,19 @@ const ReportTemplates = () => {
           helperText="Use {PLACEHOLDER_NAME} for dynamic content. Available placeholders will be replaced with actual data when generating reports."
         />
 
-        {/* Available Placeholders */}
+        {/* Available Placeholders and Formatting */}
         <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1 }}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-            Available Placeholders:
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 2 }}>
-            {availablePlaceholders.map((placeholder) => (
-              <Chip
-                key={placeholder}
-                label={`{${placeholder}}`}
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: "0.7rem", cursor: "pointer" }}
+          <Box sx={{ maxHeight: "400px", overflowY: "auto" }}>
+            <Typography
+              variant="subtitle2"
+              color="text.secondary"
+              sx={{ mb: 2, fontWeight: 600 }}
+            >
+              Available Placeholders:
+            </Typography>
+            {placeholderDescriptions.map((item) => (
+              <Box
+                key={item.name}
                 onClick={() => {
                   const textField = document.querySelector(
                     'textarea[aria-label*="' +
@@ -1025,28 +1028,60 @@ const ReportTemplates = () => {
                     const end = textField.selectionEnd;
                     const newValue =
                       editData.substring(0, start) +
-                      `{${placeholder}}` +
+                      `{${item.name}}` +
                       editData.substring(end);
                     setEditData(newValue);
                     // Focus back to text field
                     setTimeout(() => textField.focus(), 0);
                   }
                 }}
-              />
+                sx={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 1,
+                  p: 1,
+                  mb: 0.5,
+                  cursor: "pointer",
+                  borderRadius: 1,
+                  "&:hover": {
+                    backgroundColor: "#e8e8e8",
+                  },
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                    fontWeight: 600,
+                    color: "#1976d2",
+                    minWidth: "180px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {`{${item.name}}`}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  {item.description}
+                </Typography>
+              </Box>
             ))}
-          </Box>
 
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-            Available Formatting:
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            {availableFormatting.map((format) => (
-              <Chip
-                key={format}
-                label={format}
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: "0.7rem", cursor: "pointer" }}
+            <Typography
+              variant="subtitle2"
+              color="text.secondary"
+              sx={{ mb: 2, mt: 3, fontWeight: 600 }}
+            >
+              Available Formatting:
+            </Typography>
+            {formattingOptions.map((format) => (
+              <Box
+                key={format.code}
                 onClick={() => {
                   const textField = document.querySelector(
                     'textarea[aria-label*="' +
@@ -1057,17 +1092,50 @@ const ReportTemplates = () => {
                   if (textField) {
                     const start = textField.selectionStart;
                     const end = textField.selectionEnd;
-                    const formatCode = format.split(" - ")[0]; // Get just the format code
                     const newValue =
                       editData.substring(0, start) +
-                      formatCode +
+                      format.code +
                       editData.substring(end);
                     setEditData(newValue);
                     // Focus back to text field
                     setTimeout(() => textField.focus(), 0);
                   }
                 }}
-              />
+                sx={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 1,
+                  p: 1,
+                  mb: 0.5,
+                  cursor: "pointer",
+                  borderRadius: 1,
+                  "&:hover": {
+                    backgroundColor: "#e8e8e8",
+                  },
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                    fontWeight: 600,
+                    color: "#1976d2",
+                    minWidth: "200px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {format.code}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  {format.description}
+                </Typography>
+              </Box>
             ))}
           </Box>
         </Box>
@@ -1291,86 +1359,6 @@ const ReportTemplates = () => {
     );
   };
 
-  const renderCompanyDetails = () => {
-    // Use the first template's company details since they're constant
-    const firstTemplate = Object.values(templates)[0];
-    if (!firstTemplate?.companyDetails) {
-      return null;
-    }
-
-    const companyDetails = firstTemplate.companyDetails;
-    const entries = Object.entries(companyDetails);
-    const leftColumn = entries.slice(0, 3);
-    const rightColumn = entries.slice(3);
-
-    return (
-      <Grid item xs={12}>
-        <Card>
-          <CardContent>
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                mb: 2,
-              }}
-            >
-              <Typography variant="h6" color="black">
-                Company Details
-              </Typography>
-              <IconButton
-                onClick={() => handleEdit("companyDetails", companyDetails)}
-                size="small"
-              >
-                <EditIcon />
-              </IconButton>
-            </Box>
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                  {leftColumn.map(([key, value]) => (
-                    <Box
-                      key={key}
-                      sx={{ display: "flex", justifyContent: "space-between" }}
-                    >
-                      <Typography variant="body2" color="black">
-                        {key.charAt(0).toUpperCase() +
-                          key.slice(1).replace(/([A-Z])/g, " $1")}
-                        :
-                      </Typography>
-                      <Typography variant="body2" color="black">
-                        {value}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                  {rightColumn.map(([key, value]) => (
-                    <Box
-                      key={key}
-                      sx={{ display: "flex", justifyContent: "space-between" }}
-                    >
-                      <Typography variant="body2" color="black">
-                        {key.charAt(0).toUpperCase() +
-                          key.slice(1).replace(/([A-Z])/g, " $1")}
-                        :
-                      </Typography>
-                      <Typography variant="body2" color="black">
-                        {value}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-      </Grid>
-    );
-  };
-
   const renderAvailablePlaceholders = () => {
     // Available placeholders for reference
     const basePlaceholders = ["CLIENT_NAME", "SITE_NAME", "SITE_ADDRESS"];
@@ -1389,6 +1377,7 @@ const ReportTemplates = () => {
       "ASBESTOS_REMOVALIST",
       "LAA_NAME",
       "LAA_LICENSE",
+      "LAA_LICENCE_STATE",
       "INSPECTION_TIME",
       "INSPECTION_DATE",
       "REPORT_TYPE",
@@ -1412,6 +1401,7 @@ const ReportTemplates = () => {
     const asbestosAssessmentPlaceholders = [
       "LAA_NAME",
       "LAA_LICENSE",
+      "LAA_LICENCE_STATE",
       "ASSESSMENT_DATE",
       "ASSESSMENT_SCOPE_BULLETS",
       "IDENTIFIED_ASBESTOS_ITEMS",
@@ -1631,18 +1621,9 @@ const ReportTemplates = () => {
                       <Box
                         sx={{
                           p: 2,
-                          border: `1px solid ${colors.grey[700]}`,
                           borderRadius: 1,
                         }}
                       >
-                        <Typography
-                          variant="subtitle2"
-                          color="black"
-                          sx={{ mb: 1 }}
-                        >
-                          {key.charAt(0).toUpperCase() +
-                            key.slice(1).replace(/([A-Z])/g, " $1")}
-                        </Typography>
                         <Typography variant="body2" color="black">
                           {value && value.length > 150
                             ? `${value.substring(0, 150)}...`
@@ -1662,6 +1643,20 @@ const ReportTemplates = () => {
   return (
     <PermissionGate requiredPermissions={["admin.view"]}>
       <Box m="20px">
+        {/* Breadcrumbs */}
+        <Breadcrumbs sx={{ marginBottom: 3 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={() => navigate("/admin/report-templates")}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Report Templates
+          </Link>
+          <Typography color="text.primary">Asbestos Clearances</Typography>
+        </Breadcrumbs>
+
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography
             variant="h2"
@@ -1669,11 +1664,11 @@ const ReportTemplates = () => {
             fontWeight="bold"
             sx={{ mb: "5px" }}
           >
-            Report Templates
+            Asbestos Clearance Report Templates
           </Typography>
         </Box>
         <Typography variant="h5" color="black">
-          Manage standardised content for different report types
+          Manage standardised content for clearance reports
         </Typography>
 
         {saveStatus.show && (
@@ -1681,28 +1676,6 @@ const ReportTemplates = () => {
             {saveStatus.message}
           </Alert>
         )}
-
-        {/* Company Details - Full width at top */}
-        <Box sx={{ mt: 3 }}>
-          {loading ? (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                minHeight: "200px",
-              }}
-            >
-              <Typography variant="h6" color="black">
-                Loading templates...
-              </Typography>
-            </Box>
-          ) : (
-            <Grid container spacing={3}>
-              {renderCompanyDetails()}
-            </Grid>
-          )}
-        </Box>
 
         {/* Report Template Selection Tabs */}
         <Box sx={{ mt: 3, mb: 2 }}>
@@ -2086,4 +2059,4 @@ const ReportTemplates = () => {
   );
 };
 
-export default ReportTemplates;
+export default ClearanceReportTemplates;

@@ -47,10 +47,8 @@ import LDsuppliedJobs from "./scenes/fibreID/LDsuppliedJobs.jsx";
 import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
 import ClientSuppliedFibreCountAnalysis from "./scenes/fibreID/ClientSuppliedFibreCountAnalysis.jsx";
 import ClientSuppliedFibreIDAnalysis from "./scenes/fibreID/ClientSuppliedFibreIDAnalysis.jsx";
-import AssessmentItemsPage from "./scenes/surveys/asbestos/AssessmentItems";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
 import LDsuppliedItems from "./scenes/fibreID/LDsuppliedItems.jsx";
-import AssessmentJobsPage from "./scenes/surveys/asbestos";
 import UserManual from "./scenes/userManual/UserManual";
 
 // Lazy loaded components
@@ -75,7 +73,15 @@ const ClearanceItems = lazy(() => import("./scenes/clearances/ClearanceItems"));
 const Clients = lazy(() => import("./scenes/clients"));
 const ClientDetails = lazy(() => import("./scenes/clients/ClientDetails"));
 const AdminDashboard = lazy(() => import("./scenes/admin/AdminDashboard"));
-const ReportTemplates = lazy(() => import("./scenes/admin/ReportTemplates"));
+const ReportTemplatesIndex = lazy(() =>
+  import("./scenes/admin/ReportTemplatesIndex")
+);
+const ClearanceReportTemplates = lazy(() =>
+  import("./scenes/admin/ClearanceReportTemplates")
+);
+const SurveyReportTemplates = lazy(() =>
+  import("./scenes/admin/SurveyReportTemplates")
+);
 
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
 const InvoiceItems = lazy(() => import("./scenes/admin/InvoiceItems"));
@@ -88,15 +94,20 @@ const LeadAssessment = lazy(() =>
 );
 
 // New survey page components
+const AsbestosAssessment = lazy(() =>
+  import("./scenes/surveys/asbestos-assessment")
+);
+const AssessmentItems = lazy(() =>
+  import("./scenes/surveys/asbestos-assessment/AssessmentItems")
+);
 const ResidentialAsbestosAssessment = lazy(() =>
   import("./scenes/surveys/residential-asbestos")
 );
-const AsbestosManagementPlan = lazy(() =>
-  import("./scenes/surveys/asbestos-management-plan")
+const CommercialAsbestosAssessment = lazy(() =>
+  import("./scenes/surveys/commercial-asbestos")
 );
-const HazardousMaterialsManagementPlan = lazy(() =>
-  import("./scenes/surveys/hazardous-materials-management-plan")
-);
+const HAZMATSurveys = lazy(() => import("./scenes/surveys/hazmat"));
+
 const MouldMoistureAssessment = lazy(() =>
   import("./scenes/surveys/mould-moisture")
 );
@@ -402,19 +413,34 @@ function App() {
                               )}
 
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <Route
-                                  path="/surveys/lead"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <LeadAssessment />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
+                                <>
+                                  <Route
+                                    path="/surveys/asbestos-assessment"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <AsbestosAssessment />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/surveys/asbestos-assessment/:id/items"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <AssessmentItems />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                </>
                               )}
+
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
                                   path="/surveys/residential-asbestos"
@@ -429,29 +455,46 @@ function App() {
                                   }
                                 />
                               )}
+
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
-                                  path="/surveys/asbestos-management-plan"
+                                  path="/surveys/commercial-asbestos"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["asbestos.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <AsbestosManagementPlan />
+                                        <CommercialAsbestosAssessment />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
                               )}
+
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
-                                  path="/surveys/hazardous-materials-management-plan"
+                                  path="/surveys/hazmat"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["asbestos.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <HazardousMaterialsManagementPlan />
+                                        <HAZMATSurveys />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+
+                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                <Route
+                                  path="/surveys/lead"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["asbestos.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadAssessment />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
@@ -841,24 +884,14 @@ function App() {
                               )}
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
-                                  path="/assessments"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <AssessmentJobsPage />
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <Route
                                   path="/assessments/:id/items"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["asbestos.view"]}
                                     >
-                                      <AssessmentItemsPage />
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <AssessmentItems />
+                                      </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
@@ -878,18 +911,44 @@ function App() {
                               {isFeatureEnabled(
                                 "ADMIN.TEMPLATE_MANAGEMENT"
                               ) && (
-                                <Route
-                                  path="/admin/report-templates"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["admin.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ReportTemplates />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
+                                <>
+                                  <Route
+                                    path="/admin/report-templates"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["admin.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ReportTemplatesIndex />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/admin/report-templates/clearances"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["admin.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClearanceReportTemplates />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/admin/report-templates/surveys"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["admin.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <SurveyReportTemplates />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                </>
                               )}
 
                               {isFeatureEnabled(

@@ -21,6 +21,9 @@ import {
   DialogActions,
   TextField,
   FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Autocomplete,
   Container,
   Breadcrumbs,
@@ -34,58 +37,73 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { tokens } from "../../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
-import { projectService } from "../../../services/api";
+import { projectService, asbestosAssessmentService } from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 
-const CACHE_KEY = "residentialAsbestosJobsCache";
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_KEY = "asbestosAssessmentJobsCache";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 const loadJobsCache = () => {
   if (typeof window === "undefined" || !window.sessionStorage) {
     return null;
   }
+
   try {
     const cachedRaw = window.sessionStorage.getItem(CACHE_KEY);
-    if (!cachedRaw) return null;
+    if (!cachedRaw) {
+      return null;
+    }
+
     const parsed = JSON.parse(cachedRaw);
-    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
     if (!Array.isArray(parsed.jobs) || typeof parsed.timestamp !== "number") {
       window.sessionStorage.removeItem(CACHE_KEY);
       return null;
     }
+
     if (Date.now() - parsed.timestamp > CACHE_TTL_MS) {
       window.sessionStorage.removeItem(CACHE_KEY);
       return null;
     }
+
     return parsed;
   } catch (error) {
-    console.warn("[Residential Asbestos] Failed to parse jobs cache", error);
+    console.warn("[Asbestos Assessment] Failed to parse jobs cache", error);
     return null;
   }
 };
 
 const saveJobsCache = (jobs) => {
-  if (typeof window === "undefined" || !window.sessionStorage) return;
+  if (typeof window === "undefined" || !window.sessionStorage) {
+    return;
+  }
+
   try {
     const payload = JSON.stringify({ jobs, timestamp: Date.now() });
     window.sessionStorage.setItem(CACHE_KEY, payload);
   } catch (error) {
-    console.warn("[Residential Asbestos] Failed to write jobs cache", error);
+    console.warn("[Asbestos Assessment] Failed to write jobs cache", error);
   }
 };
 
 const clearJobsCache = () => {
-  if (typeof window === "undefined" || !window.sessionStorage) return;
+  if (typeof window === "undefined" || !window.sessionStorage) {
+    return;
+  }
+
   try {
     window.sessionStorage.removeItem(CACHE_KEY);
   } catch (error) {
-    console.warn("[Residential Asbestos] Failed to clear jobs cache", error);
+    console.warn("[Asbestos Assessment] Failed to clear jobs cache", error);
   }
 };
 
-const ResidentialAsbestosAssessment = () => {
+const AsbestosAssessment = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
@@ -95,36 +113,64 @@ const ResidentialAsbestosAssessment = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [surveyDate, setSurveyDate] = useState("");
-  const [surveyDateError, setSurveyDateError] = useState(false);
+  const [assessmentDate, setAssessmentDate] = useState("");
+  const [assessmentDateError, setAssessmentDateError] = useState(false);
+
+  // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchJobs = useCallback(
     async ({ force = false, silent = false } = {}) => {
-      if (!silent) setLoading(true);
+      const startTime = performance.now();
+      console.log("[Asbestos Assessment] Starting fetchJobs");
+
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
         if (!force) {
           const cached = loadJobsCache();
           if (cached) {
+            console.log(
+              "[Asbestos Assessment] Serving jobs from cache"
+            );
             setJobs(cached.jobs);
-            if (!silent) setLoading(false);
+            if (!silent) {
+              setLoading(false);
+            }
             return;
           }
         }
 
-        // TODO: Replace with actual service call
-        const jobs = [];
+        const jobsResponse = await asbestosAssessmentService.getAsbestosAssessments();
+        const jobs = jobsResponse.data || jobsResponse || [];
+
+        if (!Array.isArray(jobs)) {
+          console.error("Jobs is not an array:", jobs);
+          setJobs([]);
+          return;
+        }
+
+        console.log(
+          `[Asbestos Assessment] Found ${jobs.length} active jobs`
+        );
 
         const processedJobs = jobs.map((job) => {
           const projectRef = job.projectId || {};
+          const projectIdentifier =
+            projectRef?.projectID || job.projectID || "Unknown";
+          const projectName =
+            projectRef?.name || job.projectName || "Unknown Project";
           const clientName =
             typeof projectRef?.client === "string"
               ? projectRef.client
@@ -132,11 +178,11 @@ const ResidentialAsbestosAssessment = () => {
 
           return {
             id: job._id,
-            projectID: projectRef?.projectID || job.projectID || "Unknown",
-            projectName: projectRef?.name || job.projectName || "Unknown Project",
+            projectID: projectIdentifier,
+            projectName: projectName,
             clientName: clientName,
-            surveyDate: job.surveyDate || null,
-            status: job.status || "Active",
+            surveyDate: job.assessmentDate || job.surveyDate || null,
+            status: job.status || "in-progress",
             originalData: job,
           };
         });
@@ -150,10 +196,25 @@ const ResidentialAsbestosAssessment = () => {
         setJobs(sortedJobs);
         saveJobsCache(sortedJobs);
       } catch (err) {
+        const errorTime = performance.now() - startTime;
+        console.error(
+          `[Asbestos Assessment] Error after ${errorTime.toFixed(2)}ms:`,
+          err
+        );
         setError(err.message || "Failed to fetch jobs");
-        if (!force) clearJobsCache();
+        if (!force) {
+          clearJobsCache();
+        }
       } finally {
-        if (!silent) setLoading(false);
+        if (!silent) {
+          setLoading(false);
+        }
+        const finalTime = performance.now() - startTime;
+        console.log(
+          `[Asbestos Assessment] fetchJobs completed in ${finalTime.toFixed(
+            2
+          )}ms`
+        );
       }
     },
     []
@@ -174,7 +235,7 @@ const ResidentialAsbestosAssessment = () => {
 
         const sortedProjects = projectsData.sort((a, b) => {
           const aNum = parseInt(a.projectID?.replace(/\D/g, "")) || 0;
-          const bNum = parseInt(b.projectID?.replace(/\D/g, "") || 0);
+          const bNum = parseInt(b.projectID?.replace(/\D/g, "")) || 0;
           return bNum - aNum;
         });
 
@@ -190,7 +251,9 @@ const ResidentialAsbestosAssessment = () => {
 
   useEffect(() => {
     const cached = loadJobsCache();
+
     if (cached) {
+      console.log("[Asbestos Assessment] Using cached jobs");
       setJobs(cached.jobs);
       setLoading(false);
       fetchJobs({ force: true, silent: true });
@@ -201,7 +264,8 @@ const ResidentialAsbestosAssessment = () => {
 
   const getStatusColor = useCallback(
     (status) => {
-      const normalizedStatus = status?.toLowerCase().replace(/\s+/g, "_");
+      const normalizedStatus = status?.toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
+
       switch (normalizedStatus) {
         case "completed":
         case "complete":
@@ -212,6 +276,10 @@ const ResidentialAsbestosAssessment = () => {
           return theme.palette.primary.main;
         case "cancelled":
           return theme.palette.error.main;
+        case "samples_with_lab":
+        case "sample_analysis_complete":
+        case "report_ready_for_review":
+          return theme.palette.info.main;
         default:
           return theme.palette.grey[500];
       }
@@ -221,18 +289,26 @@ const ResidentialAsbestosAssessment = () => {
 
   const formatStatusLabel = useCallback((status) => {
     if (!status) return "Unknown";
+
     const statusMap = {
       in_progress: "In Progress",
+      "in-progress": "In Progress",
       completed: "Completed",
       cancelled: "Cancelled",
       complete: "Complete",
       active: "Active",
+      "samples-with-lab": "Samples With Lab",
+      "sample-analysis-complete": "Sample Analysis Complete",
+      "report-ready-for-review": "Report Ready For Review",
     };
+
     return (
       statusMap[status] ||
       status
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .split(/[_-]/)
+        .map(
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        )
         .join(" ")
     );
   }, []);
@@ -240,17 +316,19 @@ const ResidentialAsbestosAssessment = () => {
   const handleCreateJob = () => {
     setModalOpen(true);
     setSelectedProject(null);
-    setSurveyDate(getTodaySydney());
-    setSurveyDateError(false);
+    setAssessmentDate(getTodaySydney());
+    setAssessmentDateError(false);
     setModalError(null);
-    if (projects.length === 0) fetchProjects();
+    if (projects.length === 0) {
+      fetchProjects();
+    }
   };
 
   const handleCloseModal = () => {
     setModalOpen(false);
     setSelectedProject(null);
-    setSurveyDate("");
-    setSurveyDateError(false);
+    setAssessmentDate("");
+    setAssessmentDateError(false);
     setModalError(null);
   };
 
@@ -260,28 +338,46 @@ const ResidentialAsbestosAssessment = () => {
       return;
     }
 
-    if (!surveyDate || surveyDate.trim() === "") {
-      setSurveyDateError(true);
-      setModalError("Please enter a survey date");
+    if (!assessmentDate || assessmentDate.trim() === "") {
+      setAssessmentDateError(true);
+      setModalError("Please enter an assessment date");
       return;
     }
 
     setModalLoading(true);
     setModalError(null);
-    setSurveyDateError(false);
+    setAssessmentDateError(false);
 
     try {
-      // TODO: Replace with actual service call
-      handleCloseModal();
+      const newJobData = {
+        projectId: selectedProject._id,
+        assessmentDate: assessmentDate,
+      };
+
+      const response = await asbestosAssessmentService.createAsbestosAssessment(newJobData);
+
+      if (response.data) {
+        clearJobsCache();
+        await fetchJobs({ force: true });
+        handleCloseModal();
+      } else {
+        // If response structure is different, still refresh
+        clearJobsCache();
+        await fetchJobs({ force: true });
+        handleCloseModal();
+      }
     } catch (err) {
-      setModalError(err.response?.data?.message || err.message || "Failed to create job");
+      console.error("Error creating job:", err);
+      setModalError(
+        err.response?.data?.message || err.message || "Failed to create job"
+      );
     } finally {
       setModalLoading(false);
     }
   };
 
   const handleRowClick = (job) => {
-    // TODO: Navigate to job details page
+    navigate(`/surveys/asbestos-assessment/${job.id}/items`);
   };
 
   const handleDeleteClick = (event, job) => {
@@ -292,19 +388,28 @@ const ResidentialAsbestosAssessment = () => {
 
   const handleDeleteConfirm = async () => {
     if (!jobToDelete) return;
+
     setDeleteLoading(true);
     try {
-      // TODO: Replace with actual service call
+      await asbestosAssessmentService.deleteAsbestosAssessment(jobToDelete.id);
       clearJobsCache();
       setJobs((prev) => prev.filter((job) => job.id !== jobToDelete.id));
       await fetchJobs({ force: true, silent: true });
       setDeleteDialogOpen(false);
       setJobToDelete(null);
     } catch (err) {
-      setError(err.response?.data?.message || err.message || "Failed to delete job");
+      console.error("Error deleting job:", err);
+      setError(
+        err.response?.data?.message || err.message || "Failed to delete job"
+      );
     } finally {
       setDeleteLoading(false);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setJobToDelete(null);
   };
 
   const handleBackToSurveys = () => {
@@ -324,7 +429,7 @@ const ResidentialAsbestosAssessment = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Surveys Home
           </Link>
-          <Typography color="text.primary">Residential Asbestos Surveys</Typography>
+          <Typography color="text.primary">Asbestos Assessment</Typography>
         </Breadcrumbs>
 
         <Box
@@ -338,7 +443,7 @@ const ResidentialAsbestosAssessment = () => {
           }}
         >
           <Typography variant="h4" component="h1" gutterBottom>
-            Residential Asbestos Surveys
+            Asbestos Assessment
           </Typography>
           <Button
             variant="contained"
@@ -353,7 +458,7 @@ const ResidentialAsbestosAssessment = () => {
               },
             }}
           >
-            New Survey
+            New Assessment
           </Button>
         </Box>
 
@@ -381,7 +486,7 @@ const ResidentialAsbestosAssessment = () => {
                 {loading ? (
                   <TableRow>
                     <TableCell colSpan={5} align="center">
-                      Loading surveys...
+                      Loading assessments...
                     </TableCell>
                   </TableRow>
                 ) : error ? (
@@ -393,7 +498,7 @@ const ResidentialAsbestosAssessment = () => {
                 ) : jobs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} align="center">
-                      No active surveys found
+                      No active assessments found
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -405,7 +510,10 @@ const ResidentialAsbestosAssessment = () => {
                       sx={{ cursor: "pointer" }}
                     >
                       <TableCell sx={{ width: "115px" }}>
-                        <Typography variant="body2" sx={{ fontWeight: "medium" }}>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: "medium" }}
+                        >
                           {job.projectID}
                         </Typography>
                       </TableCell>
@@ -445,12 +553,12 @@ const ResidentialAsbestosAssessment = () => {
                         sx={{ minWidth: "120px" }}
                       >
                         {hasPermission(currentUser, "asbestos.delete") && (
-                          <Tooltip title="Delete Survey">
+                          <Tooltip title="Delete Assessment">
                             <IconButton
                               onClick={(event) => handleDeleteClick(event, job)}
                               color="error"
                               size="small"
-                              title="Delete Survey"
+                              title="Delete Assessment"
                             >
                               <DeleteIcon />
                             </IconButton>
@@ -466,10 +574,20 @@ const ResidentialAsbestosAssessment = () => {
         </Paper>
       </Box>
 
-      <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
+      {/* Create Assessment Modal */}
+      <Dialog
+        open={modalOpen}
+        onClose={handleCloseModal}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">New Residential Asbestos Survey</Typography>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">New Asbestos Assessment</Typography>
             <IconButton onClick={handleCloseModal}>
               <CloseIcon />
             </IconButton>
@@ -481,10 +599,13 @@ const ResidentialAsbestosAssessment = () => {
               {modalError}
             </Alert>
           )}
+
           <FormControl fullWidth sx={{ mb: 3, mt: 1 }}>
             <Autocomplete
               options={Array.isArray(projects) ? projects : []}
-              getOptionLabel={(option) => `${option.projectID} - ${option.name}`}
+              getOptionLabel={(option) =>
+                `${option.projectID} - ${option.name}`
+              }
               value={selectedProject}
               onChange={(event, newValue) => {
                 setSelectedProject(newValue);
@@ -514,27 +635,27 @@ const ResidentialAsbestosAssessment = () => {
 
           <TextField
             fullWidth
-            label="Survey Date"
+            label="Assessment Date"
             type="date"
-            value={surveyDate}
+            value={assessmentDate}
             onChange={(e) => {
-              setSurveyDate(e.target.value);
-              if (surveyDateError) {
-                setSurveyDateError(false);
+              setAssessmentDate(e.target.value);
+              if (assessmentDateError) {
+                setAssessmentDateError(false);
               }
               setModalError(null);
             }}
             InputLabelProps={{
               shrink: true,
             }}
-            error={surveyDateError}
+            error={assessmentDateError}
             required
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
                   <Button
                     size="small"
-                    onClick={() => setSurveyDate(getTodaySydney())}
+                    onClick={() => setAssessmentDate(getTodaySydney())}
                     sx={{ textTransform: "none", minWidth: "auto" }}
                   >
                     Today
@@ -544,9 +665,9 @@ const ResidentialAsbestosAssessment = () => {
             }}
             sx={{ mb: 2 }}
           />
-          {surveyDateError && (
+          {assessmentDateError && (
             <Typography variant="body2" sx={{ color: "error.main", mb: 2 }}>
-              Please enter a survey date.
+              Please enter an assessment date.
             </Typography>
           )}
         </DialogContent>
@@ -555,7 +676,7 @@ const ResidentialAsbestosAssessment = () => {
           <Button
             onClick={handleSubmitModal}
             variant="contained"
-            disabled={!selectedProject || !surveyDate || modalLoading}
+            disabled={!selectedProject || !assessmentDate || modalLoading}
             sx={{
               backgroundColor: colors.primary[700],
               color: colors.grey[100],
@@ -564,26 +685,42 @@ const ResidentialAsbestosAssessment = () => {
               },
             }}
           >
-            {modalLoading ? "Creating..." : "Create Survey"}
+            {modalLoading ? "Creating..." : "Create Assessment"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">Delete Residential Asbestos Survey</Typography>
-            <IconButton onClick={() => setDeleteDialogOpen(false)}>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Delete Asbestos Assessment</Typography>
+            <IconButton onClick={handleDeleteCancel}>
               <CloseIcon />
             </IconButton>
           </Box>
         </DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            Are you sure you want to delete this survey?
+            Are you sure you want to delete this asbestos assessment?
           </Typography>
           {jobToDelete && (
-            <Box sx={{ p: 2, backgroundColor: theme.palette.grey[100], borderRadius: 1 }}>
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: theme.palette.grey[100],
+                borderRadius: 1,
+              }}
+            >
               <Typography variant="body2" sx={{ fontWeight: "bold" }}>
                 Project: {jobToDelete.projectID} - {jobToDelete.projectName}
               </Typography>
@@ -593,11 +730,12 @@ const ResidentialAsbestosAssessment = () => {
             </Box>
           )}
           <Alert severity="warning" sx={{ mt: 2 }}>
-            This action cannot be undone. All associated data will be permanently deleted.
+            This action cannot be undone. All associated data will be
+            permanently deleted.
           </Alert>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>
+          <Button onClick={handleDeleteCancel} disabled={deleteLoading}>
             Cancel
           </Button>
           <Button
@@ -611,7 +749,7 @@ const ResidentialAsbestosAssessment = () => {
               },
             }}
           >
-            {deleteLoading ? "Deleting..." : "Delete Survey"}
+            {deleteLoading ? "Deleting..." : "Delete Assessment"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -619,4 +757,5 @@ const ResidentialAsbestosAssessment = () => {
   );
 };
 
-export default ResidentialAsbestosAssessment;
+export default AsbestosAssessment;
+

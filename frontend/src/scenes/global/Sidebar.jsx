@@ -371,11 +371,8 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 
 const Sidebar = () => {
   const theme = useTheme();
-  const { currentUser } = useAuth();
   const { isAdmin } = usePermissions();
-  const location = useLocation();
-  const showHidden = true; // Set to true to show hidden components
-
+ 
   // Detect tablet and mobile screens - hide sidebar completely
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
   const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
@@ -531,14 +528,8 @@ const Sidebar = () => {
               to="/timesheets/monthly"
               icon={<AccessTimeIcon />}
             />
-            
-          <Item
-            title="Clients"
-            to="/clients"
-            icon={<PeopleOutlinedIcon />}
-          />
 
-            
+            <Item title="Clients" to="/clients" icon={<PeopleOutlinedIcon />} />
           </PermissionGate>
 
           {/* Collapsible Sections */}
@@ -553,8 +544,12 @@ const Sidebar = () => {
           </PermissionGate> */}
 
           <SectionDivider />
-          
-          <CollapsibleSection title="Projects" to="/projects" icon={<StorageIcon />} />
+
+          <CollapsibleSection
+            title="Projects"
+            to="/projects"
+            icon={<StorageIcon />}
+          />
 
           <CollapsibleSection
             title="Invoices"
@@ -580,19 +575,19 @@ const Sidebar = () => {
 
           <SectionDivider />
 
-          {isFeatureEnabled("ADVANCED.SURVEYS") && (
-            <CollapsibleSection
-              title="SURVEYS"
-              to="/surveys"
-              icon={<SearchIcon />}
-            />
-          )}
-
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
             <CollapsibleSection
               title="Air Mon & Clearances"
               to="/asbestos-removal"
               icon={<ConstructionIcon />}
+            />
+          )}
+
+          {isFeatureEnabled("ADVANCED.SURVEYS") && (
+            <CollapsibleSection
+              title="Surveys"
+              to="/surveys"
+              icon={<SearchIcon />}
             />
           )}
 

@@ -49,6 +49,7 @@ import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { compressImage } from "../../utils/imageCompression";
+import { getTodaySydney } from "../../utils/dateUtils";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
@@ -1327,11 +1328,7 @@ const ClientSuppliedJobs = () => {
                         <InputAdornment position="end">
                           <Button
                             size="small"
-                            onClick={() =>
-                              setSampleReceiptDate(
-                                new Date().toISOString().split("T")[0]
-                              )
-                            }
+                            onClick={() => setSampleReceiptDate(getTodaySydney())}
                             sx={{ textTransform: "none", minWidth: "auto" }}
                           >
                             Today

@@ -365,8 +365,9 @@ const getTemplateByType = async (templateType) => {
 const replacePlaceholders = async (content, data) => {
   if (!content) return '';
   
-  // Look up user's Asbestos Assessor licence number and signature
+  // Look up user's Asbestos Assessor licence number, state, and signature
   let laaLicenceNumber = 'AA00031'; // Default fallback
+  let laaLicenceState = ''; // Default fallback
   let userSignature = null;
   let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
   
@@ -379,13 +380,14 @@ const replacePlaceholders = async (content, data) => {
   }
   
   if (userIdentifier) {
-    // Check cache first
-    if (userLookupCache.has(userIdentifier)) {
-      const cachedUser = userLookupCache.get(userIdentifier);
-      console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
-      laaName = cachedUser.name;
-      laaLicenceNumber = cachedUser.licenceNumber;
-      userSignature = cachedUser.signature;
+      // Check cache first
+      if (userLookupCache.has(userIdentifier)) {
+        const cachedUser = userLookupCache.get(userIdentifier);
+        console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
+        laaName = cachedUser.name;
+        laaLicenceNumber = cachedUser.licenceNumber;
+        laaLicenceState = cachedUser.licenceState || '';
+        userSignature = cachedUser.signature;
     } else {
       try {
         console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
@@ -449,7 +451,8 @@ const replacePlaceholders = async (content, data) => {
             
             if (asbestosAssessorLicence) {
               laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
-              console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber);
+              laaLicenceState = asbestosAssessorLicence.state || '';
+              console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber, 'State:', laaLicenceState);
             }
           }
           
@@ -457,6 +460,7 @@ const replacePlaceholders = async (content, data) => {
           userLookupCache.set(userIdentifier, {
             name: laaName,
             licenceNumber: laaLicenceNumber,
+            licenceState: laaLicenceState,
             signature: userSignature
           });
           console.log('[TEMPLATE SERVICE] Cached user data for:', userIdentifier);
@@ -482,10 +486,34 @@ const replacePlaceholders = async (content, data) => {
     '[LAA_NAME]': laaName,
     '{LAA_LICENSE}': laaLicenceNumber,
     '[LAA_LICENCE]': laaLicenceNumber,
+    '{LAA_LICENCE_STATE}': laaLicenceState,
+    '[LAA_LICENCE_STATE]': laaLicenceState,
     '{ASSESSMENT_DATE}': data.assessmentDate 
       ? new Date(data.assessmentDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
     '{ASSESSMENT_SCOPE_BULLETS}': data.assessmentScopeBullets || '<li>No areas specified</li>',
+    '{ASSESSMENT_SCOPE}': (() => {
+      // Custom placeholder for assessment scope - will be defined at a later date
+      // Returns empty string for now, but will format as bullet list when implemented
+      if (data.assessmentScope && Array.isArray(data.assessmentScope) && data.assessmentScope.length > 0) {
+        return data.assessmentScope.map(item => {
+          const text = typeof item === 'string' ? item : (item.text || item.name || '');
+          return `[BULLET]${text}`;
+        }).join('\n');
+      }
+      return ''; // Return empty for now until defined
+    })(),
+    '[ASSESSMENT_SCOPE]': (() => {
+      // Custom placeholder for assessment scope - will be defined at a later date
+      // Returns empty string for now, but will format as bullet list when implemented
+      if (data.assessmentScope && Array.isArray(data.assessmentScope) && data.assessmentScope.length > 0) {
+        return data.assessmentScope.map(item => {
+          const text = typeof item === 'string' ? item : (item.text || item.name || '');
+          return `[BULLET]${text}`;
+        }).join('\n');
+      }
+      return ''; // Return empty for now until defined
+    })(),
     '{IDENTIFIED_ASBESTOS_ITEMS}': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
     '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
     '{INSPECTION_TIME}': (() => {

@@ -61,6 +61,40 @@ const asbestosAssessmentService = {
       responseType: 'blob'
     });
     return response.data;
+  },
+
+  // Add photo to assessment item
+  addPhotoToItem: async (assessmentId, itemId, photoData, includeInReport = true) => {
+    const response = await api.post(
+      `/assessments/${assessmentId}/items/${itemId}/photos`,
+      { photoData, includeInReport }
+    );
+    return response.data;
+  },
+
+  // Delete photo from assessment item
+  deletePhotoFromItem: async (assessmentId, itemId, photoId) => {
+    const response = await api.delete(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}`
+    );
+    return response.data;
+  },
+
+  // Toggle photo inclusion in report
+  togglePhotoInReport: async (assessmentId, itemId, photoId) => {
+    const response = await api.patch(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/toggle`
+    );
+    return response.data;
+  },
+
+  // Update photo description
+  updatePhotoDescription: async (assessmentId, itemId, photoId, description) => {
+    const response = await api.patch(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/description`,
+      { description }
+    );
+    return response.data;
   }
 };
 

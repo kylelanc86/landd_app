@@ -60,6 +60,7 @@ const CustomDataFields = () => {
   const [roomAreas, setRoomAreas] = useState([]);
   const [legislation, setLegislation] = useState([]);
   const [projectStatuses, setProjectStatuses] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItemText, setNewItemText] = useState("");
@@ -67,6 +68,8 @@ const CustomDataFields = () => {
   const [newJurisdiction, setNewJurisdiction] = useState("ACT");
   const [newIsActiveStatus, setNewIsActiveStatus] = useState(true);
   const [newStatusColor, setNewStatusColor] = useState("#1976d2");
+  const [newAsbestosType, setNewAsbestosType] = useState("");
+  const [newRecommendationName, setNewRecommendationName] = useState("");
   const [currentTab, setCurrentTab] = useState("");
   const [loading, setLoading] = useState(false);
   const { showSnackbar } = useSnackbar();
@@ -85,6 +88,7 @@ const CustomDataFields = () => {
         roomAreaData,
         legislationData,
         projectStatusesData,
+        recommendationsData,
       ] = await Promise.all([
         customDataFieldGroupService.getFieldsByType("asbestos_removalist"),
         customDataFieldGroupService.getFieldsByType("location_description"),
@@ -92,6 +96,7 @@ const CustomDataFields = () => {
         customDataFieldGroupService.getFieldsByType("room_area"),
         customDataFieldGroupService.getFieldsByType("legislation"),
         customDataFieldGroupService.getProjectStatuses(),
+        customDataFieldGroupService.getFieldsByType("recommendation"),
       ]);
 
       setAsbestosRemovalists(asbestosData || []);
@@ -99,6 +104,7 @@ const CustomDataFields = () => {
       setMaterialsDescriptions(materialsData || []);
       setRoomAreas(roomAreaData || []);
       setLegislation(legislationData || []);
+      setRecommendations(recommendationsData || []);
       // Handle project statuses data which might be an object with activeStatuses and inactiveStatuses
       if (
         projectStatusesData &&
@@ -197,6 +203,12 @@ const CustomDataFields = () => {
             setter: setProjectStatuses,
             title: "Projects Status",
           };
+        case 4:
+          return {
+            data: recommendations,
+            setter: setRecommendations,
+            title: "Recommendations",
+          };
         default:
           return { data: [], setter: () => {}, title: "" };
       }
@@ -213,6 +225,8 @@ const CustomDataFields = () => {
     setNewLegislationTitle("");
     setNewJurisdiction("ACT"); // Reset jurisdiction on add
     setNewIsActiveStatus(true); // Reset isActiveStatus on add
+    setNewAsbestosType(""); // Reset asbestos type on add
+    setNewRecommendationName(""); // Reset recommendation name on add
     setDialogOpen(true);
   };
 
@@ -220,13 +234,19 @@ const CustomDataFields = () => {
     const { title } = getCurrentData();
     setCurrentTab(title);
     setEditingItem(item);
-    setNewItemText(item.text || item.name || "");
+    setNewItemText(
+      currentTab === "Recommendations"
+        ? item.text || ""
+        : item.text || item.name || ""
+    );
     setNewLegislationTitle(item.legislationTitle || "");
     setNewJurisdiction(item.jurisdiction || "ACT"); // Set jurisdiction on edit
     setNewIsActiveStatus(
       item.isActiveStatus !== undefined ? item.isActiveStatus : true
     ); // Set isActiveStatus on edit
     setNewStatusColor(item.statusColor || "#1976d2"); // Set status color on edit
+    setNewAsbestosType(item.asbestosType || ""); // Set asbestos type on edit
+    setNewRecommendationName(item.name || ""); // Set recommendation name on edit
     setDialogOpen(true);
   };
 
@@ -309,17 +329,41 @@ const CustomDataFields = () => {
         return "legislation";
       case "Projects Status":
         return "project_status";
+      case "Recommendations":
+        return "recommendation";
       default:
         return "asbestos_removalist";
     }
   };
 
   const handleSaveItem = async () => {
-    if (!newItemText.trim()) return;
+    // For recommendations, validate both fields separately
+    if (currentTab === "Recommendations") {
+      if (!newRecommendationName.trim()) {
+        showSnackbar("Recommendation name is required", "error");
+        return;
+      }
+      if (!newItemText.trim()) {
+        showSnackbar("Recommendation content is required", "error");
+        return;
+      }
+    } else {
+      // For other tabs, validate the main text field
+      if (!newItemText.trim()) return;
+    }
 
     // For legislation, both fields are required
     if (currentTab === "Legislation" && !newLegislationTitle.trim()) return;
     if (currentTab === "Legislation" && !newJurisdiction.trim()) return;
+
+    // For materials descriptions, asbestos type is required
+    if (currentTab === "Materials Descriptions" && !newAsbestosType.trim()) {
+      showSnackbar(
+        "Asbestos type is required for Materials Descriptions",
+        "error"
+      );
+      return;
+    }
 
     const { data, setter, title } = getCurrentData();
 
@@ -340,6 +384,16 @@ const CustomDataFields = () => {
           updateData.statusColor = newStatusColor;
         }
 
+        // For materials descriptions, include the asbestos type field
+        if (title === "Materials Descriptions") {
+          updateData.asbestosType = newAsbestosType.trim();
+        }
+
+        // For recommendations, include the name field
+        if (title === "Recommendations") {
+          updateData.name = newRecommendationName.trim();
+        }
+
         // For all custom data field types, update the backend group
         if (
           [
@@ -349,13 +403,42 @@ const CustomDataFields = () => {
             "Room/Area",
             "Location Descriptions",
             "Materials Descriptions",
+            "Recommendations",
           ].includes(title)
         ) {
           // Get the current group
           const groupType = getTypeFromTitle(title);
-          const group = await customDataFieldGroupService.getGroupByType(
-            groupType
-          );
+          let group;
+          try {
+            group = await customDataFieldGroupService.getGroupByType(groupType);
+          } catch (getError) {
+            // If group doesn't exist (404), create it
+            if (
+              getError.response?.status === 404 ||
+              getError.response?.status === 400
+            ) {
+              try {
+                const groupName = title;
+                const groupDescription = `${title} custom data fields`;
+                group = await customDataFieldGroupService.createGroup({
+                  name: groupName,
+                  description: groupDescription,
+                  type: groupType,
+                  fields: [],
+                });
+              } catch (createError) {
+                console.error(`Error creating ${title} group:`, createError);
+                const createErrorMessage =
+                  createError.response?.data?.message ||
+                  createError.message ||
+                  `Failed to create ${title} group`;
+                showSnackbar(createErrorMessage, "error");
+                return;
+              }
+            } else {
+              throw getError;
+            }
+          }
 
           if (!group) {
             showSnackbar(`${title} group not found`, "error");
@@ -363,15 +446,33 @@ const CustomDataFields = () => {
           }
 
           // Update the specific field in the group's fields array
+          // Clean fields to only include necessary properties
           const updatedFields = group.fields.map((field) => {
+            const cleanedField = {
+              _id: field._id,
+              text: field.text,
+              order: field.order,
+              isActive: field.isActive,
+              ...(field.legislationTitle && {
+                legislationTitle: field.legislationTitle,
+              }),
+              ...(field.jurisdiction && { jurisdiction: field.jurisdiction }),
+              ...(field.isActiveStatus !== undefined && {
+                isActiveStatus: field.isActiveStatus,
+              }),
+              ...(field.statusColor && { statusColor: field.statusColor }),
+              ...(field.asbestosType && { asbestosType: field.asbestosType }),
+              ...(field.name && { name: field.name }),
+              ...(field.createdBy && { createdBy: field.createdBy }),
+            };
+
             if (field._id.toString() === editingItem._id.toString()) {
               return {
-                ...field,
+                ...cleanedField,
                 ...updateData,
-                updatedAt: new Date(),
               };
             }
-            return field;
+            return cleanedField;
           });
 
           // Update the group with the new fields array
@@ -444,6 +545,16 @@ const CustomDataFields = () => {
           newItemData.statusColor = newStatusColor;
         }
 
+        // For materials descriptions, include the asbestos type field
+        if (title === "Materials Descriptions") {
+          newItemData.asbestosType = newAsbestosType.trim();
+        }
+
+        // For recommendations, include the name field
+        if (title === "Recommendations") {
+          newItemData.name = newRecommendationName.trim();
+        }
+
         // For all custom data field types, add to the backend group
         if (
           [
@@ -453,14 +564,46 @@ const CustomDataFields = () => {
             "Room/Area",
             "Location Descriptions",
             "Materials Descriptions",
+            "Recommendations",
           ].includes(title)
         ) {
           try {
             // Get the current group
             const groupType = getTypeFromTitle(title);
-            const group = await customDataFieldGroupService.getGroupByType(
-              groupType
-            );
+            let group;
+            try {
+              group = await customDataFieldGroupService.getGroupByType(
+                groupType
+              );
+            } catch (getError) {
+              // If group doesn't exist (404), create it
+              if (
+                getError.response?.status === 404 ||
+                getError.response?.status === 400
+              ) {
+                try {
+                  const groupName = title;
+                  const groupDescription = `${title} custom data fields`;
+                  group = await customDataFieldGroupService.createGroup({
+                    name: groupName,
+                    description: groupDescription,
+                    type: groupType,
+                    fields: [],
+                  });
+                } catch (createError) {
+                  console.error(`Error creating ${title} group:`, createError);
+                  const createErrorMessage =
+                    createError.response?.data?.message ||
+                    createError.message ||
+                    `Failed to create ${title} group`;
+                  showSnackbar(createErrorMessage, "error");
+                  return;
+                }
+              } else {
+                // Re-throw if it's a different error
+                throw getError;
+              }
+            }
 
             if (!group) {
               showSnackbar(`${title} group not found`, "error");
@@ -487,17 +630,53 @@ const CustomDataFields = () => {
               ...(newItemData.statusColor && {
                 statusColor: newItemData.statusColor,
               }),
+              ...(newItemData.asbestosType && {
+                asbestosType: newItemData.asbestosType,
+              }),
+              ...(newItemData.name && {
+                name: newItemData.name,
+              }),
             };
 
+            // Clean existing fields to only include necessary properties
+            const cleanedFields = group.fields.map((field) => ({
+              _id: field._id,
+              text: field.text,
+              order: field.order,
+              isActive: field.isActive,
+              ...(field.legislationTitle && {
+                legislationTitle: field.legislationTitle,
+              }),
+              ...(field.jurisdiction && { jurisdiction: field.jurisdiction }),
+              ...(field.isActiveStatus !== undefined && {
+                isActiveStatus: field.isActiveStatus,
+              }),
+              ...(field.statusColor && { statusColor: field.statusColor }),
+              ...(field.asbestosType && { asbestosType: field.asbestosType }),
+              ...(field.name && { name: field.name }),
+              ...(field.createdBy && { createdBy: field.createdBy }),
+            }));
+
             // Add the new field to the group's fields array
-            const updatedFields = [...group.fields, newField];
+            const updatedFields = [...cleanedFields, newField];
 
             // Update the group with the new fields array
-            await customDataFieldGroupService.updateGroup(group._id, {
+            const updatePayload = {
               name: group.name,
               description: group.description,
               fields: updatedFields,
-            });
+            };
+
+            console.log(
+              "Adding recommendation - Update payload:",
+              JSON.stringify(updatePayload, null, 2)
+            );
+            console.log("New field being added:", newField);
+
+            await customDataFieldGroupService.updateGroup(
+              group._id,
+              updatePayload
+            );
 
             // Create new item for local state
             const newItem = {
@@ -530,7 +709,12 @@ const CustomDataFields = () => {
             showSnackbar(`${title} added successfully`);
           } catch (error) {
             console.error(`Error adding ${title} to backend:`, error);
-            showSnackbar(`Failed to add ${title} to backend`, "error");
+            const errorMessage =
+              error.response?.data?.message ||
+              error.message ||
+              `Failed to add ${title} to backend`;
+            console.error("Full error details:", error.response?.data);
+            showSnackbar(errorMessage, "error");
             return;
           }
         }
@@ -546,6 +730,8 @@ const CustomDataFields = () => {
     setNewItemText("");
     setNewLegislationTitle("");
     setNewJurisdiction("ACT"); // Reset jurisdiction on save
+    setNewAsbestosType(""); // Reset asbestos type on save
+    setNewRecommendationName(""); // Reset recommendation name on save
   };
 
   const handleDialogClose = () => {
@@ -556,6 +742,8 @@ const CustomDataFields = () => {
     setNewJurisdiction("ACT"); // Reset jurisdiction on close
     setNewIsActiveStatus(true); // Reset isActiveStatus on close
     setNewStatusColor("#1976d2"); // Reset status color on close
+    setNewAsbestosType(""); // Reset asbestos type on close
+    setNewRecommendationName(""); // Reset recommendation name on close
   };
 
   const renderTabContent = (data, title) => {
@@ -613,7 +801,25 @@ const CustomDataFields = () => {
                 }}
               >
                 <ListItemText
-                  primary={item.text || item.name || "Unnamed Item"}
+                  primary={
+                    title === "Recommendations" && item.name ? (
+                      <Typography
+                        variant="subtitle1"
+                        sx={{ fontWeight: "bold" }}
+                      >
+                        {item.name}
+                      </Typography>
+                    ) : (
+                      item.text || item.name || "Unnamed Item"
+                    )
+                  }
+                  secondary={
+                    title === "Materials Descriptions" && item.asbestosType
+                      ? `Asbestos Type: ${item.asbestosType}`
+                      : title === "Recommendations" && item.text
+                      ? item.text
+                      : null
+                  }
                 />
                 <ListItemSecondaryAction>
                   <IconButton
@@ -1052,6 +1258,7 @@ const CustomDataFields = () => {
             <Tab label="Item Descriptions" />
             <Tab label="Legislation" />
             <Tab label="Projects Status" />
+            <Tab label="Recommendations" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -1098,6 +1305,10 @@ const CustomDataFields = () => {
           <TabPanel value={tabValue} index={3}>
             {renderProjectStatusContent()}
           </TabPanel>
+
+          <TabPanel value={tabValue} index={4}>
+            {renderTabContent(recommendations, "Recommendations")}
+          </TabPanel>
         </Paper>
 
         {/* Add/Edit Dialog */}
@@ -1134,21 +1345,62 @@ const CustomDataFields = () => {
                 </TextField>
               </Box>
             )}
-            <TextField
-              autoFocus
-              margin="dense"
-              label={
-                currentTab === "Legislation"
-                  ? "Legislation Type"
-                  : `${currentTab} Name`
-              }
-              fullWidth
-              variant="outlined"
-              value={newItemText}
-              onChange={(e) => setNewItemText(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
-              sx={{ mb: currentTab === "Legislation" ? 2 : 0 }}
-            />
+            {currentTab !== "Recommendations" && (
+              <TextField
+                autoFocus
+                margin="dense"
+                label={
+                  currentTab === "Legislation"
+                    ? "Legislation Type"
+                    : `${currentTab} Name`
+                }
+                fullWidth
+                variant="outlined"
+                value={newItemText}
+                onChange={(e) => setNewItemText(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
+                sx={{
+                  mb:
+                    currentTab === "Legislation" ||
+                    currentTab === "Materials Descriptions"
+                      ? 2
+                      : 0,
+                }}
+              />
+            )}
+            {currentTab === "Recommendations" && (
+              <>
+                <TextField
+                  autoFocus
+                  margin="dense"
+                  label="Recommendation Name"
+                  fullWidth
+                  variant="outlined"
+                  value={newRecommendationName}
+                  onChange={(e) => setNewRecommendationName(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
+                  required
+                  error={!newRecommendationName.trim()}
+                  helperText={
+                    !newRecommendationName.trim() ? "Name is required" : ""
+                  }
+                  sx={{ mb: 2 }}
+                />
+                <TextField
+                  margin="dense"
+                  label="Recommendation Content"
+                  fullWidth
+                  variant="outlined"
+                  value={newItemText}
+                  onChange={(e) => setNewItemText(e.target.value)}
+                  multiline
+                  rows={3}
+                  required
+                  error={!newItemText.trim()}
+                  helperText={!newItemText.trim() ? "Content is required" : ""}
+                />
+              </>
+            )}
             {currentTab === "Legislation" && (
               <TextField
                 margin="dense"
@@ -1159,6 +1411,23 @@ const CustomDataFields = () => {
                 onChange={(e) => setNewLegislationTitle(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
               />
+            )}
+            {currentTab === "Materials Descriptions" && (
+              <TextField
+                select
+                margin="dense"
+                label="Asbestos Type"
+                fullWidth
+                variant="outlined"
+                value={newAsbestosType}
+                onChange={(e) => setNewAsbestosType(e.target.value)}
+                required
+                error={!newAsbestosType}
+                helperText={!newAsbestosType ? "Asbestos type is required" : ""}
+              >
+                <MenuItem value="Friable">Friable</MenuItem>
+                <MenuItem value="Non-friable">Non-friable</MenuItem>
+              </TextField>
             )}
 
             {currentTab === "Projects Status" && (

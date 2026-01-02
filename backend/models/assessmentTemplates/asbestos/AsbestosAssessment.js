@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 
 const AssessmentItemSchema = new mongoose.Schema({
-  itemNumber: { type: Number, required: true },
+  // itemNumber is optional initially - it will be added later in the process
+  // for items that are confirmed to contain asbestos
+  itemNumber: { type: Number, required: false },
   sampleReference: { type: String, required: true },
   locationDescription: { type: String, required: true },
   levelFloor: { type: String, required: false },
@@ -12,6 +14,28 @@ const AssessmentItemSchema = new mongoose.Schema({
   condition: { type: String, required: true },
   risk: { type: String, required: true },
   photograph: { type: String },
+  photographs: [{
+    data: {
+      type: String, // Base64 image data
+      required: true,
+    },
+    includeInReport: {
+      type: Boolean,
+      default: true, // By default, include photos in report
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    photoNumber: {
+      type: Number,
+      required: false,
+    },
+    description: {
+      type: String,
+      required: false,
+    },
+  }],
   recommendationActions: { type: String },
   readyForAnalysis: { type: Boolean, default: false },
   
@@ -63,6 +87,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
     enum: ['in-progress', 'samples-with-lab', 'sample-analysis-complete', 'report-ready-for-review', 'complete']
   },
   items: [AssessmentItemSchema],
+  assessmentScope: [{ type: String }], // Array of scope items for the assessment
   analysisCertificate: { type: Boolean, default: false },
   analysisCertificateFile: { type: String },
   sitePlan: { type: Boolean, default: false },

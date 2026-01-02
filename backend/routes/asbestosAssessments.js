@@ -71,84 +71,84 @@ router.get('/:id', async (req, res) => {
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     
     // Debug logging for fibre analysis report
-    console.log('=== ASSESSMENT FETCH DEBUG ===');
-    console.log('Assessment ID:', job._id);
-    console.log('Assessment fields:', Object.keys(job.toObject()));
-    console.log('fibreAnalysisReport exists:', !!job.fibreAnalysisReport);
-    console.log('fibreAnalysisReport type:', typeof job.fibreAnalysisReport);
-    console.log('fibreAnalysisReport length:', job.fibreAnalysisReport ? job.fibreAnalysisReport.length : 'N/A');
-    if (job.fibreAnalysisReport) {
-      console.log('fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
-      console.log('fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
-      console.log('fibreAnalysisReport middle (100 chars):', job.fibreAnalysisReport.substring(Math.floor(job.fibreAnalysisReport.length / 2) - 50, Math.floor(job.fibreAnalysisReport.length / 2) + 50));
+    // console.log('=== ASSESSMENT FETCH DEBUG ===');
+    // console.log('Assessment ID:', job._id);
+    // console.log('Assessment fields:', Object.keys(job.toObject()));
+    // console.log('fibreAnalysisReport exists:', !!job.fibreAnalysisReport);
+    // console.log('fibreAnalysisReport type:', typeof job.fibreAnalysisReport);
+    // console.log('fibreAnalysisReport length:', job.fibreAnalysisReport ? job.fibreAnalysisReport.length : 'N/A');
+    // if (job.fibreAnalysisReport) {
+    //   console.log('fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+    //   console.log('fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+    //   console.log('fibreAnalysisReport middle (100 chars):', job.fibreAnalysisReport.substring(Math.floor(job.fibreAnalysisReport.length / 2) - 50, Math.floor(job.fibreAnalysisReport.length / 2) + 50));
       
-      // Check for common corruption patterns
-      console.log('=== CORRUPTION PATTERN CHECK ===');
-      console.log('Contains null bytes:', job.fibreAnalysisReport.includes('\0'));
-      console.log('Contains undefined:', job.fibreAnalysisReport.includes('undefined'));
-      console.log('Contains [object Object]:', job.fibreAnalysisReport.includes('[object Object]'));
-      console.log('Contains NaN:', job.fibreAnalysisReport.includes('NaN'));
-      console.log('Contains Infinity:', job.fibreAnalysisReport.includes('Infinity'));
-      console.log('Contains -Infinity:', job.fibreAnalysisReport.includes('-Infinity'));
-      console.log('Contains invalid base64 chars:', /[^A-Za-z0-9+/=]/.test(job.fibreAnalysisReport));
+    //   // Check for common corruption patterns
+    //   console.log('=== CORRUPTION PATTERN CHECK ===');
+    //   console.log('Contains null bytes:', job.fibreAnalysisReport.includes('\0'));
+    //   console.log('Contains undefined:', job.fibreAnalysisReport.includes('undefined'));
+    //   console.log('Contains [object Object]:', job.fibreAnalysisReport.includes('[object Object]'));
+    //   console.log('Contains NaN:', job.fibreAnalysisReport.includes('NaN'));
+    //   console.log('Contains Infinity:', job.fibreAnalysisReport.includes('Infinity'));
+    //   console.log('Contains -Infinity:', job.fibreAnalysisReport.includes('-Infinity'));
+    //   console.log('Contains invalid base64 chars:', /[^A-Za-z0-9+/=]/.test(job.fibreAnalysisReport));
       
-      // More specific NaN detection
-      if (job.fibreAnalysisReport.includes('NaN')) {
-        console.log('=== DETAILED NaN ANALYSIS ===');
-        const nanIndex = job.fibreAnalysisReport.indexOf('NaN');
-        console.log('First NaN found at index:', nanIndex);
-        console.log('Context around NaN (50 chars before):', job.fibreAnalysisReport.substring(Math.max(0, nanIndex - 50), nanIndex));
-        console.log('Context around NaN (50 chars after):', job.fibreAnalysisReport.substring(nanIndex + 3, nanIndex + 53));
+    //   // More specific NaN detection
+    //   if (job.fibreAnalysisReport.includes('NaN')) {
+    //     console.log('=== DETAILED NaN ANALYSIS ===');
+    //     const nanIndex = job.fibreAnalysisReport.indexOf('NaN');
+    //     console.log('First NaN found at index:', nanIndex);
+    //     console.log('Context around NaN (50 chars before):', job.fibreAnalysisReport.substring(Math.max(0, nanIndex - 50), nanIndex));
+    //     console.log('Context around NaN (50 chars after):', job.fibreAnalysisReport.substring(nanIndex + 3, nanIndex + 53));
         
-        // Check if it's actually part of base64 data or text content
-        const beforeContext = job.fibreAnalysisReport.substring(Math.max(0, nanIndex - 10), nanIndex);
-        const afterContext = job.fibreAnalysisReport.substring(nanIndex + 3, nanIndex + 13);
-        console.log('Immediate context before NaN:', beforeContext);
-        console.log('Immediate context after NaN:', afterContext);
+    //     // Check if it's actually part of base64 data or text content
+    //     const beforeContext = job.fibreAnalysisReport.substring(Math.max(0, nanIndex - 10), nanIndex);
+    //     const afterContext = job.fibreAnalysisReport.substring(nanIndex + 3, nanIndex + 13);
+    //     console.log('Immediate context before NaN:', beforeContext);
+    //     console.log('Immediate context after NaN:', afterContext);
         
-        // Check if it's surrounded by valid base64 characters
-        const isBase64Context = /^[A-Za-z0-9+/=]*$/.test(beforeContext + afterContext);
-        console.log('NaN is in base64 context:', isBase64Context);
-        console.log('=== END DETAILED NaN ANALYSIS ===');
-      }
+    //     // Check if it's surrounded by valid base64 characters
+    //     const isBase64Context = /^[A-Za-z0-9+/=]*$/.test(beforeContext + afterContext);
+    //     console.log('NaN is in base64 context:', isBase64Context);
+    //     console.log('=== END DETAILED NaN ANALYSIS ===');
+    //   }
       
-      // Check for other potential PDF corruption patterns
-      console.log('=== ADDITIONAL CORRUPTION CHECKS ===');
-      console.log('Contains "null" string:', job.fibreAnalysisReport.includes('null'));
-      console.log('Contains "undefined" string:', job.fibreAnalysisReport.includes('undefined'));
-      console.log('Contains "false" string:', job.fibreAnalysisReport.includes('false'));
-      console.log('Contains "true" string:', job.fibreAnalysisReport.includes('true'));
-      console.log('Contains "0" string:', job.fibreAnalysisReport.includes('0'));
-      console.log('Contains "1" string:', job.fibreAnalysisReport.includes('1'));
+    //   // Check for other potential PDF corruption patterns
+    //   console.log('=== ADDITIONAL CORRUPTION CHECKS ===');
+    //   console.log('Contains "null" string:', job.fibreAnalysisReport.includes('null'));
+    //   console.log('Contains "undefined" string:', job.fibreAnalysisReport.includes('undefined'));
+    //   console.log('Contains "false" string:', job.fibreAnalysisReport.includes('false'));
+    //   console.log('Contains "true" string:', job.fibreAnalysisReport.includes('true'));
+    //   console.log('Contains "0" string:', job.fibreAnalysisReport.includes('0'));
+    //   console.log('Contains "1" string:', job.fibreAnalysisReport.includes('1'));
       
-      // Check for potential PDF structure issues
-      console.log('Contains PDF header "JVBERi0xLjMK":', job.fibreAnalysisReport.startsWith('JVBERi0xLjMK'));
-      console.log('Contains PDF trailer "%%EOF":', job.fibreAnalysisReport.includes('%%EOF'));
-      console.log('Contains PDF object markers "obj":', job.fibreAnalysisReport.includes('obj'));
-      console.log('Contains PDF stream markers "stream":', job.fibreAnalysisReport.includes('stream'));
+    //   // Check for potential PDF structure issues
+    //   console.log('Contains PDF header "JVBERi0xLjMK":', job.fibreAnalysisReport.startsWith('JVBERi0xLjMK'));
+    //   console.log('Contains PDF trailer "%%EOF":', job.fibreAnalysisReport.includes('%%EOF'));
+    //   console.log('Contains PDF object markers "obj":', job.fibreAnalysisReport.includes('obj'));
+    //   console.log('Contains PDF stream markers "stream":', job.fibreAnalysisReport.includes('stream'));
       
-      // Check for potential encoding issues
-      console.log('Contains non-ASCII characters:', /[^\x00-\x7F]/.test(job.fibreAnalysisReport));
-      console.log('Contains control characters:', /[\x00-\x1F\x7F]/.test(job.fibreAnalysisReport));
-      console.log('=== END ADDITIONAL CORRUPTION CHECKS ===');
-      console.log('=== END CORRUPTION PATTERN CHECK ===');
-    }
-    console.log('=== END ASSESSMENT FETCH DEBUG ===');
+    //   // Check for potential encoding issues
+    //   console.log('Contains non-ASCII characters:', /[^\x00-\x7F]/.test(job.fibreAnalysisReport));
+    //   console.log('Contains control characters:', /[\x00-\x1F\x7F]/.test(job.fibreAnalysisReport));
+    //   console.log('=== END ADDITIONAL CORRUPTION CHECKS ===');
+    //   console.log('=== END CORRUPTION PATTERN CHECK ===');
+    // }
+    // console.log('=== END ASSESSMENT FETCH DEBUG ===');
     
-    // Log the final state before sending response
-    console.log('=== PRE-RESPONSE DEBUG ===');
-    if (job.fibreAnalysisReport) {
-      console.log('About to send - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
-      console.log('About to send - fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
-      console.log('About to send - fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
-      console.log('About to send - fibreAnalysisReport type:', typeof job.fibreAnalysisReport);
-      console.log('About to send - fibreAnalysisReport is string:', typeof job.fibreAnalysisReport === 'string');
-      console.log('About to send - fibreAnalysisReport is null:', job.fibreAnalysisReport === null);
-      console.log('About to send - fibreAnalysisReport is undefined:', job.fibreAnalysisReport === undefined);
-    } else {
-      console.log('About to send - fibreAnalysisReport is missing/null/undefined');
-    }
-    console.log('=== END PRE-RESPONSE DEBUG ===');
+    // // Log the final state before sending response
+    // console.log('=== PRE-RESPONSE DEBUG ===');
+    // if (job.fibreAnalysisReport) {
+    //   console.log('About to send - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
+    //   console.log('About to send - fibreAnalysisReport starts with:', job.fibreAnalysisReport.substring(0, 50));
+    //   console.log('About to send - fibreAnalysisReport ends with:', job.fibreAnalysisReport.substring(job.fibreAnalysisReport.length - 50));
+    //   console.log('About to send - fibreAnalysisReport type:', typeof job.fibreAnalysisReport);
+    //   console.log('About to send - fibreAnalysisReport is string:', typeof job.fibreAnalysisReport === 'string');
+    //   console.log('About to send - fibreAnalysisReport is null:', job.fibreAnalysisReport === null);
+    //   console.log('About to send - fibreAnalysisReport is undefined:', job.fibreAnalysisReport === undefined);
+    // } else {
+    //   console.log('About to send - fibreAnalysisReport is missing/null/undefined');
+    // }
+    // console.log('=== END PRE-RESPONSE DEBUG ===');
     
     res.json(job);
   } catch (err) {
@@ -159,19 +159,26 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
-    const { projectId, assessmentDate, status } = req.body;
+    const { projectId, assessmentDate, status, assessmentScope } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
     
+    const updateData = {
+      projectId,
+      assessmentDate,
+      status: status || 'in-progress',
+      updatedAt: new Date()
+    };
+    
+    // Include assessmentScope if provided
+    if (assessmentScope !== undefined) {
+      updateData.assessmentScope = assessmentScope;
+    }
+    
     const job = await AsbestosAssessment.findByIdAndUpdate(
       req.params.id,
-      {
-        projectId,
-        assessmentDate,
-        status: status || 'in-progress',
-        updatedAt: new Date()
-      },
+      updateData,
       { new: true }
     ).populate({
       path: "projectId",
@@ -320,6 +327,128 @@ router.delete('/:id/items/:itemId', async (req, res) => {
     res.json({ message: 'Item deleted' });
   } catch (err) {
     res.status(400).json({ message: 'Failed to delete item', error: err.message });
+  }
+});
+
+// POST /api/assessments/:id/items/:itemId/photos - add photo to assessment item
+router.post('/:id/items/:itemId/photos', async (req, res) => {
+  try {
+    const { photoData, includeInReport = true } = req.body;
+
+    if (!photoData) {
+      return res.status(400).json({ message: 'Photo data is required' });
+    }
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    // Initialize photographs array if it doesn't exist
+    if (!item.photographs) {
+      item.photographs = [];
+    }
+
+    // Calculate next photo number for this item
+    const existingPhotoNumbers = item.photographs.map(p => p.photoNumber || 0);
+    const nextPhotoNumber = existingPhotoNumbers.length > 0 ? Math.max(...existingPhotoNumbers) + 1 : 1;
+    
+    // If this is the first photo and no photo numbers exist, start from 1
+    const actualPhotoNumber = item.photographs.length === 0 ? 1 : nextPhotoNumber;
+
+    // Add new photo
+    item.photographs.push({
+      data: photoData,
+      includeInReport: includeInReport,
+      uploadedAt: new Date(),
+      photoNumber: actualPhotoNumber,
+    });
+
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.status(201).json(item);
+  } catch (err) {
+    console.error('Error adding photo to assessment item:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/items/:itemId/photos/:photoId - delete photo from assessment item
+router.delete('/:id/items/:itemId/photos/:photoId', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photoIndex = item.photographs.findIndex(photo => photo._id.toString() === req.params.photoId);
+    if (photoIndex === -1) {
+      return res.status(404).json({ message: 'Photo not found' });
+    }
+
+    item.photographs.splice(photoIndex, 1);
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Photo deleted successfully', item });
+  } catch (err) {
+    console.error('Error deleting photo from assessment item:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId/toggle - toggle photo inclusion in report
+router.patch('/:id/items/:itemId/photos/:photoId/toggle', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: 'Photo not found' });
+    }
+
+    photo.includeInReport = !photo.includeInReport;
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Photo inclusion toggled successfully', item });
+  } catch (err) {
+    console.error('Error toggling photo inclusion:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId/description - update photo description
+router.patch('/:id/items/:itemId/photos/:photoId/description', async (req, res) => {
+  try {
+    const { description } = req.body;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: 'Photo not found' });
+    }
+
+    photo.description = description !== undefined ? description : photo.description;
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Photo description updated successfully', item });
+  } catch (err) {
+    console.error('Error updating photo description:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 

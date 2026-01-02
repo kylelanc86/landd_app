@@ -68,6 +68,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateFormat";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
+import { getTodaySydney } from "../../utils/dateUtils";
 
 const TIMING_LOG_PREFIX = "[AsbestosRemovalJobDetails]";
 const TIMING_ENABLED = true;
@@ -1167,12 +1168,7 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleSetToday = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-    const formattedDate = `${year}-${month}-${day}`;
-    setNewShiftDate(formattedDate);
+    setNewShiftDate(getTodaySydney());
   };
 
   const handleShiftSubmit = async () => {
@@ -1682,7 +1678,7 @@ const AsbestosRemovalJobDetails = () => {
   const resetClearanceForm = () => {
     setClearanceForm({
       projectId: job?.projectId._id || job?.projectId || "",
-      clearanceDate: new Date().toISOString().split("T")[0],
+      clearanceDate: getTodaySydney(),
       inspectionTime: "09:00 AM",
       clearanceType: "Non-friable",
       asbestosRemovalist: job?.asbestosRemovalist || "",

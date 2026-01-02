@@ -1,5 +1,16 @@
 import { format, parseISO } from 'date-fns';
 
+// Get today's date in Sydney timezone (YYYY-MM-DD format for date inputs)
+export const getTodaySydney = () => {
+  const now = new Date();
+  // Get date in Sydney timezone
+  const sydneyDate = new Date(now.toLocaleString("en-US", { timeZone: "Australia/Sydney" }));
+  const year = sydneyDate.getFullYear();
+  const month = String(sydneyDate.getMonth() + 1).padStart(2, '0');
+  const day = String(sydneyDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Format date to en-GB format (DD MMM YYYY)
 export const formatDate = (date) => {
   if (!date) return '';

@@ -4,7 +4,7 @@ const CustomDataFieldSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status'],
+    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status', 'recommendation'],
     index: true
   },
   text: {
@@ -19,6 +19,11 @@ const CustomDataFieldSchema = new mongoose.Schema({
   jurisdiction: {
     type: String,
     trim: true
+  },
+  asbestosType: {
+    type: String,
+    trim: true,
+    enum: ['Friable', 'Non-friable']
   },
   isActiveStatus: {
     type: Boolean,
