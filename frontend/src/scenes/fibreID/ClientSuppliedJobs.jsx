@@ -39,6 +39,7 @@ import {
   Description as DescriptionIcon,
   Download as DownloadIcon,
   Close as CloseIcon,
+  Edit as EditIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, projectService } from "../../services/api";
@@ -81,6 +82,11 @@ const ClientSuppliedJobs = () => {
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
   const [selectedJobForCOC, setSelectedJobForCOC] = useState(null);
   const [uploadingCOC, setUploadingCOC] = useState({});
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [jobToEdit, setJobToEdit] = useState(null);
+  const [editSampleReceiptDate, setEditSampleReceiptDate] = useState("");
+  const [editSampleReceiptDateError, setEditSampleReceiptDateError] = useState(false);
+  const [updatingDate, setUpdatingDate] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -838,6 +844,63 @@ const ClientSuppliedJobs = () => {
     }
   };
 
+  const handleEditDate = (job) => {
+    setJobToEdit(job);
+    // Format the date for the input field (YYYY-MM-DD)
+    if (job.sampleReceiptDate) {
+      const date = new Date(job.sampleReceiptDate);
+      const formattedDate = date.toISOString().split("T")[0];
+      setEditSampleReceiptDate(formattedDate);
+    } else {
+      setEditSampleReceiptDate("");
+    }
+    setEditSampleReceiptDateError(false);
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateDate = async () => {
+    if (!jobToEdit || !editSampleReceiptDate || editSampleReceiptDate.trim() === "") {
+      setEditSampleReceiptDateError(true);
+      return;
+    }
+
+    try {
+      setEditSampleReceiptDateError(false);
+      setUpdatingDate(true);
+
+      await clientSuppliedJobsService.update(jobToEdit._id, {
+        sampleReceiptDate: editSampleReceiptDate,
+      });
+
+      // Refresh the jobs list
+      await fetchClientSuppliedJobs();
+
+      // Close dialog and reset form
+      setEditDialogOpen(false);
+      setJobToEdit(null);
+      setEditSampleReceiptDate("");
+      setEditSampleReceiptDateError(false);
+      showSnackbar("Sample receipt date updated successfully!", "success");
+    } catch (error) {
+      console.error("Error updating sample receipt date:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to update sample receipt date.";
+      showSnackbar(`Failed to update date: ${errorMessage}`, "error");
+    } finally {
+      setUpdatingDate(false);
+    }
+  };
+
+  const handleCloseEditDialog = () => {
+    setEditDialogOpen(false);
+    setJobToEdit(null);
+    setEditSampleReceiptDate("");
+    setEditSampleReceiptDateError(false);
+  };
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -943,14 +1006,33 @@ const ClientSuppliedJobs = () => {
                           variant="outlined"
                         />
                       </TableCell>
-                      <TableCell sx={{ width: "135px" }}>
-                        <Typography variant="body2">
-                          {job.sampleReceiptDate
-                            ? new Date(
-                                job.sampleReceiptDate
-                              ).toLocaleDateString("en-GB")
-                            : "N/A"}
-                        </Typography>
+                      <TableCell 
+                        sx={{ width: "135px" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Typography variant="body2">
+                            {job.sampleReceiptDate
+                              ? new Date(
+                                  job.sampleReceiptDate
+                                ).toLocaleDateString("en-GB")
+                              : "N/A"}
+                          </Typography>
+                          <IconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditDate(job);
+                            }}
+                            size="small"
+                            title="Edit Sample Receipt Date"
+                            sx={{ 
+                              color: "primary.main",
+                              padding: "4px"
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
                       </TableCell>
                       <TableCell sx={{ width: "150px" }}>
                         <Chip
@@ -1808,6 +1890,132 @@ const ClientSuppliedJobs = () => {
               />
             )}
           </DialogContent>
+        </Dialog>
+
+        {/* Edit Sample Receipt Date Dialog */}
+        <Dialog
+          open={editDialogOpen}
+          onClose={handleCloseEditDialog}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <EditIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Edit Sample Receipt Date
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box
+              sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 3 }}
+            >
+              {jobToEdit && (
+                <>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Project:</strong> {jobToEdit.projectId?.projectID || "N/A"} - {jobToEdit.projectId?.name || "Unnamed Project"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Job Type:</strong> {jobToEdit.jobType || "N/A"}
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Sample Receipt Date"
+                    type="date"
+                    value={editSampleReceiptDate}
+                    onChange={(e) => {
+                      setEditSampleReceiptDate(e.target.value);
+                      if (editSampleReceiptDateError) {
+                        setEditSampleReceiptDateError(false);
+                      }
+                    }}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    error={editSampleReceiptDateError}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              setEditSampleReceiptDate(
+                                new Date().toISOString().split("T")[0]
+                              )
+                            }
+                            sx={{ textTransform: "none", minWidth: "auto" }}
+                          >
+                            Today
+                          </Button>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  {editSampleReceiptDateError && (
+                    <Typography variant="body2" sx={{ color: "error.main" }}>
+                      Sample receipt date is required.
+                    </Typography>
+                  )}
+                </>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={handleCloseEditDialog}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateDate}
+              variant="contained"
+              disabled={!editSampleReceiptDate || updatingDate}
+              startIcon={<EditIcon />}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {updatingDate ? "Updating..." : "Update Date"}
+            </Button>
+          </DialogActions>
         </Dialog>
       </Box>
     </Container>
