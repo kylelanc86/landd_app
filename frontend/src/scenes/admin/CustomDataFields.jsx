@@ -57,6 +57,7 @@ const CustomDataFields = () => {
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [locationDescriptions, setLocationDescriptions] = useState([]);
   const [materialsDescriptions, setMaterialsDescriptions] = useState([]);
+  const [materialsDescriptionsNonACM, setMaterialsDescriptionsNonACM] = useState([]);
   const [roomAreas, setRoomAreas] = useState([]);
   const [legislation, setLegislation] = useState([]);
   const [projectStatuses, setProjectStatuses] = useState([]);
@@ -85,6 +86,7 @@ const CustomDataFields = () => {
         asbestosData,
         locationData,
         materialsData,
+        materialsNonACMData,
         roomAreaData,
         legislationData,
         projectStatusesData,
@@ -93,6 +95,7 @@ const CustomDataFields = () => {
         customDataFieldGroupService.getFieldsByType("asbestos_removalist"),
         customDataFieldGroupService.getFieldsByType("location_description"),
         customDataFieldGroupService.getFieldsByType("materials_description"),
+        customDataFieldGroupService.getFieldsByType("materials_description_non_acm"),
         customDataFieldGroupService.getFieldsByType("room_area"),
         customDataFieldGroupService.getFieldsByType("legislation"),
         customDataFieldGroupService.getProjectStatuses(),
@@ -102,6 +105,7 @@ const CustomDataFields = () => {
       setAsbestosRemovalists(asbestosData || []);
       setLocationDescriptions(locationData || []);
       setMaterialsDescriptions(materialsData || []);
+      setMaterialsDescriptionsNonACM(materialsNonACMData || []);
       setRoomAreas(roomAreaData || []);
       setLegislation(legislationData || []);
       setRecommendations(recommendationsData || []);
@@ -184,6 +188,12 @@ const CustomDataFields = () => {
                 setter: setMaterialsDescriptions,
                 title: "Materials Descriptions",
               };
+            case 3:
+              return {
+                data: materialsDescriptionsNonACM,
+                setter: setMaterialsDescriptionsNonACM,
+                title: "Materials Descriptions (non-ACM)",
+              };
             default:
               return { data: [], setter: () => {}, title: "" };
           }
@@ -254,16 +264,17 @@ const CustomDataFields = () => {
     const { data, setter, title } = getCurrentData();
     try {
       // For all custom data field types, we need to update the backend group
-      if (
-        [
-          "Projects Status",
-          "Legislation",
-          "Asbestos Removalists",
-          "Room/Area",
-          "Location Descriptions",
-          "Materials Descriptions",
-        ].includes(title)
-      ) {
+        if (
+          [
+            "Projects Status",
+            "Legislation",
+            "Asbestos Removalists",
+            "Room/Area",
+            "Location Descriptions",
+            "Materials Descriptions",
+            "Materials Descriptions (non-ACM)",
+          ].includes(title)
+        ) {
         // Get the current group
         const groupType = getTypeFromTitle(title);
         const group = await customDataFieldGroupService.getGroupByType(
@@ -325,6 +336,8 @@ const CustomDataFields = () => {
         return "location_description";
       case "Materials Descriptions":
         return "materials_description";
+      case "Materials Descriptions (non-ACM)":
+        return "materials_description_non_acm";
       case "Legislation":
         return "legislation";
       case "Projects Status":
@@ -403,6 +416,7 @@ const CustomDataFields = () => {
             "Room/Area",
             "Location Descriptions",
             "Materials Descriptions",
+            "Materials Descriptions (non-ACM)",
             "Recommendations",
           ].includes(title)
         ) {
@@ -564,6 +578,7 @@ const CustomDataFields = () => {
             "Room/Area",
             "Location Descriptions",
             "Materials Descriptions",
+            "Materials Descriptions (non-ACM)",
             "Recommendations",
           ].includes(title)
         ) {
@@ -1276,6 +1291,7 @@ const CustomDataFields = () => {
                 <Tab label="Room/Area" />
                 <Tab label="Location Descriptions" />
                 <Tab label="Materials Descriptions" />
+                <Tab label="Materials Descriptions (non-ACM)" />
               </Tabs>
 
               <TabPanel value={itemDescriptionsTabValue} index={0}>
@@ -1293,6 +1309,13 @@ const CustomDataFields = () => {
                 {renderTabContent(
                   materialsDescriptions,
                   "Materials Descriptions"
+                )}
+              </TabPanel>
+
+              <TabPanel value={itemDescriptionsTabValue} index={3}>
+                {renderTabContent(
+                  materialsDescriptionsNonACM,
+                  "Materials Descriptions (non-ACM)"
                 )}
               </TabPanel>
             </Box>

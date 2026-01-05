@@ -228,7 +228,7 @@ const MobileDrawer = ({ open, onClose }) => {
             <Divider sx={{ my: 1 }} />
 
             {isFeatureEnabled("ADVANCED.SURVEYS") && (
-              <MenuItem title="SURVEYS" to="/surveys" icon={<SearchIcon />} />
+              <MenuItem title="Surveys" to="/surveys" icon={<SearchIcon />} />
             )}
 
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (

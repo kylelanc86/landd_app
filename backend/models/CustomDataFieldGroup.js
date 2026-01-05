@@ -13,7 +13,7 @@ const CustomDataFieldGroupSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'room_area', 'legislation', 'project_status', 'recommendation'],
+    enum: ['asbestos_removalist', 'location_description', 'materials_description', 'materials_description_non_acm', 'room_area', 'legislation', 'project_status', 'recommendation'],
     index: true
   },
   fields: [{

@@ -75,6 +75,7 @@ const AssessmentItems = () => {
     roomArea: "",
     locationDescription: "",
     materialType: "",
+    asbestosContent: "",
     asbestosType: "",
     condition: "",
     risk: "",
@@ -86,6 +87,7 @@ const AssessmentItems = () => {
     roomAreas: [],
     locationDescriptions: [],
     materialsDescriptions: [],
+    materialsDescriptionsNonACM: [],
     recommendations: [],
   });
 
@@ -96,6 +98,7 @@ const AssessmentItems = () => {
     useState(false);
   const [selectedRecommendations, setSelectedRecommendations] = useState([]);
   const [customRecommendationText, setCustomRecommendationText] = useState("");
+  const [isNonACM, setIsNonACM] = useState(false);
 
   // Scope of Assessment state
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
@@ -189,11 +192,15 @@ const AssessmentItems = () => {
         roomAreasData,
         locationDescriptionsData,
         materialsDescriptionsData,
+        materialsDescriptionsNonACMData,
         recommendationsData,
       ] = await Promise.all([
         customDataFieldGroupService.getFieldsByType("room_area"),
         customDataFieldGroupService.getFieldsByType("location_description"),
         customDataFieldGroupService.getFieldsByType("materials_description"),
+        customDataFieldGroupService.getFieldsByType(
+          "materials_description_non_acm"
+        ),
         customDataFieldGroupService.getFieldsByType("recommendation"),
       ]);
 
@@ -220,6 +227,9 @@ const AssessmentItems = () => {
         roomAreas: processData(roomAreasData),
         locationDescriptions: processData(locationDescriptionsData),
         materialsDescriptions: processData(materialsDescriptionsData),
+        materialsDescriptionsNonACM: processData(
+          materialsDescriptionsNonACMData
+        ),
         recommendations: processData(recommendationsData),
       });
     } catch (err) {
@@ -256,10 +266,42 @@ const AssessmentItems = () => {
     e.preventDefault();
 
     // Validate required fields
-    if (!form.sampleReference || form.sampleReference.trim() === "") {
-      showSnackbar("Sample Reference is required", "error");
-      return;
+    if (!isNonACM) {
+      if (!form.sampleReference || form.sampleReference.trim() === "") {
+        showSnackbar("Sample Reference is required", "error");
+        return;
+      }
+      if (!form.asbestosType || form.asbestosType.trim() === "") {
+        showSnackbar("Asbestos Type is required", "error");
+        return;
+      }
+      if (!form.condition || form.condition.trim() === "") {
+        showSnackbar("Condition is required", "error");
+        return;
+      }
+      if (!form.risk || form.risk.trim() === "") {
+        showSnackbar("Risk is required", "error");
+        return;
+      }
+
+      // Validate sample reference uniqueness
+      if (form.sampleReference && form.sampleReference.trim() !== "") {
+        const normalizedRef = ensureSampleReferencePrefix(form.sampleReference);
+        if (
+          !isSampleReferenceUnique(
+            form.sampleReference,
+            editingItem?._id || null
+          )
+        ) {
+          showSnackbar(
+            `Sample Reference "${normalizedRef}" already exists. Please use a unique value.`,
+            "error"
+          );
+          return;
+        }
+      }
     }
+
     if (!form.roomArea || form.roomArea.trim() === "") {
       showSnackbar("Room/Area is required", "error");
       return;
@@ -272,58 +314,37 @@ const AssessmentItems = () => {
       showSnackbar("Material Description is required", "error");
       return;
     }
-    if (!form.asbestosType || form.asbestosType.trim() === "") {
-      showSnackbar("Asbestos Type is required", "error");
-      return;
-    }
-    if (!form.condition || form.condition.trim() === "") {
-      showSnackbar("Condition is required", "error");
-      return;
-    }
-    if (!form.risk || form.risk.trim() === "") {
-      showSnackbar("Risk is required", "error");
-      return;
-    }
-
-    // Validate sample reference uniqueness
-    if (form.sampleReference && form.sampleReference.trim() !== "") {
-      const normalizedRef = ensureSampleReferencePrefix(form.sampleReference);
-      if (
-        !isSampleReferenceUnique(form.sampleReference, editingItem?._id || null)
-      ) {
-        showSnackbar(
-          `Sample Reference "${normalizedRef}" already exists. Please use a unique value.`,
-          "error"
-        );
-        return;
-      }
-    }
 
     try {
       // Build recommendations value from selected recommendations and custom text
       let recommendationsValue = "";
 
-      // Add selected recommendation texts
-      const selectedTexts = selectedRecommendations
-        .map((id) => {
-          const rec = customDataFields.recommendations.find(
-            (r) => r._id === id
-          );
-          return rec ? rec.text : "";
-        })
-        .filter((text) => text.trim() !== "");
+      if (isNonACM) {
+        // For non-ACM items, set recommendation to "No Action Required"
+        recommendationsValue = "No Action Required";
+      } else {
+        // Add selected recommendation texts
+        const selectedTexts = selectedRecommendations
+          .map((id) => {
+            const rec = customDataFields.recommendations.find(
+              (r) => r._id === id
+            );
+            return rec ? rec.text : "";
+          })
+          .filter((text) => text.trim() !== "");
 
-      // Combine selected recommendations and custom text
-      const allTexts = [...selectedTexts];
-      if (customRecommendationText.trim()) {
-        allTexts.push(customRecommendationText.trim());
-      }
+        // Combine selected recommendations and custom text
+        const allTexts = [...selectedTexts];
+        if (customRecommendationText.trim()) {
+          allTexts.push(customRecommendationText.trim());
+        }
 
-      recommendationsValue = allTexts.join("\n\n");
+        recommendationsValue = allTexts.join("\n\n");
 
-      // Fallback to form.recommendations for backward compatibility if nothing is selected
-      if (!recommendationsValue) {
-        recommendationsValue = form.recommendations || "";
+        // Fallback to form.recommendations for backward compatibility if nothing is selected
+        if (!recommendationsValue) {
+          recommendationsValue = form.recommendations || "";
+        }
       }
 
       // Note: itemNumber is not set initially. It will be added later in the process
@@ -333,16 +354,21 @@ const AssessmentItems = () => {
         // Only include itemNumber when editing an existing item that already has one
         ...(editingItem &&
           editingItem.itemNumber && { itemNumber: editingItem.itemNumber }),
-        sampleReference: form.sampleReference
+        sampleReference: isNonACM
+          ? null
+          : form.sampleReference
           ? ensureSampleReferencePrefix(form.sampleReference.toUpperCase())
           : "",
         levelFloor: showLevelFloor ? form.levelFloor : "",
         roomArea: form.roomArea,
         locationDescription: form.locationDescription,
         materialType: form.materialType,
-        asbestosType: form.asbestosType || "",
-        condition: form.condition || "",
-        risk: form.risk || "",
+        asbestosContent: isNonACM
+          ? "Visually Assessed as Non-ACM"
+          : form.asbestosContent || "",
+        asbestosType: isNonACM ? null : form.asbestosType || "",
+        condition: isNonACM ? null : form.condition || "",
+        risk: isNonACM ? null : form.risk || "",
         recommendationActions: recommendationsValue,
         notes: form.notes || "",
       };
@@ -373,13 +399,28 @@ const AssessmentItems = () => {
 
   const handleEdit = (item) => {
     setEditingItem(item);
+
+    // Check if this is a non-ACM item
+    const isNonACMItem =
+      (!item.sampleReference || item.sampleReference.trim() === "") &&
+      (!item.asbestosType || item.asbestosType.trim() === "") &&
+      (!item.condition || item.condition.trim() === "") &&
+      (!item.risk || item.risk.trim() === "") &&
+      (item.recommendationActions === "No Action Required" ||
+        item.recommendations === "No Action Required");
+    setIsNonACM(isNonACMItem);
+
     // Strip "LD-" prefix from sample reference for editing (user will see just the number)
     let sampleRef = item.sampleReference || "";
     if (sampleRef.startsWith("LD-")) {
       sampleRef = sampleRef.substring(3);
     }
     // Check if material type matches a dropdown option
-    const matchingMaterial = customDataFields.materialsDescriptions.find(
+    // Use the appropriate data source based on whether it's a non-ACM item
+    const materialsSource = isNonACMItem
+      ? customDataFields.materialsDescriptionsNonACM
+      : customDataFields.materialsDescriptions;
+    const matchingMaterial = materialsSource.find(
       (mat) => mat.text === item.materialType
     );
     const materialFromDropdown = !!matchingMaterial;
@@ -390,6 +431,7 @@ const AssessmentItems = () => {
       roomArea: item.roomArea || "",
       locationDescription: item.locationDescription || "",
       materialType: item.materialType || "",
+      asbestosContent: item.asbestosContent || "",
       asbestosType: item.asbestosType || "",
       condition: item.condition || "",
       risk: item.risk || "",
@@ -402,35 +444,44 @@ const AssessmentItems = () => {
     setSelectedMaterialFromDropdown(materialFromDropdown);
 
     // Parse recommendations to determine which are selected and which are custom
-    const recommendationsText = item.recommendations || "";
-    const selectedIds = [];
-    let customText = "";
+    if (isNonACMItem) {
+      // For non-ACM items, set recommendation to "No Action Required"
+      setSelectedRecommendations([]);
+      setCustomRecommendationText("No Action Required");
+    } else {
+      const recommendationsText =
+        item.recommendationActions || item.recommendations || "";
+      const selectedIds = [];
+      let customText = "";
 
-    if (recommendationsText) {
-      // Split by double newlines (paragraph breaks)
-      const parts = recommendationsText.split(/\n\n+/).filter((p) => p.trim());
+      if (recommendationsText) {
+        // Split by double newlines (paragraph breaks)
+        const parts = recommendationsText
+          .split(/\n\n+/)
+          .filter((p) => p.trim());
 
-      parts.forEach((part) => {
-        const trimmedPart = part.trim();
-        // Check if this part matches any predefined recommendation
-        const matchingRec = customDataFields.recommendations.find(
-          (rec) => rec.text === trimmedPart
-        );
-        if (matchingRec) {
-          selectedIds.push(matchingRec._id);
-        } else {
-          // This is custom text
-          if (customText) {
-            customText += "\n\n" + trimmedPart;
+        parts.forEach((part) => {
+          const trimmedPart = part.trim();
+          // Check if this part matches any predefined recommendation
+          const matchingRec = customDataFields.recommendations.find(
+            (rec) => rec.text === trimmedPart
+          );
+          if (matchingRec) {
+            selectedIds.push(matchingRec._id);
           } else {
-            customText = trimmedPart;
+            // This is custom text
+            if (customText) {
+              customText += "\n\n" + trimmedPart;
+            } else {
+              customText = trimmedPart;
+            }
           }
-        }
-      });
-    }
+        });
+      }
 
-    setSelectedRecommendations(selectedIds);
-    setCustomRecommendationText(customText);
+      setSelectedRecommendations(selectedIds);
+      setCustomRecommendationText(customText);
+    }
 
     setDialogOpen(true);
   };
@@ -468,6 +519,7 @@ const AssessmentItems = () => {
       roomArea: "",
       locationDescription: "",
       materialType: "",
+      asbestosContent: "",
       asbestosType: "",
       condition: "",
       risk: "",
@@ -478,6 +530,7 @@ const AssessmentItems = () => {
     setSelectedMaterialFromDropdown(false);
     setSelectedRecommendations([]);
     setCustomRecommendationText("");
+    setIsNonACM(false);
   };
 
   // Dictation functions
@@ -1264,6 +1317,51 @@ const AssessmentItems = () => {
           >
             Scope of Assessment
           </Button>
+        </Box>
+
+        {/* Scope of Assessment Display */}
+        {assessment?.assessmentScope &&
+          Array.isArray(assessment.assessmentScope) &&
+          assessment.assessmentScope.length > 0 &&
+          assessment.assessmentScope.some((item) => item.trim() !== "") && (
+            <Card sx={{ mt: 3, mb: 3 }}>
+              <CardContent>
+                <Typography
+                  variant="h6"
+                  component="h2"
+                  gutterBottom
+                  sx={{ fontWeight: 600, mb: 2 }}
+                >
+                  Scope of Assessment
+                </Typography>
+                <Grid container spacing={2}>
+                  {assessment.assessmentScope
+                    .filter((item) => item.trim() !== "")
+                    .map((item, index) => (
+                      <Grid item xs={12} sm={6} md={4} key={index}>
+                        <Box sx={{ display: "flex", alignItems: "flex-start" }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              mr: 1,
+                              color: "text.secondary",
+                              flexShrink: 0,
+                            }}
+                          >
+                            •
+                          </Typography>
+                          <Typography variant="body2" sx={{ flex: 1 }}>
+                            {item}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    ))}
+                </Grid>
+              </CardContent>
+            </Card>
+          )}
+
+        <Box sx={{ mt: 2, mb: 2 }}>
           <Button
             variant="contained"
             color="secondary"
@@ -1274,7 +1372,7 @@ const AssessmentItems = () => {
             }}
             startIcon={<AddIcon />}
           >
-            Add Item
+            Add Assessment Item
           </Button>
         </Box>
 
@@ -1304,6 +1402,9 @@ const AssessmentItems = () => {
                     <TableCell sx={{ fontWeight: "bold" }}>
                       Asbestos Type
                     </TableCell>
+                    <TableCell sx={{ fontWeight: "bold" }}>
+                      Asbestos Content
+                    </TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Condition</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Risk</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>
@@ -1317,7 +1418,7 @@ const AssessmentItems = () => {
                     <TableRow>
                       <TableCell
                         colSpan={
-                          8 +
+                          9 +
                           (items &&
                           items.length > 0 &&
                           items.some(
@@ -1379,6 +1480,7 @@ const AssessmentItems = () => {
                               }
                             />
                           </TableCell>
+                          <TableCell>{item.asbestosContent || "N/A"}</TableCell>
                           <TableCell>{item.condition || "N/A"}</TableCell>
                           <TableCell>{item.risk || "N/A"}</TableCell>
                           <TableCell>
@@ -1509,46 +1611,78 @@ const AssessmentItems = () => {
           <form onSubmit={handleSubmit}>
             <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Sample Reference"
-                    value={form.sampleReference}
-                    onChange={(e) => {
-                      let value = e.target.value;
-                      // Remove "LD-" if user types it (we'll add it automatically)
-                      if (value.startsWith("LD-")) {
-                        value = value.substring(3);
-                      }
-                      // Convert to uppercase
-                      value = value.toUpperCase();
-                      setForm({ ...form, sampleReference: value });
-                    }}
-                    onBlur={(e) => {
-                      // Add LD- prefix when field loses focus if value exists
-                      if (e.target.value && e.target.value.trim() !== "") {
-                        const prefixed = ensureSampleReferencePrefix(
-                          e.target.value
-                        );
-                        // Store without prefix in form state, but show with prefix
-                        const withoutPrefix = prefixed.startsWith("LD-")
-                          ? prefixed.substring(3)
-                          : prefixed;
-                        setForm({ ...form, sampleReference: withoutPrefix });
-                      }
-                    }}
-                    helperText={
-                      form.sampleReference
-                        ? `Will be saved as: LD-${form.sampleReference}`
-                        : "Prefix 'LD-' will be added automatically"
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={isNonACM}
+                        onChange={(e) => {
+                          setIsNonACM(e.target.checked);
+                          if (e.target.checked) {
+                            // Set recommendation to "No Action Required" when checked
+                            setCustomRecommendationText("No Action Required");
+                            setSelectedRecommendations([]);
+                            // Asbestos content will be set to "Visually Assessed as Non-ACM" on save
+                          } else {
+                            // Clear recommendation when unchecked
+                            setCustomRecommendationText("");
+                            setSelectedRecommendations([]);
+                            // Clear asbestos content if it was set to the non-ACM value
+                            if (
+                              form.asbestosContent ===
+                              "Visually Assessed as Non-ACM"
+                            ) {
+                              setForm({ ...form, asbestosContent: "" });
+                            }
+                          }
+                        }}
+                      />
                     }
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">LD-</InputAdornment>
-                      ),
-                    }}
+                    label="Visually Assessed as Non-ACM"
                   />
                 </Grid>
+                {!isNonACM && (
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      label="Sample Reference"
+                      value={form.sampleReference}
+                      onChange={(e) => {
+                        let value = e.target.value;
+                        // Remove "LD-" if user types it (we'll add it automatically)
+                        if (value.startsWith("LD-")) {
+                          value = value.substring(3);
+                        }
+                        // Convert to uppercase
+                        value = value.toUpperCase();
+                        setForm({ ...form, sampleReference: value });
+                      }}
+                      onBlur={(e) => {
+                        // Add LD- prefix when field loses focus if value exists
+                        if (e.target.value && e.target.value.trim() !== "") {
+                          const prefixed = ensureSampleReferencePrefix(
+                            e.target.value
+                          );
+                          // Store without prefix in form state, but show with prefix
+                          const withoutPrefix = prefixed.startsWith("LD-")
+                            ? prefixed.substring(3)
+                            : prefixed;
+                          setForm({ ...form, sampleReference: withoutPrefix });
+                        }
+                      }}
+                      helperText={
+                        form.sampleReference
+                          ? `Will be saved as: LD-${form.sampleReference}`
+                          : "Prefix 'LD-' will be added automatically"
+                      }
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">LD-</InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Grid>
+                )}
                 <Grid item xs={12} container spacing={2} alignItems="center">
                   <Grid item>
                     <FormControlLabel
@@ -1642,9 +1776,11 @@ const AssessmentItems = () => {
                     <Autocomplete
                       value={
                         form.materialType
-                          ? customDataFields.materialsDescriptions.find(
-                              (item) => item.text === form.materialType
-                            ) || form.materialType
+                          ? (isNonACM
+                              ? customDataFields.materialsDescriptionsNonACM
+                              : customDataFields.materialsDescriptions
+                            ).find((item) => item.text === form.materialType) ||
+                            form.materialType
                           : null
                       }
                       onChange={(event, newValue) => {
@@ -1654,7 +1790,9 @@ const AssessmentItems = () => {
                           newValue.text
                         ) {
                           // Selected from dropdown
-                          const asbestosTypeValue = newValue.asbestosType
+                          const asbestosTypeValue = isNonACM
+                            ? ""
+                            : newValue.asbestosType
                             ? newValue.asbestosType === "Friable"
                               ? "friable"
                               : newValue.asbestosType === "Non-friable"
@@ -1666,7 +1804,9 @@ const AssessmentItems = () => {
                             materialType: newValue.text || "",
                             asbestosType: asbestosTypeValue,
                           });
-                          setSelectedMaterialFromDropdown(!!asbestosTypeValue);
+                          setSelectedMaterialFromDropdown(
+                            !isNonACM && !!asbestosTypeValue
+                          );
                         } else if (newValue === null || newValue === "") {
                           // Cleared
                           setForm({
@@ -1678,11 +1818,14 @@ const AssessmentItems = () => {
                         } else {
                           // Free text input (string)
                           // Check if it matches a dropdown option
-                          const matchingMaterial =
-                            customDataFields.materialsDescriptions.find(
-                              (item) => item.text === newValue
-                            );
+                          const materialsSource = isNonACM
+                            ? customDataFields.materialsDescriptionsNonACM
+                            : customDataFields.materialsDescriptions;
+                          const matchingMaterial = materialsSource.find(
+                            (item) => item.text === newValue
+                          );
                           if (
+                            !isNonACM &&
                             matchingMaterial &&
                             matchingMaterial.asbestosType
                           ) {
@@ -1714,7 +1857,11 @@ const AssessmentItems = () => {
                         // The onChange handler will handle matching and setting asbestos type
                         setForm({ ...form, materialType: newInputValue });
                       }}
-                      options={customDataFields.materialsDescriptions}
+                      options={
+                        isNonACM
+                          ? customDataFields.materialsDescriptionsNonACM
+                          : customDataFields.materialsDescriptions
+                      }
                       getOptionLabel={(option) =>
                         typeof option === "string" ? option : option.text || ""
                       }
@@ -1739,7 +1886,7 @@ const AssessmentItems = () => {
                             }}
                           >
                             <Typography>{option.text}</Typography>
-                            {option.asbestosType && (
+                            {!isNonACM && option.asbestosType && (
                               <Chip
                                 label={option.asbestosType}
                                 size="small"
@@ -1763,37 +1910,39 @@ const AssessmentItems = () => {
                       )}
                     />
                   </Grid>
-                  {selectedMaterialFromDropdown && form.asbestosType && (
-                    <Grid item xs={12} md={4}>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          height: "100%",
-                          pt: 1,
-                        }}
-                      >
-                        <Chip
-                          label={`Asbestos Type: ${
-                            form.asbestosType === "friable"
-                              ? "Friable"
-                              : form.asbestosType === "non-friable"
-                              ? "Non-friable"
-                              : form.asbestosType
-                          }`}
-                          color={
-                            form.asbestosType === "friable"
-                              ? "error"
-                              : form.asbestosType === "non-friable"
-                              ? "warning"
-                              : "default"
-                          }
-                          size="medium"
-                        />
-                      </Box>
-                    </Grid>
-                  )}
-                  {!selectedMaterialFromDropdown && (
+                  {!isNonACM &&
+                    selectedMaterialFromDropdown &&
+                    form.asbestosType && (
+                      <Grid item xs={12} md={4}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            height: "100%",
+                            pt: 1,
+                          }}
+                        >
+                          <Chip
+                            label={`Asbestos Type: ${
+                              form.asbestosType === "friable"
+                                ? "Friable"
+                                : form.asbestosType === "non-friable"
+                                ? "Non-friable"
+                                : form.asbestosType
+                            }`}
+                            color={
+                              form.asbestosType === "friable"
+                                ? "error"
+                                : form.asbestosType === "non-friable"
+                                ? "warning"
+                                : "default"
+                            }
+                            size="medium"
+                          />
+                        </Box>
+                      </Grid>
+                    )}
+                  {!isNonACM && !selectedMaterialFromDropdown && (
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
                         <InputLabel>Asbestos Type</InputLabel>
@@ -1811,47 +1960,74 @@ const AssessmentItems = () => {
                     </Grid>
                   )}
                 </Grid>
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Risk Assessment
-                    </Typography>
-                  </Divider>
-                </Grid>
                 <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Condition</InputLabel>
-                    <Select
-                      value={form.condition}
-                      onChange={(e) =>
-                        setForm({ ...form, condition: e.target.value })
+                  <TextField
+                    fullWidth
+                    label="Asbestos Content"
+                    value={
+                      isNonACM
+                        ? "Visually Assessed as Non-ACM"
+                        : form.asbestosContent
+                    }
+                    onChange={(e) => {
+                      if (!isNonACM) {
+                        setForm({ ...form, asbestosContent: e.target.value });
                       }
-                      label="Condition"
-                    >
-                      <MenuItem value="Good">Good</MenuItem>
-                      <MenuItem value="Fair">Fair</MenuItem>
-                      <MenuItem value="Minor damage">Minor damage</MenuItem>
-                      <MenuItem value="Poor">Poor</MenuItem>
-                    </Select>
-                  </FormControl>
+                    }}
+                    disabled={isNonACM}
+                    placeholder={isNonACM ? "" : "e.g., 5%, 10-15%, Trace"}
+                    helperText={
+                      isNonACM
+                        ? "No asbestos content for non-ACM items"
+                        : "Enter the asbestos content percentage or description"
+                    }
+                  />
                 </Grid>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Risk</InputLabel>
-                    <Select
-                      value={form.risk}
-                      onChange={(e) =>
-                        setForm({ ...form, risk: e.target.value })
-                      }
-                      label="Risk"
-                    >
-                      <MenuItem value="Very low">Very low</MenuItem>
-                      <MenuItem value="Low">Low</MenuItem>
-                      <MenuItem value="Moderate">Moderate</MenuItem>
-                      <MenuItem value="High">High</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
+                {!isNonACM && (
+                  <>
+                    <Grid item xs={12}>
+                      <Divider sx={{ my: 2 }}>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Risk Assessment
+                        </Typography>
+                      </Divider>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Condition</InputLabel>
+                        <Select
+                          value={form.condition}
+                          onChange={(e) =>
+                            setForm({ ...form, condition: e.target.value })
+                          }
+                          label="Condition"
+                        >
+                          <MenuItem value="Good">Good</MenuItem>
+                          <MenuItem value="Fair">Fair</MenuItem>
+                          <MenuItem value="Minor damage">Minor damage</MenuItem>
+                          <MenuItem value="Poor">Poor</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Risk</InputLabel>
+                        <Select
+                          value={form.risk}
+                          onChange={(e) =>
+                            setForm({ ...form, risk: e.target.value })
+                          }
+                          label="Risk"
+                        >
+                          <MenuItem value="Very low">Very low</MenuItem>
+                          <MenuItem value="Low">Low</MenuItem>
+                          <MenuItem value="Moderate">Moderate</MenuItem>
+                          <MenuItem value="High">High</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </>
+                )}
                 <Grid item xs={12}>
                   <Divider sx={{ my: 2 }}>
                     <Typography variant="subtitle2" color="text.secondary">
@@ -1870,6 +2046,7 @@ const AssessmentItems = () => {
                         control={
                           <Checkbox
                             checked={selectedRecommendations.includes(rec._id)}
+                            disabled={isNonACM}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 // Add this recommendation
@@ -1928,16 +2105,23 @@ const AssessmentItems = () => {
                     label="Recommendations"
                     value={customRecommendationText}
                     onChange={(e) => {
-                      setCustomRecommendationText(e.target.value);
-                      if (dictationError) {
-                        setDictationError("");
+                      if (!isNonACM) {
+                        setCustomRecommendationText(e.target.value);
+                        if (dictationError) {
+                          setDictationError("");
+                        }
                       }
                     }}
                     multiline
                     rows={4}
-                    helperText="You can edit this text directly or select recommendations above to add them"
+                    disabled={isNonACM}
+                    helperText={
+                      isNonACM
+                        ? "No Action Required for non-ACM items"
+                        : "You can edit this text directly or select recommendations above to add them"
+                    }
                     InputProps={{
-                      endAdornment: (
+                      endAdornment: !isNonACM && (
                         <InputAdornment position="end">
                           <IconButton
                             onClick={
