@@ -1115,9 +1115,9 @@ const generateSitePlanContentPage = (
                     ? escapeHtml(entry.description.trim())
                     : '<span style="color:#9ca3af;">(-)</span>';
               return `
-                <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
-                  <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0;"></span>
-                  <span style="font-size:12px; color:#334155; line-height:1.4; flex:1;">${description}</span>
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                  <span style="display:inline-block; width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; max-height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
+                  <span style="font-size:8.4px; color:#334155; line-height:1.4; flex:1; margin-left:16px;">${description}</span>
                 </div>
               `;
               })
@@ -1189,9 +1189,9 @@ const generateSitePlanContentPage = (
                     ? escapeHtml(entry.description.trim())
                     : '<span style="color:#9ca3af;">(-)</span>';
                 return `
-                  <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
-                    <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)};"></span>
-                    <span style="font-size:12px; color:#334155;">${description}</span>
+                  <div style="display:flex; align-items:center; margin-bottom:8px;">
+                    <span style="display:inline-block; width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; max-height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
+                    <span style="font-size:8.4px; color:#334155; margin-left:16px;">${description}</span>
                   </div>
                 `;
               })
