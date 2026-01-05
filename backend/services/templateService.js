@@ -365,8 +365,9 @@ const getTemplateByType = async (templateType) => {
 const replacePlaceholders = async (content, data) => {
   if (!content) return '';
   
-  // Look up user's Asbestos Assessor licence number and signature
+  // Look up user's Asbestos Assessor licence number, state, and signature
   let laaLicenceNumber = 'AA00031'; // Default fallback
+  let laaLicenceState = ''; // Default fallback
   let userSignature = null;
   let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
   
@@ -385,6 +386,7 @@ const replacePlaceholders = async (content, data) => {
       console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
       laaName = cachedUser.name;
       laaLicenceNumber = cachedUser.licenceNumber;
+      laaLicenceState = cachedUser.licenceState || '';
       userSignature = cachedUser.signature;
     } else {
       try {
@@ -449,7 +451,8 @@ const replacePlaceholders = async (content, data) => {
             
             if (asbestosAssessorLicence) {
               laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
-              console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber);
+              laaLicenceState = asbestosAssessorLicence.state || '';
+              console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber, 'State:', laaLicenceState);
             }
           }
           
@@ -457,6 +460,7 @@ const replacePlaceholders = async (content, data) => {
           userLookupCache.set(userIdentifier, {
             name: laaName,
             licenceNumber: laaLicenceNumber,
+            licenceState: laaLicenceState,
             signature: userSignature
           });
           console.log('[TEMPLATE SERVICE] Cached user data for:', userIdentifier);
@@ -482,6 +486,8 @@ const replacePlaceholders = async (content, data) => {
     '[LAA_NAME]': laaName,
     '{LAA_LICENSE}': laaLicenceNumber,
     '[LAA_LICENCE]': laaLicenceNumber,
+    '{LAA_LICENCE_STATE}': laaLicenceState,
+    '[LAA_LICENCE_STATE]': laaLicenceState,
     '{ASSESSMENT_DATE}': data.assessmentDate 
       ? new Date(data.assessmentDate).toLocaleDateString('en-GB')
       : 'Unknown Date',
@@ -490,8 +496,13 @@ const replacePlaceholders = async (content, data) => {
     '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
     '{INSPECTION_TIME}': (() => {
       if (data.inspectionTime) {
+        let timeStr = data.inspectionTime.trim();
+        
+        // Strip any existing AM/PM to avoid duplicates (case-insensitive, handles multiple spaces)
+        timeStr = timeStr.replace(/\s*(AM|PM|am|pm)\s*/gi, '').trim();
+        
         // Convert 24-hour format to 12-hour format with AM/PM
-        const timeMatch = data.inspectionTime.match(/^(\d{1,2}):(\d{2})$/);
+        const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
           let hours = parseInt(timeMatch[1]);
           const minutes = timeMatch[2];
@@ -506,7 +517,36 @@ const replacePlaceholders = async (content, data) => {
           
           return `${hours}:${minutes} ${ampm}`;
         }
-        return data.inspectionTime; // Return as-is if format doesn't match
+        // If format doesn't match, return the original (might be invalid format)
+        return data.inspectionTime;
+      }
+      return 'Inspection Time';
+    })(),
+    '[INSPECTION_TIME]': (() => {
+      if (data.inspectionTime) {
+        let timeStr = data.inspectionTime.trim();
+        
+        // Strip any existing AM/PM to avoid duplicates (case-insensitive, handles multiple spaces)
+        timeStr = timeStr.replace(/\s*(AM|PM|am|pm)\s*/gi, '').trim();
+        
+        // Convert 24-hour format to 12-hour format with AM/PM
+        const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1]);
+          const minutes = timeMatch[2];
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          
+          // Convert to 12-hour format
+          if (hours === 0) {
+            hours = 12; // Midnight
+          } else if (hours > 12) {
+            hours = hours - 12; // Afternoon/evening
+          }
+          
+          return `${hours}:${minutes} ${ampm}`;
+        }
+        // If format doesn't match, return the original (might be invalid format)
+        return data.inspectionTime;
       }
       return 'Inspection Time';
     })(),

@@ -1386,14 +1386,13 @@ const AsbestosRemovalJobDetails = () => {
       console.log("Calling generateHTMLTemplatePDF...");
       const fileName = await generateHTMLTemplatePDF(
         "asbestos-clearance", // template type
-        fullClearance // clearance data
+        fullClearance, // clearance data
+        { openInNewTab: true } // open in new tab instead of downloading
       );
       console.log("PDF generation completed, fileName:", fileName);
 
       showSnackbar(
-        `PDF generated successfully! Check your downloads folder for: ${
-          fileName.filename || fileName
-        }`,
+        "PDF opened in new tab",
         "success"
       );
 
