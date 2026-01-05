@@ -496,15 +496,17 @@ const replacePlaceholders = async (content, data) => {
     '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
     '{INSPECTION_TIME}': (() => {
       if (data.inspectionTime) {
-        let timeStr = data.inspectionTime.trim();
+        const trimmedTime = data.inspectionTime.trim();
         
-        // Strip any existing AM/PM to avoid duplicates (case-insensitive, handles multiple spaces)
-        timeStr = timeStr.replace(/\s*(AM|PM|am|pm)\s*/gi, '').trim();
+        // If it already has AM/PM, return as-is (preserve the original format)
+        if (trimmedTime.match(/\s*(AM|PM|am|pm)\s*$/i)) {
+          return trimmedTime;
+        }
         
-        // Convert 24-hour format to 12-hour format with AM/PM
-        const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+        // If it's in 24-hour format (HH:MM), convert to 12-hour format with AM/PM
+        const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
-          let hours = parseInt(timeMatch[1]);
+          let hours = parseInt(timeMatch[1], 10);
           const minutes = timeMatch[2];
           const ampm = hours >= 12 ? 'PM' : 'AM';
           
@@ -515,24 +517,26 @@ const replacePlaceholders = async (content, data) => {
             hours = hours - 12; // Afternoon/evening
           }
           
-          return `${hours}:${minutes} ${ampm}`;
+          return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
         }
         // If format doesn't match, return the original (might be invalid format)
-        return data.inspectionTime;
+        return trimmedTime;
       }
       return 'Inspection Time';
     })(),
     '[INSPECTION_TIME]': (() => {
       if (data.inspectionTime) {
-        let timeStr = data.inspectionTime.trim();
+        const trimmedTime = data.inspectionTime.trim();
         
-        // Strip any existing AM/PM to avoid duplicates (case-insensitive, handles multiple spaces)
-        timeStr = timeStr.replace(/\s*(AM|PM|am|pm)\s*/gi, '').trim();
+        // If it already has AM/PM, return as-is (preserve the original format)
+        if (trimmedTime.match(/\s*(AM|PM|am|pm)\s*$/i)) {
+          return trimmedTime;
+        }
         
-        // Convert 24-hour format to 12-hour format with AM/PM
-        const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+        // If it's in 24-hour format (HH:MM), convert to 12-hour format with AM/PM
+        const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
-          let hours = parseInt(timeMatch[1]);
+          let hours = parseInt(timeMatch[1], 10);
           const minutes = timeMatch[2];
           const ampm = hours >= 12 ? 'PM' : 'AM';
           
@@ -543,10 +547,10 @@ const replacePlaceholders = async (content, data) => {
             hours = hours - 12; // Afternoon/evening
           }
           
-          return `${hours}:${minutes} ${ampm}`;
+          return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
         }
         // If format doesn't match, return the original (might be invalid format)
-        return data.inspectionTime;
+        return trimmedTime;
       }
       return 'Inspection Time';
     })(),

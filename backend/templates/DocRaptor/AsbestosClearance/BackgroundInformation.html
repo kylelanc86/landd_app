@@ -153,11 +153,13 @@
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
+        box-sizing: border-box !important;
       }
 
       .bullets li {
         margin-bottom: 0 !important;
         margin-top: 2px !important;
+        padding: 0 !important;
         line-height: 1.4 !important;
         word-break: keep-all !important;
         overflow-wrap: normal !important;
@@ -166,6 +168,15 @@
         display: list-item !important;
         list-style-type: disc !important;
         list-style-position: outside !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* Ensure list item content wraps properly - override global * rule */
+      .bullets li * {
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
       }
 
       .bullets li:last-child {
