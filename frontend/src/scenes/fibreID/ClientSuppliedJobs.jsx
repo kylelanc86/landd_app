@@ -50,6 +50,7 @@ import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { compressImage } from "../../utils/imageCompression";
+import { getTodayInSydney } from "../../utils/dateUtils";
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
@@ -1410,9 +1411,7 @@ const ClientSuppliedJobs = () => {
                           <Button
                             size="small"
                             onClick={() =>
-                              setSampleReceiptDate(
-                                new Date().toISOString().split("T")[0]
-                              )
+                              setSampleReceiptDate(getTodayInSydney())
                             }
                             sx={{ textTransform: "none", minWidth: "auto" }}
                           >
@@ -1967,9 +1966,7 @@ const ClientSuppliedJobs = () => {
                           <Button
                             size="small"
                             onClick={() =>
-                              setEditSampleReceiptDate(
-                                new Date().toISOString().split("T")[0]
-                              )
+                              setEditSampleReceiptDate(getTodayInSydney())
                             }
                             sx={{ textTransform: "none", minWidth: "auto" }}
                           >

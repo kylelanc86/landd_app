@@ -66,6 +66,7 @@ import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateFormat";
+import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
 
@@ -1681,7 +1682,7 @@ const AsbestosRemovalJobDetails = () => {
   const resetClearanceForm = () => {
     setClearanceForm({
       projectId: job?.projectId._id || job?.projectId || "",
-      clearanceDate: new Date().toISOString().split("T")[0],
+      clearanceDate: getTodayInSydney(),
       inspectionTime: "09:00 AM",
       clearanceType: "Non-friable",
       asbestosRemovalist: job?.asbestosRemovalist || "",

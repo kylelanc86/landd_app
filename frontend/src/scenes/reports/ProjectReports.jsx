@@ -48,6 +48,7 @@ import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 import ProjectLogModalWrapper from "./ProjectLogModalWrapper";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useAuth } from "../../context/AuthContext";
+import { getTodayInSydney } from "../../utils/dateUtils";
 
 const ProjectReports = () => {
   const { projectId } = useParams();
@@ -64,7 +65,7 @@ const ProjectReports = () => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     reportType: "",
-    reportDate: new Date().toISOString().split("T")[0],
+    reportDate: getTodayInSydney(),
     description: "",
     asbestosRemovalist: "",
     status: "completed",
@@ -1529,7 +1530,7 @@ const ProjectReports = () => {
       setUploadDialogOpen(false);
       setUploadForm({
         reportType: "",
-        reportDate: new Date().toISOString().split("T")[0],
+        reportDate: getTodayInSydney(),
         description: "",
         asbestosRemovalist: "",
         status: "completed",

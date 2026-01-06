@@ -513,8 +513,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       const photosForReport = [];
       
       clearanceItems.forEach((item, index) => {
-        console.log(`Item ${index}:`, item);
-        console.log(`Item ${index} photographs array:`, item.photographs);
+        // console.log(`Item ${index}:`, item);
+        // console.log(`Item ${index} photographs array:`, item.photographs);
         
         // Add photographs that are marked for inclusion in report
         if (item.photographs && Array.isArray(item.photographs)) {

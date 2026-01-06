@@ -31,6 +31,7 @@ import {
   clientService,
 } from "../../services/api";
 import invoiceItemService from "../../services/invoiceItemService";
+import { getTodayInSydney } from "../../utils/dateUtils";
 
 const DraftInvoicePage = () => {
   const navigate = useNavigate();
@@ -43,7 +44,7 @@ const DraftInvoicePage = () => {
   // Invoice header state with initial due date calculation
   const [invoiceHeader, setInvoiceHeader] = useState({
     invoiceNumber: "",
-    invoiceDate: new Date().toISOString().split("T")[0], // Today's date
+    invoiceDate: getTodayInSydney(), // Today's date (Sydney timezone)
     dueDate: "",
     client: "",
     project: "",
