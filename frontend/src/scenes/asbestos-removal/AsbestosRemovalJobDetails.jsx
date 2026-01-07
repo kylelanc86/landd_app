@@ -69,7 +69,6 @@ import { formatDate } from "../../utils/dateFormat";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
-import { getTodayInSydney } from "../../utils/dateUtils";
 
 const TIMING_LOG_PREFIX = "[AsbestosRemovalJobDetails]";
 const TIMING_ENABLED = true;
