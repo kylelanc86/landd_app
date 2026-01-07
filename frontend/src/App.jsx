@@ -48,7 +48,6 @@ import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
 import ClientSuppliedFibreCountAnalysis from "./scenes/fibreID/ClientSuppliedFibreCountAnalysis.jsx";
 import ClientSuppliedFibreIDAnalysis from "./scenes/fibreID/ClientSuppliedFibreIDAnalysis.jsx";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
-import LDsuppliedItems from "./scenes/fibreID/LDsuppliedItems.jsx";
 import UserManual from "./scenes/userManual/UserManual";
 
 // Lazy loaded components
@@ -124,6 +123,7 @@ const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
 const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
+const LaboratoryServices = lazy(() => import("./scenes/laboratory-services"));
 const AsbestosRemovalJobDetails = lazy(() =>
   import("./scenes/asbestos-removal/AsbestosRemovalJobDetails")
 );
@@ -775,34 +775,18 @@ function App() {
                                   }
                                 />
                               )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/assessment/:assessmentId/items"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <LDsuppliedItems />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/assessment/:assessmentId/item/:itemNumber/analysis"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <LDsuppliedAnalysisPage />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
+                              <Route
+                                path="/fibre-id/assessment/:assessmentId/item/:itemNumber/analysis"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["clientSup.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LDsuppliedAnalysisPage />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
                               {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
                                 <Route
                                   path="/fibre-id/client-supplied/:jobId/samples"
@@ -1012,6 +996,28 @@ function App() {
                                     <Suspense fallback={<LoadingSpinner />}>
                                       <LaboratoryDashboard />
                                     </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/laboratory-services"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["clientSup.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LaboratoryServices />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/laboratory-services/ld-supplied"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["clientSup.view"]}
+                                  >
+                                    <LDsuppliedJobs />
                                   </PermissionRoute>
                                 }
                               />

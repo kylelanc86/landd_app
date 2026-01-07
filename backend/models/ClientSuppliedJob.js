@@ -113,11 +113,14 @@ const clientSuppliedJobSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.Mixed,
       default: {}
     },
-    analyzedBy: {
+    analysedBy: {
       type: mongoose.Schema.Types.Mixed,
       ref: 'User'
     },
-    analyzedAt: {
+    analysedAt: {
+      type: Date
+    },
+    analysisDueDate: {
       type: Date
     },
     createdAt: {

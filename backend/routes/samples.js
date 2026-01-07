@@ -14,7 +14,7 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
       .populate('job')
       .populate('collectedBy')
       .populate('sampler')
-      .populate('analyzedBy')
+      .populate('analysedBy')
       .sort({ createdAt: -1 });
     res.json(samples);
   } catch (err) {
@@ -28,7 +28,7 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
     const samples = await Sample.find({ shift: req.params.shiftId })
       .populate('collectedBy')
       .populate('sampler')
-      .populate('analyzedBy')
+      .populate('analysedBy')
       .populate({
         path: 'job',
         populate: {
@@ -58,7 +58,7 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
     const allSamples = await Sample.find({ fullSampleID: fullSampleIDPattern })
       .populate('collectedBy')
       .populate('sampler')
-      .populate('analyzedBy')
+      .populate('analysedBy')
       .populate({
         path: 'job',
         populate: {
@@ -86,7 +86,7 @@ router.get('/:id', auth, checkPermission(['jobs.view']), async (req, res) => {
       })
       .populate('collectedBy')
       .populate('sampler')
-      .populate('analyzedBy');
+      .populate('analysedBy');
     if (!sample) {
       return res.status(404).json({ message: 'Sample not found' });
     }

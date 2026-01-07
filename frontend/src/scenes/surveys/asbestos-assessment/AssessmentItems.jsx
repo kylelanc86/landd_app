@@ -40,15 +40,24 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
+  ArrowForward as ArrowForwardIcon,
   PhotoCamera as PhotoCameraIcon,
   Upload as UploadIcon,
   Close as CloseIcon,
   Check as CheckIcon,
+  Description as DescriptionIcon,
+  Map as MapIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 
 import { useNavigate, useParams } from "react-router-dom";
 import PermissionGate from "../../../components/PermissionGate";
+import SitePlanDrawing from "../../../components/SitePlanDrawing";
+import { useAuth } from "../../../context/AuthContext";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+import { format } from "date-fns";
 import asbestosAssessmentService from "../../../services/asbestosAssessmentService";
 import customDataFieldGroupService from "../../../services/customDataFieldGroupService";
 import {
@@ -60,6 +69,7 @@ import {
 const AssessmentItems = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { currentUser } = useAuth();
 
   const [items, setItems] = useState([]);
   const [assessment, setAssessment] = useState(null);
@@ -104,7 +114,34 @@ const AssessmentItems = () => {
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
   const [scopeItems, setScopeItems] = useState([""]);
 
-  // Dictation state
+  // Job Specific Exclusions state
+  const [jobExclusionsModalOpen, setJobExclusionsModalOpen] = useState(false);
+  const [savingExclusions, setSavingExclusions] = useState(false);
+  const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
+  const [isDictatingExclusions, setIsDictatingExclusions] = useState(false);
+  const [dictationErrorExclusions, setDictationErrorExclusions] = useState("");
+  const recognitionRefExclusions = useRef(null);
+
+  // Assessment Complete state
+  const [assessmentCompleted, setAssessmentCompleted] = useState(false);
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+
+  // Samples Submitted to Lab state
+  const [showSamplesSubmittedDialog, setShowSamplesSubmittedDialog] =
+    useState(false);
+  const [submittedBySignature, setSubmittedBySignature] = useState("");
+  const [turnaroundTime, setTurnaroundTime] = useState("");
+  const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
+  const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
+
+  // Site Plan state
+  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
+  const [sitePlanFile, setSitePlanFile] = useState(null);
+  const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
+  const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
+    useState(false);
+
+  // Dictation state (for recommendations)
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
   const recognitionRef = useRef(null);
@@ -153,6 +190,14 @@ const AssessmentItems = () => {
 
       setItems(itemsData || []);
       setAssessment(assessmentData);
+      // Set assessment completed state based on status (site-works-complete or later)
+      setAssessmentCompleted(
+        assessmentData?.status === "site-works-complete" ||
+          assessmentData?.status === "samples-with-lab" ||
+          assessmentData?.status === "sample-analysis-complete" ||
+          assessmentData?.status === "report-ready-for-review" ||
+          assessmentData?.status === "complete"
+      );
       // Load assessment scope if it exists
       if (
         assessmentData?.assessmentScope &&
@@ -623,6 +668,322 @@ const AssessmentItems = () => {
     setIsDictating(false);
   };
 
+  // Dictation functions for exclusions
+  const startDictationExclusions = () => {
+    // If already dictating, stop it first
+    if (isDictatingExclusions && recognitionRefExclusions.current) {
+      stopDictationExclusions();
+      return;
+    }
+
+    // Check if browser supports speech recognition
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      setDictationErrorExclusions(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+      );
+      return;
+    }
+
+    try {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-AU";
+
+      recognition.onstart = () => {
+        setIsDictatingExclusions(true);
+        setDictationErrorExclusions("");
+      };
+
+      recognition.onresult = (event) => {
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          }
+        }
+
+        // Update the job specific exclusions field with the final transcript
+        if (finalTranscript) {
+          setAssessment((prev) => {
+            const currentText = prev?.jobSpecificExclusions || "";
+            const isFirstWord = !currentText || currentText.trim().length === 0;
+            const newText = isFirstWord
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
+              : finalTranscript;
+            return {
+              ...prev,
+              jobSpecificExclusions:
+                currentText + (currentText ? " " : "") + newText,
+            };
+          });
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        setDictationErrorExclusions(`Dictation error: ${event.error}`);
+        setIsDictatingExclusions(false);
+        recognitionRefExclusions.current = null;
+      };
+
+      recognition.onend = () => {
+        setIsDictatingExclusions(false);
+        recognitionRefExclusions.current = null;
+      };
+
+      recognitionRefExclusions.current = recognition;
+      recognition.start();
+    } catch (error) {
+      console.error("Error starting dictation:", error);
+      setDictationErrorExclusions(
+        "Failed to start dictation. Please try again."
+      );
+      recognitionRefExclusions.current = null;
+    }
+  };
+
+  const stopDictationExclusions = () => {
+    if (recognitionRefExclusions.current) {
+      try {
+        recognitionRefExclusions.current.stop();
+      } catch (error) {
+        console.error("Error stopping dictation:", error);
+      }
+      recognitionRefExclusions.current = null;
+    }
+    setIsDictatingExclusions(false);
+  };
+
+  // Complete assessment handler
+  const handleCompleteAssessment = () => {
+    setCompleteDialogOpen(true);
+  };
+
+  const confirmCompleteAssessment = async () => {
+    try {
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        status: "site-works-complete",
+      });
+      setAssessmentCompleted(true);
+      showSnackbar("Assessment site works completed successfully!", "success");
+      await fetchData();
+    } catch (err) {
+      console.error("Error completing assessment:", err);
+      showSnackbar("Failed to complete assessment", "error");
+    } finally {
+      setCompleteDialogOpen(false);
+    }
+  };
+
+  const handleReopenAssessment = async () => {
+    try {
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        status: "in-progress",
+      });
+      setAssessmentCompleted(false);
+      showSnackbar("Assessment reopened successfully!", "success");
+      await fetchData();
+    } catch (err) {
+      console.error("Error reopening assessment:", err);
+      showSnackbar("Failed to reopen assessment", "error");
+    }
+  };
+
+  // Handle Samples Submitted to Lab
+  const handleSamplesSubmittedToLab = () => {
+    // Automatically set the current user's name
+    const userName = currentUser
+      ? `${currentUser.firstName} ${currentUser.lastName}`
+      : "";
+    setSubmittedBySignature(userName);
+    // Reset turnaround time state and set default to current date/time
+    setTurnaroundTime("");
+    setAnalysisDueDate(new Date());
+    setShowCustomTurnaround(false);
+    setShowSamplesSubmittedDialog(true);
+  };
+
+  // Handle the actual submission after dialog confirmation
+  const handleConfirmSamplesSubmitted = async () => {
+    // Validate turnaround time is selected
+    if (!turnaroundTime && !showCustomTurnaround) {
+      showSnackbar("Please select a turnaround time", "error");
+      return;
+    }
+    if (showCustomTurnaround && !analysisDueDate) {
+      showSnackbar("Please select an analysis due date", "error");
+      return;
+    }
+    if (!showCustomTurnaround && !analysisDueDate) {
+      showSnackbar("Please select a turnaround time", "error");
+      return;
+    }
+
+    try {
+      const currentDate = new Date().toISOString();
+      const finalTurnaroundTime = showCustomTurnaround
+        ? "custom"
+        : turnaroundTime;
+
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        status: "samples-with-lab",
+        samplesReceivedDate: currentDate,
+        submittedBy: submittedBySignature,
+        turnaroundTime: finalTurnaroundTime,
+        analysisDueDate: analysisDueDate ? analysisDueDate.toISOString() : null,
+      });
+      // Refetch assessment to update UI
+      await fetchData();
+      // Close dialog
+      setShowSamplesSubmittedDialog(false);
+      showSnackbar("Samples submitted to lab successfully", "success");
+      // Navigate to the assessment items page
+      navigate(`/surveys/asbestos-assessment/${id}/items`);
+    } catch (error) {
+      console.error("Error submitting samples to lab:", error);
+      showSnackbar("Failed to submit samples to lab", "error");
+    }
+  };
+
+  // Site Plan handlers
+  const handleSitePlanSave = async (sitePlanData) => {
+    try {
+      const imageData =
+        typeof sitePlanData === "string"
+          ? sitePlanData
+          : sitePlanData?.imageData;
+      const legendEntries = Array.isArray(sitePlanData?.legend)
+        ? sitePlanData.legend.map((entry) => ({
+            color: entry.color,
+            description: entry.description,
+          }))
+        : [];
+      const legendTitle =
+        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
+          ? sitePlanData.legendTitle.trim()
+          : "Key";
+      const figureTitle =
+        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
+          ? sitePlanData.figureTitle.trim()
+          : "Asbestos Assessment Site Plan";
+
+      if (!imageData) {
+        showSnackbar("No site plan image data was provided", "error");
+        return;
+      }
+
+      // Save the drawn site plan to the assessment
+      await asbestosAssessmentService.update(id, {
+        sitePlan: true, // Enable site plan functionality
+        sitePlanFile: imageData, // Base64 image data
+        sitePlanLegend: legendEntries,
+        sitePlanLegendTitle: legendTitle,
+        sitePlanFigureTitle: figureTitle,
+        sitePlanSource: "drawn", // Mark it as a drawn site plan
+      });
+
+      showSnackbar("Drawn site plan saved successfully!", "success");
+      setSitePlanDrawingDialogOpen(false);
+      await fetchData(); // Refresh assessment data to show the new site plan
+    } catch (error) {
+      console.error("Error saving site plan:", error);
+      showSnackbar("Error saving site plan", "error");
+    }
+  };
+
+  const handleSitePlanDrawingClose = () => {
+    setSitePlanDrawingDialogOpen(false);
+  };
+
+  const handleSitePlanFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setSitePlanFile(file);
+    }
+  };
+
+  const handleUploadSitePlan = async () => {
+    if (!sitePlanFile) {
+      showSnackbar("Please select a file first", "error");
+      return;
+    }
+
+    try {
+      setUploadingSitePlan(true);
+
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          // Extract just the base64 data from the data URL
+          const dataUrl = event.target.result;
+          const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
+
+          // Update the assessment with the site plan file
+          await asbestosAssessmentService.update(id, {
+            sitePlanFile: base64Data,
+            sitePlanLegend: [],
+            sitePlanLegendTitle: null,
+            sitePlanSource: "uploaded",
+          });
+
+          showSnackbar("Site plan uploaded successfully", "success");
+
+          setSitePlanDialogOpen(false);
+          setSitePlanFile(null);
+          await fetchData(); // Refresh assessment data
+        } catch (error) {
+          console.error("Error uploading site plan:", error);
+          showSnackbar("Failed to upload site plan", "error");
+        } finally {
+          setUploadingSitePlan(false);
+        }
+      };
+      reader.readAsDataURL(sitePlanFile);
+    } catch (error) {
+      console.error("Error processing site plan file:", error);
+      showSnackbar("Failed to process site plan file", "error");
+      setUploadingSitePlan(false);
+    }
+  };
+
+  const handleRemoveSitePlan = async () => {
+    if (window.confirm("Are you sure you want to remove the site plan?")) {
+      try {
+        // Update the assessment to remove the site plan file
+        await asbestosAssessmentService.update(id, {
+          sitePlanFile: null,
+          sitePlanSource: null, // Backend will convert null to undefined to remove the field
+          sitePlanLegend: [],
+          sitePlanLegendTitle: null,
+        });
+
+        showSnackbar("Site plan removed successfully", "success");
+
+        await fetchData(); // Refresh assessment data
+      } catch (error) {
+        console.error("Error removing site plan:", error);
+        showSnackbar("Failed to remove site plan", "error");
+      }
+    }
+  };
+
   // Cleanup: stop dictation when component unmounts
   useEffect(() => {
     return () => {
@@ -633,6 +994,14 @@ const AssessmentItems = () => {
           // Ignore errors during cleanup
         }
         recognitionRef.current = null;
+      }
+      if (recognitionRefExclusions.current) {
+        try {
+          recognitionRefExclusions.current.stop();
+        } catch (error) {
+          // Ignore errors during cleanup
+        }
+        recognitionRefExclusions.current = null;
       }
     };
   }, []);
@@ -1226,11 +1595,6 @@ const AssessmentItems = () => {
     }
   };
 
-  const formatAsbestosType = (type) => {
-    if (!type) return "N/A";
-    return type.charAt(0).toUpperCase() + type.slice(1).replace("-", "-");
-  };
-
   if (loading) {
     return (
       <Box
@@ -1297,7 +1661,13 @@ const AssessmentItems = () => {
           </Box>
         )}
 
-        <Box display="flex" gap={2} sx={{ mt: 3 }}>
+        <Box
+          display="flex"
+          gap={2}
+          sx={{ mt: 3 }}
+          alignItems="center"
+          flexWrap="wrap"
+        >
           <Button
             variant="outlined"
             color="primary"
@@ -1317,51 +1687,76 @@ const AssessmentItems = () => {
           >
             Scope of Assessment
           </Button>
-        </Box>
-
-        {/* Scope of Assessment Display */}
-        {assessment?.assessmentScope &&
-          Array.isArray(assessment.assessmentScope) &&
-          assessment.assessmentScope.length > 0 &&
-          assessment.assessmentScope.some((item) => item.trim() !== "") && (
-            <Card sx={{ mt: 3, mb: 3 }}>
-              <CardContent>
-                <Typography
-                  variant="h6"
-                  component="h2"
-                  gutterBottom
-                  sx={{ fontWeight: 600, mb: 2 }}
-                >
-                  Scope of Assessment
-                </Typography>
-                <Grid container spacing={2}>
+          {assessment?.assessmentScope &&
+            Array.isArray(assessment.assessmentScope) &&
+            assessment.assessmentScope.length > 0 &&
+            assessment.assessmentScope.some((item) => item.trim() !== "") && (
+              <>
+                <ArrowForwardIcon sx={{ color: "text.secondary" }} />
+                <Typography variant="body1">
                   {assessment.assessmentScope
                     .filter((item) => item.trim() !== "")
-                    .map((item, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={index}>
-                        <Box sx={{ display: "flex", alignItems: "flex-start" }}>
-                          <Typography
-                            component="span"
-                            sx={{
-                              mr: 1,
-                              color: "text.secondary",
-                              flexShrink: 0,
-                            }}
-                          >
-                            •
-                          </Typography>
-                          <Typography variant="body2" sx={{ flex: 1 }}>
-                            {item}
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    ))}
-                </Grid>
-              </CardContent>
-            </Card>
-          )}
+                    .join(" | ")}
+                </Typography>
+              </>
+            )}
+        </Box>
 
-        <Box sx={{ mt: 2, mb: 2 }}>
+        {/* Site Plan Actions */}
+        <Box
+          display="flex"
+          gap={2}
+          sx={{ mt: 2, mb: 2 }}
+          alignItems="center"
+          flexWrap="wrap"
+        >
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() => setSitePlanDrawingDialogOpen(true)}
+            startIcon={<MapIcon />}
+          >
+            {assessment?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+          </Button>
+          {assessment?.sitePlanFile && (
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleRemoveSitePlan}
+              startIcon={<DeleteIcon />}
+              sx={{
+                borderColor: "#d32f2f",
+                color: "#d32f2f",
+                "&:hover": {
+                  borderColor: "#b71c1c",
+                  backgroundColor: "rgba(211, 47, 47, 0.04)",
+                },
+              }}
+            >
+              Delete Site Plan
+            </Button>
+          )}
+          {assessment?.sitePlanFile && (
+            <Typography
+              variant="body2"
+              color="success.main"
+              sx={{ fontWeight: "medium" }}
+            >
+              ✓ Site Plan Attached
+            </Typography>
+          )}
+          {!assessment?.sitePlanFile && (
+            <Typography
+              variant="body2"
+              color="warning.main"
+              sx={{ fontWeight: "medium" }}
+            >
+              ⚠ No Site Plan
+            </Typography>
+          )}
+        </Box>
+
+        <Box sx={{ mt: 2, mb: 2, display: "flex", gap: 2 }}>
           <Button
             variant="contained"
             color="secondary"
@@ -1373,6 +1768,20 @@ const AssessmentItems = () => {
             startIcon={<AddIcon />}
           >
             Add Assessment Item
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setJobExclusionsModalOpen(true)}
+            startIcon={<DescriptionIcon />}
+            sx={{
+              backgroundColor: "#1976d2",
+              color: "white",
+              "&:hover": {
+                backgroundColor: "#1565c0",
+              },
+            }}
+          >
+            Job Specific Exclusions
           </Button>
         </Box>
 
@@ -1397,16 +1806,11 @@ const AssessmentItems = () => {
                       Location Description
                     </TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>
-                      Material Description
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>
-                      Asbestos Type
+                      Sample Reference
                     </TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>
                       Asbestos Content
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Condition</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Risk</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>
                       Photograph
                     </TableCell>
@@ -1418,7 +1822,7 @@ const AssessmentItems = () => {
                     <TableRow>
                       <TableCell
                         colSpan={
-                          9 +
+                          5 +
                           (items &&
                           items.length > 0 &&
                           items.some(
@@ -1466,23 +1870,8 @@ const AssessmentItems = () => {
                           <TableCell>
                             {item.locationDescription || "N/A"}
                           </TableCell>
-                          <TableCell>{item.materialType || "N/A"}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={formatAsbestosType(item.asbestosType)}
-                              size="small"
-                              color={
-                                item.asbestosType === "friable"
-                                  ? "error"
-                                  : item.asbestosType === "non-friable"
-                                  ? "warning"
-                                  : "default"
-                              }
-                            />
-                          </TableCell>
+                          <TableCell>{item.sampleReference || "N/A"}</TableCell>
                           <TableCell>{item.asbestosContent || "N/A"}</TableCell>
-                          <TableCell>{item.condition || "N/A"}</TableCell>
-                          <TableCell>{item.risk || "N/A"}</TableCell>
                           <TableCell>
                             {(() => {
                               const photoCount =
@@ -1561,6 +1950,50 @@ const AssessmentItems = () => {
             </TableContainer>
           </CardContent>
         </Card>
+
+        {/* Assessment Complete Button */}
+        <Box
+          sx={{
+            mt: 3,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <Button
+            variant="contained"
+            color={assessmentCompleted ? "error" : "primary"}
+            onClick={
+              assessmentCompleted
+                ? handleReopenAssessment
+                : handleCompleteAssessment
+            }
+            disabled={!items || items.length === 0}
+            sx={{
+              backgroundColor: assessmentCompleted ? "#d32f2f" : "#1976d2",
+              "&:hover": {
+                backgroundColor: assessmentCompleted ? "#b71c1c" : "#1565c0",
+              },
+            }}
+          >
+            {assessmentCompleted ? "REOPEN ASSESSMENT" : "ASSESSMENT COMPLETED"}
+          </Button>
+          {assessment?.status === "site-works-complete" && (
+            <Button
+              variant="contained"
+              onClick={handleSamplesSubmittedToLab}
+              sx={{
+                backgroundColor: "#ff9800",
+                color: "white",
+                "&:hover": {
+                  backgroundColor: "#f57c00",
+                },
+              }}
+            >
+              Submit Samples to Lab
+            </Button>
+          )}
+        </Box>
 
         {/* Add/Edit Dialog */}
         <Dialog
@@ -3110,6 +3543,653 @@ const AssessmentItems = () => {
               </Box>
             )}
           </DialogContent>
+        </Dialog>
+
+        {/* Job Specific Exclusions Modal */}
+        <Dialog
+          open={jobExclusionsModalOpen}
+          onClose={() => setJobExclusionsModalOpen(false)}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <DescriptionIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Job Specific Exclusions
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box sx={{ mb: 3 }}>
+              <TextField
+                fullWidth
+                value={assessment?.jobSpecificExclusions || ""}
+                onChange={(e) => {
+                  // Update local state for the text field
+                  setAssessment((prev) => ({
+                    ...prev,
+                    jobSpecificExclusions: e.target.value,
+                  }));
+                }}
+                multiline
+                rows={6}
+                placeholder="Enter job-specific exclusions/caveats that should be included in the assessment report"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      {savingExclusions ? (
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                      ) : (
+                        <IconButton
+                          onClick={
+                            isDictatingExclusions
+                              ? stopDictationExclusions
+                              : startDictationExclusions
+                          }
+                          color={isDictatingExclusions ? "error" : "primary"}
+                          title={
+                            isDictatingExclusions
+                              ? "Stop Dictation"
+                              : "Start Dictation"
+                          }
+                          sx={{
+                            backgroundColor: isDictatingExclusions
+                              ? "error.light"
+                              : "transparent",
+                            "&:hover": {
+                              backgroundColor: isDictatingExclusions
+                                ? "error.main"
+                                : "action.hover",
+                            },
+                          }}
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      )}
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ mb: 2 }}
+              />
+              {/* Dictation Status and Errors */}
+              {isDictatingExclusions && (
+                <Box
+                  sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      backgroundColor: "error.main",
+                      animation: "pulse 1.5s ease-in-out infinite",
+                      "@keyframes pulse": {
+                        "0%": { opacity: 1 },
+                        "50%": { opacity: 0.5 },
+                        "100%": { opacity: 1 },
+                      },
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Dictating... Speak clearly into your microphone
+                  </Typography>
+                </Box>
+              )}
+              {dictationErrorExclusions && (
+                <Typography
+                  variant="caption"
+                  color="error.main"
+                  sx={{ mt: 1, display: "block" }}
+                >
+                  {dictationErrorExclusions}
+                </Typography>
+              )}
+              {exclusionsLastSaved && (
+                <Typography variant="body2" color="text.secondary">
+                  Last saved:{" "}
+                  {new Date(exclusionsLastSaved).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Typography>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setJobExclusionsModalOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  setSavingExclusions(true);
+                  await asbestosAssessmentService.update(id, {
+                    jobSpecificExclusions:
+                      assessment?.jobSpecificExclusions || "",
+                  });
+                  showSnackbar(
+                    "Job specific exclusions saved successfully",
+                    "success"
+                  );
+                  setExclusionsLastSaved(new Date());
+                  setJobExclusionsModalOpen(false);
+                } catch (error) {
+                  console.error("Error saving job specific exclusions:", error);
+                  showSnackbar(
+                    "Failed to save job specific exclusions",
+                    "error"
+                  );
+                } finally {
+                  setSavingExclusions(false);
+                }
+              }}
+              variant="contained"
+              color="primary"
+              disabled={savingExclusions}
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {savingExclusions ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                "Save Exclusions"
+              )}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Complete Assessment Confirmation Dialog */}
+        <Dialog
+          open={completeDialogOpen}
+          onClose={() => setCompleteDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "success.main",
+                color: "white",
+              }}
+            >
+              <CheckIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Complete Assessment
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to complete this assessment?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setCompleteDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmCompleteAssessment}
+              variant="contained"
+              color="success"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: "success.main",
+                "&:hover": {
+                  backgroundColor: "success.dark",
+                },
+              }}
+            >
+              Complete Assessment
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Site Plan Upload Dialog */}
+        <Dialog
+          open={sitePlanDialogOpen}
+          onClose={() => setSitePlanDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <UploadIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Upload Site Plan
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Upload a site plan file (PDF, JPG, or PNG). This will be
+                included in the assessment report.
+              </Typography>
+
+              <Box sx={{ mb: 2 }}>
+                <input
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  style={{ display: "none" }}
+                  id="site-plan-file-upload"
+                  type="file"
+                  onChange={handleSitePlanFileUpload}
+                />
+                <label htmlFor="site-plan-file-upload">
+                  <Button
+                    variant="outlined"
+                    component="span"
+                    startIcon={<UploadIcon />}
+                    fullWidth
+                  >
+                    {sitePlanFile ? sitePlanFile.name : "Choose Site Plan File"}
+                  </Button>
+                </label>
+              </Box>
+
+              {sitePlanFile && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Selected file: {sitePlanFile.name} (
+                  {(sitePlanFile.size / 1024 / 1024).toFixed(2)} MB)
+                </Alert>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setSitePlanDialogOpen(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUploadSitePlan}
+              variant="contained"
+              disabled={!sitePlanFile || uploadingSitePlan}
+              startIcon={
+                uploadingSitePlan ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <UploadIcon />
+                )
+              }
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {uploadingSitePlan ? "Uploading..." : "Upload Site Plan"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Site Plan Drawing Modal */}
+        <Dialog
+          open={sitePlanDrawingDialogOpen}
+          onClose={handleSitePlanDrawingClose}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "90vh",
+              maxHeight: "90vh",
+            },
+          }}
+        >
+          <DialogTitle>
+            <Box
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+            >
+              <Typography variant="h6">Site Plan Drawing</Typography>
+              <IconButton onClick={() => setSitePlanDrawingDialogOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ p: 2, height: "100%" }}>
+            <SitePlanDrawing
+              onSave={handleSitePlanSave}
+              onCancel={() => setSitePlanDrawingDialogOpen(false)}
+              existingSitePlan={assessment?.sitePlanFile}
+              existingLegend={assessment?.sitePlanLegend}
+              existingLegendTitle={assessment?.sitePlanLegendTitle}
+              existingFigureTitle={assessment?.sitePlanFigureTitle}
+            />
+          </DialogContent>
+        </Dialog>
+
+        {/* Samples Submitted to Lab Confirmation Dialog */}
+        <Dialog
+          open={showSamplesSubmittedDialog}
+          onClose={() => setShowSamplesSubmittedDialog(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <CheckIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Confirm Samples Submitted to Lab & Turnaround Time
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ mb: 3, color: "text.primary" }}>
+              Please confirm that the samples have been physically delivered to
+              the laboratory and when analysis tis due.
+            </Typography>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Signature
+              </Typography>
+              <TextField
+                fullWidth
+                value={submittedBySignature}
+                variant="outlined"
+                disabled
+                helperText="This will be automatically signed with your name"
+              />
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Turnaround
+              </Typography>
+              <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
+                <Button
+                  variant={
+                    turnaroundTime === "3 day" ? "contained" : "outlined"
+                  }
+                  onClick={() => {
+                    const now = new Date();
+                    const dueDate = new Date(now);
+                    dueDate.setDate(now.getDate() + 3);
+                    setTurnaroundTime("3 day");
+                    setAnalysisDueDate(dueDate);
+                    setShowCustomTurnaround(false);
+                  }}
+                  sx={{
+                    minWidth: 100,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                    backgroundColor:
+                      turnaroundTime === "3 day" ? "#1976d2" : "transparent",
+                    color: turnaroundTime === "3 day" ? "white" : "#1976d2",
+                    borderColor: "#1976d2",
+                    "&:hover": {
+                      backgroundColor:
+                        turnaroundTime === "3 day"
+                          ? "#1565c0"
+                          : "rgba(25, 118, 210, 0.04)",
+                    },
+                  }}
+                >
+                  3 day
+                </Button>
+                <Button
+                  variant={
+                    turnaroundTime === "24 hours" ? "contained" : "outlined"
+                  }
+                  onClick={() => {
+                    const now = new Date();
+                    const dueDate = new Date(now);
+                    dueDate.setHours(now.getHours() + 24);
+                    setTurnaroundTime("24 hours");
+                    setAnalysisDueDate(dueDate);
+                    setShowCustomTurnaround(false);
+                  }}
+                  sx={{
+                    minWidth: 100,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                    backgroundColor:
+                      turnaroundTime === "24 hours" ? "#1976d2" : "transparent",
+                    color: turnaroundTime === "24 hours" ? "white" : "#1976d2",
+                    borderColor: "#1976d2",
+                    "&:hover": {
+                      backgroundColor:
+                        turnaroundTime === "24 hours"
+                          ? "#1565c0"
+                          : "rgba(25, 118, 210, 0.04)",
+                    },
+                  }}
+                >
+                  24 hours
+                </Button>
+                <Button
+                  variant={showCustomTurnaround ? "contained" : "outlined"}
+                  onClick={() => {
+                    setShowCustomTurnaround(true);
+                    setTurnaroundTime("");
+                    // Set to current date/time when custom is selected
+                    setAnalysisDueDate(new Date());
+                  }}
+                  sx={{
+                    minWidth: 100,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                    backgroundColor: showCustomTurnaround
+                      ? "#1976d2"
+                      : "transparent",
+                    color: showCustomTurnaround ? "white" : "#1976d2",
+                    borderColor: "#1976d2",
+                    "&:hover": {
+                      backgroundColor: showCustomTurnaround
+                        ? "#1565c0"
+                        : "rgba(25, 118, 210, 0.04)",
+                    },
+                  }}
+                >
+                  Custom
+                </Button>
+              </Box>
+              {/* Show calculated due date for preset options */}
+              {(turnaroundTime === "3 day" || turnaroundTime === "24 hours") &&
+                analysisDueDate && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 1, fontStyle: "italic" }}
+                  >
+                    Analysis due date:{" "}
+                    {format(analysisDueDate, "dd/MM/yyyy HH:mm")}
+                  </Typography>
+                )}
+              {showCustomTurnaround && (
+                <Box sx={{ mt: 2 }}>
+                  <LocalizationProvider dateAdapter={AdapterDateFns}>
+                    <DateTimePicker
+                      label="Analysis Due Date & Time"
+                      value={analysisDueDate}
+                      onChange={(newValue) => setAnalysisDueDate(newValue)}
+                      slots={{ textField: TextField }}
+                      slotProps={{
+                        textField: {
+                          fullWidth: true,
+                          inputProps: {
+                            format: "dd/MM/yyyy HH:mm",
+                          },
+                        },
+                      }}
+                      format="dd/MM/yyyy HH:mm"
+                    />
+                  </LocalizationProvider>
+                </Box>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setShowSamplesSubmittedDialog(false)}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmSamplesSubmitted}
+              variant="contained"
+              color="primary"
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Confirm Submission
+            </Button>
+          </DialogActions>
         </Dialog>
       </Box>
     </PermissionGate>

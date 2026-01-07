@@ -98,9 +98,19 @@ const LDsuppliedAnalysisPage = () => {
       setAssessment(response);
 
       // Find the specific assessment item
-      const item = response.items.find(
+      // Try to find by itemNumber first, then fall back to array index
+      let item = response.items.find(
         (item) => item.itemNumber === parseInt(itemNumber)
       );
+
+      // If not found by itemNumber, try by array index (itemNumber - 1 for 1-based indexing)
+      if (!item && response.items && response.items.length > 0) {
+        const index = parseInt(itemNumber) - 1;
+        if (index >= 0 && index < response.items.length) {
+          item = response.items[index];
+        }
+      }
+
       if (!item) {
         throw new Error(`Assessment item ${itemNumber} not found`);
       }
@@ -132,7 +142,7 @@ const LDsuppliedAnalysisPage = () => {
         setFibres(savedData.fibres || []);
         setFinalResult(savedData.finalResult || "");
         setAnalysisDate(
-          savedData.analyzedAt ? new Date(savedData.analyzedAt) : new Date()
+          savedData.analysedAt ? new Date(savedData.analysedAt) : new Date()
         );
       } else {
         // Pre-populate sample description if available
@@ -166,12 +176,12 @@ const LDsuppliedAnalysisPage = () => {
     }
   };
 
-  const handleBackToAssessment = () => {
-    navigate(`/fibre-id/assessment/${assessmentId}/items`);
+  const handleBackToJobs = () => {
+    navigate("/laboratory-services/ld-supplied");
   };
 
   const handleBackToHome = () => {
-    navigate("/fibre-id");
+    navigate("/laboratory-services");
   };
 
   const addFibre = () => {
@@ -298,7 +308,7 @@ const LDsuppliedAnalysisPage = () => {
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: isAnalysisComplete,
-        analyzedAt: analysisDate,
+        analysedAt: analysisDate,
       };
 
       // Update the assessment item with analysis data
@@ -319,9 +329,9 @@ const LDsuppliedAnalysisPage = () => {
         },
       }));
 
-      // Show success message and navigate to assessment items page
+      // Show success message and navigate back to jobs list
       showSnackbar("Analysis saved successfully!", "success");
-      navigate(`/fibre-id/assessment/${assessmentId}/items`);
+      navigate("/laboratory-services/ld-supplied");
     } catch (error) {
       console.error("Error saving analysis:", error);
       console.error("Error details:", error.response?.data);
@@ -359,7 +369,7 @@ const LDsuppliedAnalysisPage = () => {
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
         isAnalyzed: true,
-        analyzedAt: analysisDate,
+        analysedAt: analysisDate,
       };
 
       // Update the assessment item with analysis data
@@ -405,8 +415,8 @@ const LDsuppliedAnalysisPage = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
-        isAnalyzed: false,
-        analyzedAt: null,
+        isAnalysed: false,
+        analysedAt: null,
       };
 
       // Update the assessment item with analysis data
@@ -473,10 +483,10 @@ const LDsuppliedAnalysisPage = () => {
           </Typography>
           <Button
             variant="outlined"
-            onClick={() => navigate("/fibre-id")}
+            onClick={() => navigate("/laboratory-services")}
             sx={{ mt: 2, display: "block", mx: "auto" }}
           >
-            Return to Fibre ID Home
+            Return to Laboratory Services
           </Button>
         </Box>
       </Container>
@@ -495,18 +505,18 @@ const LDsuppliedAnalysisPage = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Fibre ID Home
+            Laboratory Services
           </Link>
           <Link
             component="button"
             variant="body1"
-            onClick={handleBackToAssessment}
+            onClick={handleBackToJobs}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            Assessment Items
+            L&D Supplied Jobs
           </Link>
           <Typography color="text.primary">
-            {assessmentItem.sampleReference}
+            {assessmentItem.sampleReference || `Item ${itemNumber}`}
           </Typography>
         </Breadcrumbs>
 

@@ -159,7 +159,17 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
-    const { projectId, assessmentDate, status, assessmentScope } = req.body;
+    const { 
+      projectId, 
+      assessmentDate, 
+      status, 
+      assessmentScope,
+      samplesReceivedDate,
+      submittedBy,
+      turnaroundTime,
+      analysisDueDate,
+      jobSpecificExclusions
+    } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
@@ -174,6 +184,23 @@ router.put('/:id', async (req, res) => {
     // Include assessmentScope if provided
     if (assessmentScope !== undefined) {
       updateData.assessmentScope = assessmentScope;
+    }
+    
+    // Include samples submission data if provided
+    if (samplesReceivedDate !== undefined) {
+      updateData.samplesReceivedDate = samplesReceivedDate;
+    }
+    if (submittedBy !== undefined) {
+      updateData.submittedBy = submittedBy;
+    }
+    if (turnaroundTime !== undefined) {
+      updateData.turnaroundTime = turnaroundTime;
+    }
+    if (analysisDueDate !== undefined) {
+      updateData.analysisDueDate = analysisDueDate;
+    }
+    if (jobSpecificExclusions !== undefined) {
+      updateData.jobSpecificExclusions = jobSpecificExclusions;
     }
     
     const job = await AsbestosAssessment.findByIdAndUpdate(
@@ -635,15 +662,15 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     assessment.items[itemIndex].analysisData = {
       ...assessment.items[itemIndex].analysisData,
       ...analysisData,
-      analyzedBy: req.user._id,
-      analyzedAt: new Date(),
-      isAnalyzed: true
+      analysedBy: req.user._id,
+      analysedAt: new Date(),
+      isAnalysed: true
     };
     
     // Update the item's updatedAt timestamp
     assessment.items[itemIndex].updatedAt = new Date();
     
-    // Check if all items are analyzed to update assessment status
+    // Check if all items are analysed to update assessment status
     const allItemsAnalyzed = assessment.items.every(item => item.analysisData?.isAnalyzed);
     if (allItemsAnalyzed && assessment.status === 'samples-with-lab') {
       assessment.status = 'sample-analysis-complete';

@@ -77,7 +77,8 @@ const ClientSuppliedJobs = () => {
   const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
   const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
   const [authorisingReports, setAuthorisingReports] = useState({});
-  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] = useState({});
+  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
+    useState({});
   const [closingJobs, setClosingJobs] = useState({});
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
@@ -86,7 +87,8 @@ const ClientSuppliedJobs = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [jobToEdit, setJobToEdit] = useState(null);
   const [editSampleReceiptDate, setEditSampleReceiptDate] = useState("");
-  const [editSampleReceiptDateError, setEditSampleReceiptDateError] = useState(false);
+  const [editSampleReceiptDateError, setEditSampleReceiptDateError] =
+    useState(false);
   const [updatingDate, setUpdatingDate] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -570,7 +572,7 @@ const ClientSuppliedJobs = () => {
     setCocDialogOpen(true);
   };
 
-  // Check if all samples in a job have been analyzed (have analysisData)
+  // Check if all samples in a job have been analysed (have analysisData)
   const areAllSamplesAnalyzed = (job) => {
     if (!job || !job.samples || job.samples.length === 0) {
       return false;
@@ -581,8 +583,8 @@ const ClientSuppliedJobs = () => {
       return job.samples.every((sample) => {
         return (
           sample.analysisData &&
-          sample.analysisData.isAnalyzed === true &&
-          sample.analyzedAt
+          sample.analysisData.isAnalysed === true &&
+          sample.analysedAt
         );
       });
     }
@@ -592,7 +594,7 @@ const ClientSuppliedJobs = () => {
       return (
         sample.analysisData &&
         sample.analysisData.fieldsCounted !== undefined &&
-        sample.analyzedAt
+        sample.analysedAt
       );
     });
   };
@@ -608,17 +610,17 @@ const ClientSuppliedJobs = () => {
       // Samples are now embedded in the job
       const sampleItems = fullJob.samples || [];
 
-      // Get analyst from first analyzed sample or job analyst
+      // Get analyst from first analysed sample or job analyst
       let analyst = null;
-      const analyzedSample = sampleItems.find((s) => s.analyzedBy);
-      if (analyzedSample?.analyzedBy) {
+      const analysedSample = sampleItems.find((s) => s.analysedBy);
+      if (analysedSample?.analysedBy) {
         if (
-          typeof analyzedSample.analyzedBy === "object" &&
-          analyzedSample.analyzedBy.firstName
+          typeof analysedSample.analysedBy === "object" &&
+          analysedSample.analysedBy.firstName
         ) {
-          analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
-        } else if (typeof analyzedSample.analyzedBy === "string") {
-          analyst = analyzedSample.analyzedBy;
+          analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+        } else if (typeof analysedSample.analysedBy === "string") {
+          analyst = analysedSample.analysedBy;
         }
       } else if (fullJob.analyst) {
         analyst = fullJob.analyst;
@@ -804,7 +806,10 @@ const ClientSuppliedJobs = () => {
       // Generate and download the authorised report
       try {
         await handleGeneratePDF(job);
-        showSnackbar("Report authorised and downloaded successfully.", "success");
+        showSnackbar(
+          "Report authorised and downloaded successfully.",
+          "success"
+        );
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
         showSnackbar(
@@ -824,7 +829,9 @@ const ClientSuppliedJobs = () => {
     try {
       setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: true }));
 
-      const response = await clientSuppliedJobsService.sendForAuthorisation(job._id);
+      const response = await clientSuppliedJobsService.sendForAuthorisation(
+        job._id
+      );
 
       showSnackbar(
         response.data?.message ||
@@ -841,7 +848,10 @@ const ClientSuppliedJobs = () => {
         "error"
       );
     } finally {
-      setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: false }));
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [job._id]: false,
+      }));
     }
   };
 
@@ -860,7 +870,11 @@ const ClientSuppliedJobs = () => {
   };
 
   const handleUpdateDate = async () => {
-    if (!jobToEdit || !editSampleReceiptDate || editSampleReceiptDate.trim() === "") {
+    if (
+      !jobToEdit ||
+      !editSampleReceiptDate ||
+      editSampleReceiptDate.trim() === ""
+    ) {
       setEditSampleReceiptDateError(true);
       return;
     }
@@ -911,28 +925,40 @@ const ClientSuppliedJobs = () => {
           message="Generating Fibre ID Report PDF..."
         />
 
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 3,
-          }}
-        >
-          <Box>
+        <Box sx={{ mb: 3 }}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
             <Typography variant="h4" component="h1" gutterBottom>
               Client Supplied Jobs
             </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => setCreateDialogOpen(true)}
+              sx={{ minWidth: "200px" }}
+            >
+              Add New Job
+            </Button>
           </Box>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={() => setCreateDialogOpen(true)}
-            sx={{ minWidth: "200px" }}
-          >
-            Add New Job
-          </Button>
+          <Breadcrumbs>
+            <Link
+              component="button"
+              variant="body1"
+              onClick={() => navigate("/laboratory-services")}
+              sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+            >
+              <ArrowBackIcon sx={{ mr: 1 }} />
+              Laboratory Services
+            </Link>
+            <Typography color="text.primary">Client Supplied Jobs</Typography>
+          </Breadcrumbs>
         </Box>
 
         {/* Jobs Table */}
@@ -1007,11 +1033,13 @@ const ClientSuppliedJobs = () => {
                           variant="outlined"
                         />
                       </TableCell>
-                      <TableCell 
+                      <TableCell
                         sx={{ width: "135px" }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                        >
                           <Typography variant="body2">
                             {job.sampleReceiptDate
                               ? new Date(
@@ -1026,9 +1054,9 @@ const ClientSuppliedJobs = () => {
                             }}
                             size="small"
                             title="Edit Sample Receipt Date"
-                            sx={{ 
+                            sx={{
                               color: "primary.main",
-                              padding: "4px"
+                              padding: "4px",
                             }}
                           >
                             <EditIcon fontSize="small" />
@@ -1102,8 +1130,7 @@ const ClientSuppliedJobs = () => {
                               ),
                             };
                             const baseVisible =
-                              conditions.notApproved &&
-                              conditions.reportViewed;
+                              conditions.notApproved && conditions.reportViewed;
                             const visibility = {
                               showAuthorise:
                                 baseVisible &&
@@ -1152,7 +1179,9 @@ const ClientSuppliedJobs = () => {
                                       e.stopPropagation();
                                       handleSendForAuthorisation(job);
                                     }}
-                                    disabled={sendingAuthorisationRequests[job._id]}
+                                    disabled={
+                                      sendingAuthorisationRequests[job._id]
+                                    }
                                   >
                                     {sendingAuthorisationRequests[job._id]
                                       ? "Sending..."
@@ -1940,7 +1969,9 @@ const ClientSuppliedJobs = () => {
               {jobToEdit && (
                 <>
                   <Typography variant="body2" color="text.secondary">
-                    <strong>Project:</strong> {jobToEdit.projectId?.projectID || "N/A"} - {jobToEdit.projectId?.name || "Unnamed Project"}
+                    <strong>Project:</strong>{" "}
+                    {jobToEdit.projectId?.projectID || "N/A"} -{" "}
+                    {jobToEdit.projectId?.name || "Unnamed Project"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     <strong>Job Type:</strong> {jobToEdit.jobType || "N/A"}

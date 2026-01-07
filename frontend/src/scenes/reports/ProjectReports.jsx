@@ -975,17 +975,17 @@ const ProjectReports = () => {
         // Get samples from the job
         const sampleItems = fullJob.samples || [];
 
-        // Get analyst from first analyzed sample or job analyst
+        // Get analyst from first analysed sample or job analyst
         let analyst = null;
-        const analyzedSample = sampleItems.find((s) => s.analyzedBy);
-        if (analyzedSample?.analyzedBy) {
+        const analysedSample = sampleItems.find((s) => s.analysedBy);
+        if (analysedSample?.analysedBy) {
           if (
-            typeof analyzedSample.analyzedBy === "object" &&
-            analyzedSample.analyzedBy.firstName
+            typeof analysedSample.analysedBy === "object" &&
+            analysedSample.analysedBy.firstName
           ) {
-            analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
-          } else if (typeof analyzedSample.analyzedBy === "string") {
-            analyst = analyzedSample.analyzedBy;
+            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+          } else if (typeof analysedSample.analysedBy === "string") {
+            analyst = analysedSample.analysedBy;
           }
         } else if (fullJob.analyst) {
           analyst = fullJob.analyst;
@@ -1228,17 +1228,17 @@ const ProjectReports = () => {
         // Get samples from the job
         const sampleItems = fullJob.samples || [];
 
-        // Get analyst from first analyzed sample or job analyst
+        // Get analyst from first analysed sample or job analyst
         let analyst = null;
-        const analyzedSample = sampleItems.find((s) => s.analyzedBy);
-        if (analyzedSample?.analyzedBy) {
+        const analysedSample = sampleItems.find((s) => s.analysedBy);
+        if (analysedSample?.analysedBy) {
           if (
-            typeof analyzedSample.analyzedBy === "object" &&
-            analyzedSample.analyzedBy.firstName
+            typeof analysedSample.analysedBy === "object" &&
+            analysedSample.analysedBy.firstName
           ) {
-            analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
-          } else if (typeof analyzedSample.analyzedBy === "string") {
-            analyst = analyzedSample.analyzedBy;
+            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+          } else if (typeof analysedSample.analysedBy === "string") {
+            analyst = analysedSample.analysedBy;
           }
         } else if (fullJob.analyst) {
           analyst = fullJob.analyst;

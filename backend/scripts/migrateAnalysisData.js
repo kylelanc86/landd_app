@@ -60,9 +60,9 @@ const migrateAnalysisData = async () => {
               crucibleNo: sampleItem.analysisData.crucibleNo || null,
               fibres: sampleItem.analysisData.fibres || [],
               finalResult: sampleItem.analysisData.finalResult || "",
-              analyzedBy: sampleItem.analyzedBy || null,
-              analyzedAt: sampleItem.analyzedAt || new Date(),
-              isAnalyzed: true
+              analysedBy: sampleItem.analysedBy || null,
+              analysedAt: sampleItem.analysedAt || new Date(),
+              isAnalysed: true
             };
             
             hasChanges = true;

@@ -82,7 +82,7 @@ const sampleSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'at_lab', 'analyzed', 'completed'],
+    enum: ['pending', 'in_progress', 'at_lab', 'analysed', 'completed'],
     default: 'pending'
   },
   notes: String,
@@ -106,7 +106,7 @@ const sampleSchema = new mongoose.Schema({
     fieldsCounted: mongoose.Schema.Types.Mixed, // Can be Number or String ('-')
     reportedConcentration: String
   },
-  analyzedBy: {
+  analysedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },

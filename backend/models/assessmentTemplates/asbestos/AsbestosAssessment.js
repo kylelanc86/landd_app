@@ -68,8 +68,8 @@ const AssessmentItemSchema = new mongoose.Schema({
       result: { type: String }
     }],
     finalResult: { type: String },
-    analyzedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    analyzedAt: { type: Date },
+    analysedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    analysedAt: { type: Date },
     isAnalyzed: { type: Boolean, default: false }
   },
   
@@ -122,14 +122,39 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   status: { 
     type: String, 
     default: 'in-progress',
-    enum: ['in-progress', 'samples-with-lab', 'sample-analysis-complete', 'report-ready-for-review', 'complete']
+    enum: ['in-progress', 'site-works-complete', 'samples-with-lab', 'sample-analysis-complete', 'report-ready-for-review', 'complete']
   },
+  samplesReceivedDate: { type: Date }, // Date when samples were submitted to lab
+  submittedBy: { type: String }, // Name of person who submitted samples to lab
+  turnaroundTime: { type: String }, // Turnaround time for analysis (e.g., "3 day", "24 hours", or custom value)
+  analysisDueDate: { type: Date }, // Date and time when analysis is due
   items: [AssessmentItemSchema],
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
+  jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
   analysisCertificate: { type: Boolean, default: false },
   analysisCertificateFile: { type: String },
   sitePlan: { type: Boolean, default: false },
-  sitePlanFile: { type: String },
+  sitePlanFile: { type: String }, // Will store the file path or base64 data
+  sitePlanSource: {
+    type: String,
+    enum: ["uploaded", "drawn"],
+  },
+  sitePlanLegend: [
+    {
+      color: {
+        type: String,
+      },
+      description: {
+        type: String,
+      },
+    },
+  ],
+  sitePlanLegendTitle: {
+    type: String,
+  },
+  sitePlanFigureTitle: {
+    type: String,
+  },
   fibreAnalysisReport: { type: String }, // Base64 PDF data for fibre analysis report
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },

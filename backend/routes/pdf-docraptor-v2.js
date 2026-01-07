@@ -2050,8 +2050,8 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
     let pdfBuffer = await docRaptorService.generatePDF(html);
     backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
 
-    // Check if there are analyzed items and note that fibre analysis report is available
-    const analyzedItems = assessmentData.items?.filter(item => item.analysisData?.isAnalyzed) || [];
+    // Check if there are analysed items and note that fibre analysis report is available
+    const analysedItems = assessmentData.items?.filter(item => item.analysisData?.isAnalyzed) || [];
 
     // Handle PDF merging for fibre analysis report (same approach as clearance reports)
     let finalPdfBuffer = pdfBuffer;

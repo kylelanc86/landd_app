@@ -387,14 +387,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
         // Set analyst from job first (database), then from first sample if available
         if (job.analyst) {
           setAnalysedBy(job.analyst);
-        } else if (sortedSamples.length > 0 && sortedSamples[0].analyzedBy) {
+        } else if (sortedSamples.length > 0 && sortedSamples[0].analysedBy) {
           const firstSample = sortedSamples[0];
           setAnalysedBy(
-            typeof firstSample.analyzedBy === "string"
-              ? firstSample.analyzedBy
-              : firstSample.analyzedBy?.firstName &&
-                firstSample.analyzedBy?.lastName
-              ? `${firstSample.analyzedBy.firstName} ${firstSample.analyzedBy.lastName}`
+            typeof firstSample.analysedBy === "string"
+              ? firstSample.analysedBy
+              : firstSample.analysedBy?.firstName &&
+                firstSample.analysedBy?.lastName
+              ? `${firstSample.analysedBy.firstName} ${firstSample.analysedBy.lastName}`
               : ""
           );
         }
@@ -1308,8 +1308,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
               fibresCounted: fibresCounted,
               fieldsCounted: fieldsCounted,
             },
-            analyzedBy: analysedBy || sample.analyzedBy,
-            analyzedAt: sample.analyzedAt || new Date(),
+            analysedBy: analysedBy || sample.analysedBy,
+            analysedAt: sample.analysedAt || new Date(),
           };
         }
         const { _id, ...sampleWithoutId } = sample;
@@ -1384,8 +1384,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
               fibresCounted: fibresCounted,
               fieldsCounted: fieldsCounted,
             },
-            analyzedBy: analysedBy,
-            analyzedAt: new Date(),
+            analysedBy: analysedBy,
+            analysedAt: new Date(),
           };
         }
         const { _id, ...sampleWithoutId } = sample;

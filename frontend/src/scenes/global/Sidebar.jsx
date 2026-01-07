@@ -372,7 +372,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 const Sidebar = () => {
   const theme = useTheme();
   const { isAdmin } = usePermissions();
- 
+
   // Detect tablet and mobile screens - hide sidebar completely
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
   const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
@@ -601,13 +601,11 @@ const Sidebar = () => {
 
           <SectionDivider />
 
-          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
-            <CollapsibleSection
-              title="Client Supplied"
-              to="/client-supplied"
-              icon={<ContactsOutlinedIcon />}
-            />
-          )}
+          <Item
+            title="Laboratory Services"
+            to="/laboratory-services"
+            icon={<ScienceIcon />}
+          />
         </Box>
 
         <Box
