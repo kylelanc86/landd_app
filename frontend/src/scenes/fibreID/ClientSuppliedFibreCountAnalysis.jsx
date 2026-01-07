@@ -39,6 +39,7 @@ import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../context/AuthContext";
 import { useSnackbar } from "../../context/SnackbarContext";
+import { getTodayInSydney } from "../../utils/dateUtils";
 
 const ANALYSIS_PROGRESS_KEY = "ldc_client_supplied_analysis_progress";
 
@@ -277,9 +278,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const [error, setError] = useState(null);
   const [users, setUsers] = useState([]);
   const [analysedBy, setAnalysedBy] = useState("");
-  const [analysisDate, setAnalysisDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [analysisDate, setAnalysisDate] = useState(getTodayInSydney());
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
   const [activeSampleId, setActiveSampleId] = useState(null);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
@@ -458,7 +457,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
               analysedBy: job.analyst || "",
               analysisDate: job.analysisDate
                 ? new Date(job.analysisDate).toISOString().split("T")[0]
-                : new Date().toISOString().split("T")[0],
+                : getTodayInSydney(),
             });
           }, 100);
         }

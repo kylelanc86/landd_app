@@ -41,26 +41,46 @@
   }
 
   .photo {
+    width: 100% !important;
     height: 375px !important;
+    min-height: 375px !important;
+    max-height: 375px !important;
     background: #f5f5f5;
     border: 2px solid #ddd;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 0;
     margin-bottom: 8px;
+    padding: 0;
     position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   .photo img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+    display: block !important;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
   }
 
   .photo-container {
     display: flex;
     flex-direction: column;
     margin-bottom: 10px;
+    margin-top: 10px;
+    width: 100%;
+    flex-shrink: 0;
+  }
+
+  .photo-container:first-child {
     margin-top: 10px;
   }
 
@@ -139,5 +159,22 @@
     background: #16b12b;
     margin-bottom: 6px;
     border-radius: 0;
+  }
+
+  /* Ensure consistent layout for all photos regardless of position */
+  .content {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .content > .photo-container {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .content > .photo-container:first-child {
+    margin-top: 10px !important;
   }
 </style>

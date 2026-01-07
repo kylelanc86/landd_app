@@ -23,6 +23,38 @@ const formatClearanceDate = (dateString) => {
   return `${day}\u00A0${month} ${year}`;
 };
 
+// Format inspection time to ensure proper AM/PM display
+const formatInspectionTime = (timeString) => {
+  if (!timeString) return 'Unknown Time';
+  
+  const trimmedTime = timeString.trim();
+  
+  // If it already has AM/PM, return as-is (preserve the original format)
+  if (trimmedTime.match(/\s*(AM|PM|am|pm)\s*$/i)) {
+    return trimmedTime;
+  }
+  
+  // If it's in 24-hour format (HH:MM), convert to 12-hour format with AM/PM
+  const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1], 10);
+    const minutes = timeMatch[2];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    // Convert to 12-hour format
+    if (hours === 0) {
+      hours = 12; // Midnight
+    } else if (hours > 12) {
+      hours = hours - 12; // Afternoon/evening
+    }
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+  }
+  
+  // If format doesn't match, return the original (might be invalid format)
+  return trimmedTime;
+};
+
 // Performance monitoring removed
 
 const escapeHtml = (value = "") =>
@@ -481,8 +513,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       const photosForReport = [];
       
       clearanceItems.forEach((item, index) => {
-        console.log(`Item ${index}:`, item);
-        console.log(`Item ${index} photographs array:`, item.photographs);
+        // console.log(`Item ${index}:`, item);
+        // console.log(`Item ${index} photographs array:`, item.photographs);
         
         // Add photographs that are marked for inclusion in report
         if (item.photographs && Array.isArray(item.photographs)) {
@@ -605,7 +637,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[ASBESTOS_REMOVALIST\]/g, clearanceData.asbestosRemovalist || 'Unknown Removalist')
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[LAA_LICENSE\]/g, 'AA00031')
-      .replace(/\[INSPECTION_TIME\]/g, clearanceData.inspectionTime || 'Unknown Time')
+      .replace(/\[INSPECTION_TIME\]/g, formatInspectionTime(clearanceData.inspectionTime))
       .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[SIGNATURE_IMAGE\]/g, '') // Will be handled by replacePlaceholders in template content
       .replace(/\[CLEARANCE_ITEMS_HEADERS\]/g, generateClearanceItemsHeaders())
@@ -1115,9 +1147,9 @@ const generateSitePlanContentPage = (
                     ? escapeHtml(entry.description.trim())
                     : '<span style="color:#9ca3af;">(-)</span>';
               return `
-                <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
-                  <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0;"></span>
-                  <span style="font-size:12px; color:#334155; line-height:1.4; flex:1;">${description}</span>
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                  <span style="display:inline-block; width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; max-height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
+                  <span style="font-size:8.4px; color:#334155; line-height:1.4; flex:1; margin-left:16px;">${description}</span>
                 </div>
               `;
               })
@@ -1189,9 +1221,9 @@ const generateSitePlanContentPage = (
                     ? escapeHtml(entry.description.trim())
                     : '<span style="color:#9ca3af;">(-)</span>';
                 return `
-                  <div style="display:flex; align-items:center; gap:16px; margin-bottom:8px;">
-                    <span style="display:inline-block; width:18px; height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)};"></span>
-                    <span style="font-size:12px; color:#334155;">${description}</span>
+                  <div style="display:flex; align-items:center; margin-bottom:8px;">
+                    <span style="display:inline-block; width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; max-height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
+                    <span style="font-size:8.4px; color:#334155; margin-left:16px;">${description}</span>
                   </div>
                 `;
               })

@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 
 // Get today's date in Sydney timezone (YYYY-MM-DD format for date inputs)
 export const getTodaySydney = () => {
@@ -51,4 +52,13 @@ export const formatDateForInput = (date) => {
   if (!date) return '';
   const parsedDate = typeof date === 'string' ? parseISO(date) : date;
   return format(parsedDate, 'yyyy-MM-dd');
+};
+
+// Get today's date in Sydney timezone (YYYY-MM-DD format)
+// This ensures consistent date handling regardless of user's local timezone
+export const getTodayInSydney = () => {
+  const SYDNEY_TZ = 'Australia/Sydney';
+  const now = new Date();
+  const sydneyDate = utcToZonedTime(now, SYDNEY_TZ);
+  return format(sydneyDate, 'yyyy-MM-dd');
 }; 

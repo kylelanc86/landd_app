@@ -146,7 +146,8 @@ pdfMake.fonts = {
       return null;
     })(),
     
-    content: [
+    content: (function() {
+      return [
       // Page 1 Content
       {
         stack: [
@@ -415,22 +416,94 @@ pdfMake.fonts = {
             margin: [0, 0, 0, 20]
           },
           
-          // Sample Analysis Table with dynamic page breaks
-          {
-            table: {
-              headerRows: 1,
-              widths: ['11%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '20.45%'],
-              body: [
-                [
-                  { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Sample Reference', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Analysis Date', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Sample Description', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Mass/Dimensions', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Non-Asbestos Fibres', style: 'tableHeader', fontSize: 8 },
-                  { text: 'Reported Result', style: 'tableHeader', fontSize: 8 }
-                ],
-                ...sortedSampleItems.map((item, index) => {
+          // Sample Analysis Table with fixed row heights
+          // Build all rows first to calculate max lines per row
+          (function() {
+            // Table column widths in percentage: ['11%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '20.45%']
+            // A4 page width: 595pt, margins: 40pt each side = 515pt usable width
+            const usablePageWidth = 515; // A4 width (595pt) - left margin (40pt) - right margin (40pt)
+            const columnWidths = [0.11, 0.168, 0.11, 0.172, 0.108, 0.1275, 0.2045];
+            
+            // Helper function to estimate how many lines text will wrap to
+            // Based on column width, font size, and text length
+            const estimateWrappedLines = (text, columnIndex) => {
+              if (!text || typeof text !== 'string') {
+                return 1;
+              }
+              
+              // First check for explicit line breaks (\n\n)
+              const explicitLines = text.split('\n\n').length;
+              
+              // Estimate character width: for 8pt font, actual rendered width varies
+              // Using 0.8pt as a conservative estimate to better detect wrapping
+              // This accounts for:
+              // - Variable character widths (M, W are wider than i, l)
+              // - Word spacing
+              // - Font metrics (actual width may be larger than font size)
+              // - Padding and cell constraints
+              const avgCharWidth = 0.8;
+              
+              // Calculate column width in points
+              const columnWidthPt = columnWidths[columnIndex] * usablePageWidth;
+              
+              // Estimate characters per line
+              // Use 80% of available width to account for:
+              // - Word boundaries (can't break in middle of words)
+              // - Variable character widths (some chars wider than average)
+              // - Padding and spacing
+              // - Font rendering differences
+              const charsPerLine = Math.floor(columnWidthPt / avgCharWidth * 0.8);
+              
+              // Calculate wrapped lines by splitting text into words and fitting them
+              // This is more accurate than just dividing by charsPerLine
+              const words = text.split(/\s+/);
+              let currentLineLength = 0;
+              let wrappedLines = 1;
+              
+              words.forEach(word => {
+                const wordLength = word.length;
+                // If adding this word would exceed the line, start a new line
+                if (currentLineLength > 0 && currentLineLength + wordLength + 1 > charsPerLine) {
+                  wrappedLines++;
+                  currentLineLength = wordLength;
+                } else {
+                  currentLineLength += (currentLineLength > 0 ? 1 : 0) + wordLength; // +1 for space
+                }
+              });
+              
+              // Use the maximum of explicit lines or wrapped lines
+              const totalLines = Math.max(explicitLines, wrappedLines, 1);
+              
+              console.log(`[estimateWrappedLines] Column ${columnIndex}, Text: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}", Length: ${text.length}, ColumnWidth: ${columnWidthPt.toFixed(1)}pt, CharWidth: ${avgCharWidth}pt, CharsPerLine: ${charsPerLine}, Words: ${words.length}, WrappedLines: ${wrappedLines}, ExplicitLines: ${explicitLines}, Total: ${totalLines}`);
+              
+              return totalLines;
+            };
+            
+            // Helper function to calculate content height based on number of lines
+            const calculateContentHeight = (lines) => {
+              // Font size: 8pt, line height: ~1.2x = 9.6pt per line
+              // Add spacing between multiple lines
+              const lineHeight = 9.6;
+              const extraSpacing = (lines - 1) * 2; // Extra spacing between multiple lines
+              const height = (lines * lineHeight) + extraSpacing;
+              console.log('[calculateContentHeight] Lines:', lines, 'Content Height:', height, 'pt');
+              return height;
+            };
+            
+            // Helper function to calculate row height (includes padding)
+            const calculateRowHeight = (maxLines) => {
+              // Font size: 8pt, line height: ~1.2x = 9.6pt per line
+              // Padding: 8pt top + 8pt bottom = 16pt total (from layout functions)
+              // Add spacing between multiple lines
+              const lineHeight = 9.6;
+              const padding = 16; // 8pt top + 8pt bottom
+              const extraSpacing = (maxLines - 1) * 2;
+              const height = (maxLines * lineHeight) + padding + extraSpacing;
+              console.log('[calculateRowHeight] Max Lines:', maxLines, 'Row Height:', height, 'pt (lineHeight:', lineHeight, 'padding:', padding, 'extraSpacing:', extraSpacing, ')');
+              return height;
+            };
+            
+            const tableRows = sortedSampleItems.map((item, index) => {
                   // DEBUG: Log all item data to find NaN source
                   console.log(`=== ITEM ${index + 1} DEBUG ===`);
                   console.log('Item:', item);
@@ -628,17 +701,145 @@ pdfMake.fonts = {
                     ? item.labReference 
                     : `${safeProjectID}-${index + 1}`;
                   
-                  return [
-                    { text: safeLabRef, fontSize: 8 },
-                    { text: safeSampleRef, fontSize: 8 },
-                    { text: safeAnalysisDate, fontSize: 8 },
-                    { text: safeDescription, fontSize: 8 },
-                    { text: safeSampleMass, fontSize: 8 },
-                    { text: safeNonAsbestos, fontSize: 8 },
-                    { text: safeAsbestos, fontSize: 8, bold: true }
-                  ];
-                })
-              ]
+                  // Return row data with text values for line counting
+                  // Note: valign is not supported by pdfMake, we'll use margins instead
+                  return {
+                    cells: [
+                      { text: safeLabRef, fontSize: 8, alignment: 'left' },
+                      { text: safeSampleRef, fontSize: 8, alignment: 'left' },
+                      { text: safeAnalysisDate, fontSize: 8, alignment: 'left' },
+                      { text: safeDescription, fontSize: 8, alignment: 'left' },
+                      { text: safeSampleMass, fontSize: 8, alignment: 'left' },
+                      { text: safeNonAsbestos, fontSize: 8, alignment: 'left' },
+                      { text: safeAsbestos, fontSize: 8, bold: true, alignment: 'left' }
+                    ],
+                    // Store text values for line counting
+                    textValues: [safeLabRef, safeSampleRef, safeAnalysisDate, safeDescription, safeSampleMass, safeNonAsbestos, safeAsbestos]
+                  };
+                });
+          
+          // Calculate max lines for each row and apply margins for vertical centering
+          console.log('[Table Height Calculation] Starting calculation for', tableRows.length, 'rows');
+          const rowsWithMargins = tableRows.map((row, rowIndex) => {
+            // Find the maximum number of lines in this row, estimating wrapping for each column
+            const lineCounts = row.textValues.map((text, colIndex) => estimateWrappedLines(text, colIndex));
+            const maxLines = Math.max(...lineCounts);
+            const rowHeight = calculateRowHeight(maxLines);
+            
+            console.log(`[Table Height Calculation] Row ${rowIndex + 1}:`, {
+              lineCounts: lineCounts,
+              maxLines: maxLines,
+              rowHeight: rowHeight,
+              textValues: row.textValues.map((t, i) => ({
+                column: i,
+                text: typeof t === 'string' ? t.substring(0, 30) + (t.length > 30 ? '...' : '') : t,
+                lines: lineCounts[i]
+              }))
+            });
+            
+            // Apply margins to all cells in this row for vertical centering
+            // pdfMake doesn't support valign, so we use margins to center content
+            const cellsWithMargins = row.cells.map((cell, cellIndex) => {
+              const cellLines = lineCounts[cellIndex];
+              const contentHeight = calculateContentHeight(cellLines);
+              
+              // Calculate margin needed to center: (rowHeight - contentHeight) / 2
+              // The rowHeight already includes padding, so we need to account for that
+              // The layout padding functions return 8 (which pdfMake treats as points)
+              // So padding is 8pt top + 8pt bottom = 16pt total
+              const paddingTop = 8; // From layout: paddingTop returns 8
+              const paddingBottom = 8; // From layout: paddingBottom returns 8
+              const availableHeight = rowHeight - paddingTop - paddingBottom;
+              const marginNeeded = (availableHeight - contentHeight) / 2;
+              
+              // Ensure margin is at least 0
+              const topMargin = Math.max(0, marginNeeded);
+              const bottomMargin = Math.max(0, marginNeeded);
+              
+              // Apply margins directly to the cell
+              // pdfMake should support margins on table cells
+              const cellWithMargins = {
+                text: cell.text,
+                fontSize: cell.fontSize || 8,
+                bold: cell.bold || false,
+                alignment: cell.alignment || 'left',
+                margin: [0, topMargin, 0, bottomMargin] // [left, top, right, bottom] in points
+              };
+              
+              console.log(`[Table Height Calculation] Row ${rowIndex + 1}, Cell ${cellIndex}:`, {
+                cellLines: cellLines,
+                contentHeight: contentHeight,
+                rowHeight: rowHeight,
+                paddingTop: paddingTop,
+                paddingBottom: paddingBottom,
+                availableHeight: availableHeight,
+                marginNeeded: marginNeeded,
+                topMargin: topMargin,
+                bottomMargin: bottomMargin,
+                marginArray: cellWithMargins.margin,
+                marginString: `[${cellWithMargins.margin[0]}, ${cellWithMargins.margin[1]}, ${cellWithMargins.margin[2]}, ${cellWithMargins.margin[3]}]`,
+                cellKeys: Object.keys(cellWithMargins),
+                originalText: cell.text ? (typeof cell.text === 'string' ? cell.text.substring(0, 30) : 'non-string') : 'no text'
+              });
+              return cellWithMargins;
+            });
+            
+            return cellsWithMargins;
+          });
+          
+          console.log('[Table Height Calculation] Final rowsWithMargins:', {
+            rowCount: rowsWithMargins.length,
+            firstRowCellCount: rowsWithMargins[0]?.length,
+            firstRowFirstCell: rowsWithMargins[0]?.[0] ? {
+              hasMargin: 'margin' in rowsWithMargins[0][0],
+              margin: rowsWithMargins[0][0].margin,
+              text: rowsWithMargins[0][0].text
+            } : 'no first cell'
+          });
+          
+          // Build the final table body with header row + data rows
+          // Header row doesn't need margins since it's typically single-line
+          const tableBody = [
+            [
+              { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8, alignment: 'left' },
+              { text: 'Sample Reference', style: 'tableHeader', fontSize: 8, alignment: 'left' },
+              { text: 'Analysis Date', style: 'tableHeader', fontSize: 8, alignment: 'left' },
+              { text: 'Sample Description', style: 'tableHeader', fontSize: 8, alignment: 'left' },
+              { text: 'Mass/Dimensions', style: 'tableHeader', fontSize: 8, alignment: 'left' },
+              { text: 'Non-Asbestos Fibres', style: 'tableHeader', fontSize: 8, alignment: 'left' },
+              { text: 'Reported Result', style: 'tableHeader', fontSize: 8, alignment: 'left' }
+            ],
+            ...rowsWithMargins
+          ];
+          
+          console.log('[Table Structure] Final table body:', {
+            totalRows: tableBody.length,
+            headerRow: tableBody[0]?.length,
+            firstDataRow: tableBody[1] ? {
+              cellCount: tableBody[1].length,
+              firstCell: tableBody[1][0] ? {
+                hasMargin: 'margin' in tableBody[1][0],
+                margin: tableBody[1][0].margin,
+                text: tableBody[1][0].text ? (typeof tableBody[1][0].text === 'string' ? tableBody[1][0].text.substring(0, 30) : 'non-string') : 'no text'
+              } : 'no first cell'
+            } : 'no first data row',
+            sampleRows: tableBody.slice(1, 4).map((row, idx) => ({
+              rowIndex: idx + 1,
+              cellCount: row?.length,
+              cellsWithMargins: row?.map((cell, cellIdx) => ({
+                cellIndex: cellIdx,
+                hasMargin: 'margin' in cell,
+                margin: cell.margin
+              }))
+            }))
+          });
+          
+          // Sample Analysis Table with fixed row heights
+          const tableDefinition = {
+            table: {
+              headerRows: 1,
+              widths: ['11%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '20.45%'],
+              body: tableBody
             },
             layout: {
               hLineWidth: function(i, node) {
@@ -655,16 +856,38 @@ pdfMake.fonts = {
               },
               paddingLeft: function(i, node) { return 4; },
               paddingRight: function(i, node) { return 4; },
-              paddingTop: function(i, node) { return 9; },
-              paddingBottom: function(i, node) { return 9; },
+              paddingTop: function(i, node) { 
+                // Equal padding top and bottom for all cells to ensure vertical centering
+                return 8; 
+              },
+              paddingBottom: function(i, node) { 
+                // Equal padding top and bottom for all cells to ensure vertical centering
+                return 8; 
+              },
               fillColor: function (rowIndex, node, columnIndex) {
                 return (rowIndex % 2 === 0) ? '#f9f9f9' : 'white';
               }
-            },
-          },
+            }
+          };
+          
+          console.log('[Table Structure] Final table definition:', {
+            hasTable: !!tableDefinition.table,
+            hasBody: !!tableDefinition.table?.body,
+            bodyLength: tableDefinition.table?.body?.length,
+            hasLayout: !!tableDefinition.layout,
+            firstDataRowFirstCell: tableDefinition.table?.body?.[1]?.[0] ? {
+              hasMargin: 'margin' in tableDefinition.table.body[1][0],
+              margin: tableDefinition.table.body[1][0].margin,
+              text: tableDefinition.table.body[1][0].text
+            } : 'no first data row cell'
+          });
+          
+          return tableDefinition;
+          })()
         ]
       }
-    ],
+    ];
+    })(),
     
     footer: (function(nataLogo) {
       return function(currentPage, pageCount) {

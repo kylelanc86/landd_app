@@ -35,6 +35,7 @@ import {
   xeroService,
 } from "../../services/api";
 import { formatDate } from "../../utils/dateFormat";
+import { getTodayInSydney } from "../../utils/dateUtils";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import { useAuth } from "../../context/AuthContext";
 import SyncIcon from "@mui/icons-material/Sync";
@@ -47,7 +48,7 @@ const emptyForm = {
   invoiceNumber: "",
   client: "",
   amount: "",
-  date: new Date().toISOString().split("T")[0], // Today's date in YYYY-MM-DD format
+  date: getTodayInSydney(), // Today's date in YYYY-MM-DD format (Sydney timezone)
   dueDate: "",
   description: "",
   reference: "",

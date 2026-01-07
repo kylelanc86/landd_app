@@ -380,14 +380,14 @@ const replacePlaceholders = async (content, data) => {
   }
   
   if (userIdentifier) {
-      // Check cache first
-      if (userLookupCache.has(userIdentifier)) {
-        const cachedUser = userLookupCache.get(userIdentifier);
-        console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
-        laaName = cachedUser.name;
-        laaLicenceNumber = cachedUser.licenceNumber;
-        laaLicenceState = cachedUser.licenceState || '';
-        userSignature = cachedUser.signature;
+    // Check cache first
+    if (userLookupCache.has(userIdentifier)) {
+      const cachedUser = userLookupCache.get(userIdentifier);
+      console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
+      laaName = cachedUser.name;
+      laaLicenceNumber = cachedUser.licenceNumber;
+      laaLicenceState = cachedUser.licenceState || '';
+      userSignature = cachedUser.signature;
     } else {
       try {
         console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
@@ -518,10 +518,17 @@ const replacePlaceholders = async (content, data) => {
     '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
     '{INSPECTION_TIME}': (() => {
       if (data.inspectionTime) {
-        // Convert 24-hour format to 12-hour format with AM/PM
-        const timeMatch = data.inspectionTime.match(/^(\d{1,2}):(\d{2})$/);
+        const trimmedTime = data.inspectionTime.trim();
+        
+        // If it already has AM/PM, return as-is (preserve the original format)
+        if (trimmedTime.match(/\s*(AM|PM|am|pm)\s*$/i)) {
+          return trimmedTime;
+        }
+        
+        // If it's in 24-hour format (HH:MM), convert to 12-hour format with AM/PM
+        const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
-          let hours = parseInt(timeMatch[1]);
+          let hours = parseInt(timeMatch[1], 10);
           const minutes = timeMatch[2];
           const ampm = hours >= 12 ? 'PM' : 'AM';
           
@@ -532,9 +539,40 @@ const replacePlaceholders = async (content, data) => {
             hours = hours - 12; // Afternoon/evening
           }
           
-          return `${hours}:${minutes} ${ampm}`;
+          return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
         }
-        return data.inspectionTime; // Return as-is if format doesn't match
+        // If format doesn't match, return the original (might be invalid format)
+        return trimmedTime;
+      }
+      return 'Inspection Time';
+    })(),
+    '[INSPECTION_TIME]': (() => {
+      if (data.inspectionTime) {
+        const trimmedTime = data.inspectionTime.trim();
+        
+        // If it already has AM/PM, return as-is (preserve the original format)
+        if (trimmedTime.match(/\s*(AM|PM|am|pm)\s*$/i)) {
+          return trimmedTime;
+        }
+        
+        // If it's in 24-hour format (HH:MM), convert to 12-hour format with AM/PM
+        const timeMatch = trimmedTime.match(/^(\d{1,2}):(\d{2})$/);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1], 10);
+          const minutes = timeMatch[2];
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          
+          // Convert to 12-hour format
+          if (hours === 0) {
+            hours = 12; // Midnight
+          } else if (hours > 12) {
+            hours = hours - 12; // Afternoon/evening
+          }
+          
+          return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+        }
+        // If format doesn't match, return the original (might be invalid format)
+        return trimmedTime;
       }
       return 'Inspection Time';
     })(),

@@ -66,9 +66,10 @@ import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateFormat";
+import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
-import { getTodaySydney } from "../../utils/dateUtils";
+import { getTodayInSydney } from "../../utils/dateUtils";
 
 const TIMING_LOG_PREFIX = "[AsbestosRemovalJobDetails]";
 const TIMING_ENABLED = true;
@@ -1168,7 +1169,7 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleSetToday = () => {
-    setNewShiftDate(getTodaySydney());
+    setNewShiftDate(getTodayInSydney());
   };
 
   const handleShiftSubmit = async () => {
@@ -1382,14 +1383,13 @@ const AsbestosRemovalJobDetails = () => {
       console.log("Calling generateHTMLTemplatePDF...");
       const fileName = await generateHTMLTemplatePDF(
         "asbestos-clearance", // template type
-        fullClearance // clearance data
+        fullClearance, // clearance data
+        { openInNewTab: true } // open in new tab instead of downloading
       );
       console.log("PDF generation completed, fileName:", fileName);
 
       showSnackbar(
-        `PDF generated successfully! Check your downloads folder for: ${
-          fileName.filename || fileName
-        }`,
+        "PDF opened in new tab",
         "success"
       );
 
@@ -1678,7 +1678,7 @@ const AsbestosRemovalJobDetails = () => {
   const resetClearanceForm = () => {
     setClearanceForm({
       projectId: job?.projectId._id || job?.projectId || "",
-      clearanceDate: getTodaySydney(),
+      clearanceDate: getTodayInSydney(),
       inspectionTime: "09:00 AM",
       clearanceType: "Non-friable",
       asbestosRemovalist: job?.asbestosRemovalist || "",
