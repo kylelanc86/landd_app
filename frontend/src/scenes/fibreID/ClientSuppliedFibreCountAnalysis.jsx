@@ -55,7 +55,7 @@ const SampleSummary = React.memo(
     onKeyDown,
     onClearTable,
     isFilterUncountable,
-    isSampleAnalyzed,
+    isSampleAnalysed,
     calculateConcentration,
     getReportedConcentration,
     inputRefs,
@@ -108,14 +108,14 @@ const SampleSummary = React.memo(
                 label={
                   isFilterUncountable(sample._id)
                     ? "Uncountable"
-                    : isSampleAnalyzed(sample._id)
+                    : isSampleAnalysed(sample._id)
                     ? "Sample Analysed"
                     : "To be counted"
                 }
                 color={
                   isFilterUncountable(sample._id)
                     ? "error"
-                    : isSampleAnalyzed(sample._id)
+                    : isSampleAnalysed(sample._id)
                     ? "success"
                     : "default"
                 }
@@ -123,7 +123,7 @@ const SampleSummary = React.memo(
                 sx={{
                   backgroundColor: isFilterUncountable(sample._id)
                     ? "error.main"
-                    : isSampleAnalyzed(sample._id)
+                    : isSampleAnalysed(sample._id)
                     ? "success.main"
                     : "grey.400",
                   color: "white",
@@ -387,14 +387,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
         // Set analyst from job first (database), then from first sample if available
         if (job.analyst) {
           setAnalysedBy(job.analyst);
-        } else if (sortedSamples.length > 0 && sortedSamples[0].analyzedBy) {
+        } else if (sortedSamples.length > 0 && sortedSamples[0].analysedBy) {
           const firstSample = sortedSamples[0];
           setAnalysedBy(
-            typeof firstSample.analyzedBy === "string"
-              ? firstSample.analyzedBy
-              : firstSample.analyzedBy?.firstName &&
-                firstSample.analyzedBy?.lastName
-              ? `${firstSample.analyzedBy.firstName} ${firstSample.analyzedBy.lastName}`
+            typeof firstSample.analysedBy === "string"
+              ? firstSample.analysedBy
+              : firstSample.analysedBy?.firstName &&
+                firstSample.analysedBy?.lastName
+              ? `${firstSample.analysedBy.firstName} ${firstSample.analysedBy.lastName}`
               : ""
           );
         }
@@ -893,7 +893,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
     setSampleAnalyses((prev) => {
       const newAnalyses = { ...prev };
       const currentAnalysis = newAnalyses[sampleId] || {};
-      
+
       // If backgroundDust is being set to "fail", automatically set uncountableDueToDust to true
       // and set fibresCounted and fieldsCounted to '-'
       // If backgroundDust is being changed from "fail" to something else, set uncountableDueToDust to false
@@ -903,8 +903,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
             ...currentAnalysis,
             [field]: value,
             uncountableDueToDust: true,
-            fibresCounted: '-',
-            fieldsCounted: '-',
+            fibresCounted: "-",
+            fieldsCounted: "-",
           };
         } else {
           // If changing from fail to something else, clear uncountableDueToDust
@@ -920,7 +920,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
           [field]: value,
         };
       }
-      
+
       return newAnalyses;
     });
   }, []);
@@ -1089,7 +1089,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
     );
   };
 
-  const isSampleAnalyzed = (sampleId) => {
+  const isSampleAnalysed = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
     if (!analysis || isFilterUncountable(sampleId)) {
       return false;
@@ -1308,8 +1308,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
               fibresCounted: fibresCounted,
               fieldsCounted: fieldsCounted,
             },
-            analyzedBy: analysedBy || sample.analyzedBy,
-            analyzedAt: sample.analyzedAt || new Date(),
+            analysedBy: analysedBy || sample.analysedBy,
+            analysedAt: sample.analysedAt || new Date(),
           };
         }
         const { _id, ...sampleWithoutId } = sample;
@@ -1384,8 +1384,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
               fibresCounted: fibresCounted,
               fieldsCounted: fieldsCounted,
             },
-            analyzedBy: analysedBy,
-            analyzedAt: new Date(),
+            analysedBy: analysedBy,
+            analysedAt: new Date(),
           };
         }
         const { _id, ...sampleWithoutId } = sample;
@@ -1462,7 +1462,6 @@ const ClientSuppliedFibreCountAnalysis = () => {
     setFibreCountModalOpen(false);
     setActiveSampleId(null);
   };
-
 
   if (loading) {
     return (
@@ -1659,7 +1658,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                     onKeyDown={handleKeyDown}
                     onClearTable={handleClearTable}
                     isFilterUncountable={isFilterUncountable}
-                    isSampleAnalyzed={isSampleAnalyzed}
+                    isSampleAnalysed={isSampleAnalysed}
                     calculateConcentration={() => null}
                     getReportedConcentration={getReportedConcentration}
                     inputRefs={inputRefs}
@@ -1692,7 +1691,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                               onKeyDown={handleKeyDown}
                               onClearTable={handleClearTable}
                               isFilterUncountable={isFilterUncountable}
-                              isSampleAnalyzed={isSampleAnalyzed}
+                              isSampleAnalysed={isSampleAnalysed}
                               calculateConcentration={() => null}
                               getReportedConcentration={
                                 getReportedConcentration

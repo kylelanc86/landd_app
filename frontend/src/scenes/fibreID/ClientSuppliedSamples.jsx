@@ -245,22 +245,22 @@ const ClientSuppliedSamples = () => {
             // Preserve existing analysis data
             analysisData: existingSample.analysisData,
             analysisResult: existingSample.analysisResult,
-            // Only preserve analyzedBy/analyzedAt if analysis was actually completed
+            // Only preserve analysedBy/analysedAt if analysis was actually completed
             // (i.e., if analysisData exists, meaning analysis was finalized)
-            analyzedBy: existingSample.analysisData
-              ? existingSample.analyzedBy
+            analysedBy: existingSample.analysisData
+              ? existingSample.analysedBy
               : undefined,
-            analyzedAt: existingSample.analysisData
-              ? existingSample.analyzedAt
+            analysedAt: existingSample.analysisData
+              ? existingSample.analysedAt
               : undefined,
           };
         } else {
           // New sample - create with basic info only (no analysis data yet)
           return {
             ...row,
-            // Don't set analyzedBy/analyzedAt for new samples - they haven't been analyzed yet
-            analyzedBy: undefined,
-            analyzedAt: undefined,
+            // Don't set analysedBy/analysedAt for new samples - they haven't been analyzed yet
+            analysedBy: undefined,
+            analysedAt: undefined,
           };
         }
       });
@@ -548,13 +548,13 @@ const ClientSuppliedSamples = () => {
                       ? samples.every(
                           (sample) =>
                             sample.analysisData &&
-                            sample.analysisData.isAnalyzed === true
+                            sample.analysisData.isAnalysed === true
                         )
                       : samples.every(
                           (sample) =>
                             sample.analysisData &&
                             sample.analysisData.fieldsCounted !== undefined &&
-                            sample.analyzedAt
+                            sample.analysedAt
                         );
 
                   return (
@@ -688,8 +688,8 @@ const ClientSuppliedSamples = () => {
             >
               {samples.every(
                 (sample) =>
-                  sample.analyzedAt ||
-                  (sample.analysisData && sample.analysisData.analyzedAt)
+                  sample.analysedAt ||
+                  (sample.analysisData && sample.analysisData.analysedAt)
               )
                 ? "Edit Analysis"
                 : "Analysis"}

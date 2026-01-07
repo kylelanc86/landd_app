@@ -510,17 +510,17 @@ pdfMake.fonts = {
                   console.log('analysisData:', item.analysisData);
                   console.log('sampleDimensions:', item.analysisData?.sampleDimensions);
                   console.log('sampleMass:', item.analysisData?.sampleMass);
-                  console.log('analyzedAt:', item.analysisData?.analyzedAt);
+                  console.log('analysedAt:', item.analysisData?.analysedAt);
                   console.log('fibres:', item.analysisData?.fibres);
                   
                   // Get analysis date with safety checks
                   let analysisDate = '';
-                  if (item.analysisData?.analyzedAt) {
-                    const date = new Date(item.analysisData.analyzedAt);
+                  if (item.analysisData?.analysedAt) {
+                    const date = new Date(item.analysisData.analysedAt);
                     console.log('Date object created:', date);
                     console.log('Date is valid:', !isNaN(date.getTime()));
                     if (!isNaN(date.getTime())) {
-                      analysisDate = formatDate(item.analysisData.analyzedAt);
+                      analysisDate = formatDate(item.analysisData.analysedAt);
                     } else {
                       analysisDate = 'Date invalid';
                     }
@@ -957,24 +957,20 @@ pdfMake.fonts = {
   
   // DEBUG: Log sample date generation
   console.log('=== SAMPLE DATE GENERATION DEBUG ===');
+  console.log('reportIssueDate:', reportIssueDate, 'type:', typeof reportIssueDate);
   console.log('sampleItems:', sampleItems, 'type:', typeof sampleItems, 'length:', sampleItems?.length);
   if (sampleItems && sampleItems.length > 0) {
-    console.log('sampleItems[0].analyzedAt:', sampleItems[0].analyzedAt, 'type:', typeof sampleItems[0].analyzedAt);
+    console.log('sampleItems[0].analysisData?.analysedAt:', sampleItems[0].analysisData?.analysedAt, 'type:', typeof sampleItems[0].analysisData?.analysedAt);
   }
-  console.log('assessment?.projectId?.d_Date:', assessment?.projectId?.d_Date, 'type:', typeof assessment?.projectId?.d_Date);
-  console.log('assessment?.projectId?.createdAt:', assessment?.projectId?.createdAt, 'type:', typeof assessment?.projectId?.createdAt);
   
-  // Get sample date - try to use the first sample's date, or job creation date, or current date
+  // Get sample date - try to use reportIssueDate first, then first sample's analysedAt, or current date
   let sampleDate = '';
-  if (sampleItems && sampleItems.length > 0 && sampleItems[0].analyzedAt) {
-    const date = new Date(sampleItems[0].analyzedAt);
-    sampleDate = !isNaN(date.getTime()) ? formatDate(sampleItems[0].analyzedAt) : formatDate(new Date());
-  } else if (assessment?.projectId?.d_Date) {
-    const date = new Date(assessment.projectId.d_Date);
-    sampleDate = !isNaN(date.getTime()) ? formatDate(assessment.projectId.d_Date) : formatDate(new Date());
-  } else if (assessment?.projectId?.createdAt) {
-    const date = new Date(assessment.projectId.createdAt);
-    sampleDate = !isNaN(date.getTime()) ? formatDate(assessment.projectId.createdAt) : formatDate(new Date());
+  if (reportIssueDate) {
+    const date = new Date(reportIssueDate);
+    sampleDate = !isNaN(date.getTime()) ? formatDate(reportIssueDate) : formatDate(new Date());
+  } else if (sampleItems && sampleItems.length > 0 && sampleItems[0].analysisData?.analysedAt) {
+    const date = new Date(sampleItems[0].analysisData.analysedAt);
+    sampleDate = !isNaN(date.getTime()) ? formatDate(sampleItems[0].analysisData.analysedAt) : formatDate(new Date());
   } else {
     sampleDate = formatDate(new Date());
   }

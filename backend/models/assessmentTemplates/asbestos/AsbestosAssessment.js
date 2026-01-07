@@ -44,9 +44,9 @@ const AssessmentItemSchema = new mongoose.Schema({
       result: { type: String }
     }],
     finalResult: { type: String },
-    analyzedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    analyzedAt: { type: Date },
-    isAnalyzed: { type: Boolean, default: false }
+    analysedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    analysedAt: { type: Date },
+    isAnalysed: { type: Boolean, default: false }
   },
   
   createdAt: { type: Date, default: Date.now },

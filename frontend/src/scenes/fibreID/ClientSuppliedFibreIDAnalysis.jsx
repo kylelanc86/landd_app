@@ -187,18 +187,18 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setTraceAsbestosContent(savedData.traceAsbestosContent || "");
         setTraceCount(savedData.traceCount || "");
         setAnalysisDate(
-          savedData.analyzedAt ? new Date(savedData.analyzedAt) : new Date()
+          savedData.analysedAt ? new Date(savedData.analysedAt) : new Date()
         );
 
         // Load analyst if available
-        if (sampleData.analyzedBy) {
+        if (sampleData.analysedBy) {
           if (
-            typeof sampleData.analyzedBy === "object" &&
-            sampleData.analyzedBy._id
+            typeof sampleData.analysedBy === "object" &&
+            sampleData.analysedBy._id
           ) {
-            setAnalyst(sampleData.analyzedBy._id);
-          } else if (typeof sampleData.analyzedBy === "string") {
-            setAnalyst(sampleData.analyzedBy);
+            setAnalyst(sampleData.analysedBy._id);
+          } else if (typeof sampleData.analysedBy === "string") {
+            setAnalyst(sampleData.analysedBy);
           }
         }
 
@@ -222,15 +222,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
             traceAsbestosContent: savedData?.traceAsbestosContent || "",
             traceCount: savedData?.traceCount || "",
             noFibreDetected: wasNoFibreDetected,
-            analysisDate: savedData?.analyzedAt
-              ? new Date(savedData.analyzedAt)
+            analysisDate: savedData?.analysedAt
+              ? new Date(savedData.analysedAt)
               : new Date(),
-            analyst: sampleData.analyzedBy
-              ? typeof sampleData.analyzedBy === "object" &&
-                sampleData.analyzedBy._id
-                ? sampleData.analyzedBy._id
-                : typeof sampleData.analyzedBy === "string"
-                ? sampleData.analyzedBy
+            analyst: sampleData.analysedBy
+              ? typeof sampleData.analysedBy === "object" &&
+                sampleData.analysedBy._id
+                ? sampleData.analysedBy._id
+                : typeof sampleData.analysedBy === "string"
+                ? sampleData.analysedBy
                 : ""
               : "",
           });
@@ -558,17 +558,17 @@ const ClientSuppliedFibreIDAnalysis = () => {
     );
   };
 
-  const isSampleAnalyzed = () => {
-    return sample?.analysisData?.isAnalyzed === true;
+  const isSampleAnalysed = () => {
+    return sample?.analysisData?.isAnalysed === true;
   };
 
-  const areAllSamplesAnalyzed = () => {
+  const areAllSamplesAnalysed = () => {
     if (!job || !job.samples || job.samples.length === 0) {
       return false;
     }
     // Check if all samples have been analyzed (isAnalyzed === true)
     return job.samples.every(
-      (s) => s.analysisData && s.analysisData.isAnalyzed === true
+      (s) => s.analysisData && s.analysisData.isAnalysed === true
     );
   };
 
@@ -605,8 +605,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
-        isAnalyzed: analysisComplete,
-        analyzedAt: analysisDate,
+        isAnalysed: analysisComplete,
+        analysedAt: analysisDate,
       };
 
       // Get analyst user object if analyst is selected
@@ -622,8 +622,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           return {
             ...s,
             analysisData, // This is already a new object with deep copied nested data
-            analyzedBy: analystUser || s.analyzedBy,
-            analyzedAt: analysisDate,
+            analysedBy: analystUser || s.analysedBy,
+            analysedAt: analysisDate,
           };
         }
         // Return a copy of other samples to avoid reference sharing
@@ -705,8 +705,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
-        isAnalyzed: analysisComplete,
-        analyzedAt: analysisDate,
+        isAnalysed: analysisComplete,
+        analysedAt: analysisDate,
       };
 
       // Get analyst user object if analyst is selected
@@ -722,8 +722,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           return {
             ...s,
             analysisData, // This is already a new object with deep copied nested data
-            analyzedBy: analystUser || s.analyzedBy,
-            analyzedAt: analysisDate,
+            analysedBy: analystUser || s.analysedBy,
+            analysedAt: analysisDate,
           };
         }
         // Return a copy of other samples to avoid reference sharing
@@ -786,7 +786,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
     }
   };
 
-  const handleMarkAsAnalyzed = async () => {
+  const handleMarkAsAnalysed = async () => {
     try {
       console.log("Marking sample as analysed...");
 
@@ -828,8 +828,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
-        isAnalyzed: true,
-        analyzedAt: analysisDate,
+        isAnalysed: true,
+        analysedAt: analysisDate,
       };
 
       // Get analyst user object if analyst is selected
@@ -845,8 +845,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           return {
             ...s,
             analysisData, // This is already a new object with deep copied nested data
-            analyzedBy: analystUser || s.analyzedBy,
-            analyzedAt: analysisDate,
+            analysedBy: analystUser || s.analysedBy,
+            analysedAt: analysisDate,
           };
         }
         // Return a copy of other samples to avoid reference sharing
@@ -931,8 +931,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
-        isAnalyzed: false,
-        analyzedAt: null,
+        isAnalysed: false,
+        analysedAt: null,
       };
 
       // Get analyst user object if analyst is selected
@@ -948,8 +948,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           return {
             ...s,
             analysisData, // This is already a new object with deep copied nested data
-            analyzedBy: analystUser || s.analyzedBy,
-            analyzedAt: null,
+            analysedBy: analystUser || s.analysedBy,
+            analysedAt: null,
           };
         }
         // Return a copy of other samples to avoid reference sharing
@@ -1295,12 +1295,12 @@ const ClientSuppliedFibreIDAnalysis = () => {
           {job &&
             job.samples &&
             (() => {
-              const analyzedCount = job.samples.filter(
-                (s) => s.analysisData && s.analysisData.isAnalyzed === true
+              const analysedCount = job.samples.filter(
+                (s) => s.analysisData && s.analysisData.isAnalysed === true
               ).length;
               const totalCount = job.samples.length;
               const color =
-                analyzedCount === totalCount ? "success.main" : "error.main";
+                analysedCount === totalCount ? "success.main" : "error.main";
               return (
                 <Typography
                   variant="body2"
@@ -1310,7 +1310,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                     color: color,
                   }}
                 >
-                  {analyzedCount} of {totalCount} samples analysed
+                  {analysedCount} of {totalCount} samples analysed
                 </Typography>
               );
             })()}
@@ -1329,7 +1329,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               value={analyst}
               onChange={(e) => setAnalyst(e.target.value)}
               label="Analyst"
-              disabled={isSampleAnalyzed()}
+              disabled={isSampleAnalysed()}
             >
               {analysts.map((analystOption) => (
                 <MenuItem key={analystOption._id} value={analystOption._id}>
@@ -1343,7 +1343,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             label="Analysis Date"
             value={analysisDate.toISOString().split("T")[0]}
             onChange={(e) => setAnalysisDate(new Date(e.target.value))}
-            disabled={isSampleAnalyzed()}
+            disabled={isSampleAnalysed()}
             InputLabelProps={{
               shrink: true,
             }}
@@ -1388,13 +1388,13 @@ const ClientSuppliedFibreIDAnalysis = () => {
                         {sampleItem.clientReference &&
                           ` - ${sampleItem.clientReference}`}
                       </Typography>
-                      {sampleItem.analysisData?.isAnalyzed && (
+                      {sampleItem.analysisData?.isAnalysed && (
                         <Typography
                           variant="body2"
                           color="success.main"
                           sx={{ ml: 1 }}
                         >
-                          (Analyzed)
+                          (Analysed)
                         </Typography>
                       )}
                     </Box>
@@ -1441,7 +1441,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               label="Sample Description"
               value={sampleDescription}
               onChange={(e) => setSampleDescription(e.target.value)}
-              disabled={isSampleAnalyzed()}
+              disabled={isSampleAnalysed()}
               sx={{
                 "& .MuiInputBase-input.Mui-disabled": {
                   backgroundColor: "#f5f5f5",
@@ -1457,7 +1457,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               <RadioGroup
                 value={sampleType}
                 onChange={(e) => setSampleType(e.target.value)}
-                disabled={isSampleAnalyzed()}
+                disabled={isSampleAnalysed()}
               >
                 <FormControlLabel
                   value="mass"
@@ -1481,10 +1481,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
                 label="Sample Mass"
                 value={sampleMass}
                 onChange={(e) => setSampleMass(e.target.value)}
-                disabled={isSampleAnalyzed()}
-                error={!isSampleAnalyzed() && !sampleMass}
+                disabled={isSampleAnalysed()}
+                error={!isSampleAnalysed() && !sampleMass}
                 helperText={
-                  !isSampleAnalyzed() && !sampleMass ? "Required" : ""
+                  !isSampleAnalysed() && !sampleMass ? "Required" : ""
                 }
                 sx={{
                   "& .MuiInputBase-input.Mui-disabled": {
@@ -1506,15 +1506,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
                         x: e.target.value,
                       })
                     }
-                    disabled={isSampleAnalyzed()}
+                    disabled={isSampleAnalysed()}
                     error={
-                      !isSampleAnalyzed() &&
+                      !isSampleAnalysed() &&
                       !sampleDimensions.x &&
                       !sampleDimensions.y &&
                       !sampleDimensions.z
                     }
                     helperText={
-                      !isSampleAnalyzed() &&
+                      !isSampleAnalysed() &&
                       !sampleDimensions.x &&
                       !sampleDimensions.y &&
                       !sampleDimensions.z
@@ -1540,7 +1540,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                         y: e.target.value,
                       })
                     }
-                    disabled={isSampleAnalyzed()}
+                    disabled={isSampleAnalysed()}
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
                         backgroundColor: "#f5f5f5",
@@ -1560,7 +1560,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                         z: e.target.value,
                       })
                     }
-                    disabled={isSampleAnalyzed()}
+                    disabled={isSampleAnalysed()}
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
                         backgroundColor: "#f5f5f5",
@@ -1578,7 +1578,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               <RadioGroup
                 value={ashing}
                 onChange={(e) => setAshing(e.target.value)}
-                disabled={isSampleAnalyzed()}
+                disabled={isSampleAnalysed()}
               >
                 <FormControlLabel
                   value="no"
@@ -1598,7 +1598,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                 label="Crucible Number"
                 value={crucibleNo}
                 onChange={(e) => setCrucibleNo(e.target.value)}
-                disabled={isSampleAnalyzed()}
+                disabled={isSampleAnalysed()}
                 sx={{
                   width: "150px",
                   ml: 2,
@@ -1628,7 +1628,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                   <Checkbox
                     checked={noFibreDetected}
                     onChange={(e) => setNoFibreDetected(e.target.checked)}
-                    disabled={isSampleAnalyzed()}
+                    disabled={isSampleAnalysed()}
                   />
                 }
                 label="No fibres detected"
@@ -1642,7 +1642,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                     value={microscope}
                     onChange={(e) => setMicroscope(e.target.value)}
                     label="Microscope"
-                    disabled={isSampleAnalyzed()}
+                    disabled={isSampleAnalysed()}
                   >
                     <MenuItem value="LD-PLM-1">LD-PLM-1</MenuItem>
                   </Select>
@@ -1683,7 +1683,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               variant="outlined"
               startIcon={<AddIcon />}
               onClick={addFibre}
-              disabled={fibres.length >= 4 || isSampleAnalyzed()}
+              disabled={fibres.length >= 4 || isSampleAnalysed()}
               size="small"
             >
               Add Fibre
@@ -1720,7 +1720,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                               onClick={(e) =>
                                 handleAsbestosMenuOpen(e, fibre.id)
                               }
-                              disabled={isSampleAnalyzed()}
+                              disabled={isSampleAnalysed()}
                               sx={{
                                 backgroundColor: "transparent",
                                 color: "transparent",
@@ -1744,7 +1744,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             sx={{ backgroundColor: "white" }}
                             size="small"
                             onClick={() => removeFibre(fibre.id)}
-                            disabled={isSampleAnalyzed()}
+                            disabled={isSampleAnalysed()}
                           >
                             Remove
                           </Button>
@@ -1777,7 +1777,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                               )
                             }
                             size="small"
-                            disabled={isSampleAnalyzed()}
+                            disabled={isSampleAnalysed()}
                           >
                             <MenuItem value="curly">Curly</MenuItem>
                             <MenuItem value="straight">Straight</MenuItem>
@@ -1810,7 +1810,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                               )
                             }
                             size="small"
-                            disabled={isSampleAnalyzed()}
+                            disabled={isSampleAnalysed()}
                           >
                             <MenuItem value="yes">Yes</MenuItem>
                             <MenuItem value="no">No</MenuItem>
@@ -1841,7 +1841,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              isSampleAnalyzed()
+                              isSampleAnalysed()
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -1880,7 +1880,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             updateFibre(fibre.id, "colour", e.target.value)
                           }
                           disabled={
-                            fibre.disintegrates === "yes" || isSampleAnalyzed()
+                            fibre.disintegrates === "yes" || isSampleAnalysed()
                           }
                           sx={{
                             "& .MuiInputBase-input.Mui-disabled": {
@@ -1913,7 +1913,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             updateFibre(fibre.id, "pleochrism", e.target.value)
                           }
                           disabled={
-                            fibre.disintegrates === "yes" || isSampleAnalyzed()
+                            fibre.disintegrates === "yes" || isSampleAnalysed()
                           }
                           placeholder="None"
                           sx={{
@@ -1952,7 +1952,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              isSampleAnalyzed()
+                              isSampleAnalysed()
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -1996,7 +1996,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              isSampleAnalyzed()
+                              isSampleAnalysed()
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -2039,7 +2039,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              isSampleAnalyzed()
+                              isSampleAnalysed()
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -2083,7 +2083,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             )
                           }
                           disabled={
-                            fibre.disintegrates === "yes" || isSampleAnalyzed()
+                            fibre.disintegrates === "yes" || isSampleAnalysed()
                           }
                           sx={{
                             "& .MuiInputBase-input.Mui-disabled": {
@@ -2120,7 +2120,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             )
                           }
                           disabled={
-                            fibre.disintegrates === "yes" || isSampleAnalyzed()
+                            fibre.disintegrates === "yes" || isSampleAnalysed()
                           }
                           sx={{
                             "& .MuiInputBase-input.Mui-disabled": {
@@ -2153,7 +2153,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                             }
                             size="small"
                             placeholder="Select Result"
-                            disabled={isSampleAnalyzed()}
+                            disabled={isSampleAnalysed()}
                           >
                             <MenuItem value="">Select Result</MenuItem>
                             <MenuItem value="Chrysotile Asbestos">
@@ -2205,7 +2205,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                   }
                 }}
                 row
-                disabled={isSampleAnalyzed()}
+                disabled={isSampleAnalysed()}
               >
                 <FormControlLabel value="yes" control={<Radio />} label="Yes" />
                 <FormControlLabel value="no" control={<Radio />} label="No" />
@@ -2225,7 +2225,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       value={traceAsbestosContent}
                       onChange={(e) => setTraceAsbestosContent(e.target.value)}
                       label="Asbestos Content"
-                      disabled={isSampleAnalyzed()}
+                      disabled={isSampleAnalysed()}
                     >
                       <MenuItem value="Chrysotile Asbestos">
                         Chrysotile Asbestos
@@ -2248,7 +2248,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       value={traceCount}
                       onChange={(e) => setTraceCount(e.target.value)}
                       row
-                      disabled={isSampleAnalyzed()}
+                      disabled={isSampleAnalysed()}
                     >
                       <FormControlLabel
                         value="< 5 unequivocal"
@@ -2320,7 +2320,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           }
           disabled={
             noFibreDetected ||
-            isSampleAnalyzed() ||
+            isSampleAnalysed() ||
             (traceAsbestos === "yes" && traceCount && traceAsbestosContent)
           }
           sx={{
@@ -2340,7 +2340,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           alignItems: "center",
         }}
       >
-        {isSampleAnalyzed() ? (
+        {isSampleAnalysed() ? (
           <Button
             variant="outlined"
             color="error"
@@ -2353,7 +2353,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           <Button
             variant="outlined"
             color="success"
-            onClick={handleMarkAsAnalyzed}
+            onClick={handleMarkAsAnalysed}
             size="large"
             disabled={!sample?.analysisData || !isAnalysisComplete()}
           >
@@ -2367,7 +2367,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             color="primary"
             onClick={handleSaveAnalysis}
             size="large"
-            disabled={isSampleAnalyzed()}
+            disabled={isSampleAnalysed()}
           >
             Save Analysis
           </Button>
@@ -2377,7 +2377,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             onClick={handleFinaliseAnalysis}
             size="large"
             disabled={
-              jobStatus === "Analysis Complete" || !areAllSamplesAnalyzed()
+              jobStatus === "Analysis Complete" || !areAllSamplesAnalysed()
             }
           >
             Finalise Analysis

@@ -41,7 +41,7 @@ const debugSampleItems = async () => {
       console.log(`  Has Analysis Data: ${!!sample.analysisData}`);
       if (sample.analysisData) {
         console.log(`  Final Result: ${sample.analysisData.finalResult}`);
-        console.log(`  Analyzed At: ${sample.analyzedAt}`);
+        console.log(`  Analysed At: ${sample.analysedAt}`);
       }
     }
     

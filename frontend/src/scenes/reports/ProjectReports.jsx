@@ -977,15 +977,15 @@ const ProjectReports = () => {
 
         // Get analyst from first analyzed sample or job analyst
         let analyst = null;
-        const analyzedSample = sampleItems.find((s) => s.analyzedBy);
-        if (analyzedSample?.analyzedBy) {
+        const analysedSample = sampleItems.find((s) => s.analysedBy);
+        if (analysedSample?.analysedBy) {
           if (
-            typeof analyzedSample.analyzedBy === "object" &&
-            analyzedSample.analyzedBy.firstName
+            typeof analysedSample.analysedBy === "object" &&
+            analysedSample.analysedBy.firstName
           ) {
-            analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
-          } else if (typeof analyzedSample.analyzedBy === "string") {
-            analyst = analyzedSample.analyzedBy;
+            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+          } else if (typeof analysedSample.analysedBy === "string") {
+            analyst = analysedSample.analysedBy;
           }
         } else if (fullJob.analyst) {
           analyst = fullJob.analyst;
@@ -999,7 +999,7 @@ const ProjectReports = () => {
         // Prepare sample items for the report
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+            (item) => item.analysisData && item.analysisData.isAnalysed === true
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -1230,15 +1230,15 @@ const ProjectReports = () => {
 
         // Get analyst from first analyzed sample or job analyst
         let analyst = null;
-        const analyzedSample = sampleItems.find((s) => s.analyzedBy);
-        if (analyzedSample?.analyzedBy) {
+        const analysedSample = sampleItems.find((s) => s.analysedBy);
+        if (analysedSample?.analysedBy) {
           if (
-            typeof analyzedSample.analyzedBy === "object" &&
-            analyzedSample.analyzedBy.firstName
+            typeof analysedSample.analysedBy === "object" &&
+            analysedSample.analysedBy.firstName
           ) {
-            analyst = `${analyzedSample.analyzedBy.firstName} ${analyzedSample.analyzedBy.lastName}`;
-          } else if (typeof analyzedSample.analyzedBy === "string") {
-            analyst = analyzedSample.analyzedBy;
+            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+          } else if (typeof analysedSample.analysedBy === "string") {
+            analyst = analysedSample.analysedBy;
           }
         } else if (fullJob.analyst) {
           analyst = fullJob.analyst;
@@ -1252,7 +1252,7 @@ const ProjectReports = () => {
         // Prepare sample items for the report
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+            (item) => item.analysisData && item.analysisData.isAnalysed === true
           )
           .map((item, index) => ({
             itemNumber: index + 1,

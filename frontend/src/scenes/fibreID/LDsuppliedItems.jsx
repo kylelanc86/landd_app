@@ -89,7 +89,7 @@ const LDsuppliedItems = () => {
             itemNumber: item.itemNumber,
             sampleReference: item.sampleReference,
             analysisData: item.analysisData,
-            isAnalyzed: item.analysisData?.isAnalyzed,
+            isAnalysed: item.analysisData?.isAnalysed,
             asbestosContent: item.asbestosContent,
           });
         });
@@ -170,7 +170,7 @@ const LDsuppliedItems = () => {
   };
 
   const getAnalysisStatusColor = (item) => {
-    if (item.analysisData?.isAnalyzed) {
+    if (item.analysisData?.isAnalysed) {
       return "success";
     } else if (item.readyForAnalysis) {
       return "warning";
@@ -180,7 +180,7 @@ const LDsuppliedItems = () => {
   };
 
   const getAnalysisStatusText = (item) => {
-    if (item.analysisData?.isAnalyzed) {
+    if (item.analysisData?.isAnalysed) {
       return "Analysed";
     } else if (item.readyForAnalysis) {
       return "Ready for Analysis";
@@ -197,8 +197,8 @@ const LDsuppliedItems = () => {
       console.log("Assessment ID:", assessmentId);
       console.log("Assessment data:", assessment);
       console.log(
-        "Items to analyze:",
-        assessment.items.filter((item) => item.analysisData?.isAnalyzed)
+        "Items to analyse:",
+        assessment.items.filter((item) => item.analysisData?.isAnalysed)
       );
 
       // Debug client information
@@ -226,7 +226,7 @@ const LDsuppliedItems = () => {
 
       // Prepare sample items with the correct structure for the fibre analysis report
       const sampleItemsForReport = assessment.items
-        .filter((item) => item.analysisData?.isAnalyzed)
+        .filter((item) => item.analysisData?.isAnalysed)
         .map((item) => ({
           ...item,
           // Ensure sample reference is properly set
@@ -572,7 +572,7 @@ const LDsuppliedItems = () => {
               disabled={
                 generatingPDF ||
                 !assessment.items?.some(
-                  (item) => item.analysisData?.isAnalyzed
+                  (item) => item.analysisData?.isAnalysed
                 ) ||
                 !analyst
               }
@@ -669,10 +669,10 @@ const LDsuppliedItems = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {item.analysisData?.isAnalyzed &&
+                          {item.analysisData?.isAnalysed &&
                           item.analysisData?.finalResult
                             ? item.analysisData.finalResult
-                            : item.analysisData?.isAnalyzed
+                            : item.analysisData?.isAnalysed
                             ? "Analysis Complete (No Result)"
                             : "TBC"}
                         </Typography>

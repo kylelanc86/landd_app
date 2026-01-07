@@ -62,7 +62,7 @@ const SampleSummary = React.memo(
     onKeyDown,
     onClearTable,
     isFilterUncountable,
-    isSampleAnalyzed,
+    isSampleAnalysed,
     calculateConcentration,
     getReportedConcentration,
     inputRefs,
@@ -72,7 +72,7 @@ const SampleSummary = React.memo(
   }) => {
     const theme = useTheme();
 
-    const isComplete = isSampleAnalyzed(sample._id);
+    const isComplete = isSampleAnalysed(sample._id);
 
     return (
       <Box
@@ -120,14 +120,14 @@ const SampleSummary = React.memo(
               label={
                 isFilterUncountable(sample._id)
                   ? "Uncountable"
-                  : isSampleAnalyzed(sample._id)
+                  : isSampleAnalysed(sample._id)
                   ? "Sample Analysed"
                   : "To be counted"
               }
               color={
                 isFilterUncountable(sample._id)
                   ? "error"
-                  : isSampleAnalyzed(sample._id)
+                  : isSampleAnalysed(sample._id)
                   ? "success"
                   : "default"
               }
@@ -135,7 +135,7 @@ const SampleSummary = React.memo(
               sx={{
                 backgroundColor: isFilterUncountable(sample._id)
                   ? "error.main"
-                  : isSampleAnalyzed(sample._id)
+                  : isSampleAnalysed(sample._id)
                   ? "success.main"
                   : "grey.400",
                 color: "white",
@@ -227,17 +227,17 @@ const SampleSummary = React.memo(
                   onClick={() => onOpenFibreCountModal(sample._id)}
                   disabled={isReadOnly || isFilterUncountable(sample._id)}
                   sx={{
-                    backgroundColor: isSampleAnalyzed(sample._id)
+                    backgroundColor: isSampleAnalysed(sample._id)
                       ? "success.main"
                       : "grey.500",
                     "&:hover": {
-                      backgroundColor: isSampleAnalyzed(sample._id)
+                      backgroundColor: isSampleAnalysed(sample._id)
                         ? "success.dark"
                         : "grey.600",
                     },
                   }}
                 >
-                  {isSampleAnalyzed(sample._id)
+                  {isSampleAnalysed(sample._id)
                     ? "Edit Fibre Counts"
                     : "Enter Fibre Counts"}
                 </Button>
@@ -1131,7 +1131,7 @@ const Analysis = () => {
     );
   };
 
-  const isSampleAnalyzed = (sampleId) => {
+  const isSampleAnalysed = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
     if (!analysis || isFilterUncountable(sampleId)) {
       return false;
@@ -1878,7 +1878,7 @@ const Analysis = () => {
             onKeyDown={handleKeyDown}
             onClearTable={handleClearTable}
             isFilterUncountable={isFilterUncountable}
-            isSampleAnalyzed={isSampleAnalyzed}
+            isSampleAnalysed={isSampleAnalysed}
             calculateConcentration={calculateConcentration}
             getReportedConcentration={getReportedConcentration}
             inputRefs={inputRefs}
@@ -1927,7 +1927,7 @@ const Analysis = () => {
                 onKeyDown={handleKeyDown}
                 onClearTable={handleClearTable}
                 isFilterUncountable={isFilterUncountable}
-                isSampleAnalyzed={isSampleAnalyzed}
+                isSampleAnalysed={isSampleAnalysed}
                 calculateConcentration={calculateConcentration}
                 getReportedConcentration={getReportedConcentration}
                 inputRefs={inputRefs}

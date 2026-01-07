@@ -506,17 +506,17 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     assessment.items[itemIndex].analysisData = {
       ...assessment.items[itemIndex].analysisData,
       ...analysisData,
-      analyzedBy: req.user._id,
-      analyzedAt: new Date(),
-      isAnalyzed: true
+      analysedBy: req.user._id,
+      analysedAt: new Date(),
+      isAnalysed: true
     };
     
     // Update the item's updatedAt timestamp
     assessment.items[itemIndex].updatedAt = new Date();
     
-    // Check if all items are analyzed to update assessment status
-    const allItemsAnalyzed = assessment.items.every(item => item.analysisData?.isAnalyzed);
-    if (allItemsAnalyzed && assessment.status === 'samples-with-lab') {
+    // Check if all items are analysed to update assessment status
+    const allItemsAnalysed = assessment.items.every(item => item.analysisData?.isAnalysed);
+    if (allItemsAnalysed && assessment.status === 'samples-with-lab') {
       assessment.status = 'sample-analysis-complete';
     }
     

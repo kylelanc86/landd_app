@@ -32,13 +32,13 @@ const populateAnalysisData = async () => {
         
         for (const item of assessment.items) {
           // Check if item has analysisData but is missing key fields
-          if (item.analysisData && !item.analysisData.isAnalyzed) {
+          if (item.analysisData && !item.analysisData.isAnalysed) {
             console.log(`  Updating item ${item.itemNumber}`);
             
             // Set isAnalyzed to true if we have basic analysis data
             if (item.analysisData.microscope && item.analysisData.sampleType) {
-              item.analysisData.isAnalyzed = true;
-              item.analysisData.analyzedAt = new Date();
+              item.analysisData.isAnalysed = true;
+              item.analysisData.analysedAt = new Date();
               
               // Use existing asbestosContent as finalResult if available
               if (item.asbestosContent && !item.analysisData.finalResult) {

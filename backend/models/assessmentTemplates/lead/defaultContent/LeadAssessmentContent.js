@@ -14,7 +14,7 @@ const leadAssessmentDefaultContent = {
   
   // Sampling Results
   samplingResultsTitle: "SAMPLING RESULTS",
-  samplingResultsContent: "A total of {NUMBER_OF_SAMPLES} samples were collected and analyzed for lead content. The results are presented in Table 1 below, with detailed laboratory reports attached in Appendix A.",
+  samplingResultsContent: "A total of {NUMBER_OF_SAMPLES} samples were collected and analysed for lead content. The results are presented in Table 1 below, with detailed laboratory reports attached in Appendix A.",
   
   // Risk Assessment
   riskAssessmentTitle: "RISK ASSESSMENT",

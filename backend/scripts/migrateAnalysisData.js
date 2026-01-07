@@ -35,7 +35,7 @@ const migrateAnalysisData = async () => {
         // Process each item
         for (const item of assessment.items) {
           // Check if item already has analysisData
-          if (item.analysisData && item.analysisData.isAnalyzed) {
+          if (item.analysisData && item.analysisData.isAnalysed) {
             console.log(`  Item ${item.itemNumber} already has analysis data, skipping`);
             continue;
           }
@@ -60,9 +60,9 @@ const migrateAnalysisData = async () => {
               crucibleNo: sampleItem.analysisData.crucibleNo || null,
               fibres: sampleItem.analysisData.fibres || [],
               finalResult: sampleItem.analysisData.finalResult || "",
-              analyzedBy: sampleItem.analyzedBy || null,
-              analyzedAt: sampleItem.analyzedAt || new Date(),
-              isAnalyzed: true
+              analysedBy: sampleItem.analysedBy || null,
+              analysedAt: sampleItem.analysedAt || new Date(),
+              isAnalysed: true
             };
             
             hasChanges = true;

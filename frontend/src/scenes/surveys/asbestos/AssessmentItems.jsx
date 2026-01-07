@@ -199,7 +199,7 @@ const AssessmentItemsPage = () => {
       // Find items that need formatting updates
       const itemsToUpdate = itemsData.filter((item) => {
         return (
-          item.analysisData?.isAnalyzed &&
+          item.analysisData?.isAnalysed &&
           item.analysisData?.finalResult &&
           // Update if current content is not properly formatted
           (!item.asbestosContent ||
@@ -593,7 +593,7 @@ const AssessmentItemsPage = () => {
                   color:
                     items.length === 0
                       ? "text.secondary"
-                      : items.every((item) => item.analysisData?.isAnalyzed)
+                      : items.every((item) => item.analysisData?.isAnalysed)
                       ? "green"
                       : "red",
                   fontWeight: "normal",
@@ -602,7 +602,7 @@ const AssessmentItemsPage = () => {
               >
                 {items.length === 0
                   ? "No Items"
-                  : items.every((item) => item.analysisData?.isAnalyzed)
+                  : items.every((item) => item.analysisData?.isAnalysed)
                   ? "Analysis Complete"
                   : "Analysis In Progress"}
               </Typography>

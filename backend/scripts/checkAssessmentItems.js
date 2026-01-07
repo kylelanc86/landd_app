@@ -37,8 +37,8 @@ const checkAssessmentItems = async () => {
             console.log(`        - Microscope: ${item.analysisData.microscope}`);
             console.log(`        - Sample Type: ${item.analysisData.sampleType}`);
             console.log(`        - Final Result: ${item.analysisData.finalResult}`);
-            console.log(`        - Is Analyzed: ${item.analysisData.isAnalyzed}`);
-            console.log(`        - Analyzed At: ${item.analysisData.analyzedAt}`);
+            console.log(`        - Is Analysed: ${item.analysisData.isAnalysed}`);
+            console.log(`        - Analysed At: ${item.analysisData.analysedAt}`);
           } else {
             console.log(`      ❌ NO ANALYSIS DATA`);
           }

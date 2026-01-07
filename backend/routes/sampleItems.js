@@ -107,8 +107,8 @@ router.post('/bulk', async (req, res) => {
       projectId,
       labReference: sample.labReference.trim(),
       clientReference: sample.clientReference.trim(),
-      analyzedBy: sample.analyzedBy || undefined,
-      analyzedAt: sample.analyzedAt || undefined,
+      analysedBy: sample.analysedBy || undefined,
+      analysedAt: sample.analysedAt || undefined,
       clientSuppliedJobId: req.body.clientSuppliedJobId || undefined
     }));
     

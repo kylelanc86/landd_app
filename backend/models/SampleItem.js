@@ -39,11 +39,11 @@ const sampleItemSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: {}
   },
-  analyzedBy: {
+  analysedBy: {
     type: mongoose.Schema.Types.Mixed, // Can be ObjectId (User reference) or String (analyst name)
     ref: 'User'
   },
-  analyzedAt: {
+  analysedAt: {
     type: Date
   },
   createdAt: {
