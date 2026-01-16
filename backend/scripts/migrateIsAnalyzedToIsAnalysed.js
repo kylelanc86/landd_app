@@ -32,11 +32,17 @@ const migrateIsAnalyzedToIsAnalysed = async () => {
       let hasChanges = false;
       
       for (const item of assessment.items) {
-        if (item.analysisData && item.analysisData.isAnalyzed !== undefined) {
-          // Check if old field exists but new field doesn't
-          if (item.analysisData.isAnalyzed !== undefined && item.analysisData.isAnalysed === undefined) {
-            item.analysisData.isAnalysed = item.analysisData.isAnalyzed;
+        if (item.analysisData) {
+          // Check if old field exists (regardless of new field)
+          if (item.analysisData.isAnalyzed !== undefined) {
+            // Copy value to new field if new field doesn't exist or is undefined
+            if (item.analysisData.isAnalysed === undefined) {
+              item.analysisData.isAnalysed = item.analysisData.isAnalyzed;
+            }
+            // Delete old field
             delete item.analysisData.isAnalyzed;
+            // Mark the nested object as modified
+            item.markModified('analysisData');
             hasChanges = true;
             assessmentItemsUpdated++;
             console.log(`  ✓ Updated item ${item.itemNumber} in assessment ${assessment._id}`);
@@ -45,6 +51,8 @@ const migrateIsAnalyzedToIsAnalysed = async () => {
       }
       
       if (hasChanges) {
+        // Mark the items array as modified
+        assessment.markModified('items');
         await assessment.save();
         totalUpdated++;
       }
@@ -67,11 +75,17 @@ const migrateIsAnalyzedToIsAnalysed = async () => {
       let hasChanges = false;
       
       for (const sample of job.samples) {
-        if (sample.analysisData && sample.analysisData.isAnalyzed !== undefined) {
-          // Check if old field exists but new field doesn't
-          if (sample.analysisData.isAnalyzed !== undefined && sample.analysisData.isAnalysed === undefined) {
-            sample.analysisData.isAnalysed = sample.analysisData.isAnalyzed;
+        if (sample.analysisData) {
+          // Check if old field exists (regardless of new field)
+          if (sample.analysisData.isAnalyzed !== undefined) {
+            // Copy value to new field if new field doesn't exist or is undefined
+            if (sample.analysisData.isAnalysed === undefined) {
+              sample.analysisData.isAnalysed = sample.analysisData.isAnalyzed;
+            }
+            // Delete old field
             delete sample.analysisData.isAnalyzed;
+            // Mark the nested object as modified
+            sample.markModified('analysisData');
             hasChanges = true;
             clientSuppliedSamplesUpdated++;
             console.log(`  ✓ Updated sample ${sample.labReference} in job ${job._id}`);
@@ -80,6 +94,8 @@ const migrateIsAnalyzedToIsAnalysed = async () => {
       }
       
       if (hasChanges) {
+        // Mark the samples array as modified
+        job.markModified('samples');
         await job.save();
         jobsUpdated++;
       }
