@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 const Equipment = require("../models/Equipment");
@@ -60,10 +61,19 @@ router.get("/", auth, checkPermission("equipment.view"), async (req, res) => {
   }
 });
 
-// Get equipment by ID
+// Get equipment by ID or reference
 router.get("/:id", auth, checkPermission("equipment.view"), async (req, res) => {
   try {
-    const equipment = await Equipment.findById(req.params.id);
+    let equipment;
+    
+    // Check if the parameter is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      // Search by _id
+      equipment = await Equipment.findById(req.params.id);
+    } else {
+      // Search by equipmentReference
+      equipment = await Equipment.findOne({ equipmentReference: req.params.id });
+    }
     
     if (!equipment) {
       return res.status(404).json({ message: "Equipment not found" });

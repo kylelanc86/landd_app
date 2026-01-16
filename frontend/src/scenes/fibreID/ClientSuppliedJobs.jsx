@@ -573,7 +573,7 @@ const ClientSuppliedJobs = () => {
   };
 
   // Check if all samples in a job have been analysed (have analysisData)
-  const areAllSamplesAnalyzed = (job) => {
+  const areAllSamplesAnalysed = (job) => {
     if (!job || !job.samples || job.samples.length === 0) {
       return false;
     }
@@ -590,6 +590,21 @@ const ClientSuppliedJobs = () => {
     }
 
     // For Fibre Count jobs, check if all samples have fieldsCounted
+    // AND the job status is "Analysis Complete" (analysis has been finalized)
+    if (job.jobType === "Fibre Count") {
+      const allSamplesAnalysed = job.samples.every((sample) => {
+        return (
+          sample.analysisData &&
+          sample.analysisData.fieldsCounted !== undefined &&
+          sample.analysedAt
+        );
+      });
+      
+      // Also require that the job status is "Analysis Complete" (finalized)
+      return allSamplesAnalysed && job.status === "Analysis Complete";
+    }
+
+    // Fallback for other job types
     return job.samples.every((sample) => {
       return (
         sample.analysisData &&
@@ -636,7 +651,7 @@ const ClientSuppliedJobs = () => {
         // Transform samples to match the format expected by generateFibreIDReport
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+            (item) => item.analysisData && item.analysisData.isAnalysed === true
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -1093,7 +1108,7 @@ const ClientSuppliedJobs = () => {
                               disabled={
                                 generatingPDF[job._id] ||
                                 (sampleCounts[job._id] || 0) === 0 ||
-                                !areAllSamplesAnalyzed(job)
+                                !areAllSamplesAnalysed(job)
                               }
                             >
                               {generatingPDF[job._id] ? "..." : "PDF"}

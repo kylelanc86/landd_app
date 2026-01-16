@@ -104,7 +104,8 @@ router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), asy
     
     const jobs = await ClientSuppliedJob.find({ 
       projectId: req.params.projectId,
-      status: 'Completed'
+      status: 'Completed',
+      jobType: 'Fibre ID'
     }).populate('projectId');
 
     const reports = jobs.map(job => ({
@@ -116,7 +117,38 @@ router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), asy
       status: job.status,
       analyst: job.analyst || 'Unknown',
       sampleCount: job.sampleCount,
-      revision: job.revision || 0
+      revision: job.revision || 0,
+      chainOfCustody: job.chainOfCustody || null
+    }));
+
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get Fibre Count Reports
+router.get('/fibre-count/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+    
+    const jobs = await ClientSuppliedJob.find({ 
+      projectId: req.params.projectId,
+      status: 'Completed',
+      jobType: 'Fibre Count'
+    }).populate('projectId');
+
+    const reports = jobs.map(job => ({
+      id: job._id,
+      date: job.analysisDate || job.updatedAt,
+      type: 'fibre_count',
+      reference: job.projectId?.projectID || job._id.toString(),
+      description: 'Fibre Count Analysis Report',
+      status: job.status,
+      analyst: job.analyst || 'Unknown',
+      sampleCount: job.sampleCount,
+      revision: job.revision || 0,
+      chainOfCustody: job.chainOfCustody || null
     }));
 
     res.json(reports);

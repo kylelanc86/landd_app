@@ -398,14 +398,32 @@ router.post("/", auth, async (req, res) => {
 // Delete a timesheet entry
 router.delete("/:id", auth, async (req, res) => {
   try {
-    const timesheet = await Timesheet.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
+    // First, find the timesheet entry
+    const timesheet = await Timesheet.findById(req.params.id);
 
     if (!timesheet) {
       return res.status(404).json({ message: "Timesheet entry not found" });
     }
+
+    // Check if user has permission to delete this entry
+    // Users can delete their own entries, or users with timesheets.approve permission can delete any entry
+    const isOwnEntry = timesheet.userId && timesheet.userId.toString() === req.user._id.toString();
+    const hasApprovePermission = hasPermission(req.user, 'timesheets.approve');
+
+    if (!isOwnEntry && !hasApprovePermission) {
+      return res.status(403).json({ 
+        message: "You do not have permission to delete this timesheet entry. You can only delete your own entries." 
+      });
+    }
+
+    // Log deletion for audit purposes
+    console.log('Deleting timesheet entry:', {
+      entryId: req.params.id,
+      entryUserId: timesheet.userId,
+      deletedBy: req.user._id,
+      isOwnEntry,
+      hasApprovePermission
+    });
 
     // Remove from project if it had one
     if (timesheet.projectId && !timesheet.isAdminWork && !timesheet.isBreak) {

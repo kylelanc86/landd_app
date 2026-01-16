@@ -70,7 +70,7 @@ const AssessmentItemSchema = new mongoose.Schema({
     finalResult: { type: String },
     analysedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     analysedAt: { type: Date },
-    isAnalyzed: { type: Boolean, default: false }
+    isAnalysed: { type: Boolean, default: false }
   },
   
   createdAt: { type: Date, default: Date.now },

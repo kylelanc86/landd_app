@@ -745,7 +745,8 @@ const SampleList = () => {
         }}
       >
         {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
-        {job?.projectName || job?.name || "Loading..."} -
+        {job?.projectName || job?.name || "Loading..."}
+        {" - "}
         {shift?.name ? `${formatDate(shift.date)}` : "Loading..."}
       </Typography>
       {/* Description of Works Field */}
@@ -955,6 +956,14 @@ const SampleList = () => {
               <TableCell
                 sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
                 onClick={
+                  !isReportAuthorized ? () => handleSort("cowlNo") : undefined
+                }
+              >
+                Cowl Number
+              </TableCell>
+              <TableCell
+                sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                onClick={
                   !isReportAuthorized ? () => handleSort("type") : undefined
                 }
               >
@@ -1010,6 +1019,11 @@ const SampleList = () => {
                   sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
                 >
                   {sample.fullSampleID}
+                </TableCell>
+                <TableCell
+                  sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                >
+                  {sample.cowlNo || "-"}
                 </TableCell>
                 <TableCell
                   sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}

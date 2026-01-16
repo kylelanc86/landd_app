@@ -76,6 +76,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const [analysisDate, setAnalysisDate] = useState(new Date());
   const [analysts, setAnalysts] = useState([]);
   const [analyst, setAnalyst] = useState("");
+  const [comments, setComments] = useState("");
   const { showSnackbar } = useSnackbar();
   const [asbestosMenuAnchor, setAsbestosMenuAnchor] = useState(null);
   const [selectedFibreId, setSelectedFibreId] = useState(null);
@@ -186,6 +187,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setTraceAsbestos(savedData.traceAsbestos || "no");
         setTraceAsbestosContent(savedData.traceAsbestosContent || "");
         setTraceCount(savedData.traceCount || "");
+        setComments(savedData.comments || "");
         setAnalysisDate(
           savedData.analysedAt ? new Date(savedData.analysedAt) : new Date()
         );
@@ -221,6 +223,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             traceAsbestos: savedData?.traceAsbestos || "no",
             traceAsbestosContent: savedData?.traceAsbestosContent || "",
             traceCount: savedData?.traceCount || "",
+            comments: savedData?.comments || "",
             noFibreDetected: wasNoFibreDetected,
             analysisDate: savedData?.analysedAt
               ? new Date(savedData.analysedAt)
@@ -250,6 +253,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setTraceAsbestos("no");
         setTraceAsbestosContent("");
         setTraceCount("");
+        setComments("");
         setAnalysisDate(new Date());
 
         // Set default analyst if available
@@ -272,6 +276,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             traceAsbestos: "no",
             traceAsbestosContent: "",
             traceCount: "",
+            comments: "",
             noFibreDetected: false,
             analysisDate: new Date(),
             analyst: analysts.length > 0 ? analysts[0]._id : "",
@@ -544,6 +549,11 @@ const ClientSuppliedFibreIDAnalysis = () => {
   };
 
   const isAnalysisComplete = () => {
+    // Check sample description validation
+    if (!sampleDescription || !sampleDescription.trim()) {
+      return false;
+    }
+
     // Check mass/dimensions validation
     if (!isMassDimensionsValid()) {
       return false;
@@ -576,6 +586,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
     try {
       console.log("Finalising analysis for job:", jobId);
 
+      // Validate sample description first
+      if (!sampleDescription || !sampleDescription.trim()) {
+        showSnackbar(
+          "Sample Description is required. Please enter a value before finalising.",
+          "warning"
+        );
+        return;
+      }
+
       // Validate mass/dimensions first
       if (!isMassDimensionsValid()) {
         const fieldName =
@@ -605,7 +624,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
-        isAnalyzed: analysisComplete,
+        comments: comments || null,
+        isAnalysed: analysisComplete,
         analysedAt: analysisDate,
       };
 
@@ -676,6 +696,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
     try {
       console.log("Starting to save analysis...");
 
+      // Validate sample description first
+      if (!sampleDescription || !sampleDescription.trim()) {
+        showSnackbar(
+          "Sample Description is required. Please enter a value before saving.",
+          "warning"
+        );
+        return;
+      }
+
       // Validate mass/dimensions
       if (!isMassDimensionsValid()) {
         const fieldName =
@@ -705,6 +734,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
+        comments: comments || null,
         isAnalysed: analysisComplete,
         analysedAt: analysisDate,
       };
@@ -790,6 +820,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
     try {
       console.log("Marking sample as analysed...");
 
+      // Validate sample description first
+      if (!sampleDescription || !sampleDescription.trim()) {
+        showSnackbar(
+          "Sample Description is required. Please enter a value before marking as analysed.",
+          "warning"
+        );
+        return;
+      }
+
       // Validate mass/dimensions first
       if (!isMassDimensionsValid()) {
         const fieldName =
@@ -828,6 +867,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
+        comments: comments || null,
         isAnalysed: true,
         analysedAt: analysisDate,
       };
@@ -931,6 +971,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
         traceAsbestosContent:
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
+        comments: comments || null,
         isAnalysed: false,
         analysedAt: null,
       };
@@ -1022,6 +1063,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       traceAsbestos,
       traceAsbestosContent,
       traceCount,
+      comments,
       noFibreDetected,
       analysisDate,
       analyst,
@@ -1061,6 +1103,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
     traceAsbestos,
     traceAsbestosContent,
     traceCount,
+    comments,
     noFibreDetected,
     analysisDate,
     analyst,
@@ -1438,10 +1481,17 @@ const ClientSuppliedFibreIDAnalysis = () => {
           <Grid item xs={12}>
             <TextField
               fullWidth
+              required
               label="Sample Description"
               value={sampleDescription}
               onChange={(e) => setSampleDescription(e.target.value)}
               disabled={isSampleAnalysed()}
+              error={!isSampleAnalysed() && !sampleDescription.trim()}
+              helperText={
+                !isSampleAnalysed() && !sampleDescription.trim()
+                  ? "Required"
+                  : ""
+              }
               sx={{
                 "& .MuiInputBase-input.Mui-disabled": {
                   backgroundColor: "#f5f5f5",
@@ -2297,6 +2347,29 @@ const ClientSuppliedFibreIDAnalysis = () => {
             </Grid>
           )}
         </Grid>
+      </Paper>
+
+      {/* Comments Box */}
+      <Paper sx={{ mb: 2, p: 3 }}>
+        <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+          Comments
+        </Typography>
+        <TextField
+          fullWidth
+          label="Sample Comments"
+          value={comments}
+          onChange={(e) => setComments(e.target.value)}
+          multiline
+          rows={4}
+          placeholder="Enter any additional comments or notes about this sample..."
+          disabled={isSampleAnalysed()}
+          sx={{
+            "& .MuiInputBase-input.Mui-disabled": {
+              backgroundColor: "#f5f5f5",
+              color: "#666",
+            },
+          }}
+        />
       </Paper>
 
       {/* Final Result Box */}

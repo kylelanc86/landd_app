@@ -32,7 +32,7 @@ const populateAnalysisData = async () => {
         
         for (const item of assessment.items) {
           // Check if item has analysisData but is missing key fields
-          if (item.analysisData && !item.analysisData.isAnalyzed) {
+          if (item.analysisData && !item.analysisData.isAnalysed) {
             console.log(`  Updating item ${item.itemNumber}`);
             
             // Set isAnalyzed to true if we have basic analysis data

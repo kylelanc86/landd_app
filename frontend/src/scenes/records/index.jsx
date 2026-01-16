@@ -13,6 +13,7 @@ import {
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import SchoolIcon from "@mui/icons-material/School";
 import GroupIcon from "@mui/icons-material/Group";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -74,6 +75,7 @@ const Records = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
+  const { currentUser } = useAuth();
 
   // Initialize view from URL parameter or default to "home"
   const urlView = searchParams.get("view");
@@ -82,12 +84,41 @@ const Records = () => {
   // Update view when URL parameter changes
   useEffect(() => {
     const urlView = searchParams.get("view");
+    const isAdminOrManager =
+      currentUser?.role === "admin" || currentUser?.role === "manager";
+    const hasOnlyCalibrationsApproval =
+      currentUser?.labApprovals?.calibrations === true &&
+      !isAdminOrManager;
+
     if (urlView && (urlView === "general" || urlView === "laboratory")) {
-      setView(urlView);
+      // Check if user has access to laboratory view
+      if (
+        urlView === "laboratory" &&
+        !currentUser?.labApprovals?.calibrations &&
+        !isAdminOrManager
+      ) {
+        // Redirect to home if user doesn't have access
+        setView("home");
+        setSearchParams({});
+      }
+      // Check if user with only calibrations approval tries to access general records
+      else if (urlView === "general" && hasOnlyCalibrationsApproval) {
+        // Redirect to laboratory view if user only has calibrations approval
+        setView("laboratory");
+        setSearchParams({ view: "laboratory" });
+      } else {
+        setView(urlView);
+      }
     } else if (!urlView) {
-      setView("home");
+      // If no view specified and user only has calibrations approval, default to laboratory
+      if (hasOnlyCalibrationsApproval) {
+        setView("laboratory");
+        setSearchParams({ view: "laboratory" });
+      } else {
+        setView("home");
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, currentUser, setSearchParams]);
 
   const generalRecordWidgets = [
     {
@@ -204,8 +235,35 @@ const Records = () => {
       icon: <ScienceIcon />,
       color: "#2e7d32",
       view: "laboratory",
+      requiresCalibrationsApproval: true,
     },
   ];
+
+  // Filter record modules based on user permissions
+  const availableRecordModules = recordModules.filter((module) => {
+    // Check if user is admin or manager - they can see all modules
+    const isAdminOrManager =
+      currentUser?.role === "admin" || currentUser?.role === "manager";
+    
+    // If user only has calibrations approval (not admin/manager), hide general records
+    const hasOnlyCalibrationsApproval =
+      currentUser?.labApprovals?.calibrations === true &&
+      currentUser?.role !== "admin" &&
+      currentUser?.role !== "manager";
+
+    if (module.id === "general") {
+      // General records: only show to admin/manager, not to users with only calibrations approval
+      return isAdminOrManager;
+    }
+
+    if (module.requiresCalibrationsApproval) {
+      return (
+        currentUser?.labApprovals?.calibrations === true ||
+        isAdminOrManager
+      );
+    }
+    return true;
+  });
 
   const handleModuleClick = (module) => {
     setView(module.view);
@@ -248,7 +306,7 @@ const Records = () => {
       {view === "home" ? (
         <Box sx={{ mt: 4 }}>
           <Grid container spacing={isTablet ? 3 : 4}>
-            {recordModules.map((module) => (
+            {availableRecordModules.map((module) => (
               <Grid item xs={12} sm={6} md={6} lg={6} key={module.id}>
                 <Card
                   sx={{
@@ -392,16 +450,44 @@ const Records = () => {
         </Box>
       ) : (
         <Box sx={{ mt: 4 }}>
-          <Grid container spacing={3}>
-            {(view === "general"
-              ? generalRecordWidgets
-              : laboratoryRecordWidgets
-            ).map((widget, index) => (
-              <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
-                <RecordWidget {...widget} />
-              </Grid>
-            ))}
-          </Grid>
+          {view === "laboratory" &&
+          !currentUser?.labApprovals?.calibrations &&
+          currentUser?.role !== "admin" &&
+          currentUser?.role !== "manager" ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <Typography variant="h6" color="error" gutterBottom>
+                Access Denied
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                You do not have permission to access Laboratory Records. Please
+                contact an administrator to grant you the Calibrations approval.
+              </Typography>
+            </Box>
+          ) : view === "general" &&
+            currentUser?.labApprovals?.calibrations === true &&
+            currentUser?.role !== "admin" &&
+            currentUser?.role !== "manager" ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <Typography variant="h6" color="error" gutterBottom>
+                Access Denied
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                You do not have permission to access General Records. You can
+                only access Laboratory Records.
+              </Typography>
+            </Box>
+          ) : (
+            <Grid container spacing={3}>
+              {(view === "general"
+                ? generalRecordWidgets
+                : laboratoryRecordWidgets
+              ).map((widget, index) => (
+                <Grid item xs={12} sm={6} md={4} lg={4} key={index}>
+                  <RecordWidget {...widget} />
+                </Grid>
+              ))}
+            </Grid>
+          )}
         </Box>
       )}
     </Box>

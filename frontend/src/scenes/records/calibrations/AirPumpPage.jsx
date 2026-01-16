@@ -111,6 +111,55 @@ const AirPumpPage = () => {
         return "Out-of-Service";
       }
 
+      // Check if the most recent calibration has all flowrates failing
+      // If all test results failed, the pump should be Out-of-Service
+      if (equipment.mostRecentCalibration) {
+        const mostRecentCal = equipment.mostRecentCalibration;
+        if (
+          mostRecentCal.testResults &&
+          mostRecentCal.testResults.length > 0
+        ) {
+          const allFailed = mostRecentCal.testResults.every(
+            (result) => !result.passed
+          );
+          if (allFailed) {
+            return "Out-of-Service";
+          }
+        }
+      }
+
+      // Check if there's at least one passed flowrate calibration within the calibration frequency
+      // Calibration frequency for air pumps is 1 year (12 months)
+      const today = new Date();
+      const oneYearAgo = new Date(today);
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+      // Check all calibrations for passed flowrates within the last year
+      const calibrations = equipment.allCalibrations || [];
+      let hasPassedFlowrateInFrequency = false;
+
+      for (const cal of calibrations) {
+        if (!cal.calibrationDate) continue;
+        const calDate = new Date(cal.calibrationDate);
+        
+        // Only consider calibrations within the last year
+        if (calDate >= oneYearAgo && calDate <= today) {
+          if (cal.testResults && cal.testResults.length > 0) {
+            // Check if at least one test result passed
+            const hasPassed = cal.testResults.some((result) => result.passed);
+            if (hasPassed) {
+              hasPassedFlowrateInFrequency = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // If no passed flowrate within the calibration frequency, pump is Out-of-Service
+      if (!hasPassedFlowrateInFrequency) {
+        return "Out-of-Service";
+      }
+
       const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
       if (daysUntil !== null && daysUntil < 0) {
         return "Calibration Overdue";
@@ -228,12 +277,22 @@ const AirPumpPage = () => {
               }
             }
 
+            // Get the most recent calibration for status checking
+            const mostRecentCalibration = calibrations.length > 0
+              ? calibrations.sort(
+                  (a, b) =>
+                    new Date(b.calibrationDate) - new Date(a.calibrationDate)
+                )[0]
+              : null;
+
             return {
               ...pump,
               lastCalibration,
               calibrationDue,
               flowrateCalibrations,
               mostRecentFlowmeter,
+              mostRecentCalibration, // Store for status calculation
+              allCalibrations: calibrations, // Store all calibrations for status calculation
             };
           } catch (err) {
             console.error(
@@ -651,8 +710,8 @@ const AirPumpPage = () => {
         };
       });
 
-      // Determine overall result (pass if all tests passed)
-      const overallResult = testResults.every((result) => result.passed)
+      // Determine overall result (pass if at least one test passed)
+      const overallResult = testResults.some((result) => result.passed)
         ? "Pass"
         : "Fail";
 

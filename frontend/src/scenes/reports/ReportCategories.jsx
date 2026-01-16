@@ -31,10 +31,17 @@ const categories = [
   },
   {
     id: "fibre-id",
-    title: "Fibre ID & FIbre Count Reports",
+    title: "Fibre ID Reports",
     icon: FibreIcon,
-    description: "Access fibre identification and fibre count reports",
+    description: "Access fibre identification reports",
     color: "#ba68c8", // purple-300
+  },
+  {
+    id: "fibre-count",
+    title: "Fibre Count Reports",
+    icon: FibreIcon,
+    description: "Access fibre count analysis reports",
+    color: "#9c27b0", // purple-500
   },
 ];
 

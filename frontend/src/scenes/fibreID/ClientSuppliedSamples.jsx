@@ -548,7 +548,7 @@ const ClientSuppliedSamples = () => {
                       ? samples.every(
                           (sample) =>
                             sample.analysisData &&
-                            sample.analysisData.isAnalyzed === true
+                            sample.analysisData.isAnalysed === true
                         )
                       : samples.every(
                           (sample) =>

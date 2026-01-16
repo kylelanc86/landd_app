@@ -14,12 +14,8 @@ const {
 } = require("../services/asbestosRemovalJobSyncService");
 const { sendMail } = require("../services/mailer");
 
-// Debug middleware to log all requests to shifts routes
+// Debug middleware removed
 router.use((req, res, next) => {
-  console.log('=== SHIFTS ROUTE HIT ===');
-  console.log('Method:', req.method);
-  console.log('Path:', req.path);
-  console.log('Full URL:', req.url);
   next();
 });
 
@@ -82,10 +78,6 @@ router.post('/jobs', auth, checkPermission(['jobs.view']), async (req, res) => {
 
 // Proxy endpoint for Google Maps Static API to avoid CORS issues
 router.get('/proxy-static-map', auth, checkPermission(['jobs.view']), async (req, res) => {
-  console.log('=== PROXY ENDPOINT HIT ===');
-  console.log('Request URL:', req.url);
-  console.log('Request query:', req.query);
-  console.log('User:', req.user);
   try {
     const { url, crop } = req.query;
     
@@ -98,9 +90,6 @@ router.get('/proxy-static-map', auth, checkPermission(['jobs.view']), async (req
       return res.status(400).json({ message: 'Invalid URL - must be Google Maps Static API' });
     }
 
-    console.log('Proxying Google Maps Static API request:', url);
-    console.log('Crop requested:', crop);
-    
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
       headers: {
@@ -108,15 +97,10 @@ router.get('/proxy-static-map', auth, checkPermission(['jobs.view']), async (req
       }
     });
 
-    console.log('Google Maps API response status:', response.status);
-    console.log('Google Maps API response headers:', response.headers);
-    console.log('Response data size:', response.data.length);
-
     // Check if the response is actually an image
     if (response.data.length < 1000) {
       // Likely an error response, let's see what it contains
       const errorText = Buffer.from(response.data).toString('utf-8');
-      console.log('Small response body (likely error):', errorText);
       return res.status(400).json({ 
         message: 'Google Maps API returned error response',
         error: errorText 
@@ -131,7 +115,6 @@ router.get('/proxy-static-map', auth, checkPermission(['jobs.view']), async (req
         const sharp = require('sharp');
         // Get image metadata to determine actual size
         const metadata = await sharp(response.data).metadata();
-        console.log('Original image dimensions:', metadata.width, 'x', metadata.height);
         
         // Crop the bottom ~20% to remove Google footer/watermark
         const cropHeight = Math.floor(metadata.height * 0.8);
@@ -139,12 +122,10 @@ router.get('/proxy-static-map', auth, checkPermission(['jobs.view']), async (req
         imageBuffer = await sharp(response.data)
           .extract({ left: 0, top: 0, width: metadata.width, height: cropHeight })
           .toBuffer();
-        console.log('Image cropped successfully to:', metadata.width, 'x', cropHeight);
       } catch (cropError) {
         console.error('Error cropping image:', cropError);
         console.error('Crop error details:', cropError.message);
         // If cropping fails, return original image
-        console.log('Returning original uncropped image due to crop error');
       }
     }
 
@@ -193,14 +174,11 @@ router.get('/:id', auth, async (req, res) => {
 // Create a new shift
 router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
   try {
-    console.log('Creating shift with data:', req.body);
-    
     // Validate required fields
     const requiredFields = ['job', 'jobModel', 'name', 'date', 'startTime', 'endTime', 'supervisor'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
-      console.log('Missing required fields:', missingFields);
       return res.status(400).json({ 
         message: 'Missing required fields', 
         fields: missingFields 
@@ -208,10 +186,8 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     }
     
     const shift = new Shift(req.body);
-    console.log('Shift object created:', shift);
     
     const newShift = await shift.save();
-    console.log('Shift saved successfully:', newShift._id);
 
     if (
       (req.body.jobModel && req.body.jobModel === 'AsbestosRemovalJob') ||
@@ -238,16 +214,10 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
 // Update a shift
 router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']), async (req, res) => {
   try {
-    console.log('PATCH /shifts/:id - Request body:', req.body);
-    console.log('PATCH /shifts/:id - Shift ID:', req.params.id);
-    
     const shift = await Shift.findById(req.params.id);
     if (!shift) {
-      console.log('Shift not found:', req.params.id);
       return res.status(404).json({ message: 'Shift not found' });
     }
-    
-    console.log('Found shift:', shift._id);
 
     // Only update the fields that are provided in the request
     const allowedUpdates = [
@@ -288,19 +258,10 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       shift.jobModel = "AsbestosRemovalJob"; // Default to AsbestosRemovalJob since we're phasing out AirMonitoringJob
     }
     
-    console.log('Shift before validation:', {
-      _id: shift._id,
-      descriptionOfWorks: shift.descriptionOfWorks,
-      status: shift.status,
-      job: shift.job,
-      jobModel: shift.jobModel
-    });
-
     try {
       // Validate the document before saving
       const validationError = shift.validateSync();
       if (validationError) {
-        console.log('Validation error:', validationError);
         return res.status(400).json({ 
           message: 'Validation error updating shift',
           details: validationError.message,
@@ -329,7 +290,6 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
               populatedShift.job.projectId._id,
               { reports_present: true }
             );
-            console.log(`Updated project ${populatedShift.job.projectId._id} reports_present to true due to completed shift`);
           }
         } catch (error) {
           console.error("Error updating project reports_present field:", error);
@@ -593,7 +553,6 @@ router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) =
         sample.fullSampleID = currentFullSampleID + 'X';
         sample.sampleNumber = currentSampleNumber + 'X';
         await sample.save();
-        console.log(`Renamed sample from ${currentFullSampleID} to ${sample.fullSampleID}`);
       } catch (saveError) {
         // If there's a duplicate key error, try appending another X
         if (saveError.message.includes('duplicate key') || saveError.code === 11000) {
@@ -697,9 +656,6 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
       .select('sampleNumber cowlNo fullSampleID')
       .sort({ fullSampleID: 1 });
     
-    console.log('Samples found:', samples.length);
-    console.log('Sample data:', JSON.stringify(samples, null, 2));
-
     // Generate a simple HTML-based COC document
     const fs = require('fs');
     const path = require('path');
@@ -737,9 +693,6 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
       ? new Date(shift.samplesReceivedDate).toLocaleDateString('en-GB') 
       : shiftDate;
     
-    console.log('Shift submittedBy:', shift.submittedBy);
-    console.log('Final submittedBy:', submittedBy);
-
     // Create simple HTML document
     const htmlContent = `
 <!DOCTYPE html>

@@ -26,7 +26,10 @@ import {
   TableHead,
   TableRow,
   Paper,
+  IconButton,
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
+import DownloadIcon from "@mui/icons-material/Download";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import EditIcon from "@mui/icons-material/Edit";
@@ -87,6 +90,11 @@ const ProjectReports = () => {
     reportId: null,
     action: null, // 'view' or 'download'
   });
+
+  // COC dialog state
+  const [cocDialogOpen, setCocDialogOpen] = useState(false);
+  const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
+  const [selectedCOC, setSelectedCOC] = useState(null);
 
   const { showSnackbar } = useSnackbar();
 
@@ -399,34 +407,16 @@ const ProjectReports = () => {
               airMonitoringReports.length > 0;
           }
 
-          // Check clearances (only from completed jobs)
-          const { default: asbestosClearanceService } = await import(
-            "../../services/asbestosClearanceService"
-          );
-
+          // Check clearances using the dedicated endpoint
           let hasClearances = false;
           try {
-            const clearancesResponse = await asbestosClearanceService.getAll();
-            let projectClearances = [];
-
-            if (clearancesResponse && Array.isArray(clearancesResponse)) {
-              projectClearances = clearancesResponse.filter(
-                (clearance) =>
-                  clearance.projectId === projectId ||
-                  clearance.projectId?._id === projectId
-              );
-            } else if (
-              clearancesResponse.clearances &&
-              Array.isArray(clearancesResponse.clearances)
-            ) {
-              projectClearances = clearancesResponse.clearances.filter(
-                (clearance) =>
-                  clearance.projectId === projectId ||
-                  clearance.projectId?._id === projectId
-              );
-            }
-
-            hasClearances = projectClearances.length > 0;
+            const clearanceReports = await reportService.getClearanceReports(
+              projectId
+            );
+            hasClearances =
+              clearanceReports &&
+              Array.isArray(clearanceReports) &&
+              clearanceReports.length > 0;
           } catch (clearanceError) {
             console.log("No asbestos clearance reports found");
           }
@@ -455,6 +445,25 @@ const ProjectReports = () => {
         }
       } catch (error) {
         console.log("No fibre ID reports found");
+      }
+
+      // Check fibre count reports (client supplied jobs)
+      try {
+        // Check for completed fibre count reports
+        const fibreCountReports = await reportService.getFibreCountReports(
+          projectId
+        );
+        const hasCompletedReports =
+          fibreCountReports &&
+          Array.isArray(fibreCountReports) &&
+          fibreCountReports.length > 0;
+
+        // Show the category only when there are completed reports to display
+        if (hasCompletedReports) {
+          available.push("fibre-count");
+        }
+      } catch (error) {
+        console.log("No fibre count reports found");
       }
 
       // Check uploaded reports
@@ -629,66 +638,35 @@ const ProjectReports = () => {
           }
 
           // Get clearances for this project using the dedicated endpoint
-          // Only show clearances if there are completed asbestos removal jobs for this project
           try {
-            const { default: asbestosClearanceService } = await import(
-              "../../services/asbestosClearanceService"
-            );
-            const { default: asbestosRemovalJobService } = await import(
-              "../../services/asbestosRemovalJobService"
+            const clearanceReports = await reportService.getClearanceReports(
+              projectId
             );
 
-            // First, check if there are any completed asbestos removal jobs for this project
-            const completedJobsResponse =
-              await asbestosRemovalJobService.getAll();
-            const completedJobs =
-              completedJobsResponse.jobs || completedJobsResponse.data || [];
-            const hasCompletedJobs = completedJobs.some(
-              (job) =>
-                (job.projectId === projectId ||
-                  job.projectId?._id === projectId) &&
-                job.status === "completed"
-            );
-
-            // Only fetch clearances if there are completed jobs for this project
-            if (hasCompletedJobs) {
-              const clearancesResponse =
-                await asbestosClearanceService.getAll();
-
-              let projectClearances = [];
-
-              if (clearancesResponse && Array.isArray(clearancesResponse)) {
-                projectClearances = clearancesResponse.filter(
-                  (clearance) =>
-                    clearance.projectId === projectId ||
-                    clearance.projectId?._id === projectId
-                );
-              } else if (
-                clearancesResponse.clearances &&
-                Array.isArray(clearancesResponse.clearances)
-              ) {
-                projectClearances = clearancesResponse.clearances.filter(
-                  (clearance) =>
-                    clearance.projectId === projectId ||
-                    clearance.projectId?._id === projectId
-                );
-              }
-
+            if (
+              clearanceReports &&
+              Array.isArray(clearanceReports) &&
+              clearanceReports.length > 0
+            ) {
               // Map clearances to report format
-              const clearanceReports = projectClearances.map((clearance) => ({
-                id: clearance._id,
-                date: clearance.clearanceDate || clearance.createdAt,
-                reference: `${clearance.clearanceType}-${clearance._id}`,
-                description: `${clearance.clearanceType} Asbestos Clearance`,
-                asbestosRemovalist: clearance.asbestosRemovalist || "N/A",
-                additionalInfo: `${clearance.clearanceType} Clearance`,
-                status: clearance.status || "Unknown",
-                revision: clearance.revision || 0,
-                type: "clearance",
-                data: clearance,
-              }));
+              const mappedClearanceReports = clearanceReports.map(
+                (clearance) => ({
+                  id: clearance.id,
+                  date: clearance.date,
+                  reference: clearance.reference,
+                  description: clearance.description,
+                  asbestosRemovalist: clearance.asbestosRemovalist || "N/A",
+                  additionalInfo:
+                    clearance.additionalInfo ||
+                    `${clearance.clearanceType || "Clearance"} Clearance`,
+                  status: clearance.status || "Unknown",
+                  revision: clearance.revision || 0,
+                  type: "clearance",
+                  data: clearance,
+                })
+              );
 
-              reportsData.push(...clearanceReports);
+              reportsData.push(...mappedClearanceReports);
             }
           } catch (clearanceError) {
             console.error("Error fetching clearances:", clearanceError);
@@ -708,6 +686,23 @@ const ProjectReports = () => {
             revision: report.revision || 0,
             type: "fibre_id",
             data: report,
+            chainOfCustody: report.chainOfCustody || null,
+          }));
+          break;
+
+        case "fibre-count":
+          const fibreCountReports = await reportService.getFibreCountReports(
+            projectId
+          );
+          reportsData = fibreCountReports.map((report) => ({
+            id: report.id,
+            date: report.date,
+            description: report.description,
+            status: report.status,
+            revision: report.revision || 0,
+            type: "fibre_count",
+            data: report,
+            chainOfCustody: report.chainOfCustody || null,
           }));
           break;
 
@@ -931,8 +926,10 @@ const ProjectReports = () => {
         const { default: asbestosClearanceService } = await import(
           "../../services/asbestosClearanceService"
         );
+        // Use report.id or report.data.id (backend returns 'id', not '_id')
+        const clearanceId = report.id || report.data?.id || report.data?._id;
         const fullClearance = await asbestosClearanceService.getById(
-          report.data._id
+          clearanceId
         );
 
         // Debug logging to see what clearance data we're getting
@@ -999,7 +996,7 @@ const ProjectReports = () => {
         // Prepare sample items for the report
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+            (item) => item.analysisData && item.analysisData.isAnalysed === true
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -1032,6 +1029,88 @@ const ProjectReports = () => {
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
         });
+      } else if (report.type === "fibre_count") {
+        // Generate and open the fibre count report PDF
+        const jobId = report.data.id || report.data._id;
+
+        // Fetch the full job data with samples
+        const jobResponse = await clientSuppliedJobsService.getById(jobId);
+        const fullJob = jobResponse.data;
+
+        // Get samples from the job
+        const sampleItems = fullJob.samples || [];
+
+        // Get analyst from first analyzed sample or job analyst
+        let analyst = null;
+        const analysedSample = sampleItems.find((s) => s.analysedBy);
+        if (analysedSample?.analysedBy) {
+          if (
+            typeof analysedSample.analysedBy === "object" &&
+            analysedSample.analysedBy.firstName
+          ) {
+            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+          } else if (typeof analysedSample.analysedBy === "string") {
+            analyst = analysedSample.analysedBy;
+          }
+        } else if (fullJob.analyst) {
+          analyst = fullJob.analyst;
+        }
+
+        // If no analyst found, default to "Unknown Analyst"
+        if (!analyst) {
+          analyst = "Unknown Analyst";
+        }
+
+        // Transform sample items to match air monitoring format
+        const transformedSamples = sampleItems.map((item, index) => {
+          return {
+            fullSampleID: item.labReference || `Sample-${index + 1}`,
+            sampleID: item.labReference || `Sample-${index + 1}`,
+            location: item.clientReference || item.locationDescription || "N/A",
+            // No time or flowrate for client supplied
+            startTime: null,
+            endTime: null,
+            averageFlowrate: null,
+            // Use analysisData from sample item
+            analysis: item.analysisData
+              ? {
+                  fieldsCounted: item.analysisData.fieldsCounted,
+                  fibresCounted: item.analysisData.fibresCounted,
+                  edgesDistribution: item.analysisData.edgesDistribution,
+                  backgroundDust: item.analysisData.backgroundDust,
+                  // No reported concentration for client supplied
+                  reportedConcentration: null,
+                }
+              : null,
+          };
+        });
+
+        // Create a mock shift-like object for PDF generation
+        const mockShift = {
+          descriptionOfWorks:
+            fullJob.projectId?.name || "Client Supplied Fibre Count",
+          date: fullJob.sampleReceiptDate || new Date(),
+          analysedBy: analyst || "N/A",
+          analysisDate: fullJob.analysisDate || new Date(),
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        };
+
+        // Create a job-like object with projectId populated
+        const jobForPDF = {
+          projectId: fullJob.projectId,
+          asbestosRemovalist: null, // Not applicable for client supplied
+        };
+
+        // Generate the PDF using air monitoring format
+        await generateShiftReport({
+          shift: mockShift,
+          job: jobForPDF,
+          samples: transformedSamples,
+          project: fullJob.projectId,
+          openInNewTab: true,
+          isClientSupplied: true, // Flag to indicate we want fibre count format
+        });
       } else if (report.type === "uploaded") {
         // Download the uploaded report file
         const downloadUrl = `${
@@ -1050,6 +1129,240 @@ const ProjectReports = () => {
     }
   };
 
+  const handleExportCSV = async (report) => {
+    try {
+      // Only handle shift (air monitoring) reports
+      if (report.type !== "shift") {
+        showSnackbar(
+          "CSV export is only available for air monitoring reports",
+          "info"
+        );
+        return;
+      }
+
+      const reportId = report.id || report.data?._id || report.data?.id;
+      setProcessingReport({ reportId: reportId, action: "csv" });
+      showSnackbar("Exporting air monitoring shift data to CSV...", "info");
+
+      const { shift, job } = report.data;
+
+      // Fetch samples for this shift
+      const samplesResponse = await sampleService.getByShift(shift._id);
+
+      // Ensure we have complete sample data including analysis
+      const samplesWithAnalysis = await Promise.all(
+        samplesResponse.data.map(async (sample) => {
+          if (!sample.analysis) {
+            const completeSample = await sampleService.getById(sample._id);
+            return completeSample.data;
+          }
+          return sample;
+        })
+      );
+
+      // Get project data
+      let projectData = job.projectId;
+      if (projectData && typeof projectData === "string") {
+        const projectResponse = await projectService.getById(projectData);
+        projectData = projectResponse.data;
+      }
+      if (
+        projectData &&
+        projectData.client &&
+        typeof projectData.client === "string"
+      ) {
+        const clientResponse = await clientService.getById(projectData.client);
+        projectData.client = clientResponse.data;
+      }
+
+      // Get full job data
+      const { default: asbestosRemovalJobService } = await import(
+        "../../services/asbestosRemovalJobService"
+      );
+      const fullJobDataResponse = await asbestosRemovalJobService.getById(
+        job._id
+      );
+      const fullJobData = fullJobDataResponse.data;
+
+      // Helper function to escape CSV values
+      const escapeCsvCell = (value) => {
+        if (value === null || value === undefined) return "";
+        return `"${String(value).replace(/"/g, '""')}"`;
+      };
+
+      // Helper to format date
+      const formatDate = (dateStr) => {
+        if (!dateStr) return "";
+        const d = new Date(dateStr);
+        return d.toLocaleDateString("en-AU");
+      };
+
+      // Helper to format person name
+      const formatPersonName = (value) => {
+        if (!value) return "";
+        if (typeof value === "string") return value;
+        if (typeof value === "object") {
+          const { firstName, lastName } = value;
+          if (firstName || lastName) {
+            return [firstName, lastName].filter(Boolean).join(" ").trim();
+          }
+        }
+        return "";
+      };
+
+      // Helper to format time
+      const formatTime = (timeStr) => {
+        if (!timeStr) return "";
+        return timeStr.split(":").slice(0, 2).join(":");
+      };
+
+      // Build CSV rows
+      const csvRows = [];
+
+      // Add header information
+      csvRows.push(["Project ID", projectData?.projectID || ""]);
+      csvRows.push(["Project Name", projectData?.name || ""]);
+      csvRows.push(["Shift Name", shift?.name || ""]);
+      csvRows.push(["Sample Date", shift?.date ? formatDate(shift.date) : ""]);
+      csvRows.push([
+        "Description of Works",
+        shift?.descriptionOfWorks || fullJobData?.description || "",
+      ]);
+      csvRows.push([
+        "Asbestos Removalist",
+        fullJobData?.asbestosRemovalist || "",
+      ]);
+      csvRows.push([
+        "Supervisor",
+        shift?.supervisor
+          ? formatPersonName(shift.supervisor)
+          : shift?.defaultSampler
+          ? formatPersonName(shift.defaultSampler)
+          : "",
+      ]);
+      csvRows.push(["Analysed By", shift?.analysedBy || ""]);
+      csvRows.push([
+        "Analysis Date",
+        shift?.analysisDate ? formatDate(shift.analysisDate) : "",
+      ]);
+      csvRows.push([]); // Empty row
+      csvRows.push([]); // Empty row
+
+      // Define sample column headers
+      const sampleHeaders = [
+        "L&D Sample Ref",
+        "Sample Location",
+        "Sample Type",
+        "Time On",
+        "Time Off",
+        "Ave Flow (L/min)",
+        "Field Count",
+        "Fibre Count",
+        "Reported Conc. (fibres/ml)",
+        "Sampler",
+        "Analyst",
+      ];
+
+      csvRows.push(sampleHeaders);
+
+      // Add sample data rows
+      samplesWithAnalysis.forEach((sample) => {
+        // Format location with type indicator
+        let location = sample.location || "N/A";
+        if (sample.type) {
+          if (sample.type.toLowerCase() === "exposure") {
+            location = `${location} (E)`;
+          } else if (sample.type.toLowerCase() === "clearance") {
+            location = `${location} (C)`;
+          }
+        }
+
+        // Format reported concentration
+        let reportedConc = "";
+        if (sample.analysis) {
+          if (
+            sample.analysis.uncountableDueToDust === true ||
+            sample.analysis.uncountableDueToDust === "true"
+          ) {
+            reportedConc = "UDD";
+          } else if (
+            sample.analysis.edgesDistribution === "fail" ||
+            sample.analysis.backgroundDust === "fail"
+          ) {
+            reportedConc = "Uncountable";
+          } else if (sample.analysis.reportedConcentration) {
+            const conc = sample.analysis.reportedConcentration;
+            if (typeof conc === "string" && conc.startsWith("<")) {
+              reportedConc = conc;
+            } else if (typeof conc === "number") {
+              reportedConc = conc.toFixed(2);
+            } else {
+              reportedConc = conc.toString();
+            }
+          }
+        }
+
+        const row = [
+          sample.fullSampleID || sample.sampleID || "",
+          location,
+          sample.type || "",
+          formatTime(sample.startTime),
+          formatTime(sample.endTime),
+          sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : "",
+          sample.analysis?.fieldsCounted !== undefined &&
+          sample.analysis?.fieldsCounted !== null
+            ? sample.analysis.fieldsCounted
+            : "",
+          sample.analysis?.fibresCounted !== undefined &&
+          sample.analysis?.fibresCounted !== null
+            ? sample.analysis.fibresCounted
+            : "",
+          reportedConc,
+          formatPersonName(sample.collectedBy || sample.sampler),
+          formatPersonName(sample.analysedBy || sample.analysis?.analysedBy),
+        ];
+
+        csvRows.push(row);
+      });
+
+      // Convert to CSV string
+      const csvContent = csvRows
+        .map((row) =>
+          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : ""
+        )
+        .join("\r\n");
+
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+
+      // Generate filename
+      const projectID = projectData?.projectID || "";
+      const shiftName = shift?.name || "shift";
+      const shiftDate = shift?.date
+        ? formatDate(shift.date).replace(/\//g, "")
+        : "";
+      const filename = `${projectID}_${shiftName}_${shiftDate}.csv`;
+
+      link.setAttribute("download", filename);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showSnackbar("CSV file downloaded successfully", "success");
+    } catch (err) {
+      console.error("Error exporting CSV:", err);
+      setError("Failed to export CSV");
+      showSnackbar("Failed to export CSV. Please try again.", "error");
+    } finally {
+      setProcessingReport({ reportId: null, action: null });
+    }
+  };
+
   const handleDownloadReport = async (report) => {
     try {
       // Use report.id, or fallback to report.data._id or report.data.id
@@ -1062,6 +1375,8 @@ const ProjectReports = () => {
           ? "Clearance"
           : report.type === "fibre_id"
           ? "Fibre ID"
+          : report.type === "fibre_count"
+          ? "Fibre Count"
           : report.type === "asbestos_assessment"
           ? "Asbestos Assessment"
           : "Report";
@@ -1185,8 +1500,10 @@ const ProjectReports = () => {
         const { default: asbestosClearanceService } = await import(
           "../../services/asbestosClearanceService"
         );
+        // Use report.id or report.data.id (backend returns 'id', not '_id')
+        const clearanceId = report.id || report.data?.id || report.data?._id;
         const fullClearance = await asbestosClearanceService.getById(
-          report.data._id
+          clearanceId
         );
 
         // Debug logging to see what clearance data we're getting
@@ -1252,7 +1569,7 @@ const ProjectReports = () => {
         // Prepare sample items for the report
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalyzed === true
+            (item) => item.analysisData && item.analysisData.isAnalysed === true
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -1284,6 +1601,88 @@ const ProjectReports = () => {
           returnPdfData: false,
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
+        });
+      } else if (report.type === "fibre_count") {
+        // Generate and download the fibre count report PDF
+        const jobId = report.data.id || report.data._id;
+
+        // Fetch the full job data with samples
+        const jobResponse = await clientSuppliedJobsService.getById(jobId);
+        const fullJob = jobResponse.data;
+
+        // Get samples from the job
+        const sampleItems = fullJob.samples || [];
+
+        // Get analyst from first analyzed sample or job analyst
+        let analyst = null;
+        const analysedSample = sampleItems.find((s) => s.analysedBy);
+        if (analysedSample?.analysedBy) {
+          if (
+            typeof analysedSample.analysedBy === "object" &&
+            analysedSample.analysedBy.firstName
+          ) {
+            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
+          } else if (typeof analysedSample.analysedBy === "string") {
+            analyst = analysedSample.analysedBy;
+          }
+        } else if (fullJob.analyst) {
+          analyst = fullJob.analyst;
+        }
+
+        // If no analyst found, default to "Unknown Analyst"
+        if (!analyst) {
+          analyst = "Unknown Analyst";
+        }
+
+        // Transform sample items to match air monitoring format
+        const transformedSamples = sampleItems.map((item, index) => {
+          return {
+            fullSampleID: item.labReference || `Sample-${index + 1}`,
+            sampleID: item.labReference || `Sample-${index + 1}`,
+            location: item.clientReference || item.locationDescription || "N/A",
+            // No time or flowrate for client supplied
+            startTime: null,
+            endTime: null,
+            averageFlowrate: null,
+            // Use analysisData from sample item
+            analysis: item.analysisData
+              ? {
+                  fieldsCounted: item.analysisData.fieldsCounted,
+                  fibresCounted: item.analysisData.fibresCounted,
+                  edgesDistribution: item.analysisData.edgesDistribution,
+                  backgroundDust: item.analysisData.backgroundDust,
+                  // No reported concentration for client supplied
+                  reportedConcentration: null,
+                }
+              : null,
+          };
+        });
+
+        // Create a mock shift-like object for PDF generation
+        const mockShift = {
+          descriptionOfWorks:
+            fullJob.projectId?.name || "Client Supplied Fibre Count",
+          date: fullJob.sampleReceiptDate || new Date(),
+          analysedBy: analyst || "N/A",
+          analysisDate: fullJob.analysisDate || new Date(),
+          reportApprovedBy: fullJob.reportApprovedBy || null,
+          reportIssueDate: fullJob.reportIssueDate || null,
+        };
+
+        // Create a job-like object with projectId populated
+        const jobForPDF = {
+          projectId: fullJob.projectId,
+          asbestosRemovalist: null, // Not applicable for client supplied
+        };
+
+        // Generate the PDF using air monitoring format
+        await generateShiftReport({
+          shift: mockShift,
+          job: jobForPDF,
+          samples: transformedSamples,
+          project: fullJob.projectId,
+          openInNewTab: false,
+          isClientSupplied: true, // Flag to indicate we want fibre count format
         });
       } else if (report.type === "uploaded") {
         // For uploaded reports, directly download the file
@@ -1376,9 +1775,12 @@ const ProjectReports = () => {
           "../../services/asbestosRemovalJobService"
         );
 
+        // Use report.id or report.data.id (backend returns 'id', not '_id')
+        const clearanceId = report.id || report.data?.id || report.data?._id;
+
         // Get current clearance data to increment revision count
         const currentClearance = await asbestosClearanceService.getById(
-          report.data._id
+          clearanceId
         );
         const currentRevision = currentClearance.revision || 0;
         const newRevision = currentRevision + 1;
@@ -1399,7 +1801,7 @@ const ProjectReports = () => {
         ];
 
         // Update clearance with new revision and revision reason
-        await asbestosClearanceService.update(report.data._id, {
+        await asbestosClearanceService.update(clearanceId, {
           status: "in progress",
           revision: newRevision,
           revisionReasons: updatedRevisionReasons,
@@ -1436,8 +1838,8 @@ const ProjectReports = () => {
 
         // Reload reports to reflect the change
         loadReports();
-      } else if (report.type === "fibre_id") {
-        // For fibre ID reports (client supplied jobs), reset the status to Analysis Complete
+      } else if (report.type === "fibre_id" || report.type === "fibre_count") {
+        // For fibre ID and fibre count reports (client supplied jobs), reset the status to Analysis Complete
         const { clientSuppliedJobsService } = await import(
           "../../services/api"
         );
@@ -1486,6 +1888,68 @@ const ProjectReports = () => {
       report: null,
     });
     setRevisionReason("");
+  };
+
+  // Handle COC view
+  const handleViewCOC = async (report) => {
+    try {
+      // Get COC from report data or fetch full job data
+      let chainOfCustody = report.chainOfCustody || report.data?.chainOfCustody;
+
+      // If COC not in report data, fetch the full job
+      if (!chainOfCustody) {
+        const jobId = report.id || report.data?.id || report.data?._id;
+        const jobResponse = await clientSuppliedJobsService.getById(jobId);
+        chainOfCustody = jobResponse.data?.chainOfCustody;
+      }
+
+      if (!chainOfCustody || !chainOfCustody.data) {
+        showSnackbar(
+          "No Chain of Custody document available for this report",
+          "info"
+        );
+        return;
+      }
+
+      setSelectedCOC(chainOfCustody);
+      setCocDialogOpen(true);
+    } catch (error) {
+      console.error("Error loading COC:", error);
+      showSnackbar("Failed to load Chain of Custody document", "error");
+    }
+  };
+
+  // Handle COC download
+  const handleDownloadCOC = () => {
+    if (!selectedCOC?.data) return;
+
+    try {
+      // Convert base64 to blob
+      const byteString = atob(selectedCOC.data.split(",")[1]);
+      const mimeString = selectedCOC.data
+        .split(",")[0]
+        .split(":")[1]
+        .split(";")[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = selectedCOC.fileName || "chain-of-custody.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading COC:", error);
+      showSnackbar("Failed to download Chain of Custody document", "error");
+    }
   };
 
   // Handle report upload
@@ -1822,6 +2286,8 @@ const ProjectReports = () => {
             onView={handleViewReport}
             onDownload={handleDownloadReport}
             onRevise={handleReviseReport}
+            onViewCOC={handleViewCOC}
+            onExportCSV={handleExportCSV}
             processingReport={processingReport}
           />
         </>
@@ -1850,7 +2316,7 @@ const ProjectReports = () => {
               const reportType = reviseDialog.report?.type;
               let tableText = "the asbestos removal jobs table";
 
-              if (reportType === "fibre_id") {
+              if (reportType === "fibre_id" || reportType === "fibre_count") {
                 tableText = "the client supplied jobs table";
               } else if (reportType === "clearance") {
                 tableText = "the clearances table";
@@ -1921,6 +2387,9 @@ const ProjectReports = () => {
                     Asbestos Clearance Report
                   </MenuItem>
                   <MenuItem value="fibre-id">Fibre ID Analysis Report</MenuItem>
+                  <MenuItem value="fibre-count">
+                    Fibre Count Analysis Report
+                  </MenuItem>
                   <MenuItem value="other">Other Report</MenuItem>
                 </Select>
               </FormControl>
@@ -2045,6 +2514,172 @@ const ProjectReports = () => {
           >
             {uploading ? "Uploading..." : "Upload Report"}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* COC View Dialog */}
+      <Dialog
+        open={cocDialogOpen}
+        onClose={() => setCocDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography variant="h6">Chain of Custody</Typography>
+            <IconButton onClick={() => setCocDialogOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedCOC && (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                File: {selectedCOC.fileName}
+              </Typography>
+              {selectedCOC.uploadedAt && (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 2 }}
+                >
+                  Uploaded: {new Date(selectedCOC.uploadedAt).toLocaleString()}
+                </Typography>
+              )}
+
+              <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownloadCOC}
+                >
+                  Download
+                </Button>
+              </Box>
+
+              {/* Preview COC if it's an image */}
+              {selectedCOC.fileType?.startsWith("image/") && (
+                <Box
+                  sx={{
+                    border: "1px solid #ddd",
+                    borderRadius: 1,
+                    overflow: "hidden",
+                    maxHeight: "500px",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    backgroundColor: "#f5f5f5",
+                    cursor: "pointer",
+                    "&:hover": {
+                      opacity: 0.9,
+                    },
+                  }}
+                  onClick={() => setCocFullScreenOpen(true)}
+                  title="Click to view full size"
+                >
+                  <img
+                    src={selectedCOC.data}
+                    alt="Chain of Custody"
+                    style={{
+                      maxHeight: "500px",
+                      maxWidth: "100%",
+                      objectFit: "contain",
+                      display: "block",
+                    }}
+                  />
+                </Box>
+              )}
+
+              {/* Show PDF icon for PDFs */}
+              {selectedCOC.fileType === "application/pdf" && (
+                <Box
+                  sx={{
+                    border: "1px solid #ddd",
+                    borderRadius: 1,
+                    p: 4,
+                    textAlign: "center",
+                    backgroundColor: "#f5f5f5",
+                  }}
+                >
+                  <DownloadIcon
+                    sx={{ fontSize: 48, color: "text.secondary", mb: 2 }}
+                  />
+                  <Typography variant="body1" color="text.secondary">
+                    PDF Document
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 1 }}
+                  >
+                    Click Download to view
+                  </Typography>
+                </Box>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCocDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Full Screen COC Viewer */}
+      <Dialog
+        open={cocFullScreenOpen}
+        onClose={() => setCocFullScreenOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        fullScreen
+      >
+        <DialogTitle>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography variant="h6">
+              Chain of Custody - {selectedCOC?.fileName}
+            </Typography>
+            <IconButton onClick={() => setCocFullScreenOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedCOC?.fileType?.startsWith("image/") && (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                minHeight: "80vh",
+                backgroundColor: "#000",
+              }}
+            >
+              <img
+                src={selectedCOC.data}
+                alt="Chain of Custody"
+                style={{
+                  maxHeight: "90vh",
+                  maxWidth: "100%",
+                  objectFit: "contain",
+                }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCocFullScreenOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

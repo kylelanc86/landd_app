@@ -169,15 +169,7 @@ const Reports = () => {
           const sortedCached = sortProjectsByID(filteredCached);
 
           // Log diagnostic info for cached projects
-          sortedCached.forEach((project) => {
-            const projectId = project._id?.toString();
-            const reasons = projectReasons[projectId] || ["unknown"];
-            console.log(
-              `[REPORTS-FOLDER] ${project.projectID || "N/A"}: ${reasons.join(
-                ", "
-              )}`
-            );
-          });
+
 
           // Fast path: Display cached projects immediately (no API call!)
           setAllProjects(sortedCached);
@@ -186,10 +178,7 @@ const Reports = () => {
           setLoading(false);
           loadedFromCache = true;
 
-          console.log(
-            `[REPORTS] Displayed ${sortedCached.length} cached projects`
-          );
-        }
+            }
       }
 
       // Step 3: Fetch fresh projects by IDs in the background
@@ -207,17 +196,6 @@ const Reports = () => {
           // Sort by projectID descending
           const sortedProjects = sortProjectsByID(fetchedProjects);
 
-          // Log diagnostic info for each project showing why it qualified
-          console.log("[REPORTS-FOLDER] Folder qualification details:");
-          sortedProjects.forEach((project) => {
-            const projectId = project._id?.toString();
-            const reasons = projectReasons[projectId] || ["unknown"];
-            console.log(
-              `[REPORTS-FOLDER] Project: ${project.projectID || "N/A"} (${
-                project.name || "Unnamed"
-              }) - Reasons: ${reasons.join(", ")}`
-            );
-          });
 
           // Update state with fresh data
           setAllProjects(sortedProjects);

@@ -35,7 +35,7 @@ const migrateAnalysisData = async () => {
         // Process each item
         for (const item of assessment.items) {
           // Check if item already has analysisData
-          if (item.analysisData && item.analysisData.isAnalyzed) {
+          if (item.analysisData && item.analysisData.isAnalysed) {
             console.log(`  Item ${item.itemNumber} already has analysis data, skipping`);
             continue;
           }

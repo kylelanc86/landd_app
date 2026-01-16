@@ -307,7 +307,7 @@ const LDsuppliedAnalysisPage = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
-        isAnalyzed: isAnalysisComplete,
+        isAnalysed: isAnalysisComplete,
         analysedAt: analysisDate,
       };
 
@@ -340,7 +340,7 @@ const LDsuppliedAnalysisPage = () => {
     }
   };
 
-  const handleMarkAsAnalyzed = async () => {
+  const handleMarkAsAnalysed = async () => {
     try {
       console.log("Marking item as analysed...");
 
@@ -368,7 +368,7 @@ const LDsuppliedAnalysisPage = () => {
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
         finalResult: noFibreDetected ? "No fibres detected" : finalResult,
-        isAnalyzed: true,
+        isAnalysed: true,
         analysedAt: analysisDate,
       };
 
@@ -559,7 +559,7 @@ const LDsuppliedAnalysisPage = () => {
               type="date"
               value={analysisDate.toISOString().split("T")[0]}
               onChange={(e) => setAnalysisDate(new Date(e.target.value))}
-              disabled={assessmentItem?.analysisData?.isAnalyzed}
+              disabled={assessmentItem?.analysisData?.isAnalysed}
               InputLabelProps={{
                 shrink: true,
               }}
@@ -585,7 +585,7 @@ const LDsuppliedAnalysisPage = () => {
               label="Sample Description"
               value={sampleDescription}
               onChange={(e) => setSampleDescription(e.target.value)}
-              disabled={assessmentItem?.analysisData?.isAnalyzed}
+              disabled={assessmentItem?.analysisData?.isAnalysed}
               sx={{
                 "& .MuiInputBase-input.Mui-disabled": {
                   backgroundColor: "#f5f5f5",
@@ -601,7 +601,7 @@ const LDsuppliedAnalysisPage = () => {
               <RadioGroup
                 value={sampleType}
                 onChange={(e) => setSampleType(e.target.value)}
-                disabled={assessmentItem?.analysisData?.isAnalyzed}
+                disabled={assessmentItem?.analysisData?.isAnalysed}
               >
                 <FormControlLabel
                   value="mass"
@@ -624,7 +624,7 @@ const LDsuppliedAnalysisPage = () => {
                 label="Sample Mass"
                 value={sampleMass}
                 onChange={(e) => setSampleMass(e.target.value)}
-                disabled={assessmentItem?.analysisData?.isAnalyzed}
+                disabled={assessmentItem?.analysisData?.isAnalysed}
                 sx={{
                   "& .MuiInputBase-input.Mui-disabled": {
                     backgroundColor: "#f5f5f5",
@@ -645,7 +645,7 @@ const LDsuppliedAnalysisPage = () => {
                         x: e.target.value,
                       })
                     }
-                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    disabled={assessmentItem?.analysisData?.isAnalysed}
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
                         backgroundColor: "#f5f5f5",
@@ -665,7 +665,7 @@ const LDsuppliedAnalysisPage = () => {
                         y: e.target.value,
                       })
                     }
-                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    disabled={assessmentItem?.analysisData?.isAnalysed}
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
                         backgroundColor: "#f5f5f5",
@@ -685,7 +685,7 @@ const LDsuppliedAnalysisPage = () => {
                         z: e.target.value,
                       })
                     }
-                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    disabled={assessmentItem?.analysisData?.isAnalysed}
                     sx={{
                       "& .MuiInputBase-input.Mui-disabled": {
                         backgroundColor: "#f5f5f5",
@@ -703,7 +703,7 @@ const LDsuppliedAnalysisPage = () => {
               <RadioGroup
                 value={ashing}
                 onChange={(e) => setAshing(e.target.value)}
-                disabled={assessmentItem?.analysisData?.isAnalyzed}
+                disabled={assessmentItem?.analysisData?.isAnalysed}
               >
                 <FormControlLabel
                   value="no"
@@ -723,7 +723,7 @@ const LDsuppliedAnalysisPage = () => {
                 label="Crucible Number"
                 value={crucibleNo}
                 onChange={(e) => setCrucibleNo(e.target.value)}
-                disabled={assessmentItem?.analysisData?.isAnalyzed}
+                disabled={assessmentItem?.analysisData?.isAnalysed}
                 sx={{
                   width: "150px",
                   ml: 2,
@@ -753,7 +753,7 @@ const LDsuppliedAnalysisPage = () => {
                   <Checkbox
                     checked={noFibreDetected}
                     onChange={(e) => setNoFibreDetected(e.target.checked)}
-                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    disabled={assessmentItem?.analysisData?.isAnalysed}
                   />
                 }
                 label="No fibres detected"
@@ -767,7 +767,7 @@ const LDsuppliedAnalysisPage = () => {
                     value={microscope}
                     onChange={(e) => setMicroscope(e.target.value)}
                     label="Microscope"
-                    disabled={assessmentItem?.analysisData?.isAnalyzed}
+                    disabled={assessmentItem?.analysisData?.isAnalysed}
                   >
                     <MenuItem value="LD-PLM-1">LD-PLM-1</MenuItem>
                   </Select>
@@ -809,7 +809,7 @@ const LDsuppliedAnalysisPage = () => {
               startIcon={<AddIcon />}
               onClick={addFibre}
               disabled={
-                fibres.length >= 4 || assessmentItem?.analysisData?.isAnalyzed
+                fibres.length >= 4 || assessmentItem?.analysisData?.isAnalysed
               }
               size="small"
             >
@@ -851,7 +851,7 @@ const LDsuppliedAnalysisPage = () => {
                             sx={{ backgroundColor: "white" }}
                             size="small"
                             onClick={() => removeFibre(fibre.id)}
-                            disabled={assessmentItem?.analysisData?.isAnalyzed}
+                            disabled={assessmentItem?.analysisData?.isAnalysed}
                           >
                             Remove
                           </Button>
@@ -888,7 +888,7 @@ const LDsuppliedAnalysisPage = () => {
                               )
                             }
                             size="small"
-                            disabled={assessmentItem?.analysisData?.isAnalyzed}
+                            disabled={assessmentItem?.analysisData?.isAnalysed}
                           >
                             <MenuItem value="curly">Curly</MenuItem>
                             <MenuItem value="straight">Straight</MenuItem>
@@ -925,7 +925,7 @@ const LDsuppliedAnalysisPage = () => {
                               )
                             }
                             size="small"
-                            disabled={assessmentItem?.analysisData?.isAnalyzed}
+                            disabled={assessmentItem?.analysisData?.isAnalysed}
                           >
                             <MenuItem value="yes">Yes</MenuItem>
                             <MenuItem value="no">No</MenuItem>
@@ -960,7 +960,7 @@ const LDsuppliedAnalysisPage = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              assessmentItem?.analysisData?.isAnalyzed
+                              assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -1004,7 +1004,7 @@ const LDsuppliedAnalysisPage = () => {
                           }
                           disabled={
                             fibre.disintegrates === "yes" ||
-                            assessmentItem?.analysisData?.isAnalyzed
+                            assessmentItem?.analysisData?.isAnalysed
                           }
                           sx={{
                             "& .MuiInputBase-input.Mui-disabled": {
@@ -1042,7 +1042,7 @@ const LDsuppliedAnalysisPage = () => {
                           }
                           disabled={
                             fibre.disintegrates === "yes" ||
-                            assessmentItem?.analysisData?.isAnalyzed
+                            assessmentItem?.analysisData?.isAnalysed
                           }
                           placeholder="None"
                           sx={{
@@ -1085,7 +1085,7 @@ const LDsuppliedAnalysisPage = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              assessmentItem?.analysisData?.isAnalyzed
+                              assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -1133,7 +1133,7 @@ const LDsuppliedAnalysisPage = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              assessmentItem?.analysisData?.isAnalyzed
+                              assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -1180,7 +1180,7 @@ const LDsuppliedAnalysisPage = () => {
                             size="small"
                             disabled={
                               fibre.disintegrates === "yes" ||
-                              assessmentItem?.analysisData?.isAnalyzed
+                              assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
                               "& .MuiInputBase-input.Mui-disabled": {
@@ -1229,7 +1229,7 @@ const LDsuppliedAnalysisPage = () => {
                           }
                           disabled={
                             fibre.disintegrates === "yes" ||
-                            assessmentItem?.analysisData?.isAnalyzed
+                            assessmentItem?.analysisData?.isAnalysed
                           }
                           sx={{
                             "& .MuiInputBase-input.Mui-disabled": {
@@ -1271,7 +1271,7 @@ const LDsuppliedAnalysisPage = () => {
                           }
                           disabled={
                             fibre.disintegrates === "yes" ||
-                            assessmentItem?.analysisData?.isAnalyzed
+                            assessmentItem?.analysisData?.isAnalysed
                           }
                           sx={{
                             "& .MuiInputBase-input.Mui-disabled": {
@@ -1308,7 +1308,7 @@ const LDsuppliedAnalysisPage = () => {
                             }
                             size="small"
                             placeholder="Select Result"
-                            disabled={assessmentItem?.analysisData?.isAnalyzed}
+                            disabled={assessmentItem?.analysisData?.isAnalysed}
                           >
                             <MenuItem value="">Select Result</MenuItem>
                             <MenuItem value="Chrysotile Asbestos">
@@ -1353,7 +1353,7 @@ const LDsuppliedAnalysisPage = () => {
               ? "No fibres detected"
               : "Summary of all fibre analysis results"
           }
-          disabled={noFibreDetected || assessmentItem?.analysisData?.isAnalyzed}
+          disabled={noFibreDetected || assessmentItem?.analysisData?.isAnalysed}
           sx={{
             "& .MuiInputBase-input.Mui-disabled": {
               backgroundColor: "#f5f5f5",
@@ -1371,7 +1371,7 @@ const LDsuppliedAnalysisPage = () => {
           alignItems: "center",
         }}
       >
-        {assessmentItem?.analysisData?.isAnalyzed ? (
+        {assessmentItem?.analysisData?.isAnalysed ? (
           <Button
             variant="outlined"
             color="error"
@@ -1384,7 +1384,7 @@ const LDsuppliedAnalysisPage = () => {
           <Button
             variant="outlined"
             color="success"
-            onClick={handleMarkAsAnalyzed}
+            onClick={handleMarkAsAnalysed}
             size="large"
             disabled={!assessmentItem?.analysisData || !isAnalysisComplete()}
           >
@@ -1397,7 +1397,7 @@ const LDsuppliedAnalysisPage = () => {
           color="primary"
           onClick={handleSaveAnalysis}
           size="large"
-          disabled={assessmentItem?.analysisData?.isAnalyzed}
+          disabled={assessmentItem?.analysisData?.isAnalysed}
         >
           Save Analysis
         </Button>

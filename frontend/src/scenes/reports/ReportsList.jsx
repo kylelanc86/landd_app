@@ -20,6 +20,8 @@ import {
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
   Edit as EditIcon,
+  Description as DescriptionIcon,
+  TableChart as TableChartIcon,
 } from "@mui/icons-material";
 import { format } from "date-fns";
 
@@ -32,6 +34,8 @@ const ReportsList = ({
   onDownload,
   onPrint,
   onRevise,
+  onViewCOC,
+  onExportCSV,
   processingReport = { reportId: null, action: null },
 }) => {
   const getCategoryTitle = () => {
@@ -42,6 +46,8 @@ const ReportsList = ({
         return "Air Monitoring and Clearances";
       case "fibre-id":
         return "Fibre ID Reports";
+      case "fibre-count":
+        return "Fibre Count Reports";
       default:
         return "Reports";
     }
@@ -253,6 +259,46 @@ const ReportsList = ({
                         )}
                       </IconButton>
                     </Tooltip>
+                    {/* CSV Export button for air monitoring reports */}
+                    {report.type === "shift" && onExportCSV && (
+                      <Tooltip title="Export to CSV">
+                        <IconButton
+                          size="small"
+                          onClick={() => onExportCSV(report)}
+                          color="success"
+                          disabled={
+                            (processingReport.reportId === report.id ||
+                              processingReport.reportId === report.data?._id ||
+                              processingReport.reportId === report.data?.id) &&
+                            processingReport.action === "csv"
+                          }
+                        >
+                          {(processingReport.reportId === report.id ||
+                            processingReport.reportId === report.data?._id ||
+                            processingReport.reportId === report.data?.id) &&
+                          processingReport.action === "csv" ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <TableChartIcon />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {/* COC button for fibre ID and fibre count reports */}
+                    {(category === "fibre-id" || category === "fibre-count") &&
+                      (report.data?.chainOfCustody ||
+                        report.chainOfCustody) &&
+                      onViewCOC && (
+                        <Tooltip title="View Chain of Custody">
+                          <IconButton
+                            size="small"
+                            onClick={() => onViewCOC(report)}
+                            color="info"
+                          >
+                            <DescriptionIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     {/* Only show revise button for completed reports */}
                     {(report.status === "complete" ||
                       report.status === "completed" ||

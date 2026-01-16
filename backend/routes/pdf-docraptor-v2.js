@@ -347,6 +347,15 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       reportTypeNameVC = 'Inspection Certificate';
     }
     
+    // Determine clearance type prefix for filename (NF for Non-friable, F for Friable types)
+    let clearanceTypePrefix = '';
+    if (clearanceData.clearanceType === 'Non-friable') {
+      clearanceTypePrefix = 'NF ';
+    } else if (clearanceData.clearanceType === 'Friable' || clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
+      clearanceTypePrefix = 'F ';
+    }
+    // Vehicle/Equipment clearances don't get a prefix
+    
     // Determine report authoriser text
     let reportAuthoriserText;
     if (clearanceData.reportApprovedBy) {
@@ -366,7 +375,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[REPORT_AUTHORISER\]/g, reportAuthoriserText)
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})`)
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${clearanceTypePrefix}${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
       .replace(/\[FOOTER_TEXT\]/g, footerText)
@@ -1394,7 +1403,16 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       reportTypeName = 'Inspection Certificate';
     }
     
-    const filename = `${projectId}: ${reportTypeName} - ${siteName} (${clearanceDate}).pdf`;
+    // Determine clearance type prefix for filename (NF for Non-friable, F for Friable types)
+    let clearanceTypePrefix = '';
+    if (clearanceData.clearanceType === 'Non-friable') {
+      clearanceTypePrefix = 'NF ';
+    } else if (clearanceData.clearanceType === 'Friable' || clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
+      clearanceTypePrefix = 'F ';
+    }
+    // Vehicle/Equipment clearances don't get a prefix
+    
+    const filename = `${projectId}_${clearanceTypePrefix}${reportTypeName} - ${siteName} (${clearanceDate}).pdf`;
 
     // Generate PDF using DocRaptor with optimized settings
     const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
@@ -2051,7 +2069,7 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
     backendPerformanceMonitor.endStage('docraptor-generation', pdfId);
 
     // Check if there are analysed items and note that fibre analysis report is available
-    const analysedItems = assessmentData.items?.filter(item => item.analysisData?.isAnalyzed) || [];
+    const analysedItems = assessmentData.items?.filter(item => item.analysisData?.isAnalysed) || [];
 
     // Handle PDF merging for fibre analysis report (same approach as clearance reports)
     let finalPdfBuffer = pdfBuffer;

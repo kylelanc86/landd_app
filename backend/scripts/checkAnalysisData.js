@@ -30,7 +30,7 @@ const checkAnalysisData = async () => {
       
       if (assessment.items && assessment.items.length > 0) {
         for (const item of assessment.items) {
-          if (item.analysisData && item.analysisData.isAnalyzed) {
+          if (item.analysisData && item.analysisData.isAnalysed) {
             itemsWithAnalysis++;
             console.log(`    Item ${item.itemNumber}: ✅ HAS ANALYSIS DATA`);
             console.log(`      - Microscope: ${item.analysisData.microscope}`);

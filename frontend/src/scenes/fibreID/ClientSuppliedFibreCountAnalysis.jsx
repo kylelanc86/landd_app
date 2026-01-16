@@ -55,7 +55,7 @@ const SampleSummary = React.memo(
     onKeyDown,
     onClearTable,
     isFilterUncountable,
-    isSampleAnalyzed,
+    isSampleAnalysed,
     calculateConcentration,
     getReportedConcentration,
     inputRefs,
@@ -108,14 +108,14 @@ const SampleSummary = React.memo(
                 label={
                   isFilterUncountable(sample._id)
                     ? "Uncountable"
-                    : isSampleAnalyzed(sample._id)
+                    : isSampleAnalysed(sample._id)
                     ? "Sample Analysed"
                     : "To be counted"
                 }
                 color={
                   isFilterUncountable(sample._id)
                     ? "error"
-                    : isSampleAnalyzed(sample._id)
+                    : isSampleAnalysed(sample._id)
                     ? "success"
                     : "default"
                 }
@@ -123,7 +123,7 @@ const SampleSummary = React.memo(
                 sx={{
                   backgroundColor: isFilterUncountable(sample._id)
                     ? "error.main"
-                    : isSampleAnalyzed(sample._id)
+                    : isSampleAnalysed(sample._id)
                     ? "success.main"
                     : "grey.400",
                   color: "white",
@@ -893,7 +893,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
     setSampleAnalyses((prev) => {
       const newAnalyses = { ...prev };
       const currentAnalysis = newAnalyses[sampleId] || {};
-      
+
       // If backgroundDust is being set to "fail", automatically set uncountableDueToDust to true
       // and set fibresCounted and fieldsCounted to '-'
       // If backgroundDust is being changed from "fail" to something else, set uncountableDueToDust to false
@@ -903,8 +903,8 @@ const ClientSuppliedFibreCountAnalysis = () => {
             ...currentAnalysis,
             [field]: value,
             uncountableDueToDust: true,
-            fibresCounted: '-',
-            fieldsCounted: '-',
+            fibresCounted: "-",
+            fieldsCounted: "-",
           };
         } else {
           // If changing from fail to something else, clear uncountableDueToDust
@@ -920,7 +920,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
           [field]: value,
         };
       }
-      
+
       return newAnalyses;
     });
   }, []);
@@ -979,7 +979,13 @@ const ClientSuppliedFibreCountAnalysis = () => {
   );
 
   const handleKeyDown = useCallback((e, sampleId, rowIndex, colIndex) => {
-    if (e.key === " ") {
+    // Handle spacebar - check multiple properties for tablet keyboard compatibility
+    if (
+      e.key === " " ||
+      e.key === "Spacebar" ||
+      e.keyCode === 32 ||
+      e.code === "Space"
+    ) {
       e.preventDefault();
       setSampleAnalyses((prev) => {
         const newAnalyses = { ...prev };
@@ -1054,6 +1060,65 @@ const ClientSuppliedFibreCountAnalysis = () => {
         return newAnalyses;
       });
     }
+
+    // Handle "/" key for half fibre - check multiple properties for tablet keyboard compatibility
+    if (
+      e.key === "/" ||
+      e.keyCode === 191 ||
+      e.code === "Slash" ||
+      (e.key === "?" && e.shiftKey === false) // Some keyboards send "?" for "/"
+    ) {
+      e.preventDefault();
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
+        newFibreCounts[rowIndex][colIndex] = "0.5";
+
+        // Calculate new totals
+        let fibresCounted = 0;
+        let fieldsCounted = 0;
+        newFibreCounts.forEach((row) => {
+          row.forEach((cell) => {
+            if (cell !== "") {
+              const numValue = parseFloat(cell);
+              if (!isNaN(numValue)) {
+                fibresCounted += numValue;
+                fieldsCounted += 1;
+              }
+            }
+          });
+        });
+
+        newAnalyses[sampleId] = {
+          ...newAnalyses[sampleId],
+          fibreCounts: newFibreCounts,
+          fibresCounted: parseFloat(fibresCounted.toFixed(1)),
+          fieldsCounted,
+        };
+
+        // Move to next cell
+        const nextCol = colIndex + 1;
+        const nextRow = rowIndex;
+        if (nextCol < 20) {
+          const nextInput =
+            inputRefs.current[`${sampleId}-${nextRow}-${nextCol}`];
+          if (nextInput) {
+            setTimeout(() => {
+              nextInput.focus();
+            }, 0);
+          }
+        } else if (rowIndex < 4) {
+          const nextInput = inputRefs.current[`${sampleId}-${nextRow + 1}-0`];
+          if (nextInput) {
+            setTimeout(() => {
+              nextInput.focus();
+            }, 0);
+          }
+        }
+
+        return newAnalyses;
+      });
+    }
   }, []);
 
   const handleClearTable = useCallback((sampleId) => {
@@ -1080,6 +1145,41 @@ const ClientSuppliedFibreCountAnalysis = () => {
     setSelectedSampleId(null);
   };
 
+  const handleFillZeros = useCallback((sampleId) => {
+    setSampleAnalyses((prev) => {
+      const newAnalyses = { ...prev };
+      const newFibreCounts = Array(5)
+        .fill()
+        .map(() => Array(20).fill("0"));
+
+      // Calculate totals (all zeros means 0 fibres, 100 fields)
+      newAnalyses[sampleId] = {
+        ...newAnalyses[sampleId],
+        fibreCounts: newFibreCounts,
+        fibresCounted: 0,
+        fieldsCounted: 100,
+      };
+      return newAnalyses;
+    });
+  }, []);
+
+  const handleClearTableInModal = () => {
+    if (activeSampleId !== null && activeSampleId !== undefined) {
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        newAnalyses[activeSampleId] = {
+          ...newAnalyses[activeSampleId],
+          fibreCounts: Array(5)
+            .fill()
+            .map(() => Array(20).fill("")),
+          fibresCounted: 0,
+          fieldsCounted: 0,
+        };
+        return newAnalyses;
+      });
+    }
+  };
+
   const isFilterUncountable = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
     return (
@@ -1089,7 +1189,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
     );
   };
 
-  const isSampleAnalyzed = (sampleId) => {
+  const isSampleAnalysed = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
     if (!analysis || isFilterUncountable(sampleId)) {
       return false;
@@ -1408,11 +1508,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
 
       showSnackbar("Analysis finalized successfully", "success");
 
-      // Navigate back to samples page
+      // Navigate back to client supplied jobs page
       const basePath = location.pathname.startsWith("/client-supplied")
         ? "/client-supplied"
         : "/fibre-id/client-supplied";
-      navigate(`${basePath}/${jobId}/samples`);
+      navigate(basePath);
     } catch (error) {
       console.error("Error finalizing analysis:", error);
       setError("Failed to finalize analysis. Please try again.");
@@ -1462,7 +1562,6 @@ const ClientSuppliedFibreCountAnalysis = () => {
     setFibreCountModalOpen(false);
     setActiveSampleId(null);
   };
-
 
   if (loading) {
     return (
@@ -1659,7 +1758,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                     onKeyDown={handleKeyDown}
                     onClearTable={handleClearTable}
                     isFilterUncountable={isFilterUncountable}
-                    isSampleAnalyzed={isSampleAnalyzed}
+                    isSampleAnalysed={isSampleAnalysed}
                     calculateConcentration={() => null}
                     getReportedConcentration={getReportedConcentration}
                     inputRefs={inputRefs}
@@ -1692,7 +1791,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                               onKeyDown={handleKeyDown}
                               onClearTable={handleClearTable}
                               isFilterUncountable={isFilterUncountable}
-                              isSampleAnalyzed={isSampleAnalyzed}
+                              isSampleAnalysed={isSampleAnalysed}
                               calculateConcentration={() => null}
                               getReportedConcentration={
                                 getReportedConcentration
@@ -1777,10 +1876,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                 {jobStatus !== "Completed" && (
                   <Button
                     startIcon={<ClearIcon />}
-                    onClick={() => {
-                      handleClearTable(activeSampleId);
-                      handleCloseFibreCountModal();
-                    }}
+                    onClick={handleClearTableInModal}
                     disabled={isFilterUncountable(activeSampleId)}
                     size="small"
                     color="error"
@@ -1821,7 +1917,41 @@ const ClientSuppliedFibreCountAnalysis = () => {
                   <Table size="small" sx={{ tableLayout: "fixed" }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ width: "80px" }}>Range</TableCell>
+                        <TableCell sx={{ width: "80px", position: "relative" }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
+                          >
+                            Range
+                            <Button
+                              size="small"
+                              onClick={() => handleFillZeros(activeSampleId)}
+                              disabled={
+                                isFilterUncountable(activeSampleId) ||
+                                jobStatus === "Completed"
+                              }
+                              sx={{
+                                minWidth: "auto",
+                                width: "16px",
+                                height: "16px",
+                                p: 0,
+                                backgroundColor: "success.main",
+                                opacity: 0,
+                                transition: "opacity 0.2s",
+                                "&:hover": {
+                                  opacity: 1,
+                                },
+                                "&.Mui-disabled": {
+                                  opacity: 0,
+                                },
+                              }}
+                              title="Fill all cells with 0"
+                            />
+                          </Box>
+                        </TableCell>
                         {Array.from({ length: 20 }, (_, i) => (
                           <TableCell
                             key={i}
