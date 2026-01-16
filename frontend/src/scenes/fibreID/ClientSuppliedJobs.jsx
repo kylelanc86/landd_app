@@ -578,7 +578,7 @@ const ClientSuppliedJobs = () => {
       return false;
     }
 
-    // For Fibre ID jobs, check if all samples have isAnalyzed === true
+    // For Fibre ID jobs, check if all samples have isAnalysed === true
     if (job.jobType === "Fibre ID") {
       return job.samples.every((sample) => {
         return (

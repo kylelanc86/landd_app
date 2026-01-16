@@ -35,7 +35,7 @@ const populateAnalysisData = async () => {
           if (item.analysisData && !item.analysisData.isAnalysed) {
             console.log(`  Updating item ${item.itemNumber}`);
             
-            // Set isAnalyzed to true if we have basic analysis data
+            // Set isAnalysed to true if we have basic analysis data
             if (item.analysisData.microscope && item.analysisData.sampleType) {
               item.analysisData.isAnalysed = true;
               item.analysisData.analysedAt = new Date();

@@ -372,6 +372,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 const Sidebar = () => {
   const theme = useTheme();
   const { isAdmin } = usePermissions();
+  const { currentUser } = useAuth();
 
   // Detect tablet and mobile screens - hide sidebar completely
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint

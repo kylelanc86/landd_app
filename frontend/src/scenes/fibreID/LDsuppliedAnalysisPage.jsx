@@ -404,7 +404,7 @@ const LDsuppliedAnalysisPage = () => {
     try {
       console.log("Setting item to editable mode...");
 
-      // Create analysis data with current form values but set isAnalyzed to false
+      // Create analysis data with current form values but set isAnalysed to false
       const analysisData = {
         microscope: noFibreDetected ? "N/A" : microscope,
         sampleDescription,
