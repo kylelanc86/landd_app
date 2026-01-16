@@ -148,6 +148,69 @@ const NewSample = () => {
         return "Out-of-Service";
       }
 
+      // Handle flowmeters differently - they have simpler calibration structure
+      const isFlowmeter =
+        equipment.equipmentType === "Site flowmeter" ||
+        (!equipment.allCalibrations && !equipment.mostRecentCalibration);
+
+      if (isFlowmeter) {
+        // For flowmeters, just check if calibration is overdue
+        const daysUntil = calculateDaysUntilCalibration(
+          equipment.calibrationDue
+        );
+        if (daysUntil !== null && daysUntil < 0) {
+          return "Calibration Overdue";
+        }
+        return "Active";
+      }
+
+      // For air pumps, check test results and calibration frequency
+      // Check if the most recent calibration has all flowrates failing
+      // If all test results failed, the pump should be Out-of-Service
+      if (equipment.mostRecentCalibration) {
+        const mostRecentCal = equipment.mostRecentCalibration;
+        if (mostRecentCal.testResults && mostRecentCal.testResults.length > 0) {
+          const allFailed = mostRecentCal.testResults.every(
+            (result) => !result.passed
+          );
+          if (allFailed) {
+            return "Out-of-Service";
+          }
+        }
+      }
+
+      // Check if there's at least one passed flowrate calibration within the calibration frequency
+      // Calibration frequency for air pumps is 1 year (12 months)
+      const today = new Date();
+      const oneYearAgo = new Date(today);
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+      // Check all calibrations for passed flowrates within the last year
+      const calibrations = equipment.allCalibrations || [];
+      let hasPassedFlowrateInFrequency = false;
+
+      for (const cal of calibrations) {
+        if (!cal.calibrationDate) continue;
+        const calDate = new Date(cal.calibrationDate);
+
+        // Only consider calibrations within the last year
+        if (calDate >= oneYearAgo && calDate <= today) {
+          if (cal.testResults && cal.testResults.length > 0) {
+            // Check if at least one test result passed
+            const hasPassed = cal.testResults.some((result) => result.passed);
+            if (hasPassed) {
+              hasPassedFlowrateInFrequency = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // If no passed flowrate within the calibration frequency, pump is Out-of-Service
+      if (!hasPassedFlowrateInFrequency) {
+        return "Out-of-Service";
+      }
+
       const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
       if (daysUntil !== null && daysUntil < 0) {
         return "Calibration Overdue";
@@ -212,10 +275,22 @@ const NewSample = () => {
                     )
                   : null;
 
+              // Get the most recent calibration for status checking
+              const mostRecentCalibration =
+                calibrations.length > 0
+                  ? calibrations.sort(
+                      (a, b) =>
+                        new Date(b.calibrationDate) -
+                        new Date(a.calibrationDate)
+                    )[0]
+                  : null;
+
               return {
                 ...pump,
                 lastCalibration,
                 calibrationDue,
+                mostRecentCalibration, // Store for status calculation
+                allCalibrations: calibrations, // Store all calibrations for status calculation
               };
             } catch (err) {
               console.error(
@@ -856,6 +931,29 @@ const NewSample = () => {
     setForm((prev) => ({ ...prev, [field]: timeString }));
   };
 
+  // Helper functions for time dropdowns
+  const parseTime = (timeString) => {
+    if (!timeString) return { hour: "00", minute: "00" };
+    const [hour, minute] = timeString.split(":");
+    return {
+      hour: hour || "00",
+      minute: minute || "00",
+    };
+  };
+
+  const formatTime = (hour, minute) => {
+    return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+  };
+
+  const handleTimeChange = (field, type, value) => {
+    const currentTime = parseTime(form[field]);
+    const newTime =
+      type === "hour"
+        ? formatTime(value, currentTime.minute)
+        : formatTime(currentTime.hour, value);
+    setForm((prev) => ({ ...prev, [field]: newTime }));
+  };
+
   const validateForm = async () => {
     const errors = {};
 
@@ -1047,11 +1145,19 @@ const NewSample = () => {
         }
       }
       console.error("Error creating sample:", error);
-      
+
       // Check for duplicate key error
-      const errorMessage = error.response?.data?.message || error.message || "Failed to create sample";
-      if (errorMessage.includes("duplicate key") || errorMessage.includes("E11000")) {
-        const attemptedFullSampleID = projectID ? `${projectID}-${form.sampleNumber}` : form.sampleNumber;
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create sample";
+      if (
+        errorMessage.includes("duplicate key") ||
+        errorMessage.includes("E11000")
+      ) {
+        const attemptedFullSampleID = projectID
+          ? `${projectID}-${form.sampleNumber}`
+          : form.sampleNumber;
         setError(
           `Sample number ${attemptedFullSampleID} already exists. This may occur if samples exist from a deleted job/shift. Please refresh the page to recalculate the next available sample number.`
         );
@@ -1376,20 +1482,51 @@ const NewSample = () => {
               >
                 Air-monitor Setup
               </Typography>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <TextField
-                  name="startTime"
-                  label="Start Time"
-                  type="time"
-                  value={form.startTime}
-                  onChange={handleChange}
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <FormControl
                   required
-                  fullWidth
+                  sx={{ minWidth: 100 }}
                   error={!!fieldErrors.startTime}
-                  helperText={fieldErrors.startTime}
-                  InputLabelProps={{ shrink: true }}
-                  inputProps={{ step: 60 }}
-                />
+                >
+                  <InputLabel>Hour</InputLabel>
+                  <Select
+                    value={parseTime(form.startTime).hour}
+                    onChange={(e) =>
+                      handleTimeChange("startTime", "hour", e.target.value)
+                    }
+                    label="Hour"
+                  >
+                    {Array.from({ length: 24 }, (_, i) =>
+                      i.toString().padStart(2, "0")
+                    ).map((hour) => (
+                      <MenuItem key={hour} value={hour}>
+                        {hour}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl
+                  required
+                  sx={{ minWidth: 100 }}
+                  error={!!fieldErrors.startTime}
+                >
+                  <InputLabel>Minutes</InputLabel>
+                  <Select
+                    value={parseTime(form.startTime).minute}
+                    onChange={(e) =>
+                      handleTimeChange("startTime", "minute", e.target.value)
+                    }
+                    label="Minutes"
+                  >
+                    {Array.from({ length: 60 }, (_, i) =>
+                      i.toString().padStart(2, "0")
+                    ).map((minute) => (
+                      <MenuItem key={minute} value={minute}>
+                        {minute}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <IconButton
                   onClick={() => setCurrentTime("startTime")}
                   sx={{ alignSelf: "flex-end", mb: 1 }}
@@ -1397,6 +1534,15 @@ const NewSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
+              {fieldErrors.startTime && (
+                <Typography
+                  variant="caption"
+                  color="error"
+                  sx={{ mt: -1, mb: 1, ml: 1 }}
+                >
+                  {fieldErrors.startTime}
+                </Typography>
+              )}
               <FormControl
                 fullWidth
                 required
@@ -1443,21 +1589,51 @@ const NewSample = () => {
               >
                 Air-monitor Collection
               </Typography>
-              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-                <TextField
-                  name="endTime"
-                  label="End Time"
-                  type="time"
-                  value={form.endTime}
-                  onChange={handleChange}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  inputProps={{ step: 60 }}
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <FormControl
+                  required
+                  sx={{ minWidth: 100 }}
                   error={insufficientSampleTime}
-                  helperText={
-                    insufficientSampleTime ? "Insufficient sample time" : ""
-                  }
-                />
+                >
+                  <InputLabel>Hour</InputLabel>
+                  <Select
+                    value={parseTime(form.endTime).hour}
+                    onChange={(e) =>
+                      handleTimeChange("endTime", "hour", e.target.value)
+                    }
+                    label="Hour"
+                  >
+                    {Array.from({ length: 24 }, (_, i) =>
+                      i.toString().padStart(2, "0")
+                    ).map((hour) => (
+                      <MenuItem key={hour} value={hour}>
+                        {hour}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl
+                  required
+                  sx={{ minWidth: 100 }}
+                  error={insufficientSampleTime}
+                >
+                  <InputLabel>Minutes</InputLabel>
+                  <Select
+                    value={parseTime(form.endTime).minute}
+                    onChange={(e) =>
+                      handleTimeChange("endTime", "minute", e.target.value)
+                    }
+                    label="Minutes"
+                  >
+                    {Array.from({ length: 60 }, (_, i) =>
+                      i.toString().padStart(2, "0")
+                    ).map((minute) => (
+                      <MenuItem key={minute} value={minute}>
+                        {minute}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <IconButton
                   onClick={() => setCurrentTime("endTime")}
                   sx={{ alignSelf: "flex-end", mb: 1 }}
@@ -1465,6 +1641,15 @@ const NewSample = () => {
                   <AccessTimeIcon />
                 </IconButton>
               </Box>
+              {insufficientSampleTime && (
+                <Typography
+                  variant="caption"
+                  color="error"
+                  sx={{ mt: -1, mb: 1, ml: 1 }}
+                >
+                  Insufficient sample time
+                </Typography>
+              )}
               <FormControlLabel
                 control={
                   <Checkbox

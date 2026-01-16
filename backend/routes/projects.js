@@ -30,15 +30,11 @@ const getProjectStatuses = async (forceRefresh = false) => {
     if (!forceRefresh && statusCache.data && statusCache.timestamp) {
       const cacheAge = now - statusCache.timestamp;
       if (cacheAge < statusCache.TTL) {
-        console.log(`[PROJECTS] Using cached statuses (age: ${Math.round(cacheAge / 1000)}s)`);
         return statusCache.data;
-      } else {
-        console.log(`[PROJECTS] Cache expired (age: ${Math.round(cacheAge / 1000)}s), refreshing...`);
       }
     }
 
     // Fetch from database
-    console.log(`[PROJECTS] Fetching statuses from database...`);
     const fetchStartTime = Date.now();
     const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
     const group = await CustomDataFieldGroup.findOne({ 
@@ -65,8 +61,6 @@ const getProjectStatuses = async (forceRefresh = false) => {
       .map(field => field.text);
     
     const result = { activeStatuses, inactiveStatuses };
-    const fetchTime = Date.now() - fetchStartTime;
-    console.log(`[PROJECTS] Statuses fetched from database in ${fetchTime}ms`);
     
     // Update cache
     statusCache.data = result;
@@ -77,7 +71,6 @@ const getProjectStatuses = async (forceRefresh = false) => {
     console.error('Error fetching project statuses from custom data field groups:', error);
     // Return cached data if available, even if expired, as fallback
     if (statusCache.data) {
-      console.log('[PROJECTS] Database error, returning stale cache as fallback');
       return statusCache.data;
     }
     // Return empty arrays if database query fails and no cache
@@ -153,9 +146,6 @@ router.get('/status-counts', auth, checkPermission(['projects.view']), async (re
     statusCounts.all_active = totalActive;
     statusCounts.all_inactive = totalInactive;
 
-    const queryTime = Date.now() - startTime;
-    console.log(`[PROJECTS] Status counts completed in ${queryTime}ms (active: ${totalActive}, inactive: ${totalInactive})`);
-
     res.json({ statusCounts });
   } catch (error) {
     console.error('Error fetching status counts:', error);
@@ -166,8 +156,6 @@ router.get('/status-counts', auth, checkPermission(['projects.view']), async (re
 // Get all projects
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
   const requestStartTime = Date.now();
-  console.log(`[PROJECTS] Starting getAll request - Page: ${req.query.page}, Limit: ${req.query.limit}, Search: ${req.query.search}, Status: ${req.query.status}`);
-  console.log(`[PROJECTS] Full query object:`, req.query);
   
   try {
     const {
@@ -181,12 +169,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     } = req.query;
 
     // Get status arrays from custom data fields
-    const statusStartTime = Date.now();
     const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
-    const statusTime = Date.now() - statusStartTime;
-    console.log(`[PROJECTS] Status fetching completed in ${statusTime}ms`);
-    console.log(`[PROJECTS] Active statuses:`, activeStatuses);
-    console.log(`[PROJECTS] Inactive statuses:`, inactiveStatuses);
 
     // Build query
     const query = {};
@@ -201,27 +184,21 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     // This prevents inactive projects from being loaded when no status filter is provided
     if (status) {
       try {
-        console.log(`[PROJECTS] Processing status filter: ${status}`);
         if (status === 'all') {
           // Show ALL projects (both active and inactive) - no status filter applied
-          console.log(`[PROJECTS] Showing all projects (active and inactive)`);
           // Don't add any status filter to the query
         } else if (status === 'all_active') {
           // Filter for all active statuses from custom data fields
           if (activeStatuses.length > 0) {
             query.status = { $in: activeStatuses };
-            console.log(`[PROJECTS] Applied active status filter:`, query.status);
           } else {
-            console.log(`[PROJECTS] No active statuses available, returning empty result`);
             query.status = { $in: [] }; // Return no results if no active statuses defined
           }
         } else if (status === 'all_inactive') {
           // Filter for all inactive statuses from custom data fields
           if (inactiveStatuses.length > 0) {
             query.status = { $in: inactiveStatuses };
-            console.log(`[PROJECTS] Applied inactive status filter:`, query.status);
           } else {
-            console.log(`[PROJECTS] No inactive statuses available, returning empty result`);
             query.status = { $in: [] }; // Return no results if no inactive statuses defined
           }
         } else {
@@ -234,7 +211,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           } else {
             query.status = { $in: statusArray };
           }
-          console.log(`[PROJECTS] Applied specific status filter:`, query.status);
         }
       } catch (error) {
         throw new Error(`Invalid status filter: ${error.message}`);
@@ -244,9 +220,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       // This prevents inactive projects from appearing when statuses aren't loaded yet
       if (activeStatuses.length > 0) {
         query.status = { $in: activeStatuses };
-        console.log(`[PROJECTS] No status filter provided, defaulting to active projects only`);
       } else {
-        console.log(`[PROJECTS] No active statuses available and no filter provided, returning empty result`);
         query.status = { $in: [] }; // Return no results if no active statuses defined
       }
     }
@@ -254,16 +228,10 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const queryBuildTime = Date.now() - requestStartTime;
-    console.log(`[PROJECTS] Query building completed in ${queryBuildTime}ms`);
-    console.log(`[PROJECTS] Final query:`, JSON.stringify(query, null, 2));
-    
     try {
       let projects, total;
 
       if (search) {
-        console.log(`[PROJECTS] Starting optimized search for: "${search}"`);
-        console.log(`[PROJECTS] Base query:`, JSON.stringify(query, null, 2));
         
         const searchStartTime = Date.now();
         
@@ -384,8 +352,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         const aggregationResult = await Project.aggregate(pipeline);
         const searchTime = Date.now() - searchStartTime;
         
-        console.log(`[PROJECTS] Aggregation search completed in ${searchTime}ms`);
-        console.log(`[PROJECTS] Found ${aggregationResult.length} matching projects`);
         
         // Convert aggregation results to Mongoose documents (for consistency with non-search queries)
         // This allows us to use .toObject() and other Mongoose methods if needed
@@ -408,15 +374,10 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         // This is fine since we only have ~200 active projects
         // If needed later, we can add server-side pagination here with $skip and $limit
         
-        console.log(`[PROJECTS] Returning ${projects.length} projects from optimized search`);
       } else {
         // Use regular find for non-search queries
-        const countStartTime = Date.now();
         total = await Project.countDocuments(query);
-        const countTime = Date.now() - countStartTime;
-        console.log(`[PROJECTS] Count query completed in ${countTime}ms`);
         
-        const dataStartTime = Date.now();
         projects = await Project.find(query)
           .select('projectID name department status client users d_Date workOrder categories description notes projectContact budget isLargeProject reports_present createdAt updatedAt startDate endDate address')
           .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
@@ -424,8 +385,6 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           .limit(parseInt(limit))
           .populate('client', 'name')
           .populate('users', 'firstName lastName');
-        const dataTime = Date.now() - dataStartTime;
-        console.log(`[PROJECTS] Data query completed in ${dataTime}ms`);
       }
 
       const pages = Math.ceil(total / parseInt(limit));
@@ -453,17 +412,12 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
           limit: parseInt(limit),
         }
       };
-
-      const totalTime = Date.now() - requestStartTime;
-      console.log(`[PROJECTS] getAll completed in ${totalTime}ms - Projects: ${projects.length}, Total: ${total}`);
       
       res.json(response);
     } catch (error) {
       throw new Error(`Database error: ${error.message}`);
     }
   } catch (error) {
-    const totalTime = Date.now() - requestStartTime;
-    console.log(`[PROJECTS] getAll ERROR after ${totalTime}ms: ${error.message}`);
     res.status(500).json({ message: error.message });
   }
 });
@@ -486,13 +440,6 @@ router.get('/:id', auth, checkPermission(['projects.view']), async (req, res) =>
 // Create project
 router.post('/', auth, checkPermission(['projects.create']), async (req, res) => {
   try {
-    console.log('=== CREATING NEW PROJECT ===');
-    console.log('Request body:', req.body);
-    console.log('Client ID:', req.body.client);
-    console.log('Department:', req.body.department);
-    console.log('Users:', req.body.users);
-    console.log('============================');
-    
     // Validate categories before creating project
     const validCategories = [
       'Asbestos Management Plan',
@@ -548,8 +495,6 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
       budget: parseFloat(req.body.budget) || 0
     });
     
-    console.log('Project instance created:', project);
-    
     // Save the project (this will trigger the pre-save hook)
     const newProject = await project.save();
     
@@ -562,14 +507,11 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
         });
         
         await job.save();
-        console.log(`Automatically created client supplied job for project ${newProject.projectID}`);
-        
         // Update the project's reports_present field to true
         await Project.findByIdAndUpdate(
           newProject._id,
           { reports_present: true }
         );
-        console.log(`Updated project ${newProject._id} reports_present to true due to automatic client supplied job creation`);
       } catch (jobError) {
         console.error('Error creating automatic client supplied job:', jobError);
         // Don't fail the project creation if job creation fails
@@ -668,31 +610,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
         });
       
       if (originalUsers.length !== cleanedUsers.length) {
-        console.log('🔍 CLEANED UP EXISTING PROJECT USERS', {
-          projectId: project._id,
-          originalUsers,
-          cleanedUsers,
-          originalCount: originalUsers.length,
-          cleanedCount: cleanedUsers.length
-        });
         project.users = cleanedUsers;
       }
     }
-
-    console.log('🔍 EXISTING PROJECT DATA', {
-      projectId: project._id,
-      projectID: project.projectID,
-      name: project.name,
-      department: project.department,
-      status: project.status,
-      categories: project.categories,
-      categoriesType: typeof project.categories,
-      isCategoriesArray: Array.isArray(project.categories),
-      client: project.client,
-      workOrder: project.workOrder,
-      users: project.users,
-      allFields: Object.keys(project.toObject())
-    });
 
     // Store old status and users before updating
     const oldStatus = project.status;
@@ -719,19 +639,6 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     }
     
     // Update project fields
-    console.log('🔍 UPDATING PROJECT FIELDS', {
-      projectId: project._id,
-      fieldUpdates: {
-        name: { from: project.name, to: req.body.name || project.name, changed: req.body.name !== undefined },
-        client: { from: project.client, to: req.body.client || project.client, changed: req.body.client !== undefined },
-        department: { from: project.department, to: req.body.department || project.department, changed: req.body.department !== undefined },
-        status: { from: project.status, to: req.body.status || project.status, changed: req.body.status !== undefined },
-        categories: { from: project.categories, to: req.body.categories, changed: req.body.categories !== undefined },
-        address: { from: project.address, to: req.body.address || project.address, changed: req.body.address !== undefined },
-        workOrder: { from: project.workOrder, to: req.body.workOrder || project.workOrder, changed: req.body.workOrder !== undefined },
-        users: { from: project.users, to: req.body.users || project.users, changed: req.body.users !== undefined }
-      }
-    });
 
     project.name = req.body.name || project.name;
     project.client = req.body.client || project.client;
@@ -762,23 +669,11 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
         'Other'
       ];
       
-      console.log('🔍 CATEGORIES VALIDATION', {
-        originalCategories: req.body.categories,
-        categoriesType: typeof req.body.categories,
-        isArray: Array.isArray(req.body.categories)
-      });
-      
       // Filter out invalid categories and trim whitespace
       const processedCategories = req.body.categories
         .filter(category => category && typeof category === 'string')
         .map(category => category.trim())
         .filter(category => validCategories.includes(category));
-      
-      console.log('🔍 CATEGORIES AFTER PROCESSING', {
-        processedCategories,
-        validCategoriesCount: processedCategories.length,
-        originalCount: req.body.categories.length
-      });
       
       project.categories = processedCategories;
     }
@@ -818,16 +713,8 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
             return /^[0-9a-fA-F]{24}$/.test(user);
           });
         
-        console.log('🔍 USERS FIELD PROCESSING', {
-          originalUsers: req.body.users,
-          cleanedUsers,
-          originalCount: req.body.users.length,
-          cleanedCount: cleanedUsers.length
-        });
-        
         project.users = cleanedUsers;
       } else {
-        console.log('🔍 USERS FIELD NOT ARRAY', { users: req.body.users, type: typeof req.body.users });
         // If users is not an array, set to empty array
         project.users = [];
       }
@@ -839,32 +726,12 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
 
     // Fix any string dates that might have been sent from frontend
     if (req.body.updatedAt && typeof req.body.updatedAt === 'string') {
-      console.log('🔍 Converting updatedAt from string to Date:', req.body.updatedAt);
       project.updatedAt = new Date(req.body.updatedAt);
     }
-
-    console.log('🔍 PROJECT BEFORE SAVE', {
-      projectId: project._id,
-      projectID: project.projectID,
-      name: project.name,
-      department: project.department,
-      status: project.status,
-      categories: project.categories,
-      categoriesType: typeof project.categories,
-      isCategoriesArray: Array.isArray(project.categories),
-      client: project.client,
-      workOrder: project.workOrder,
-      users: project.users,
-      modifiedPaths: project.modifiedPaths(),
-      isModified: project.isModified()
-    });
-
-    console.log('🔄 ATTEMPTING TO SAVE PROJECT', { projectId: project._id });
     
     // Add detailed validation before save
     try {
       await project.validate();
-      console.log('✅ PROJECT VALIDATION PASSED', { projectId: project._id });
     } catch (validationError) {
       console.error('❌ PROJECT VALIDATION FAILED', {
         projectId: project._id,
@@ -876,7 +743,6 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     }
     
     const updatedProject = await project.save();
-    console.log('✅ PROJECT SAVED SUCCESSFULLY', { projectId: project._id });
     
     // Update dashboard stats if status changed
     if (req.body.status && req.body.status !== oldStatus) {
@@ -890,12 +756,6 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
 
       // Log status change to audit trail
       try {
-        console.log('🔍 Logging status change to audit trail:', {
-          projectId: project._id,
-          oldStatus,
-          newStatus: req.body.status,
-          userId: req.user._id
-        });
         const ProjectAuditService = require('../services/projectAuditService');
         await ProjectAuditService.logStatusChange(
           project._id, 
@@ -904,7 +764,6 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
           req.user._id, 
           `Status changed from "${oldStatus}" to "${req.body.status}"`
         );
-        console.log('🔍 Status change logged successfully');
       } catch (auditError) {
         console.error('Error logging status change to audit trail:', auditError);
         // Don't fail the project update if audit logging fails
@@ -1175,12 +1034,8 @@ router.get('/:id/timelogs', auth, checkPermission(['projects.view']), async (req
 
 // Get projects assigned to current user
 router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req, res) => {
+  const startTime = Date.now();
   try {
-    const startTime = Date.now();
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`[ASSIGNED-TO-ME] Starting request for user: ${req.user.id}`);
-    console.log(`[ASSIGNED-TO-ME] Params:`, req.query);
-    
     const {
       page = 1,
       limit = 50,
@@ -1205,10 +1060,7 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
 
     if (useCachedIds) {
       // Get user's cached allocated project IDs (skip status fetch since cache only has active projects)
-      const userStartTime = Date.now();
       const user = await User.findById(userId).select('allocatedProjectIds').lean(); // Use lean() for faster query
-      const userFetchTime = Date.now() - userStartTime;
-      console.log(`[ASSIGNED-TO-ME] ⏱️  User cache fetch: ${userFetchTime}ms`);
       
       if (user && user.allocatedProjectIds && user.allocatedProjectIds.length > 0) {
         // Use cached IDs - much faster than querying by users array
@@ -1216,20 +1068,15 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         cachedProjectIds = user.allocatedProjectIds;
         query = { _id: { $in: cachedProjectIds } }; // Build query directly
         usingCachedIds = true;
-        console.log(`[ASSIGNED-TO-ME] ✅ Using cached project IDs (${cachedProjectIds.length} active projects)`);
       } else {
         // Cache is empty - return empty results
         // This is intentional: cache may be correctly empty (no active projects) or not yet populated
         query = { _id: { $in: [] } }; // Empty array ensures no results
         usingCachedIds = true; // Still mark as using cache (empty cache)
-        console.log(`[ASSIGNED-TO-ME] ℹ️  Cache empty - returning no projects (cache may be correctly empty or not yet populated)`);
       }
     } else {
       // For inactive or specific status queries, use users array (need status fetch)
-      const statusFetchStart = Date.now();
       const { activeStatuses, inactiveStatuses } = await getProjectStatuses();
-      statusFetchTime = Date.now() - statusFetchStart;
-      console.log(`[ASSIGNED-TO-ME] ⏱️  Status fetch: ${statusFetchTime}ms`);
       query = { users: new mongoose.Types.ObjectId(userId) }; // Build query directly
     }
 
@@ -1242,7 +1089,6 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
             // Filter for all active statuses
             if (activeStatuses.length > 0) {
               query.status = { $in: activeStatuses };
-              console.log(`[ASSIGNED-TO-ME] Applied active status filter (${activeStatuses.length} statuses)`);
             } else {
               query.status = { $in: [] }; // Return no results if no active statuses defined
             }
@@ -1250,7 +1096,6 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
             // Filter for all inactive statuses
             if (inactiveStatuses.length > 0) {
               query.status = { $in: inactiveStatuses };
-              console.log(`[ASSIGNED-TO-ME] Applied inactive status filter (${inactiveStatuses.length} statuses)`);
             } else {
               query.status = { $in: [] }; // Return no results if no inactive statuses defined
             }
@@ -1258,7 +1103,6 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
             // Handle specific status or comma-separated list
             const statusArray = status.includes(',') ? status.split(',') : [status];
             query.status = { $in: statusArray };
-            console.log(`[ASSIGNED-TO-ME] Applied specific status filter:`, query.status);
           }
         } catch (error) {
           throw new Error(`Invalid status filter: ${error.message}`);
@@ -1267,23 +1111,14 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
         // DEFAULT BEHAVIOR: If no status filter provided, only show active projects
         if (activeStatuses.length > 0) {
           query.status = { $in: activeStatuses };
-          console.log(`[ASSIGNED-TO-ME] No status filter provided, defaulting to active projects (${activeStatuses.length} statuses)`);
         } else {
-          console.log(`[ASSIGNED-TO-ME] No active statuses available and no filter provided, returning empty result`);
           query.status = { $in: [] }; // Return no results if no active statuses defined
         }
       }
-    } else {
-      // Using cached IDs - cache already contains only active projects
-      // No status filter needed, but log for clarity
-      console.log(`[ASSIGNED-TO-ME] Using cached IDs (already filtered to active projects)`);
     }
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const queryBuildTime = Date.now() - queryStartTime;
-    console.log(`[ASSIGNED-TO-ME] ⏱️  Query building: ${queryBuildTime}ms`);
-    console.log(`[ASSIGNED-TO-ME] 🔍 Query:`, JSON.stringify(query, null, 2));
     
     try {
       const dbStartTime = Date.now();
@@ -1307,13 +1142,8 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           .limit(parseInt(limit))
           .lean(); // Use lean() for plain JS objects (faster, no Mongoose overhead)
         
-        const findTime = Date.now() - findStartTime;
-        console.log(`[ASSIGNED-TO-ME] ⏱️  Find query (cached IDs): ${findTime}ms`);
-        console.log(`[ASSIGNED-TO-ME] Using cached total: ${total} (skipped count query)`);
       } else {
         // For non-cached queries, use aggregation (needs status filtering)
-        const aggregateStartTime = Date.now();
-        
         const results = await Project.aggregate([
           // Match stage - filter documents
           { $match: query },
@@ -1345,20 +1175,12 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           }
         ]);
         
-        const aggregateTime = Date.now() - aggregateStartTime;
-        console.log(`[ASSIGNED-TO-ME] ⏱️  Combined aggregate query (count + data): ${aggregateTime}ms`);
-        
         // Extract results
         total = results[0].metadata[0]?.total || 0;
         projects = results[0].data || [];
       }
       
       const pages = Math.ceil(total / parseInt(limit));
-      
-      console.log(`[ASSIGNED-TO-ME] 📊 Results: ${projects.length} projects (${total} total)`);
-      
-      const dbTime = Date.now() - dbStartTime;
-      console.log(`[ASSIGNED-TO-ME] ⏱️  Total database time: ${dbTime}ms`);
 
       // OPTIMIZATION 2 & 3: No .populate() needed, no client lookup
       // Data is already lean from aggregation (plain JS objects, not Mongoose documents)
@@ -1380,43 +1202,19 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
           limit: parseInt(limit),
         }
       };
-      const transformTime = Date.now() - transformStart;
-      console.log(`[ASSIGNED-TO-ME] ⏱️  Response transformation: ${transformTime}ms`);
-
-      const totalTime = Date.now() - startTime;
-      const breakdown = {
-        queryBuild: queryBuildTime,
-        database: dbTime,
-        transform: transformTime,
-        total: totalTime
-      };
-      
-      // Only include statusFetch if we actually fetched statuses
-      if (statusFetchTime > 0) {
-        breakdown.statusFetch = statusFetchTime;
-      }
-      
-      console.log(`[ASSIGNED-TO-ME] ⏱️  TOTAL REQUEST TIME: ${totalTime}ms`);
-      console.log(`[ASSIGNED-TO-ME] 📈 Performance breakdown:`, breakdown);
-      console.log(`[ASSIGNED-TO-ME] ✅ Request completed successfully`);
-      console.log(`${'='.repeat(80)}\n`);
-
       // Include backend timing in response for frontend debugging
+      const totalTime = Date.now() - startTime;
       response._timing = {
         backend: {
-          total: totalTime,
-          breakdown: breakdown
+          total: totalTime
         }
       };
 
       res.json(response);
     } catch (error) {
-      const errorTime = Date.now() - startTime;
-      console.error(`[ASSIGNED-TO-ME] ❌ Database error after ${errorTime}ms:`, error.message);
       throw new Error(`Database error: ${error.message}`);
     }
   } catch (error) {
-    console.error(`[ASSIGNED-TO-ME] ❌ Request failed:`, error.message);
     res.status(500).json({ message: error.message });
   }
 });
@@ -1470,7 +1268,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           jobs.forEach((job) => {
             addProjectId(job.projectId, 'active_air_monitoring_jobs');
           });
-          console.log(`[REPORTS-FILTER] Condition 1: Found ${count} active air monitoring jobs`);
         })
         .catch((err) => {
           console.error('Error fetching active air monitoring jobs:', err);
@@ -1522,7 +1319,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           jobs.forEach((job) => {
             addProjectId(job.projectId, 'active_asbestos_removal_jobs');
           });
-          console.log(`[REPORTS-FILTER] Condition 3: Found ${projectCount} projects with active asbestos removal jobs (${jobs.length} jobs)`);
         } catch (err) {
           console.error('Error fetching active asbestos removal jobs:', err);
         }
@@ -1560,7 +1356,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           jobs.forEach((job) => {
             addProjectId(job.projectId, 'active_client_supplied_jobs');
           });
-          console.log(`[REPORTS-FILTER] Condition 5: Found ${projectCount} projects with active client supplied jobs (${jobs.length} jobs)`);
         })
         .catch((err) => {
           console.error('Error fetching active client supplied jobs:', err);
@@ -1577,7 +1372,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           jobs.forEach((job) => {
             addProjectId(job.projectId, 'completed_client_supplied_jobs');
           });
-          console.log(`[REPORTS-FILTER] Condition 6: Found ${projectCount} projects with completed client supplied jobs (${jobs.length} jobs)`);
         })
         .catch((err) => {
           console.error('Error fetching completed client supplied jobs:', err);
@@ -1596,7 +1390,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           assessments.forEach((assessment) => {
             addProjectId(assessment.projectId, 'asbestos_assessments');
           });
-          console.log(`[REPORTS-FILTER] Condition 7: Found ${projectCount} projects with asbestos assessments (${assessments.length} assessments)`);
         } catch (err) {
           console.error('Error fetching asbestos assessments:', err);
         }
@@ -1617,7 +1410,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           clearances.forEach((clearance) => {
             addProjectId(clearance.projectId, 'clearance_reports');
           });
-          console.log(`[REPORTS-FILTER] Condition 8: Found ${projectCount} projects with clearance reports (${clearances.length} clearances)`);
         } catch (err) {
           console.error('Error fetching clearance reports:', err);
         }
@@ -1656,8 +1448,6 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
       reasonsSummary[projectId] = Array.from(reasons);
     });
 
-    console.log(`[REPORTS-FILTER] Summary: Found ${projectIds.length} unique projects with reports/jobs in ${queryTime}ms`);
-    console.log(`[REPORTS-FILTER] Project reasons breakdown:`, JSON.stringify(reasonsSummary, null, 2));
 
     res.json({ 
       projectIds, 
@@ -1698,9 +1488,6 @@ router.post('/by-ids', auth, checkPermission(['projects.view']), async (req, res
       .select('_id projectID name client status department createdAt')
       .populate('client', 'name')
       .lean();
-
-    const queryTime = Date.now() - startTime;
-    console.log(`[PROJECTS] Fetched ${projects.length} projects by IDs in ${queryTime}ms`);
 
     res.json({ data: projects, count: projects.length });
   } catch (error) {

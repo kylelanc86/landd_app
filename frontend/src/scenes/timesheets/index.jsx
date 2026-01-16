@@ -75,10 +75,12 @@ const Timesheets = () => {
   const [timesheetStatus, setTimesheetStatus] = useState("incomplete");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState(null);
+  const [otherUserWarningOpen, setOtherUserWarningOpen] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [processingEntries, setProcessingEntries] = useState(new Set());
   const [successEntries, setSuccessEntries] = useState(new Set());
+  const [deletedEntryIds, setDeletedEntryIds] = useState(new Set());
   const [show24HourView, setShow24HourView] = useState(false);
   const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState(null);
@@ -165,30 +167,34 @@ const Timesheets = () => {
         return;
       }
 
-      const processedEntries = entries.map((entry) => {
-        const entryDate = entry.date
-          ? format(new Date(entry.date), "yyyy-MM-dd")
-          : formattedDate;
+      const processedEntries = entries
+        .map((entry) => {
+          const entryDate = entry.date
+            ? format(new Date(entry.date), "yyyy-MM-dd")
+            : formattedDate;
 
-        const processedEntry = {
-          ...entry,
-          date: entryDate,
-          startTime: entry.startTime || "00:00",
-          endTime: entry.endTime || "00:00",
-          projectId: entry.projectId?._id || entry.projectId,
-          projectInputType: entry.projectInputType || "",
-          description: entry.description || "",
-          isAdminWork: entry.isAdminWork || false,
-          isBreak: entry.isBreak || false,
-          // Preserve populated project data for display
-          projectData:
-            entry.projectId && typeof entry.projectId === "object"
-              ? entry.projectId
-              : null,
-        };
+          const processedEntry = {
+            ...entry,
+            date: entryDate,
+            startTime: entry.startTime || "00:00",
+            endTime: entry.endTime || "00:00",
+            projectId: entry.projectId?._id || entry.projectId,
+            projectInputType: entry.projectInputType || "",
+            description: entry.description || "",
+            isAdminWork: entry.isAdminWork || false,
+            isBreak: entry.isBreak || false,
+            // Preserve populated project data for display
+            projectData:
+              entry.projectId && typeof entry.projectId === "object"
+                ? entry.projectId
+                : null,
+            // Preserve userId (could be ObjectId or populated object)
+            userId: entry.userId?._id || entry.userId || null,
+          };
 
-        return processedEntry;
-      });
+          return processedEntry;
+        })
+        .filter((entry) => !deletedEntryIds.has(entry._id)); // Filter out deleted entries
 
       setTimeEntries(processedEntries);
     } catch (error) {
@@ -608,7 +614,13 @@ const Timesheets = () => {
     }
   };
 
-  const handleDelete = async (entryId) => {
+  const handleDelete = async (entryIdOrObject) => {
+    // Handle both old format (just ID) and new format (object with id and entry)
+    const entryId =
+      typeof entryIdOrObject === "string"
+        ? entryIdOrObject
+        : entryIdOrObject.id;
+
     try {
       // Store the entry to restore if deletion fails
       const entryToRestore = timeEntries.find((entry) => entry._id === entryId);
@@ -618,6 +630,8 @@ const Timesheets = () => {
 
       // Optimistically remove from UI immediately
       setTimeEntries((prev) => prev.filter((entry) => entry._id !== entryId));
+      // Track this entry as deleted to prevent it from being re-added
+      setDeletedEntryIds((prev) => new Set(prev).add(entryId));
       setDeleteConfirmOpen(false);
       setEntryToDelete(null);
 
@@ -635,14 +649,31 @@ const Timesheets = () => {
           });
         }, 2000);
 
+        // Entry successfully deleted, keep it in deletedEntryIds to prevent re-adding
         // Only fetch timesheet status, not entries (we already removed it from state)
         fetchTimesheetStatus();
       } catch (apiError) {
         console.error("Error deleting time entry:", apiError);
 
-        // Revert optimistic update on error
+        // If entry doesn't exist on server (404), it's already removed from UI
+        // Don't refetch as that might re-add it if there's server-side caching
+        if (apiError.response?.status === 404) {
+          console.log("Entry not found on server, keeping it removed from UI");
+          // Entry is already removed from UI optimistically and tracked in deletedEntryIds
+          // Just update status, entry will stay removed
+          fetchTimesheetStatus();
+          return;
+        }
+
+        // Revert optimistic update on error (for non-404 errors)
         if (entryToRestore) {
           setTimeEntries((prev) => [...prev, entryToRestore]);
+          // Remove from deleted set since we're restoring it
+          setDeletedEntryIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(entryId);
+            return newSet;
+          });
         }
 
         setErrorMessage(
@@ -674,7 +705,29 @@ const Timesheets = () => {
   };
 
   const handleDeleteClick = (entryId) => {
-    setEntryToDelete(entryId);
+    const entry = timeEntries.find((e) => e._id === entryId);
+    const entryUserId = entry?.userId?.toString() || entry?.userId;
+    const isAnotherUser =
+      entryUserId && entryUserId !== targetUserId?.toString();
+
+    setEntryToDelete({
+      id: entryId,
+      entry: entry, // Store the entry to check if it belongs to another user
+    });
+
+    // If it's another user's entry, show warning dialog first
+    if (isAnotherUser) {
+      setOtherUserWarningOpen(true);
+    } else {
+      // If it's their own entry, go straight to confirmation dialog
+      setDeleteConfirmOpen(true);
+    }
+  };
+
+  const handleOtherUserWarningConfirm = () => {
+    // User confirmed they want to proceed with deleting another user's entry
+    setOtherUserWarningOpen(false);
+    // Now show the regular confirmation dialog
     setDeleteConfirmOpen(true);
   };
 
@@ -705,6 +758,9 @@ const Timesheets = () => {
     if (!targetUserId) {
       return;
     }
+
+    // Clear deleted entries set when date changes (fresh data for new date)
+    setDeletedEntryIds(new Set());
 
     const fetchData = async () => {
       try {
@@ -775,79 +831,269 @@ const Timesheets = () => {
   };
 
   const getCalendarEvents = useCallback(() => {
-    return timeEntries.map((entry) => {
-      const startDateTime = new Date(entry.date);
-      const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
-      startDateTime.setHours(startHours, startMinutes, 0);
+    return timeEntries
+      .map((entry) => {
+        try {
+          // Validate entry has required fields
+          if (!entry.date || !entry.startTime || !entry.endTime) {
+            // Create a placeholder event for invalid entries so they can still be deleted
+            const placeholderDate = new Date(selectedDate || new Date());
+            placeholderDate.setHours(0, 0, 0);
+            const endDate = new Date(placeholderDate);
+            endDate.setHours(1, 0, 0);
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: placeholderDate,
+              end: endDate,
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
 
-      const endDateTime = new Date(entry.date);
-      const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
-      endDateTime.setHours(endHours, endMinutes, 0);
+          const startDateTime = new Date(entry.date);
+          if (isNaN(startDateTime.getTime())) {
+            // Create placeholder event for invalid date
+            const placeholderDate = new Date(selectedDate || new Date());
+            placeholderDate.setHours(0, 0, 0);
+            const endDate = new Date(placeholderDate);
+            endDate.setHours(1, 0, 0);
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: placeholderDate,
+              end: endDate,
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
 
-      // Handle cross-day entries: if end time is before start time, add a day
-      if (endDateTime < startDateTime) {
-        endDateTime.setDate(endDateTime.getDate() + 1);
-      }
+          const [startHours, startMinutes] = entry.startTime
+            .split(":")
+            .map(Number);
+          if (isNaN(startHours) || isNaN(startMinutes)) {
+            // Create placeholder event for invalid time
+            const placeholderDate = new Date(entry.date);
+            placeholderDate.setHours(0, 0, 0);
+            const endDate = new Date(placeholderDate);
+            endDate.setHours(1, 0, 0);
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: placeholderDate,
+              end: endDate,
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
 
-      const projectId = entry.projectId?._id || entry.projectId;
-      // Use populated project data first, fallback to projects array lookup
-      const project =
-        entry.projectData || projects.find((p) => p._id === projectId);
-      const projectName = project?.name || "Unknown Project";
+          startDateTime.setHours(startHours, startMinutes, 0);
+          if (isNaN(startDateTime.getTime())) {
+            // Create placeholder event
+            const placeholderDate = new Date(entry.date);
+            placeholderDate.setHours(0, 0, 0);
+            const endDate = new Date(placeholderDate);
+            endDate.setHours(1, 0, 0);
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: placeholderDate,
+              end: endDate,
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
 
-      let title = "";
-      let backgroundColor = "";
-      let borderColor = "";
-      let textColor = "";
-      let className = "";
+          const endDateTime = new Date(entry.date);
+          if (isNaN(endDateTime.getTime())) {
+            // Create placeholder event
+            const placeholderDate = new Date(entry.date);
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: startDateTime,
+              end: new Date(startDateTime.getTime() + 60 * 60 * 1000), // 1 hour later
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
 
-      if (entry.isBreak) {
-        title = `Break${entry.description ? ` - ${entry.description}` : ""}`;
-        backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
-        borderColor = theme.palette.grey[700];
-        textColor = theme.palette.grey[500];
-        className = "break-event";
-      } else if (entry.isAdminWork) {
-        title = `Admin Work${
-          entry.description ? ` - ${entry.description}` : ""
-        }`;
-        backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
-        borderColor = theme.palette.grey[700];
-        textColor = theme.palette.grey[500];
-        className = "admin-event";
-      } else {
-        title = `${projectName} - ${
-          entry.projectInputType?.replace("_", " ") || ""
-        }${entry.description ? `, ${entry.description}` : ""}`;
-        backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
-        borderColor = theme.palette.grey[700];
-        textColor = theme.palette.grey[500];
-        className = "project-event";
-      }
+          const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
+          if (isNaN(endHours) || isNaN(endMinutes)) {
+            // Create placeholder event
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: startDateTime,
+              end: new Date(startDateTime.getTime() + 60 * 60 * 1000), // 1 hour later
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
 
-      const event = {
-        id: entry._id,
-        title,
-        start: startDateTime,
-        end: endDateTime,
-        backgroundColor,
-        borderColor,
-        textColor,
-        className,
-        extendedProps: {
-          description: entry.description,
-          projectId: projectId,
-          projectName,
-          projectData: entry.projectData,
-          isAdminWork: entry.isAdminWork,
-          isBreak: entry.isBreak,
-          projectInputType: entry.projectInputType,
-        },
-      };
+          // Handle "24:00" as midnight of the next day
+          if (endHours === 24) {
+            endDateTime.setDate(endDateTime.getDate() + 1);
+            endDateTime.setHours(0, endMinutes, 0);
+          } else {
+            endDateTime.setHours(endHours, endMinutes, 0);
+          }
 
-      return event;
-    });
-  }, [timeEntries, projects, theme.palette.grey]);
+          if (isNaN(endDateTime.getTime())) {
+            // Create placeholder event
+            return {
+              id: entry._id,
+              title: "Invalid Entry",
+              start: startDateTime,
+              end: new Date(startDateTime.getTime() + 60 * 60 * 1000), // 1 hour later
+              backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+              borderColor: theme.palette.error.dark,
+              textColor:
+                theme.palette.error.contrastText || theme.palette.common.white,
+              className: "invalid-event",
+              extendedProps: {
+                ...entry,
+                isInvalid: true,
+              },
+            };
+          }
+
+          // Handle cross-day entries: if end time is before start time, add a day
+          if (endDateTime < startDateTime) {
+            endDateTime.setDate(endDateTime.getDate() + 1);
+          }
+
+          const projectId = entry.projectId?._id || entry.projectId;
+          // Use populated project data first, fallback to projects array lookup
+          const project =
+            entry.projectData || projects.find((p) => p._id === projectId);
+          const projectName = project?.name || "Unknown Project";
+
+          let title = "";
+          let backgroundColor = "";
+          let borderColor = "";
+          let textColor = "";
+          let className = "";
+
+          if (entry.isBreak) {
+            title = `Break${
+              entry.description ? ` - ${entry.description}` : ""
+            }`;
+            backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
+            borderColor = theme.palette.grey[700];
+            textColor = theme.palette.grey[500];
+            className = "break-event";
+          } else if (entry.isAdminWork) {
+            title = `Admin Work${
+              entry.description ? ` - ${entry.description}` : ""
+            }`;
+            backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
+            borderColor = theme.palette.grey[700];
+            textColor = theme.palette.grey[500];
+            className = "admin-event";
+          } else {
+            title = `${projectName} - ${
+              entry.projectInputType?.replace("_", " ") || ""
+            }${entry.description ? `, ${entry.description}` : ""}`;
+            backgroundColor = `linear-gradient(135deg, ${theme.palette.grey[500]} 0%, ${theme.palette.grey[700]} 100%)`;
+            borderColor = theme.palette.grey[700];
+            textColor = theme.palette.grey[500];
+            className = "project-event";
+          }
+
+          const event = {
+            id: entry._id,
+            title,
+            start: startDateTime,
+            end: endDateTime,
+            backgroundColor,
+            borderColor,
+            textColor,
+            className,
+            extendedProps: {
+              description: entry.description,
+              projectId: projectId,
+              projectName,
+              projectData: entry.projectData,
+              isAdminWork: entry.isAdminWork,
+              isBreak: entry.isBreak,
+              projectInputType: entry.projectInputType,
+            },
+          };
+
+          return event;
+        } catch (error) {
+          console.warn(
+            "Error creating calendar event for entry:",
+            entry._id,
+            error
+          );
+          // Create placeholder event so invalid entries can still be deleted
+          const placeholderDate = new Date(selectedDate || new Date());
+          placeholderDate.setHours(0, 0, 0);
+          const endDate = new Date(placeholderDate);
+          endDate.setHours(1, 0, 0);
+          return {
+            id: entry._id,
+            title: "Invalid Entry",
+            start: placeholderDate,
+            end: endDate,
+            backgroundColor: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`,
+            borderColor: theme.palette.error.dark,
+            textColor:
+              theme.palette.error.contrastText || theme.palette.common.white,
+            className: "invalid-event",
+            extendedProps: {
+              ...entry,
+              isInvalid: true,
+            },
+          };
+        }
+      })
+      .filter((event) => event !== null); // Filter out null events (shouldn't happen now)
+  }, [timeEntries, projects, theme.palette.grey, selectedDate]);
 
   // Memoize the events array to prevent unnecessary recalculations
   const calendarEvents = useMemo(
@@ -874,6 +1120,18 @@ const Timesheets = () => {
       setErrorMessage(
         "Cannot add entries to an absent timesheet. Please mark as present first."
       );
+      setErrorDialogOpen(true);
+      return;
+    }
+
+    // Validate dates before formatting
+    if (
+      !info.start ||
+      !info.end ||
+      isNaN(info.start.getTime()) ||
+      isNaN(info.end.getTime())
+    ) {
+      setErrorMessage("Invalid time selection. Please try again.");
       setErrorDialogOpen(true);
       return;
     }
@@ -930,6 +1188,15 @@ const Timesheets = () => {
 
     const entry = timeEntries.find((e) => e._id === info.event.id);
     if (entry) {
+      // Validate entry data before opening edit dialog
+      if (!entry.startTime || !entry.endTime) {
+        setErrorMessage(
+          "This entry has invalid time data and cannot be edited. Please delete and recreate it."
+        );
+        setErrorDialogOpen(true);
+        return;
+      }
+
       setFormData({
         startTime: entry.startTime,
         endTime: entry.endTime,
@@ -942,6 +1209,11 @@ const Timesheets = () => {
       setEditingEntryId(entry._id);
       setIsEditing(true);
       setOpenDialog(true);
+    } else {
+      // Entry not found in timeEntries - might be invalid, try to refresh
+      setErrorMessage("Entry data not found. Refreshing timesheet...");
+      setErrorDialogOpen(true);
+      fetchTimeEntries();
     }
   };
 
@@ -964,34 +1236,84 @@ const Timesheets = () => {
     }
 
     const entry = timeEntries.find((e) => e._id === info.event.id);
-    if (!entry) return;
+    if (!entry) {
+      info.revert();
+      return;
+    }
 
     try {
+      // Validate dates before formatting
+      if (
+        !info.event.start ||
+        !info.event.end ||
+        isNaN(info.event.start.getTime()) ||
+        isNaN(info.event.end.getTime())
+      ) {
+        info.revert();
+        setErrorMessage("Invalid time entry. Please try again.");
+        setErrorDialogOpen(true);
+        return;
+      }
+
+      // Calculate duration to preserve it when dragging
+      const originalDuration =
+        info.event.end.getTime() - info.event.start.getTime();
+
+      // Format times, ensuring we use the event's start time (which may have changed)
       const startTime = format(info.event.start, "HH:mm");
       const endTime = format(info.event.end, "HH:mm");
 
+      // Ensure end time is after start time (handle any edge cases)
+      const [startHours, startMinutes] = startTime.split(":").map(Number);
+      const [endHours, endMinutes] = endTime.split(":").map(Number);
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+
+      // Check if end is before start (cross-day scenario)
+      let finalEndTime = endTime;
+      if (endTotalMinutes < startTotalMinutes) {
+        // This shouldn't happen for same-day drags, but handle it
+        // Calculate end time based on duration
+        const durationMinutes = Math.round(originalDuration / (60 * 1000));
+        const newEndTotalMinutes = startTotalMinutes + durationMinutes;
+        const newEndHours = Math.floor(newEndTotalMinutes / 60) % 24;
+        const newEndMins = newEndTotalMinutes % 60;
+        finalEndTime = `${String(newEndHours).padStart(2, "0")}:${String(
+          newEndMins
+        ).padStart(2, "0")}`;
+      }
+
+      // Ensure date is preserved from the entry (don't change the date on drag)
       const timesheetData = {
         ...entry,
         startTime,
-        endTime,
+        endTime: finalEndTime,
+        // Preserve the original date - don't allow dragging to different days
+        date: entry.date || format(selectedDate, "yyyy-MM-dd"),
       };
 
       // Optimistically update the UI immediately
       setTimeEntries((prev) =>
         prev.map((e) =>
-          e._id === entry._id ? { ...e, startTime, endTime } : e
+          e._id === entry._id ? { ...e, startTime, endTime: finalEndTime } : e
         )
       );
 
       // Make API call in background
       await api.put(`/timesheets/${entry._id}`, timesheetData);
+
+      // Refresh entries to ensure sync
+      await fetchTimeEntries();
     } catch (error) {
       // Revert the optimistic update on error
       setTimeEntries((prev) =>
         prev.map((e) => (e._id === entry._id ? entry : e))
       );
       info.revert();
-      setErrorMessage("Failed to update time entry. Please try again.");
+      setErrorMessage(
+        error.response?.data?.message ||
+          "Failed to update time entry. Please try again."
+      );
       setErrorDialogOpen(true);
     }
   };
@@ -1015,16 +1337,52 @@ const Timesheets = () => {
     }
 
     const entry = timeEntries.find((e) => e._id === info.event.id);
-    if (!entry) return;
+    if (!entry) {
+      info.revert();
+      return;
+    }
 
     try {
+      // Validate dates before formatting
+      if (
+        !info.event.start ||
+        !info.event.end ||
+        isNaN(info.event.start.getTime()) ||
+        isNaN(info.event.end.getTime())
+      ) {
+        info.revert();
+        setErrorMessage("Invalid time entry. Please try again.");
+        setErrorDialogOpen(true);
+        return;
+      }
+
+      // Ensure end time is after start time
       const startTime = format(info.event.start, "HH:mm");
-      const endTime = format(info.event.end, "HH:mm");
+      let endTime = format(info.event.end, "HH:mm");
+
+      // Validate that end time is after start time
+      const [startHours, startMinutes] = startTime.split(":").map(Number);
+      const [endHours, endMinutes] = endTime.split(":").map(Number);
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+
+      // If end is before start (shouldn't happen, but handle it), ensure minimum duration
+      if (endTotalMinutes <= startTotalMinutes) {
+        // Set minimum duration of 15 minutes
+        const minEndTotalMinutes = startTotalMinutes + 15;
+        const minEndHours = Math.floor(minEndTotalMinutes / 60) % 24;
+        const minEndMins = minEndTotalMinutes % 60;
+        endTime = `${String(minEndHours).padStart(2, "0")}:${String(
+          minEndMins
+        ).padStart(2, "0")}`;
+      }
 
       const timesheetData = {
         ...entry,
         startTime,
         endTime,
+        // Preserve the original date
+        date: entry.date || format(selectedDate, "yyyy-MM-dd"),
       };
 
       // Optimistically update the UI immediately
@@ -1036,13 +1394,19 @@ const Timesheets = () => {
 
       // Make API call in background
       await api.put(`/timesheets/${entry._id}`, timesheetData);
+
+      // Refresh entries to ensure sync
+      await fetchTimeEntries();
     } catch (error) {
       // Revert the optimistic update on error
       setTimeEntries((prev) =>
         prev.map((e) => (e._id === entry._id ? entry : e))
       );
       info.revert();
-      setErrorMessage("Failed to update time entry. Please try again.");
+      setErrorMessage(
+        error.response?.data?.message ||
+          "Failed to update time entry. Please try again."
+      );
       setErrorDialogOpen(true);
     }
   };
@@ -1407,10 +1771,12 @@ const Timesheets = () => {
         {/* Enhanced Calendar Container with alternating shading */}
         <Box
           sx={{
-            height: isTablet ? "450px" : "625px", // 25% smaller on tablets
+            height: isTablet ? "518px" : "699px", // 25% taller than previous (was 719px), tablet unchanged
             p: 3,
             background: `linear-gradient(135deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
             position: "relative",
+            zIndex: 1,
+            overflow: "visible",
             "& .fc": {
               fontFamily: theme.typography.fontFamily,
               backgroundColor: "transparent",
@@ -1418,6 +1784,9 @@ const Timesheets = () => {
               overflow: "hidden",
               boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
               border: `2px solid ${theme.palette.divider}`,
+              position: "relative",
+              zIndex: 1,
+              pointerEvents: "auto",
             },
             "& .fc-toolbar": {
               background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
@@ -1450,8 +1819,9 @@ const Timesheets = () => {
             "& .fc-timegrid-slot": {
               borderColor: theme.palette.divider,
               backgroundColor: theme.palette.background.paper,
-              touchAction: "manipulation",
+              touchAction: isTablet ? "manipulation" : "auto",
               WebkitTapHighlightColor: "transparent",
+              pointerEvents: "auto",
             },
             "& .fc-timegrid-slot-lane": {
               borderColor: theme.palette.divider,
@@ -1485,20 +1855,36 @@ const Timesheets = () => {
               backgroundColor: "transparent",
             },
             "& .fc-timegrid": {
-              touchAction: "pan-y pinch-zoom",
+              touchAction: isTablet ? "pan-y pinch-zoom" : "auto",
+              pointerEvents: "auto",
             },
             "& .fc-timegrid-body": {
-              touchAction: "pan-y pinch-zoom",
+              touchAction: isTablet ? "pan-y pinch-zoom" : "auto",
+              pointerEvents: "auto",
             },
             "& .fc-event": {
               borderRadius: "12px",
               border: "none",
               boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
               transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              cursor: isTablet ? "default" : "move",
+              pointerEvents: "auto",
+              userSelect: "none",
+              touchAction: isTablet ? "manipulation" : "none",
               "&:hover": {
                 boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-                transform: "translateY(-2px) scale(1.02)",
+                transform: isTablet ? "none" : "translateY(-2px) scale(1.02)",
               },
+            },
+            "& .fc-event-draggable": {
+              cursor: isTablet ? "default" : "move",
+              pointerEvents: "auto",
+              touchAction: isTablet ? "manipulation" : "none",
+            },
+            "& .fc-event-dragging": {
+              opacity: 0.8,
+              cursor: "move",
+              pointerEvents: "none",
             },
             "& .fc-event-main": {
               padding: "8px 12px",
@@ -1552,6 +1938,13 @@ const Timesheets = () => {
               boxShadow: `0 6px 20px ${theme.palette.grey[500]}40 !important`,
               borderRadius: "12px !important",
             },
+            "& .invalid-event": {
+              background: `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%) !important`,
+              borderLeft: `6px solid ${theme.palette.error.dark} !important`,
+              boxShadow: `0 6px 20px ${theme.palette.error.main}40 !important`,
+              borderRadius: "12px !important",
+              cursor: "pointer",
+            },
             "@keyframes spin": {
               "0%": { transform: "translate(-50%, -50%) rotate(0deg)" },
               "100%": { transform: "translate(-50%, -50%) rotate(360deg)" },
@@ -1582,12 +1975,22 @@ const Timesheets = () => {
             height="100%"
             events={calendarEvents}
             editable={
-              timesheetStatus !== "finalised" && timesheetStatus !== "absent"
+              !isTablet &&
+              timesheetStatus !== "finalised" &&
+              timesheetStatus !== "absent"
             }
             droppable={
-              timesheetStatus !== "finalised" && timesheetStatus !== "absent"
+              !isTablet &&
+              timesheetStatus !== "finalised" &&
+              timesheetStatus !== "absent"
             }
             eventOverlap={false}
+            eventConstraint="day"
+            slotEventOverlap={false}
+            eventDurationEditable={true}
+            eventStartEditable={true}
+            eventDisplay="block"
+            eventMinHeight={20}
             firstDay={1}
             headerToolbar={false}
             allDaySlot={false}
@@ -1611,8 +2014,122 @@ const Timesheets = () => {
                 : "";
             }}
             eventContent={(eventInfo) => {
+              // Check if this is marked as an invalid entry
+              if (eventInfo.event.extendedProps?.isInvalid) {
+                const entry = timeEntries.find(
+                  (e) => e._id === eventInfo.event.id
+                );
+                const entryTitle = entry?.isBreak
+                  ? "Break"
+                  : entry?.isAdminWork
+                  ? "Admin Work"
+                  : entry?.projectData?.name ||
+                    entry?.projectId?.name ||
+                    "Project Work";
+
+                return (
+                  <Box sx={{ p: 1 }}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.75rem",
+                        color: "error.contrastText",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Invalid time entry
+                    </Typography>
+                    {entry && (
+                      <Typography
+                        sx={{
+                          fontSize: "0.65rem",
+                          color: "error.contrastText",
+                          mt: 0.5,
+                          opacity: 0.9,
+                        }}
+                      >
+                        {entryTitle}
+                        {entry.startTime &&
+                          entry.endTime &&
+                          ` (${entry.startTime} - ${entry.endTime})`}
+                      </Typography>
+                    )}
+                    <Typography
+                      sx={{
+                        fontSize: "0.6rem",
+                        color: "error.contrastText",
+                        mt: 0.5,
+                        fontStyle: "italic",
+                        opacity: 0.8,
+                      }}
+                    >
+                      Click to edit or delete
+                    </Typography>
+                  </Box>
+                );
+              }
+
+              // Validate dates before processing
+              const startDate = eventInfo.event.start;
+              const endDate = eventInfo.event.end;
+
+              // Check if dates are valid
+              if (
+                !startDate ||
+                !endDate ||
+                isNaN(startDate.getTime()) ||
+                isNaN(endDate.getTime())
+              ) {
+                // Try to get entry data to show what we can
+                const entry = timeEntries.find(
+                  (e) => e._id === eventInfo.event.id
+                );
+                const entryTitle = entry?.isBreak
+                  ? "Break"
+                  : entry?.isAdminWork
+                  ? "Admin Work"
+                  : entry?.projectData?.name || "Project Work";
+
+                return (
+                  <Box sx={{ p: 1 }}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.75rem",
+                        color: "error.main",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Invalid time entry
+                    </Typography>
+                    {entry && (
+                      <Typography
+                        sx={{
+                          fontSize: "0.65rem",
+                          color: "error.light",
+                          mt: 0.5,
+                        }}
+                      >
+                        {entryTitle}
+                        {entry.startTime &&
+                          entry.endTime &&
+                          ` (${entry.startTime} - ${entry.endTime})`}
+                      </Typography>
+                    )}
+                    <Typography
+                      sx={{
+                        fontSize: "0.6rem",
+                        color: "text.secondary",
+                        mt: 0.5,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Click to edit or delete
+                    </Typography>
+                  </Box>
+                );
+              }
+
               // Calculate duration and determine if entry should use compact layout
-              const duration = eventInfo.event.end - eventInfo.event.start;
+              const duration = endDate - startDate;
               const isShortEntry = duration <= 30 * 60 * 1000; // Entries 30 minutes or less get reduced text size
               const isVeryShortEntry = duration < 15 * 60 * 1000; // Entries less than 15 minutes get no vertical padding
               const isMediumEntry =
@@ -1720,8 +2237,7 @@ const Timesheets = () => {
                       {formatEventContent()}
                     </Typography>
                     <Typography className="event-time">
-                      {format(eventInfo.event.start, "HH:mm")} -{" "}
-                      {format(eventInfo.event.end, "HH:mm")}
+                      {format(startDate, "HH:mm")} - {format(endDate, "HH:mm")}
                     </Typography>
                     {isProcessing && (
                       <Box
@@ -1817,8 +2333,7 @@ const Timesheets = () => {
                       </Typography>
                     )}
                     <Typography className="event-time">
-                      {format(eventInfo.event.start, "HH:mm")} -{" "}
-                      {format(eventInfo.event.end, "HH:mm")}
+                      {format(startDate, "HH:mm")} - {format(endDate, "HH:mm")}
                     </Typography>
                     {isProcessing && (
                       <Box
@@ -1913,8 +2428,7 @@ const Timesheets = () => {
                     </Typography>
                   )}
                   <Typography className="event-time">
-                    {format(eventInfo.event.start, "HH:mm")} -{" "}
-                    {format(eventInfo.event.end, "HH:mm")}
+                    {format(startDate, "HH:mm")} - {format(endDate, "HH:mm")}
                   </Typography>
                   {isProcessing && (
                     <Box
@@ -2361,6 +2875,28 @@ const Timesheets = () => {
             Are you sure you want to delete this time entry? This action cannot
             be undone.
           </Typography>
+          {entryToDelete?.entry && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: "grey.50", borderRadius: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Entry Details:
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Date:{" "}
+                {entryToDelete.entry.date
+                  ? format(new Date(entryToDelete.entry.date), "dd/MM/yyyy")
+                  : "N/A"}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Time: {entryToDelete.entry.startTime || "N/A"} -{" "}
+                {entryToDelete.entry.endTime || "N/A"}
+              </Typography>
+              {entryToDelete.entry.description && (
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  Description: {entryToDelete.entry.description}
+                </Typography>
+              )}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
           <Button
@@ -2379,7 +2915,13 @@ const Timesheets = () => {
             Cancel
           </Button>
           <Button
-            onClick={() => handleDelete(entryToDelete)}
+            onClick={() => {
+              const entryId =
+                typeof entryToDelete === "string"
+                  ? entryToDelete
+                  : entryToDelete?.id;
+              handleDelete(entryToDelete);
+            }}
             variant="contained"
             color="error"
             startIcon={<DeleteIcon />}
@@ -2613,6 +3155,137 @@ const Timesheets = () => {
             }}
           >
             Split Automatically
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Other User Warning Dialog */}
+      <Dialog
+        open={otherUserWarningOpen}
+        onClose={() => {
+          setOtherUserWarningOpen(false);
+          setEntryToDelete(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              bgcolor: "warning.main",
+              color: "white",
+            }}
+          >
+            <EventBusyIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+            Delete Another User's Entry
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+          <Box
+            sx={{
+              p: 2,
+              mb: 2,
+              bgcolor: "warning.light",
+              borderRadius: 2,
+              border: `1px solid ${theme.palette.warning.main}`,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 600, color: "warning.dark", mb: 1 }}
+            >
+              ⚠️ Warning: Deleting Another User's Entry
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
+              You are attempting to delete a timesheet entry that belongs to
+              another user.
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{ color: "text.secondary", fontWeight: 600 }}
+            >
+              Are you sure you want to proceed?
+            </Typography>
+          </Box>
+          {entryToDelete?.entry && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: "grey.50", borderRadius: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Entry Details:
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Date:{" "}
+                {entryToDelete.entry.date
+                  ? format(new Date(entryToDelete.entry.date), "dd/MM/yyyy")
+                  : "N/A"}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Time: {entryToDelete.entry.startTime || "N/A"} -{" "}
+                {entryToDelete.entry.endTime || "N/A"}
+              </Typography>
+              {entryToDelete.entry.description && (
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  Description: {entryToDelete.entry.description}
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={() => {
+              setOtherUserWarningOpen(false);
+              setEntryToDelete(null);
+            }}
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleOtherUserWarningConfirm}
+            variant="contained"
+            color="warning"
+            sx={{
+              minWidth: 120,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(255, 152, 0, 0.3)",
+              "&:hover": {
+                boxShadow: "0 6px 16px rgba(255, 152, 0, 0.4)",
+              },
+            }}
+          >
+            Proceed
           </Button>
         </DialogActions>
       </Dialog>

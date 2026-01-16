@@ -556,11 +556,12 @@ const Sidebar = () => {
           
           <CollapsibleSection title="Projects" to="/projects" icon={<StorageIcon />} />
 
-          <CollapsibleSection
+          {/* Invoices link hidden for all users */}
+          {/* <CollapsibleSection
             title="Invoices"
             to="/invoices"
             icon={<AttachMoneyIcon />}
-          />
+          /> */}
 
           {isFeatureEnabled("ADVANCED.REPORTS") && (
             <CollapsibleSection
@@ -570,13 +571,16 @@ const Sidebar = () => {
             />
           )}
 
-          {isAdmin && isFeatureEnabled("ADVANCED.RECORDS") && (
-            <CollapsibleSection
-              title="Records"
-              to="/records"
-              icon={<FolderCopyIcon />}
-            />
-          )}
+          {(isAdmin ||
+            currentUser?.labApprovals?.calibrations === true ||
+            currentUser?.role === "manager") &&
+            isFeatureEnabled("ADVANCED.RECORDS") && (
+              <CollapsibleSection
+                title="Records"
+                to="/records"
+                icon={<FolderCopyIcon />}
+              />
+            )}
 
           <SectionDivider />
 

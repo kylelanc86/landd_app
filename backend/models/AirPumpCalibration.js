@@ -57,15 +57,40 @@ const airPumpCalibrationSchema = new mongoose.Schema({
 
 // Pre-save middleware to calculate percent error and pass/fail status
 airPumpCalibrationSchema.pre('save', function(next) {
-  // Calculate percent error and pass/fail for each test result
-  this.testResults.forEach(result => {
-    result.percentError = Math.abs(((result.actualFlowrate - result.setFlowrate) / result.setFlowrate) * 100);
-    result.passed = result.percentError < 5;
-  });
+  // Only recalculate if testResults exist and is an array
+  if (this.testResults && Array.isArray(this.testResults) && this.testResults.length > 0) {
+    // Calculate percent error and pass/fail for each test result
+    this.testResults.forEach(result => {
+      if (result.setFlowrate && result.actualFlowrate !== undefined) {
+        result.percentError = Math.abs(((result.actualFlowrate - result.setFlowrate) / result.setFlowrate) * 100);
+        result.passed = result.percentError < 5;
+      }
+    });
 
-  // Determine overall result - pass if all tests passed
-  const allPassed = this.testResults.every(result => result.passed);
-  this.overallResult = allPassed ? 'Pass' : 'Fail';
+    // Determine overall result - pass if at least one test passed
+    const atLeastOnePassed = this.testResults.some(result => result.passed === true);
+    this.overallResult = atLeastOnePassed ? 'Pass' : 'Fail';
+    
+    // Debug logging
+    console.log('Pre-save hook - Calculating overallResult:', {
+      testResultsCount: this.testResults.length,
+      testResults: this.testResults.map(tr => ({
+        setFlowrate: tr.setFlowrate,
+        actualFlowrate: tr.actualFlowrate,
+        percentError: tr.percentError,
+        passed: tr.passed
+      })),
+      atLeastOnePassed: atLeastOnePassed,
+      overallResult: this.overallResult,
+      previousOverallResult: this.isNew ? 'N/A (new)' : this.get('overallResult')
+    });
+  } else {
+    // If no test results, keep existing overallResult or set to Fail
+    if (!this.overallResult) {
+      this.overallResult = 'Fail';
+    }
+    console.log('Pre-save hook - No test results, overallResult:', this.overallResult);
+  }
 
   // Calculate next calibration due date (1 year from calibration date)
   if (this.calibrationDate) {

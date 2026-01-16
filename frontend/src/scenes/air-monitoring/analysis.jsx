@@ -32,6 +32,7 @@ import {
   FormControlLabel,
   Chip,
 } from "@mui/material";
+import CommentIcon from "@mui/icons-material/Comment";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
@@ -68,6 +69,7 @@ const SampleSummary = React.memo(
     inputRefs,
     isReadOnly,
     onOpenFibreCountModal,
+    onOpenCommentModal,
     isLast,
   }) => {
     const theme = useTheme();
@@ -116,32 +118,54 @@ const SampleSummary = React.memo(
                 />
               )}
             </Box>
-            <Chip
-              label={
-                isFilterUncountable(sample._id)
-                  ? "Uncountable"
-                  : isSampleAnalysed(sample._id)
-                  ? "Sample Analysed"
-                  : "To be counted"
-              }
-              color={
-                isFilterUncountable(sample._id)
-                  ? "error"
-                  : isSampleAnalysed(sample._id)
-                  ? "success"
-                  : "default"
-              }
-              size="small"
+            <Box
               sx={{
-                backgroundColor: isFilterUncountable(sample._id)
-                  ? "error.main"
-                  : isSampleAnalysed(sample._id)
-                  ? "success.main"
-                  : "grey.400",
-                color: "white",
-                fontWeight: "bold",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                gap: 1,
               }}
-            />
+            >
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<CommentIcon />}
+                onClick={() => onOpenCommentModal(sample._id)}
+                disabled={isReadOnly}
+                sx={{
+                  textTransform: "none",
+                  minWidth: "auto",
+                }}
+              >
+                {analysis?.comment ? "View/Edit Comment" : "Add Comment"}
+              </Button>
+              <Chip
+                label={
+                  isFilterUncountable(sample._id)
+                    ? "Uncountable"
+                    : isSampleAnalysed(sample._id)
+                    ? "Sample Analysed"
+                    : "To be counted"
+                }
+                color={
+                  isFilterUncountable(sample._id)
+                    ? "error"
+                    : isSampleAnalysed(sample._id)
+                    ? "success"
+                    : "default"
+                }
+                size="small"
+                sx={{
+                  backgroundColor: isFilterUncountable(sample._id)
+                    ? "error.main"
+                    : isSampleAnalysed(sample._id)
+                    ? "success.main"
+                    : "grey.400",
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              />
+            </Box>
           </Box>
 
           <Stack
@@ -245,6 +269,31 @@ const SampleSummary = React.memo(
             </Box>
           </Stack>
 
+          {/* Comment Display */}
+          {analysis?.comment && (
+            <Box
+              sx={{
+                mt: 1,
+                mb: 2,
+                p: 1.5,
+                backgroundColor: "grey.100",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "grey.300",
+              }}
+            >
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: "bold", mb: 0.5 }}
+              >
+                Comment:
+              </Typography>
+              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                {analysis.comment}
+              </Typography>
+            </Box>
+          )}
+
           {isComplete && (
             <Box>
               <Box sx={{ textAlign: "center", mb: 2 }}>
@@ -257,7 +306,9 @@ const SampleSummary = React.memo(
                     Fibres Counted
                   </Typography>
                   <Typography variant="h6">
-                    {analysis.uncountableDueToDust ? '-' : (analysis.fibresCounted || 0)}
+                    {analysis.uncountableDueToDust
+                      ? "-"
+                      : analysis.fibresCounted || 0}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -265,7 +316,9 @@ const SampleSummary = React.memo(
                     Fields Counted
                   </Typography>
                   <Typography variant="h6">
-                    {analysis.uncountableDueToDust ? '-' : (analysis.fieldsCounted || 0)}
+                    {analysis.uncountableDueToDust
+                      ? "-"
+                      : analysis.fieldsCounted || 0}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -273,7 +326,12 @@ const SampleSummary = React.memo(
                     Actual Concentration
                   </Typography>
                   <Typography variant="h6">
-                    {analysis.uncountableDueToDust ? 'N/A' : (calculateConcentration(sample._id) || "N/A")} {!analysis.uncountableDueToDust && calculateConcentration(sample._id) && 'fibres/mL'}
+                    {analysis.uncountableDueToDust
+                      ? "N/A"
+                      : calculateConcentration(sample._id) || "N/A"}{" "}
+                    {!analysis.uncountableDueToDust &&
+                      calculateConcentration(sample._id) &&
+                      "fibres/mL"}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -281,7 +339,10 @@ const SampleSummary = React.memo(
                     Reported Concentration
                   </Typography>
                   <Typography variant="h6">
-                    {getReportedConcentration(sample._id) || "N/A"} {!analysis.uncountableDueToDust && getReportedConcentration(sample._id) !== "UDD" && "fibres/mL"}
+                    {getReportedConcentration(sample._id) || "N/A"}{" "}
+                    {!analysis.uncountableDueToDust &&
+                      getReportedConcentration(sample._id) !== "UDD" &&
+                      "fibres/mL"}
                   </Typography>
                 </Box>
               </Stack>
@@ -348,6 +409,9 @@ const Analysis = () => {
   const [fibreCountSnapshot, setFibreCountSnapshot] = useState(null);
   const [activeMicroscopes, setActiveMicroscopes] = useState([]);
   const [activeTestSlides, setActiveTestSlides] = useState([]);
+  const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [activeCommentSampleId, setActiveCommentSampleId] = useState(null);
+  const [commentText, setCommentText] = useState("");
 
   // Unsaved changes detection
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -404,7 +468,8 @@ const Analysis = () => {
         const initialAnalyses = {};
         sortedSamples.forEach((sample) => {
           if (sample.analysis) {
-            const uncountableDueToDust = sample.analysis.uncountableDueToDust || false;
+            const uncountableDueToDust =
+              sample.analysis.uncountableDueToDust || false;
             initialAnalyses[sample._id] = {
               microscope: sample.analysis.microscope || "",
               testSlide: sample.analysis.testSlide || "",
@@ -423,8 +488,13 @@ const Analysis = () => {
                   : Array(5)
                       .fill()
                       .map(() => Array(20).fill("")),
-              fibresCounted: uncountableDueToDust ? '-' : (sample.analysis.fibresCounted || 0),
-              fieldsCounted: uncountableDueToDust ? '-' : (sample.analysis.fieldsCounted || 0),
+              fibresCounted: uncountableDueToDust
+                ? "-"
+                : sample.analysis.fibresCounted || 0,
+              fieldsCounted: uncountableDueToDust
+                ? "-"
+                : sample.analysis.fieldsCounted || 0,
+              comment: sample.analysis.comment || "",
             };
           } else {
             initialAnalyses[sample._id] = {
@@ -439,6 +509,7 @@ const Analysis = () => {
                 .map(() => Array(20).fill("")),
               fibresCounted: 0,
               fieldsCounted: 0,
+              comment: "",
             };
           }
         });
@@ -915,7 +986,7 @@ const Analysis = () => {
     setSampleAnalyses((prev) => {
       const newAnalyses = { ...prev };
       const currentAnalysis = newAnalyses[sampleId] || {};
-      
+
       // If backgroundDust is being set to "fail", automatically set uncountableDueToDust to true
       // and set fibresCounted and fieldsCounted to '-'
       // If backgroundDust is being changed from "fail" to something else, set uncountableDueToDust to false
@@ -925,8 +996,8 @@ const Analysis = () => {
             ...currentAnalysis,
             [field]: value,
             uncountableDueToDust: true,
-            fibresCounted: '-',
-            fieldsCounted: '-',
+            fibresCounted: "-",
+            fieldsCounted: "-",
           };
         } else {
           // If changing from fail to something else, clear uncountableDueToDust
@@ -942,7 +1013,7 @@ const Analysis = () => {
           [field]: value,
         };
       }
-      
+
       return newAnalyses;
     });
   }, []);
@@ -1003,7 +1074,13 @@ const Analysis = () => {
   );
 
   const handleKeyDown = useCallback((e, sampleId, rowIndex, colIndex) => {
-    if (e.key === " ") {
+    // Handle spacebar - check multiple properties for tablet keyboard compatibility
+    if (
+      e.key === " " ||
+      e.key === "Spacebar" ||
+      e.keyCode === 32 ||
+      e.code === "Space"
+    ) {
       e.preventDefault();
       setSampleAnalyses((prev) => {
         const newAnalyses = { ...prev };
@@ -1073,6 +1150,65 @@ const Analysis = () => {
           if (nextEmptyCol < 20) break;
           nextEmptyRow++;
           nextEmptyCol = 0;
+        }
+
+        return newAnalyses;
+      });
+    }
+
+    // Handle "/" key for half fibre - check multiple properties for tablet keyboard compatibility
+    if (
+      e.key === "/" ||
+      e.keyCode === 191 ||
+      e.code === "Slash" ||
+      (e.key === "?" && e.shiftKey === false) // Some keyboards send "?" for "/"
+    ) {
+      e.preventDefault();
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        const newFibreCounts = [...newAnalyses[sampleId].fibreCounts];
+        newFibreCounts[rowIndex][colIndex] = "0.5";
+
+        // Calculate new totals
+        let fibresCounted = 0;
+        let fieldsCounted = 0;
+        newFibreCounts.forEach((row) => {
+          row.forEach((cell) => {
+            if (cell !== "") {
+              const numValue = parseFloat(cell);
+              if (!isNaN(numValue)) {
+                fibresCounted += numValue;
+                fieldsCounted += 1;
+              }
+            }
+          });
+        });
+
+        newAnalyses[sampleId] = {
+          ...newAnalyses[sampleId],
+          fibreCounts: newFibreCounts,
+          fibresCounted: parseFloat(fibresCounted.toFixed(1)),
+          fieldsCounted,
+        };
+
+        // Move to next cell
+        const nextCol = colIndex + 1;
+        const nextRow = rowIndex;
+        if (nextCol < 20) {
+          const nextInput =
+            inputRefs.current[`${sampleId}-${nextRow}-${nextCol}`];
+          if (nextInput) {
+            setTimeout(() => {
+              nextInput.focus();
+            }, 0);
+          }
+        } else if (rowIndex < 4) {
+          const nextInput = inputRefs.current[`${sampleId}-${nextRow + 1}-0`];
+          if (nextInput) {
+            setTimeout(() => {
+              nextInput.focus();
+            }, 0);
+          }
         }
 
         return newAnalyses;
@@ -1396,12 +1532,12 @@ const Analysis = () => {
 
   const getReportedConcentration = (sampleId) => {
     const analysis = sampleAnalyses[sampleId];
-    
+
     // Check for uncountable due to dust first
     if (analysis?.uncountableDueToDust === true) {
       return "UDD";
     }
-    
+
     const calculatedConc = parseFloat(calculateConcentration(sampleId));
 
     if (!calculatedConc) return "N/A";
@@ -1520,9 +1656,13 @@ const Analysis = () => {
         const analysis = sampleAnalyses[sample._id];
         if (analysis) {
           // If uncountable due to dust, set counts to '-' and reported concentration to 'UDD'
-          const fibresCounted = analysis.uncountableDueToDust ? '-' : analysis.fibresCounted;
-          const fieldsCounted = analysis.uncountableDueToDust ? '-' : analysis.fieldsCounted;
-          
+          const fibresCounted = analysis.uncountableDueToDust
+            ? "-"
+            : analysis.fibresCounted;
+          const fieldsCounted = analysis.uncountableDueToDust
+            ? "-"
+            : analysis.fieldsCounted;
+
           const analysisData = {
             analysis: {
               microscope: analysisDetails.microscope,
@@ -1535,6 +1675,7 @@ const Analysis = () => {
               fibresCounted: fibresCounted,
               fieldsCounted: fieldsCounted,
               reportedConcentration: getReportedConcentration(sample._id),
+              comment: analysis.comment || "",
             },
           };
           console.log(
@@ -1717,6 +1858,51 @@ const Analysis = () => {
     setFibreCountSnapshot(null);
   };
 
+  const handleOpenCommentModal = (sampleId) => {
+    const analysis = sampleAnalyses[sampleId] || {};
+    setActiveCommentSampleId(sampleId);
+    setCommentText(analysis.comment || "");
+    setCommentModalOpen(true);
+  };
+
+  const handleSaveComment = () => {
+    if (activeCommentSampleId) {
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        newAnalyses[activeCommentSampleId] = {
+          ...newAnalyses[activeCommentSampleId],
+          comment: commentText,
+        };
+        return newAnalyses;
+      });
+    }
+    setCommentModalOpen(false);
+    setActiveCommentSampleId(null);
+    setCommentText("");
+  };
+
+  const handleCancelCommentModal = () => {
+    setCommentModalOpen(false);
+    setActiveCommentSampleId(null);
+    setCommentText("");
+  };
+
+  const handleDeleteComment = () => {
+    if (activeCommentSampleId) {
+      setSampleAnalyses((prev) => {
+        const newAnalyses = { ...prev };
+        newAnalyses[activeCommentSampleId] = {
+          ...newAnalyses[activeCommentSampleId],
+          comment: "",
+        };
+        return newAnalyses;
+      });
+      setCommentText("");
+    }
+    setCommentModalOpen(false);
+    setActiveCommentSampleId(null);
+  };
+
   const handleClearTableInModal = () => {
     if (activeSampleId) {
       setSampleAnalyses((prev) => {
@@ -1733,7 +1919,6 @@ const Analysis = () => {
       });
     }
   };
-
 
   // Check if all microscope calibration fields are selected and microscope has valid calibration date
   const isCalibrationComplete = () => {
@@ -1884,6 +2069,7 @@ const Analysis = () => {
             inputRefs={inputRefs}
             isReadOnly={shiftStatus === "analysis_complete"}
             onOpenFibreCountModal={handleOpenFibreCountModal}
+            onOpenCommentModal={handleOpenCommentModal}
           />
         </div>
       );
@@ -1900,6 +2086,7 @@ const Analysis = () => {
       getReportedConcentration,
       shiftStatus,
       handleOpenFibreCountModal,
+      handleOpenCommentModal,
     ]
   );
 
@@ -1933,6 +2120,7 @@ const Analysis = () => {
                 inputRefs={inputRefs}
                 isReadOnly={shiftStatus === "analysis_complete"}
                 onOpenFibreCountModal={handleOpenFibreCountModal}
+                onOpenCommentModal={handleOpenCommentModal}
                 isLast={true}
               />
             </Box>
@@ -2220,7 +2408,14 @@ const Analysis = () => {
                     "Spacebar" = 10 zeros, "/" = half fibre
                   </Typography>
 
-                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      mb: 2,
+                    }}
+                  >
                     {shiftStatus !== "analysis_complete" && (
                       <Button
                         startIcon={<ClearIcon />}
@@ -2378,15 +2573,19 @@ const Analysis = () => {
                             >
                               <Typography>
                                 Fibres Counted:{" "}
-                                {sampleAnalyses[activeSampleId].uncountableDueToDust
-                                  ? '-'
-                                  : (sampleAnalyses[activeSampleId].fibresCounted || 0)}
+                                {sampleAnalyses[activeSampleId]
+                                  .uncountableDueToDust
+                                  ? "-"
+                                  : sampleAnalyses[activeSampleId]
+                                      .fibresCounted || 0}
                               </Typography>
                               <Typography>
                                 Fields Counted:{" "}
-                                {sampleAnalyses[activeSampleId].uncountableDueToDust
-                                  ? '-'
-                                  : (sampleAnalyses[activeSampleId].fieldsCounted || 0)}
+                                {sampleAnalyses[activeSampleId]
+                                  .uncountableDueToDust
+                                  ? "-"
+                                  : sampleAnalyses[activeSampleId]
+                                      .fieldsCounted || 0}
                               </Typography>
                             </Stack>
                           </TableCell>
@@ -2404,6 +2603,54 @@ const Analysis = () => {
                 variant="contained"
               >
                 Save & Close
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Comment Modal */}
+          <Dialog
+            open={commentModalOpen}
+            onClose={handleCancelCommentModal}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>
+              {activeCommentSampleId &&
+                `Comment - ${
+                  samples.find((s) => s._id === activeCommentSampleId)
+                    ?.fullSampleID
+                }`}
+            </DialogTitle>
+            <DialogContent>
+              <TextField
+                fullWidth
+                multiline
+                rows={6}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Enter comment for this sample..."
+                disabled={shiftStatus === "analysis_complete"}
+                sx={{ mt: 2 }}
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCancelCommentModal}>Cancel</Button>
+              {activeCommentSampleId &&
+                sampleAnalyses[activeCommentSampleId]?.comment && (
+                  <Button
+                    onClick={handleDeleteComment}
+                    color="error"
+                    disabled={shiftStatus === "analysis_complete"}
+                  >
+                    Delete Comment
+                  </Button>
+                )}
+              <Button
+                onClick={handleSaveComment}
+                variant="contained"
+                disabled={shiftStatus === "analysis_complete"}
+              >
+                Save Comment
               </Button>
             </DialogActions>
           </Dialog>
@@ -2441,13 +2688,28 @@ const Analysis = () => {
                 Continue Editing
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   setCancelDialogOpen(false);
                   setHasUnsavedChanges(false);
                   window.hasUnsavedChanges = false;
                   window.currentAnalysisPath = null;
                   window.showUnsavedChangesDialog = null;
-                  navigate(-1);
+
+                  // Get shift data to get job ID
+                  try {
+                    const shiftResponse = await shiftService.getById(shiftId);
+                    const shift = shiftResponse.data;
+                    const jobId = shift?.job?._id;
+
+                    if (jobId) {
+                      navigate(`/asbestos-removal/jobs/${jobId}/details`);
+                    } else {
+                      navigate("/asbestos-removal");
+                    }
+                  } catch (error) {
+                    console.error("Error fetching shift data:", error);
+                    navigate("/asbestos-removal");
+                  }
                 }}
                 color="error"
               >

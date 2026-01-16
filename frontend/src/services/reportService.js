@@ -25,6 +25,12 @@ const reportService = {
     return response.data;
   },
 
+  // Fibre Count Reports
+  getFibreCountReports: async (projectId) => {
+    const response = await api.get(`/reports/fibre-count/${projectId}`);
+    return response.data;
+  },
+
   // Project Invoices
   getProjectInvoices: async (projectId) => {
     const response = await api.get(`/reports/invoices/${projectId}`);

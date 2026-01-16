@@ -55,45 +55,7 @@ const LDsuppliedItems = () => {
         throw new Error("Invalid response format from server");
       }
 
-      console.log("=== RAW API RESPONSE DEBUG ===");
-      console.log("Raw response:", response);
-      console.log("Raw response keys:", Object.keys(response));
-      console.log(
-        "fibreAnalysisReport in raw response:",
-        !!response.fibreAnalysisReport
-      );
-      if (response.fibreAnalysisReport) {
-        console.log(
-          "Raw fibreAnalysisReport length:",
-          response.fibreAnalysisReport.length
-        );
-        console.log(
-          "Raw fibreAnalysisReport (first 100 chars):",
-          response.fibreAnalysisReport.substring(0, 100)
-        );
-        console.log(
-          "Raw fibreAnalysisReport (last 100 chars):",
-          response.fibreAnalysisReport.substring(
-            response.fibreAnalysisReport.length - 100
-          )
-        );
-      }
-      console.log("=== END RAW API RESPONSE DEBUG ===");
-
       setAssessment(response);
-      console.log("Assessment response:", response);
-      console.log("Assessment items:", response.items);
-      if (response.items && response.items.length > 0) {
-        response.items.forEach((item, index) => {
-          console.log(`Item ${index + 1}:`, {
-            itemNumber: item.itemNumber,
-            sampleReference: item.sampleReference,
-            analysisData: item.analysisData,
-            isAnalysed: item.analysisData?.isAnalysed,
-            asbestosContent: item.asbestosContent,
-          });
-        });
-      }
     } catch (error) {
       console.error("Error fetching assessment details:", error);
 
@@ -113,41 +75,16 @@ const LDsuppliedItems = () => {
 
   const fetchAnalysts = async () => {
     try {
-      console.log("=== FETCHING ANALYSTS DEBUG ===");
       const response = await userService.getAll(true); // Get all users including inactive
-      console.log("User service response:", response);
-      console.log("Response data:", response.data);
-      console.log("Number of users returned:", response.data?.length || 0);
-
-      // Log all users to see their structure
-      if (response.data && response.data.length > 0) {
-        response.data.forEach((user, index) => {
-          console.log(`User ${index + 1}:`, {
-            id: user._id,
-            name: `${user.firstName} ${user.lastName}`,
-            labApprovals: user.labApprovals,
-            fibreIdentification: user.labApprovals?.fibreIdentification,
-          });
-        });
-      }
 
       const fibreIdentificationAnalysts = response.data.filter(
         (user) => user.labApprovals?.fibreIdentification === true
-      );
-      console.log(
-        "Filtered fibre identification analysts:",
-        fibreIdentificationAnalysts
-      );
-      console.log(
-        "Number of analysts found:",
-        fibreIdentificationAnalysts.length
       );
 
       setAnalysts(fibreIdentificationAnalysts);
 
       // Set default analyst if available
       if (fibreIdentificationAnalysts.length > 0 && !analyst) {
-        console.log("Setting default analyst:", fibreIdentificationAnalysts[0]);
         setAnalyst(fibreIdentificationAnalysts[0]._id);
       }
     } catch (error) {

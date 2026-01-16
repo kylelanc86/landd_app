@@ -117,6 +117,7 @@ const EditUserPage = () => {
           labApprovals: user.labApprovals || {
             fibreCounting: false,
             fibreIdentification: false,
+            calibrations: false,
           },
           canSetJobComplete: user.canSetJobComplete || false,
           labSignatory: user.labSignatory || false,
@@ -148,6 +149,7 @@ const EditUserPage = () => {
               labApprovals: user.labApprovals || {
                 fibreCounting: false,
                 fibreIdentification: false,
+                calibrations: false,
               },
               canSetJobComplete: user.canSetJobComplete || false,
               labSignatory: user.labSignatory || false,
@@ -696,7 +698,7 @@ const EditUserPage = () => {
               }}
             >
               <Grid container spacing={2}>
-                <Grid item xs={4}>
+                <Grid item xs={3}>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -713,7 +715,7 @@ const EditUserPage = () => {
                     label="Fibre Counting"
                   />
                 </Grid>
-                <Grid item xs={4}>
+                <Grid item xs={3}>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -730,7 +732,24 @@ const EditUserPage = () => {
                     label="Fibre Identification"
                   />
                 </Grid>
-                <Grid item xs={4}>
+                <Grid item xs={3}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.labApprovals.calibrations}
+                        onChange={(e) =>
+                          handleLabApprovalsChange(
+                            "calibrations",
+                            e.target.checked
+                          )
+                        }
+                        color="primary"
+                      />
+                    }
+                    label="Calibrations"
+                  />
+                </Grid>
+                <Grid item xs={3}>
                   <FormControlLabel
                     control={
                       <Checkbox

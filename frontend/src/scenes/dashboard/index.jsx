@@ -45,6 +45,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DescriptionIcon from "@mui/icons-material/Description";
 import PaymentIcon from "@mui/icons-material/Payment";
+import TuneIcon from "@mui/icons-material/Tune";
 import { format } from "date-fns";
 import api from "../../services/api";
 import { userPreferencesService } from "../../services/api";
@@ -87,6 +88,7 @@ const Dashboard = () => {
     "invoiceSent", // Additional widget 6 (can be enabled)
     "awaitingPayment", // Additional widget 7 (can be enabled)
     "allActive", // Additional widget 8 (can be enabled)
+    "calibrations", // Additional widget 9 (can be enabled, permission-based)
   ]);
 
   // Load widget preferences from user preferences or use defaults
@@ -108,6 +110,7 @@ const Dashboard = () => {
           invoiceSent: false,
           awaitingPayment: false,
           allActive: false,
+          calibrations: false,
         };
       }
     }
@@ -121,6 +124,7 @@ const Dashboard = () => {
       invoiceSent: false, // Additional widget 6 (user must select)
       awaitingPayment: false, // Additional widget 7 (user must select)
       allActive: false, // Additional widget 8 (user must select)
+      calibrations: false, // Additional widget 9 (user must select, permission-based)
     };
   });
 
@@ -231,6 +235,7 @@ const Dashboard = () => {
               "invoiceSent",
               "awaitingPayment",
               "allActive",
+              "calibrations",
             ];
 
             const prefsHasAllKeys = allWidgetKeys.every((key) => key in prefs);
@@ -277,6 +282,7 @@ const Dashboard = () => {
               invoiceSent: false,
               awaitingPayment: false,
               allActive: false,
+              calibrations: false,
             };
             setVisibleWidgets(defaultWidgets);
 
@@ -302,6 +308,7 @@ const Dashboard = () => {
             invoiceSent: false,
             awaitingPayment: false,
             allActive: false,
+            calibrations: false,
           };
           setVisibleWidgets(defaultWidgets);
 
@@ -342,6 +349,7 @@ const Dashboard = () => {
               invoiceSent: false,
               awaitingPayment: false,
               allActive: false,
+              calibrations: false,
               ...parsed,
               dailyTimesheet: true, // Force daily timesheet to always be true
             };
@@ -365,6 +373,7 @@ const Dashboard = () => {
               invoiceSent: false,
               awaitingPayment: false,
               allActive: false,
+              calibrations: false,
             });
           }
         } else {
@@ -380,6 +389,7 @@ const Dashboard = () => {
             invoiceSent: false,
             awaitingPayment: false,
             allActive: false,
+            calibrations: false,
           });
         }
       }
@@ -528,6 +538,13 @@ const Dashboard = () => {
         icon: <PlayArrowIcon />,
         bgcolor: "#ebba34",
         onClick: () => navigate("/projects"),
+      },
+      {
+        id: "calibrations",
+        title: "Calibrations",
+        icon: <TuneIcon />,
+        bgcolor: "#00acc1",
+        onClick: () => navigate("/records/laboratory/calibrations/list"),
       },
     ],
     [dailyTimesheetStatus, currentUser, navigate]
@@ -1192,7 +1209,23 @@ const Dashboard = () => {
           </Box>
           <FormGroup>
             {gridItems
-              .filter((item) => item.id !== "dailyTimesheet") // Exclude daily timesheet from selection
+              .filter((item) => {
+                // Exclude daily timesheet from selection
+                if (item.id === "dailyTimesheet") return false;
+                
+                // Filter calibrations widget based on permissions
+                if (item.id === "calibrations") {
+                  // Only show for admin level users, or users with calibrations approval, or users with lab signatory approval
+                  const isAdmin = currentUser?.role === "admin";
+                  const hasCalibrationsApproval = currentUser?.labApprovals?.calibrations === true;
+                  const hasLabSignatoryApproval = currentUser?.labSignatory === true;
+                  
+                  return isAdmin || hasCalibrationsApproval || hasLabSignatoryApproval;
+                }
+                
+                // Show all other widgets
+                return true;
+              })
               .map((item) => {
                 // Check if this widget is currently visible
                 const isChecked = visibleWidgets[item.id] === true;

@@ -19,6 +19,8 @@ import {
   MenuItem,
   Breadcrumbs,
   Link,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -70,8 +72,8 @@ const EquipmentList = () => {
   const [filters, setFilters] = useState({
     search: "",
     equipmentType: "",
-    section: "",
     status: "",
+    showOutOfService: false,
   });
 
   const handleBackToHome = () => {
@@ -136,7 +138,13 @@ const EquipmentList = () => {
         case "Graticule":
           try {
             const allData = await graticuleService.getAll();
-            const filtered = (allData.calibrations || allData || []).filter(
+            // Handle response structure: { data: [...], pagination: {...} } or direct array
+            const calibrationsArray = Array.isArray(allData?.data) 
+              ? allData.data 
+              : Array.isArray(allData) 
+                ? allData 
+                : [];
+            const filtered = calibrationsArray.filter(
               (cal) =>
                 cal.graticuleId === equipmentReference ||
                 cal.graticuleReference === equipmentReference
@@ -293,13 +301,17 @@ const EquipmentList = () => {
     }
   };
 
+  // Memoize backend filters to prevent unnecessary re-fetches when frontend-only filters change
+  const backendFilters = useMemo(() => {
+    const { status, showOutOfService, ...backend } = filters;
+    return backend;
+  }, [filters.search, filters.equipmentType]);
+
   const fetchEquipment = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Exclude status filter from backend call since it's calculated on frontend
-      const { status, ...backendFilters } = filters;
       const response = await equipmentService.getAll({
         limit: 100,
         ...backendFilters,
@@ -320,7 +332,7 @@ const EquipmentList = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [backendFilters]);
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
@@ -706,12 +718,25 @@ const EquipmentList = () => {
               equipmentReference
             );
             const allData = await graticuleService.getAll();
-            const filtered = (allData.calibrations || allData || []).filter(
+            // Handle response structure: { data: [...], pagination: {...} } or direct array
+            const calibrationsArray = Array.isArray(allData?.data) 
+              ? allData.data 
+              : Array.isArray(allData) 
+                ? allData 
+                : [];
+            const filtered = calibrationsArray.filter(
               (cal) =>
                 cal.graticuleId === equipmentReference ||
                 cal.graticuleReference === equipmentReference
             );
-            const archived = archivedData.calibrations || archivedData || [];
+            // Handle archived data structure similarly
+            const archived = Array.isArray(archivedData?.data) 
+              ? archivedData.data 
+              : Array.isArray(archivedData?.calibrations) 
+                ? archivedData.calibrations 
+                : Array.isArray(archivedData) 
+                  ? archivedData 
+                  : [];
             const combined = [...filtered, ...archived];
             history = combined.map((cal) => ({
               date: cal.date,
@@ -864,6 +889,17 @@ const EquipmentList = () => {
   // Filter equipment based on all filters including calculated status
   const filteredEquipment = useMemo(() => {
     return equipment.filter((item) => {
+      // Out-of-service filter - hide by default unless toggle is on
+      if (!filters.showOutOfService) {
+        const calculatedStatus = calculateStatus(item);
+        if (
+          item.status === "out-of-service" ||
+          calculatedStatus === "Out-of-Service"
+        ) {
+          return false;
+        }
+      }
+
       // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
@@ -878,11 +914,6 @@ const EquipmentList = () => {
         filters.equipmentType &&
         item.equipmentType !== filters.equipmentType
       ) {
-        return false;
-      }
-
-      // Section filter
-      if (filters.section && item.section !== filters.section) {
         return false;
       }
 
@@ -988,10 +1019,10 @@ const EquipmentList = () => {
             value={filters.search}
             onChange={(e) => handleFilterChange("search", e.target.value)}
             size="small"
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: 260 }}
             placeholder="Search by reference or brand/model"
           />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
+          <FormControl size="small" sx={{ minWidth: 195 }}>
             <InputLabel>Equipment Type</InputLabel>
             <Select
               value={filters.equipmentType}
@@ -1004,21 +1035,6 @@ const EquipmentList = () => {
               {equipmentService.getEquipmentTypes().map((type) => (
                 <MenuItem key={type} value={type}>
                   {type}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Section</InputLabel>
-            <Select
-              value={filters.section}
-              label="Section"
-              onChange={(e) => handleFilterChange("section", e.target.value)}
-            >
-              <MenuItem value="">All Sections</MenuItem>
-              {equipmentService.getSections().map((section) => (
-                <MenuItem key={section} value={section}>
-                  {section}
                 </MenuItem>
               ))}
             </Select>
@@ -1038,14 +1054,26 @@ const EquipmentList = () => {
               <MenuItem value="Out-of-Service">Out-of-Service</MenuItem>
             </Select>
           </FormControl>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={filters.showOutOfService}
+                onChange={(e) =>
+                  handleFilterChange("showOutOfService", e.target.checked)
+                }
+                color="primary"
+              />
+            }
+            label="Show Out-of-Service"
+          />
           <Button
             variant="outlined"
             onClick={() =>
               setFilters({
                 search: "",
                 equipmentType: "",
-                section: "",
                 status: "",
+                showOutOfService: false,
               })
             }
             size="small"
@@ -1233,16 +1261,29 @@ const EquipmentList = () => {
               flex: 1.5,
               minWidth: 200,
               renderCell: ({ row }) => {
+                const isAirPump = row.equipmentType === "Air pump";
+                
                 return (
                   <Box display="flex" alignItems="center" gap={1}>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleViewHistory(row)}
-                      title="View Calibration History"
-                      sx={{ color: theme.palette.info.main }}
-                    >
-                      <HistoryIcon fontSize="small" />
-                    </IconButton>
+                    {isAirPump ? (
+                      <IconButton
+                        size="small"
+                        onClick={() => navigate(`/records/laboratory/calibrations/pump/${row.equipmentReference}`)}
+                        title="View Calibration History"
+                        sx={{ color: theme.palette.info.main }}
+                      >
+                        <HistoryIcon fontSize="small" />
+                      </IconButton>
+                    ) : (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleViewHistory(row)}
+                        title="View Calibration History"
+                        sx={{ color: theme.palette.info.main }}
+                      >
+                        <HistoryIcon fontSize="small" />
+                      </IconButton>
+                    )}
                     <IconButton
                       size="small"
                       onClick={() => handleEditEquipment(row)}
@@ -1830,6 +1871,7 @@ const EquipmentList = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
     </Box>
   );
 };

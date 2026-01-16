@@ -66,6 +66,11 @@ const AirPumpCalibrationPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   // Track active tab for each date group in the table
   const [activeDateTabs, setActiveDateTabs] = useState({});
+  // Out-of-service dialog state
+  const [outOfServiceDialog, setOutOfServiceDialog] = useState(false);
+  const [outOfServiceDate, setOutOfServiceDate] = useState(
+    formatDateForInput(new Date())
+  );
 
   // Static form data (shared across all calibrations)
   const [staticFormData, setStaticFormData] = useState({
@@ -454,8 +459,8 @@ const AirPumpCalibrationPage = () => {
         };
       });
 
-      // Determine overall result (pass if all tests passed)
-      const overallResult = testResults.every((result) => result.passed)
+      // Determine overall result (pass if at least one test passed)
+      const overallResult = testResults.some((result) => result.passed)
         ? "Pass"
         : "Fail";
 
@@ -478,7 +483,8 @@ const AirPumpCalibrationPage = () => {
       }
 
       handleDialogClose(true);
-      loadData();
+      // Force a refresh to get the updated overallResult from backend
+      await loadData();
     } catch (err) {
       setError(err.message || "Failed to save calibration");
     }
@@ -597,6 +603,49 @@ const AirPumpCalibrationPage = () => {
     }
   };
 
+  const handleSetOutOfService = async () => {
+    try {
+      setError(null);
+
+      if (!outOfServiceDate) {
+        setError("Date is required");
+        return;
+      }
+
+      if (!pump || !pump._id) {
+        setError("Pump information not available");
+        return;
+      }
+
+      // Update equipment status to out-of-service
+      await equipmentService.update(pump._id, {
+        status: "out-of-service",
+      });
+
+      // Create calibration record with out-of-service marker
+      const calibrationData = {
+        pumpId: pump._id,
+        calibrationDate: new Date(outOfServiceDate),
+        testResults: [], // Empty test results for out-of-service
+        overallResult: "Fail",
+        notes: `Equipment set as Out-of-Service on ${formatDate(
+          new Date(outOfServiceDate)
+        )}`,
+        flowmeterId: null,
+        nextCalibrationDue: null,
+      };
+
+      await airPumpCalibrationService.createCalibration(calibrationData);
+
+      // Close dialog and refresh data
+      setOutOfServiceDialog(false);
+      setOutOfServiceDate(formatDateForInput(new Date()));
+      loadData();
+    } catch (err) {
+      setError(err.message || "Failed to set pump as out-of-service");
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -650,9 +699,24 @@ const AirPumpCalibrationPage = () => {
         mb={2}
       >
         <Typography variant="h6">Calibration Records</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-          Add Calibration
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="outlined"
+            color="error"
+            backkgroundCO
+            onClick={() => setOutOfServiceDialog(true)}
+            disabled={pump?.status === "out-of-service"}
+          >
+            Set Out-of-Service
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAdd}
+          >
+            Add Calibration
+          </Button>
+        </Box>
       </Box>
 
       {/* Calibrations Table */}
@@ -676,6 +740,9 @@ const AirPumpCalibrationPage = () => {
                 Next Due
               </TableCell>
               <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                Status
+              </TableCell>
+              <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                 Actions
               </TableCell>
             </TableRow>
@@ -697,18 +764,31 @@ const AirPumpCalibrationPage = () => {
               });
 
               // Convert to array and sort by date (most recent first)
+              // Also sort calibrations within each date group by creation time (most recent first)
               const dateGroups = Object.entries(groupedByDate)
-                .map(([dateKey, calList]) => ({
-                  dateKey,
-                  date: calList[0].calibrationDate,
-                  calibrations: calList,
-                }))
+                .map(([dateKey, calList]) => {
+                  // Sort calibrations within this date group by creation time (most recent first)
+                  const sortedCals = [...calList].sort((a, b) => {
+                    const dateA = a.createdAt
+                      ? new Date(a.createdAt)
+                      : new Date(0);
+                    const dateB = b.createdAt
+                      ? new Date(b.createdAt)
+                      : new Date(0);
+                    return dateB - dateA;
+                  });
+                  return {
+                    dateKey,
+                    date: sortedCals[0].calibrationDate,
+                    calibrations: sortedCals, // Use sorted list so firstCal is the most recent
+                  };
+                })
                 .sort((a, b) => new Date(b.date) - new Date(a.date));
 
               if (dateGroups.length === 0) {
                 return (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={7} align="center">
                       <Typography variant="body2" color="text.secondary">
                         No calibration records found
                       </Typography>
@@ -720,6 +800,12 @@ const AirPumpCalibrationPage = () => {
               return dateGroups.map((dateGroup) => {
                 // Get common info from first calibration (they should all be the same for same date)
                 const firstCal = dateGroup.calibrations[0];
+
+                // Check if this is an out-of-service calibration
+                const isOutOfService =
+                  !firstCal.testResults ||
+                  firstCal.testResults.length === 0 ||
+                  pump?.status === "out-of-service";
                 const flowmeter = firstCal.flowmeterId
                   ? flowmeters.find(
                       (fm) =>
@@ -742,6 +828,20 @@ const AirPumpCalibrationPage = () => {
                     });
                   }
                 });
+
+                // Calculate overallResult from test results to ensure accuracy
+                // This ensures consistency with what's shown in edit modal
+                // Pass if at least one test passed (not all tests need to pass)
+                let calculatedOverallResult = "Fail";
+                if (firstCal.testResults && firstCal.testResults.length > 0) {
+                  const atLeastOnePassed = firstCal.testResults.some(
+                    (result) => result.passed === true
+                  );
+                  calculatedOverallResult = atLeastOnePassed ? "Pass" : "Fail";
+                } else if (firstCal.overallResult) {
+                  // If no test results but overallResult exists, use it (e.g., out-of-service)
+                  calculatedOverallResult = firstCal.overallResult;
+                }
 
                 // Group test results by flowrate
                 const flowrateGroups = {};
@@ -898,9 +998,37 @@ const AirPumpCalibrationPage = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {firstCal.nextCalibrationDue
+                      {isOutOfService
+                        ? "N/A"
+                        : firstCal.nextCalibrationDue
                         ? formatDate(firstCal.nextCalibrationDue)
                         : "N/A"}
+                    </TableCell>
+                    <TableCell>
+                      {isOutOfService ? (
+                        <Chip
+                          label="Out-of-Service"
+                          size="small"
+                          sx={{
+                            backgroundColor: theme.palette.error.main,
+                            color: "white",
+                          }}
+                        />
+                      ) : (
+                        <Chip
+                          label={calculatedOverallResult || "N/A"}
+                          size="small"
+                          sx={{
+                            backgroundColor:
+                              calculatedOverallResult === "Pass"
+                                ? theme.palette.success.main
+                                : calculatedOverallResult === "Fail"
+                                ? theme.palette.error.main
+                                : theme.palette.grey[500],
+                            color: "white",
+                          }}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       <IconButton
@@ -1393,6 +1521,83 @@ const AirPumpCalibrationPage = () => {
           <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
           <Button onClick={handleDelete} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Out-of-Service Dialog */}
+      <Dialog
+        open={outOfServiceDialog}
+        onClose={() => {
+          setOutOfServiceDialog(false);
+          setError(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Set Pump as Out-of-Service</Typography>
+            <IconButton
+              onClick={() => {
+                setOutOfServiceDialog(false);
+                setError(null);
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to set{" "}
+            <strong>{pump?.equipmentReference || "this pump"}</strong> as
+            Out-of-Service?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            This will:
+            <ul>
+              <li>Update the equipment status to "Out-of-Service"</li>
+              <li>
+                Create a calibration record showing the date and who set it as
+                out-of-service
+              </li>
+            </ul>
+          </Typography>
+          <TextField
+            fullWidth
+            label="Out-of-Service Date"
+            type="date"
+            value={outOfServiceDate}
+            onChange={(e) => setOutOfServiceDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            sx={{ mt: 2 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setOutOfServiceDialog(false);
+              setError(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSetOutOfService}
+            variant="contained"
+            color="error"
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>

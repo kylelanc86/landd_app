@@ -590,6 +590,21 @@ const ClientSuppliedJobs = () => {
     }
 
     // For Fibre Count jobs, check if all samples have fieldsCounted
+    // AND the job status is "Analysis Complete" (analysis has been finalized)
+    if (job.jobType === "Fibre Count") {
+      const allSamplesAnalysed = job.samples.every((sample) => {
+        return (
+          sample.analysisData &&
+          sample.analysisData.fieldsCounted !== undefined &&
+          sample.analysedAt
+        );
+      });
+      
+      // Also require that the job status is "Analysis Complete" (finalized)
+      return allSamplesAnalysed && job.status === "Analysis Complete";
+    }
+
+    // Fallback for other job types
     return job.samples.every((sample) => {
       return (
         sample.analysisData &&

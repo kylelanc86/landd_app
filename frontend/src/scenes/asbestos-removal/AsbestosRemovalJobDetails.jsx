@@ -83,14 +83,6 @@ const AsbestosRemovalJobDetails = () => {
   renderCountRef.current += 1;
 
   const renderStart = getTimestamp();
-  if (TIMING_ENABLED && renderCountRef.current > 1) {
-    console.log(
-      `${TIMING_LOG_PREFIX} Component render #${renderCountRef.current}`,
-      {
-        timestamp: new Date().toISOString(),
-      }
-    );
-  }
 
   const theme = useTheme();
   const colors = tokens;
@@ -99,28 +91,9 @@ const AsbestosRemovalJobDetails = () => {
   const { currentUser } = useAuth();
 
   const logDebug = useCallback((stage, details) => {
-    if (!TIMING_ENABLED || typeof console === "undefined") {
-      return;
-    }
-
-    if (details === undefined) {
-      console.log(`${TIMING_LOG_PREFIX} ${stage}`);
-    } else {
-      console.log(`${TIMING_LOG_PREFIX} ${stage}`, details);
-    }
+    // Debug logging disabled
   }, []);
 
-  // Debug logging for current user
-  useEffect(() => {
-    console.log("Current User in AsbestosRemovalJobDetails:", {
-      id: currentUser?._id,
-      firstName: currentUser?.firstName,
-      lastName: currentUser?.lastName,
-      role: currentUser?.role,
-      labSignatory: currentUser?.labSignatory,
-      fullUser: currentUser,
-    });
-  }, [currentUser]);
 
   const [job, setJob] = useState(null);
   const [airMonitoringShifts, setAirMonitoringShifts] = useState([]);
@@ -198,20 +171,7 @@ const AsbestosRemovalJobDetails = () => {
       const startTime = getTimestamp();
 
       const logTiming = (stage, details) => {
-        if (!TIMING_ENABLED || typeof console === "undefined") {
-          return;
-        }
-
-        const elapsed = getTimestamp() - startTime;
-        const baseMessage = `[${timingLabel}] ${stage}${
-          stage ? " " : ""
-        }(${Math.round(elapsed)}ms elapsed)`;
-
-        if (details === undefined) {
-          console.log(baseMessage);
-        } else {
-          console.log(baseMessage, details);
-        }
+        // Timing logging disabled
       };
 
       const scheduleCommitLog = (stage, details) => {
@@ -234,18 +194,7 @@ const AsbestosRemovalJobDetails = () => {
       };
 
       const finishTiming = (stage) => {
-        if (!TIMING_ENABLED || typeof console === "undefined") {
-          return;
-        }
-
-        if (stage) {
-          logTiming(stage);
-        }
-
-        const totalElapsed = getTimestamp() - startTime;
-        console.log(
-          `[${timingLabel}] completed (${Math.round(totalElapsed)}ms total)`
-        );
+        // Timing logging disabled
       };
 
       logTiming("start");
@@ -416,17 +365,6 @@ const AsbestosRemovalJobDetails = () => {
               .sort(([, a], [, b]) => b.sizeBytes - a.sizeBytes)
               .slice(0, 10); // Top 10 largest fields
 
-            console.log(
-              `${TIMING_LOG_PREFIX} Clearance structure analysis (sample)`,
-              {
-                totalFields: Object.keys(fieldSizes).length,
-                largestFields: Object.fromEntries(sortedFields),
-                recommendation:
-                  sortedFields[0] && sortedFields[0][1].sizeKB > 10
-                    ? `Field '${sortedFields[0][0]}' is ${sortedFields[0][1].sizeKB}KB - consider reducing or lazy loading`
-                    : "All fields appear reasonable in size",
-              }
-            );
           }
 
           // Sort clearances by clearanceDate (newest to oldest)
@@ -968,18 +906,6 @@ const AsbestosRemovalJobDetails = () => {
         project.client = clientResponse.data;
       }
 
-      console.log(
-        "AsbestosRemovalJobDetails - Latest shift data:",
-        latestShift
-      );
-      console.log(
-        "AsbestosRemovalJobDetails - Site plan flag:",
-        latestShift.sitePlan
-      );
-      console.log(
-        "AsbestosRemovalJobDetails - Site plan data:",
-        latestShift.sitePlanData
-      );
 
       generateShiftReport({
         shift: latestShift,
@@ -1023,14 +949,8 @@ const AsbestosRemovalJobDetails = () => {
         reportIssueDate: now,
       };
 
-      // Log the data being sent
-      console.log("Updating shift with data:", updatedShiftData);
-
       // Update shift with report approval
       const response = await shiftService.update(shift._id, updatedShiftData);
-
-      // Log the response
-      console.log("Update response:", response.data);
 
       // Generate and download the report
       try {
@@ -1193,9 +1113,7 @@ const AsbestosRemovalJobDetails = () => {
         descriptionOfWorks: "",
       };
 
-      console.log("Creating shift with data:", shiftData);
       const response = await shiftService.create(shiftData);
-      console.log("New shift created:", response.data);
 
       // Add the new shift directly to state since backend isn't saving job/projectId fields
       if (response.data) {
@@ -1323,9 +1241,7 @@ const AsbestosRemovalJobDetails = () => {
       );
       return;
     }
-    console.log("Samples button clicked for shift:", shift._id);
     const path = `/air-monitoring/shift/${shift._id}/samples`;
-    console.log("Attempting to navigate to:", path);
     try {
       navigate(path, { replace: false });
     } catch (error) {
@@ -1370,32 +1286,21 @@ const AsbestosRemovalJobDetails = () => {
   const handleViewClearanceReport = async (clearance, event) => {
     event.stopPropagation();
     try {
-      console.log(
-        "handleViewClearanceReport called with clearance:",
-        clearance
-      );
       setGeneratingPDF(true);
 
       // Get the full clearance data with populated project
-      console.log("Fetching full clearance data...");
       const fullClearance = await asbestosClearanceService.getById(
         clearance._id
       );
-      console.log("Full clearance data:", fullClearance);
 
       // Use the new HTML template-based PDF generation
-      console.log("Calling generateHTMLTemplatePDF...");
       const fileName = await generateHTMLTemplatePDF(
         "asbestos-clearance", // template type
         fullClearance, // clearance data
         { openInNewTab: true } // open in new tab instead of downloading
       );
-      console.log("PDF generation completed, fileName:", fileName);
 
-      showSnackbar(
-        "PDF opened in new tab",
-        "success"
-      );
+      showSnackbar("PDF opened in new tab", "success");
 
       // Mark report as viewed
       setReportViewedClearanceIds((prev) => new Set(prev).add(clearance._id));
@@ -1403,7 +1308,6 @@ const AsbestosRemovalJobDetails = () => {
       console.error("Error generating PDF:", err);
       showSnackbar("Failed to generate PDF", "error");
     } finally {
-      console.log("Setting generatingPDF to false");
       setGeneratingPDF(false);
     }
   };
@@ -1413,23 +1317,18 @@ const AsbestosRemovalJobDetails = () => {
     event.stopPropagation();
 
     try {
-      console.log("handleGeneratePDF called with clearance:", clearance);
       setGeneratingPDF(true);
 
       // Get the full clearance data with populated project
-      console.log("Fetching full clearance data...");
       const fullClearance = await asbestosClearanceService.getById(
         clearance._id
       );
-      console.log("Full clearance data:", fullClearance);
 
       // Use the new HTML template-based PDF generation
-      console.log("Calling generateHTMLTemplatePDF...");
       const fileName = await generateHTMLTemplatePDF(
         "asbestos-clearance", // template type
         fullClearance // clearance data
       );
-      console.log("PDF generation completed, fileName:", fileName);
 
       showSnackbar(
         `PDF generated successfully! Check your downloads folder for: ${
@@ -1441,7 +1340,6 @@ const AsbestosRemovalJobDetails = () => {
       console.error("Error generating PDF:", err);
       showSnackbar("Failed to generate PDF", "error");
     } finally {
-      console.log("Setting generatingPDF to false");
       setGeneratingPDF(false);
     }
   };
@@ -1466,9 +1364,6 @@ const AsbestosRemovalJobDetails = () => {
       // The service returns response.data, so response is already the clearance object
       const updatedClearance = response;
 
-      console.log("Authorisation response:", updatedClearance);
-      console.log("reportApprovedBy:", updatedClearance.reportApprovedBy);
-
       // Immediately update the clearance in state to reflect the authorisation
       // This ensures the UI updates right away
       setClearances((prevClearances) => {
@@ -1480,10 +1375,6 @@ const AsbestosRemovalJobDetails = () => {
                 reportIssueDate: updatedClearance.reportIssueDate,
               }
             : c
-        );
-        console.log(
-          "Updated clearances state:",
-          updated.find((c) => c._id === clearance._id)
         );
         return updated;
       });
@@ -1523,7 +1414,6 @@ const AsbestosRemovalJobDetails = () => {
           !refreshedClearance.reportApprovedBy &&
           updatedClearance.reportApprovedBy
         ) {
-          console.log("Ensuring reportApprovedBy is set after fetchClearances");
           return prevClearances.map((c) =>
             c._id === clearance._id
               ? {
@@ -1743,10 +1633,8 @@ const AsbestosRemovalJobDetails = () => {
           editingClearance._id,
           newClearanceData
         );
-        console.log("Clearance update response:", response);
       } else {
         response = await asbestosClearanceService.create(newClearanceData);
-        console.log("Clearance creation response:", response);
       }
 
       // Close modal and refresh clearances list
@@ -1796,13 +1684,6 @@ const AsbestosRemovalJobDetails = () => {
   }
 
   if (!job) {
-    if (TIMING_ENABLED && renderCountRef.current > 1) {
-      const renderDuration = Math.round(getTimestamp() - renderStart);
-      console.log(`${TIMING_LOG_PREFIX} Render complete (no job)`, {
-        renderNumber: renderCountRef.current,
-        renderDurationMs: renderDuration,
-      });
-    }
     return (
       <Box m="20px">
         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1825,18 +1706,6 @@ const AsbestosRemovalJobDetails = () => {
     const permissionCheckDuration = Math.round(
       getTimestamp() - permissionCheckStart
     );
-
-    console.log(`${TIMING_LOG_PREFIX} Render complete`, {
-      renderNumber: renderCountRef.current,
-      renderDurationMs: renderDuration,
-      permissionCheckDurationMs: permissionCheckDuration,
-      stateSizes: {
-        job: JSON.stringify(job).length,
-        shifts: JSON.stringify(airMonitoringShifts).length,
-        clearances: JSON.stringify(clearances).length,
-        removalists: JSON.stringify(asbestosRemovalists).length,
-      },
-    });
   }
 
   return (
@@ -2202,36 +2071,6 @@ const AsbestosRemovalJobDetails = () => {
                                       conditions.hasEditPermission,
                                   };
 
-                                  if (
-                                    TIMING_ENABLED &&
-                                    permissionCheckDuration > 1
-                                  ) {
-                                    console.log(
-                                      `${TIMING_LOG_PREFIX} Permission check took ${permissionCheckDuration}ms`,
-                                      {
-                                        shiftId: shift._id,
-                                        conditions,
-                                        visibility,
-                                      }
-                                    );
-                                  }
-
-                                  console.log(
-                                    "Authorisation action visibility:",
-                                    {
-                                      shiftId: shift._id,
-                                      conditions,
-                                      visibility,
-                                      permissionCheckDurationMs:
-                                        permissionCheckDuration,
-                                      currentUser: {
-                                        id: currentUser?._id,
-                                        role: currentUser?.role,
-                                        reportProofer:
-                                          currentUser?.reportProofer,
-                                      },
-                                    }
-                                  );
 
                                   return (
                                     <>
@@ -2663,7 +2502,9 @@ const AsbestosRemovalJobDetails = () => {
                       }}
                       label="Minutes"
                     >
-                      {["00", "15", "30", "45"].map((minute) => (
+                      {Array.from({ length: 12 }, (_, i) =>
+                        (i * 5).toString().padStart(2, "0")
+                      ).map((minute) => (
                         <MenuItem key={minute} value={minute}>
                           {minute}
                         </MenuItem>

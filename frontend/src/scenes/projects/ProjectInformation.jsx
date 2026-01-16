@@ -424,6 +424,7 @@ const ProjectInformation = () => {
   const [googleMaps, setGoogleMaps] = useState(null);
   const [googleMapsError, setGoogleMapsError] = useState(null);
   const placesServiceDivRef = useRef(null);
+  const formElementRef = useRef(null); // Ref for the form element to trigger validation
 
   const [clientInputValue, setClientInputValue] = useState("");
   const [clientSearchResults, setClientSearchResults] = useState([]);
@@ -840,6 +841,13 @@ const ProjectInformation = () => {
     }
   };
 
+  // Helper function to strip "Australia" from the end of an address
+  const stripAustraliaFromAddress = (address) => {
+    if (!address) return address;
+    // Remove "Australia" from the end, handling commas and spaces
+    return address.replace(/,\s*Australia\s*$/i, "").trim();
+  };
+
   const handleAddressSelect = async (placeId) => {
     if (!placeId || !placesService || !googleMaps) return;
 
@@ -855,11 +863,12 @@ const ProjectInformation = () => {
             status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             place
           ) {
+            const cleanedAddress = stripAustraliaFromAddress(place.formatted_address);
             setForm((prev) => ({
               ...prev,
-              address: place.formatted_address,
+              address: cleanedAddress,
             }));
-            setAddressInput(place.formatted_address);
+            setAddressInput(cleanedAddress);
           } else {
             console.error("Error getting place details:", status);
           }
@@ -952,11 +961,12 @@ const ProjectInformation = () => {
       (place, status) => {
         console.log("Selected new client place:", place, "Status:", status);
         if (status === googleMaps.maps.places.PlacesServiceStatus.OK) {
+          const cleanedAddress = stripAustraliaFromAddress(place.formatted_address);
           setNewClientForm((prev) => ({
             ...prev,
-            address: place.formatted_address,
+            address: cleanedAddress,
           }));
-          setNewClientAddressInput(place.formatted_address);
+          setNewClientAddressInput(cleanedAddress);
         } else {
           console.error("Error getting new client place details:", status);
         }
@@ -1137,17 +1147,34 @@ const ProjectInformation = () => {
 
   const handleSaveAndContinue = async (e) => {
     e.preventDefault();
+    
+    // Trigger HTML5 form validation before proceeding
+    if (formElementRef.current && !formElementRef.current.checkValidity()) {
+      // If validation fails, show validation messages
+      formElementRef.current.reportValidity();
+      return;
+    }
+    
+    // Additional custom validation for email fields
+    if (form.projectContact?.email && !form.projectContact.email.includes("@")) {
+      showSnackbar("Please enter a valid email address for project contact", "error");
+      return;
+    }
+    
     await handleSubmit(e, false); // Pass false to indicate don't navigate away
   };
 
   const handleSubmit = async (e, shouldNavigate = true) => {
     e.preventDefault();
 
-    // Prevent multiple submissions
+    // Prevent multiple submissions - set saving flag immediately to prevent race condition
     if (saving) {
       console.log("🚫 SUBMISSION BLOCKED - Already saving");
       return;
     }
+    
+    // Set saving flag immediately to prevent duplicate submissions
+    setSaving(true);
 
     const operationStartTime = performance.now();
     console.log("🚀 PROJECT OPERATION START", {
@@ -1186,17 +1213,20 @@ const ProjectInformation = () => {
     console.log("🔍 URL params id:", id);
 
     try {
-      setSaving(true);
-      if (isEditMode) {
+      // Check if this is an edit operation (either by URL param or by having an _id after creation)
+      const isUpdateOperation = isEditMode || form._id;
+      
+      if (isUpdateOperation) {
         const updateStartTime = performance.now();
+        const projectIdToUpdate = id || form._id;
         console.log("🔄 PROJECT UPDATE START", {
-          projectId: id,
+          projectId: projectIdToUpdate,
           timestamp: new Date().toISOString(),
         });
 
-        console.log("🔍 Updating existing project with ID:", id);
+        console.log("🔍 Updating existing project with ID:", projectIdToUpdate);
         console.log("🔍 Update payload:", {
-          id,
+          id: projectIdToUpdate,
           form,
           formProjectID: form.projectID,
           formId: form._id,
@@ -1262,11 +1292,11 @@ const ProjectInformation = () => {
         });
 
         const apiStartTime = performance.now();
-        const response = await projectService.update(id, updateData);
+        const response = await projectService.update(projectIdToUpdate, updateData);
         const apiEndTime = performance.now();
 
         console.log("✅ PROJECT UPDATE API COMPLETE", {
-          projectId: id,
+          projectId: projectIdToUpdate,
           apiTime: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
           totalTime: `${(apiEndTime - updateStartTime).toFixed(2)}ms`,
           responseSize: JSON.stringify(response).length,
@@ -1305,9 +1335,14 @@ const ProjectInformation = () => {
           responseId: response.data?._id,
         });
 
-        // Update form with returned project ID so it's displayed immediately
+        // Update form with returned project ID and _id so it's displayed immediately
+        // Setting _id ensures subsequent "Save and Continue" clicks will update instead of create
         if (response.data?.projectID) {
-          setForm((prev) => ({ ...prev, projectID: response.data.projectID }));
+          setForm((prev) => ({ 
+            ...prev, 
+            projectID: response.data.projectID,
+            _id: response.data._id // Set _id to mark this as an existing project
+          }));
 
           // Update reports cache with new project (pass full project object)
           addProjectToCache(response.data);
@@ -1323,8 +1358,8 @@ const ProjectInformation = () => {
       const operationEndTime = performance.now();
       const totalOperationTime = operationEndTime - operationStartTime;
       console.log("✅ PROJECT OPERATION COMPLETE", {
-        operation: isEditMode ? "UPDATE" : "CREATE",
-        projectId: isEditMode ? id : form.projectID,
+        operation: isUpdateOperation ? "UPDATE" : "CREATE",
+        projectId: isUpdateOperation ? (id || form._id) : form.projectID,
         totalTime: `${totalOperationTime.toFixed(2)}ms`,
         timestamp: new Date().toISOString(),
       });
@@ -1333,7 +1368,7 @@ const ProjectInformation = () => {
 
       // Show success message
       showSnackbar(
-        isEditMode
+        isUpdateOperation
           ? "Project updated successfully!"
           : "Project created successfully!",
         "success"
@@ -1341,10 +1376,13 @@ const ProjectInformation = () => {
 
       // Reset unsaved changes flag and update original form
       setHasUnsavedChanges(false);
-      if (isEditMode) {
+      if (isUpdateOperation) {
+        // Update original form after any update operation (whether from edit mode or after creation)
         setOriginalForm(JSON.parse(JSON.stringify(form)));
-        // Refresh audit trail after update
-        await fetchAuditTrail(form._id);
+        // Refresh audit trail after update (only if we have an _id)
+        if (form._id) {
+          await fetchAuditTrail(form._id);
+        }
         // Navigate to projects page or dashboard after successful update if shouldNavigate is true
         if (shouldNavigate) {
           navigate(getReturnPath());
@@ -1353,9 +1391,13 @@ const ProjectInformation = () => {
     } catch (error) {
       const operationEndTime = performance.now();
       const totalOperationTime = operationEndTime - operationStartTime;
+      // Determine operation type for error logging (isUpdateOperation may not be in scope if error occurred early)
+      const errorOperationType = (isEditMode || form._id) ? "UPDATE" : "CREATE";
+      const errorProjectId = (isEditMode || form._id) ? (id || form._id) : form.projectID;
+      
       console.log("❌ PROJECT OPERATION ERROR", {
-        operation: isEditMode ? "UPDATE" : "CREATE",
-        projectId: isEditMode ? id : form.projectID,
+        operation: errorOperationType,
+        projectId: errorProjectId,
         totalTime: `${totalOperationTime.toFixed(2)}ms`,
         error: error.message,
         timestamp: new Date().toISOString(),
@@ -1577,7 +1619,7 @@ const ProjectInformation = () => {
             </Box>
           )}
 
-          <form onSubmit={handleSubmit} autoComplete="off">
+          <form ref={formElementRef} onSubmit={handleSubmit} autoComplete="off">
             {/* Hidden fields to prevent autofill */}
             <input
               type="text"
@@ -1979,9 +2021,9 @@ const ProjectInformation = () => {
                   )}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => {
-                      const tagProps = getTagProps({ index });
+                      const { key, ...tagProps } = getTagProps({ index });
                       return (
-                        <Chip key={tagProps.key} label={option} {...tagProps} />
+                        <Chip key={key} label={option} {...tagProps} />
                       );
                     })
                   }
@@ -2097,10 +2139,10 @@ const ProjectInformation = () => {
                   )}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => {
-                      const tagProps = getTagProps({ index });
+                      const { key, ...tagProps } = getTagProps({ index });
                       return (
                         <Chip
-                          key={tagProps.key}
+                          key={key}
                           label={`${option.firstName} ${option.lastName}`}
                           {...tagProps}
                         />
@@ -2237,8 +2279,10 @@ const ProjectInformation = () => {
                 autoComplete="new-password"
                 placeholder="email@example.com or '-' for no email"
                 error={
-                  newClientForm.invoiceEmail &&
-                  !isValidEmailOrDash(newClientForm.invoiceEmail)
+                  !!(
+                    newClientForm.invoiceEmail &&
+                    !isValidEmailOrDash(newClientForm.invoiceEmail)
+                  )
                 }
                 helperText={
                   newClientForm.invoiceEmail &&
@@ -2323,8 +2367,10 @@ const ProjectInformation = () => {
                 autoComplete="new-password"
                 placeholder="04xx xxx xxx (mobile) or 02 xxxx xxxx (landline) or '-' for no phone"
                 error={
-                  newClientForm.contact1Number &&
-                  !isValidAustralianPhone(newClientForm.contact1Number)
+                  !!(
+                    newClientForm.contact1Number &&
+                    !isValidAustralianPhone(newClientForm.contact1Number)
+                  )
                 }
                 helperText={
                   newClientForm.contact1Number &&
@@ -2342,8 +2388,10 @@ const ProjectInformation = () => {
                 autoComplete="new-password"
                 placeholder="email@example.com or '-' for no email"
                 error={
-                  newClientForm.contact1Email &&
-                  !isValidEmailOrDash(newClientForm.contact1Email)
+                  !!(
+                    newClientForm.contact1Email &&
+                    !isValidEmailOrDash(newClientForm.contact1Email)
+                  )
                 }
                 helperText={
                   newClientForm.contact1Email &&
@@ -2373,8 +2421,10 @@ const ProjectInformation = () => {
                 autoComplete="new-password"
                 placeholder="04xx xxx xxx (mobile) or 02 xxxx xxxx (landline) or '-' for no phone"
                 error={
-                  newClientForm.contact2Number &&
-                  !isValidAustralianPhone(newClientForm.contact2Number)
+                  !!(
+                    newClientForm.contact2Number &&
+                    !isValidAustralianPhone(newClientForm.contact2Number)
+                  )
                 }
                 helperText={
                   newClientForm.contact2Number &&
@@ -2392,8 +2442,10 @@ const ProjectInformation = () => {
                 autoComplete="new-password"
                 placeholder="email@example.com or '-' for no email"
                 error={
-                  newClientForm.contact2Email &&
-                  !isValidEmailOrDash(newClientForm.contact2Email)
+                  !!(
+                    newClientForm.contact2Email &&
+                    !isValidEmailOrDash(newClientForm.contact2Email)
+                  )
                 }
                 helperText={
                   newClientForm.contact2Email &&

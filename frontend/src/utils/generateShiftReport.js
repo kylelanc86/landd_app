@@ -36,8 +36,6 @@ function getSampleNumber(sampleID) {
 // Helper to load image as base64
 async function loadImageAsBase64(imagePath) {
   try {
-    console.log(`Attempting to load image: ${imagePath}`);
-    
     let response;
     
     // Check if this is an API call (needs authentication) or a static asset
@@ -45,17 +43,13 @@ async function loadImageAsBase64(imagePath) {
       // For API calls, use the existing API instance to get proper authentication
       // Remove the /api prefix since the API instance already has it in baseURL
       const apiPath = imagePath.substring(4); // Remove '/api' from the beginning
-      console.log(`API URL: ${api.defaults.baseURL}${apiPath}`);
       response = await api.get(apiPath, { responseType: 'blob' });
-      console.log(`Response status for ${imagePath}:`, response.status);
     } else {
       // For static assets (logos), use fetch with frontend URL
       const baseUrl = process.env.NODE_ENV === 'development' ? "http://localhost:3000" : window.location.origin;
       const fullUrl = imagePath.startsWith('http') ? imagePath : `${baseUrl}${imagePath}`;
       
-      console.log(`Static URL: ${fullUrl}`);
       response = await fetch(fullUrl);
-      console.log(`Response status for ${imagePath}:`, response.status);
     }
     
     if (!response.ok && !response.status) {
@@ -65,22 +59,17 @@ async function loadImageAsBase64(imagePath) {
     
     // Handle blob from either fetch or axios
     const blob = response.data || await response.blob();
-    console.log(`Blob size for ${imagePath}:`, blob.size);
-    console.log(`Blob type for ${imagePath}:`, blob.type);
     
     // Debug: Check if the response is actually an image
     if (blob.size < 1000) {
       console.warn(`Small blob size (${blob.size} bytes) - might be an error response`);
       // Try to read as text to see what error message we're getting
       const text = await blob.text();
-      console.log(`Response content:`, text);
     }
     
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        console.log(`Successfully loaded ${imagePath} as base64, length:`, reader.result.length);
-        console.log(`Base64 preview:`, reader.result.substring(0, 100) + '...');
         resolve(reader.result);
       };
       reader.onerror = (error) => {
@@ -156,14 +145,6 @@ const formatReportedConcentration = (sample) => {
 };
 
 export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false, sitePlanData = null, isClientSupplied = false }) {
-  console.log("generateShiftReport called with sitePlanData:", sitePlanData);
-  // Debug logging
-  console.log('generateShiftReport called with:', { shift, job, samples, project, openInNewTab, returnPdfData });
-  console.log('job type:', typeof job, 'job value:', job);
-  console.log('Project data:', JSON.stringify(project, null, 2));
-  console.log('Project projectContact:', project?.projectContact);
-  console.log('Available project fields:', Object.keys(project || {}));
-  
   // Ensure job is an object
   if (typeof job !== 'object' || job === null) {
     console.warn('job is not an object, using empty object:', job);
@@ -186,19 +167,11 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
   }
   
   // Determine base URL for fonts - use window.location.origin to avoid CORS issues
-  console.log('Window location:', {
-    hostname: window.location.hostname,
-    href: window.location.href,
-    origin: window.location.origin
-  });
-  
   // Use window.location.origin to load fonts from the same origin as the app
   // This prevents CORS errors when accessing from different domains
   const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000' 
     : window.location.origin;
-  
-  console.log('Font base URL:', baseUrl);
 
 pdfMake.fonts = {
   Gothic: {
@@ -216,23 +189,15 @@ pdfMake.fonts = {
   // Load site plan image if available
   let sitePlanImage = null;
   if (sitePlanData?.sitePlanData?.staticMapUrl) {
-    console.log("=== SITE PLAN IMAGE LOADING START ===");
-    console.log("Loading site plan image from:", sitePlanData.sitePlanData.staticMapUrl);
     try {
       sitePlanImage = await loadImageAsBase64(sitePlanData.sitePlanData.staticMapUrl);
-      if (sitePlanImage) {
-        console.log("Successfully loaded site plan image, length:", sitePlanImage.length);
-      } else {
-        console.log("Failed to load site plan image - returned null");
+      if (!sitePlanImage) {
         sitePlanImage = null;
       }
     } catch (error) {
       console.error("Failed to load site plan image:", error);
       sitePlanImage = null;
     }
-    console.log("=== SITE PLAN IMAGE LOADING END ===");
-  } else {
-    console.log("No site plan data or static map URL available");
   }
 
   // Sort samples
@@ -280,11 +245,80 @@ pdfMake.fonts = {
   // Document definition
   const docDefinition = {
     pageSize: "A4",
-    pageMargins: [40, 30, 40, 90],
+    // Increase top margin for air monitoring reports to account for header on page 2+
+    // Header is approximately 90px tall, so we add that to the base 30px margin
+    pageMargins: [40, !isClientSupplied ? 120 : 30, 40, 90],
     defaultStyle: {
       font: 'Gothic'
     },
-    images: nataLogo ? { nataLogo: nataLogo } : {},
+    images: {
+      ...(nataLogo ? { nataLogo: nataLogo } : {}),
+      ...(companyLogo ? { companyLogo: companyLogo } : {})
+    },
+    // Header function for all pages - full header on page 1, logo/company info only on page 2+
+    header: !isClientSupplied && companyLogo ? function(currentPage, pageCount) {
+      const headerContent = {
+        stack: [
+          {
+            columns: [
+              { image: 'companyLogo', width: 165 },
+              {
+                stack: [
+                  { 
+                    text: 'Lancaster & Dickenson Consulting Pty Ltd', 
+                    fontSize: 9,
+                    margin: [0, 1, 0, 1],
+                    color: "black",
+                    lineHeight: 1.5
+                  },
+                  { 
+                    text: '4/6 Dacre Street, Mitchell ACT 2911', 
+                    fontSize: 9,
+                    margin: [0, 1, 0, 1],
+                    color: "black",
+                    lineHeight: 1.5
+                  },
+                  { 
+                    text: 'W: www.landd.com.au', 
+                    fontSize: 9,
+                    margin: [0, 1, 0, 1],
+                    color: "black",
+                    lineHeight: 1.5
+                  },
+                ],
+                alignment: 'right',
+              },
+            ],
+            margin: [0, 0, 0, 4],
+          },
+          {
+            canvas: [
+              {
+                type: 'line',
+                x1: 0, y1: 0, x2: 520, y2: 0,
+                lineWidth: 1.5,
+                lineColor: '#16b12b'
+              }
+            ],
+            margin: [0, 0, 0, 10]
+          }
+        ],
+        margin: [40, 30, 40, 0]
+      };
+
+      // On page 1, include the report title
+      if (currentPage === 1) {
+        headerContent.stack.push({ 
+          text: 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', 
+          fontSize: 12,
+          bold: true,
+          margin: [0, 10, 0, 10], 
+          alignment: 'center' 
+        });
+      }
+
+      return headerContent;
+    } : undefined,
     styles: {
       header: {
         fontSize: 12,
@@ -315,36 +349,8 @@ pdfMake.fonts = {
       // Page 1 Content
       {
         stack: [
-          // Header
-          {
-            columns: [
-              { image: companyLogo, width: 165 },
-              {
-                stack: [
-                  { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
-                  { text: '4/6 Dacre Street, Mitchell ACT 2911', style: 'subheader' },
-                  { text: 'W: www.landd.com.au', style: 'subheader' },
-                ],
-                alignment: 'right',
-              },
-            ],
-            margin: [0, 0, 0, 4],
-          },
-          
-          // Green border beneath header
-          {
-            canvas: [
-              {
-                type: 'line',
-                x1: 0, y1: 0, x2: 520, y2: 0,
-                lineWidth: 1.5,
-                lineColor: '#16b12b'
-              }
-            ],
-            margin: [0, 0, 0, 20]
-          },
-          
-          { text: isClientSupplied ? 'ASBESTOS FIBRE COUNT REPORT' : 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
+          // Report title
+          { text: isClientSupplied ? 'ASBESTOS FIBRE COUNT REPORT' : 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, -5, 0, 10], alignment: 'center' },
           
           // Client and Lab details in single table
           {
@@ -553,7 +559,8 @@ pdfMake.fonts = {
                             const notes = [
                               { text: '1. The analysed samples covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of the samples collected or the accompanying descriptions.', style: 'notes' },
                               { text: '2. Report must not be reproduced except in full.', style: 'notes' },
-                              { text: '3. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                              { text: '3. This report relates to samples provided by a third party and the results within apply to the samples as received.', style: 'notes' },
+                              { text: '4. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
                             ];
                             if (hasUDDSample) {
                               notes.push({ text: '* UDD = sample was uncountable due to heavy dust loading', style: 'notes' });
@@ -566,7 +573,8 @@ pdfMake.fonts = {
                               { text: '3. Safe Work Australia\'s recommended Exposure Standard for all forms of asbestos is 0.1 fibres/mL', style: 'notes' },
                               { text: '4. AFC = air fibre concentration (fibres/ml)', style: 'notes' },
                               { text: '5. An E in brackets is used to denote exposure monitoring was conducted, a C indicates clearance monitoring.', style: 'notes' },
-                              { text: '6. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
+                              { text: '6. The results of the testing relate only to the samples as supplied to the laboratory.', style: 'notes' },
+                              { text: '7. Accredited for compliance with ISO/IEC 17025 – Testing. Accreditation no: 19512', style: 'notes' },
                             ];
                             if (hasUDDSample) {
                               notes.push({ text: '* UDD = sample was uncountable due to heavy dust loading', style: 'notes' });
@@ -607,6 +615,7 @@ pdfMake.fonts = {
           {
             table: {
               headerRows: 1,
+              dontBreakRows: true, // Prevent table rows from breaking across pages
               widths: isClientSupplied 
                 ? ['25%', '40%', '17%', '18%'] 
                 : ['16%', '35%', '7%', '7%', '9%', '7%', '7%', '12%'],
@@ -872,7 +881,6 @@ pdfMake.fonts = {
     ],
     footer: (function(nataLogo, job, sortedSamples, companyLogo) {
       return function(currentPage, pageCount) {
-        console.log('Footer function called - NATA logo available:', !!nataLogo);
         const footerBlocks = [];
         footerBlocks.push({
             canvas: [

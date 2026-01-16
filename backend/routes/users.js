@@ -149,7 +149,8 @@ router.post('/', auth, async (req, res) => {
       },
       labApprovals: labApprovals || {
         fibreCounting: false,
-        fibreIdentification: false
+        fibreIdentification: false,
+        calibrations: false
       },
       canSetJobComplete: canSetJobComplete || false,
       labSignatory: labSignatory || false,
