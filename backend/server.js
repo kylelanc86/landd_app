@@ -158,19 +158,19 @@ connectDB()
       // Don't fail server startup if stats initialization fails
     }
     
-    // Debug logging for route matching (temporary - remove after fixing)
-    app.use((req, res, next) => {
-      // Log all API requests to diagnose routing issues
-      if (req.method !== 'GET' || req.path.includes('api') || req.path.includes('auth') || req.path.includes('login') || req.path.includes('projects') || req.path.includes('users') || req.path.includes('timesheets') || req.path.includes('custom-data')) {
-        console.log('🔍 Route Debug:', {
-          method: req.method,
-          path: req.path,
-          url: req.url,
-          originalUrl: req.originalUrl
-        });
-      }
-      next();
-    });
+    // // Debug logging for route matching (temporary - remove after fixing)
+    // app.use((req, res, next) => {
+    //   // Log all API requests to diagnose routing issues
+    //   if (req.method !== 'GET' || req.path.includes('api') || req.path.includes('auth') || req.path.includes('login') || req.path.includes('projects') || req.path.includes('users') || req.path.includes('timesheets') || req.path.includes('custom-data')) {
+    //     console.log('🔍 Route Debug:', {
+    //       method: req.method,
+    //       path: req.path,
+    //       url: req.url,
+    //       originalUrl: req.originalUrl
+    //     });
+    //   }
+    //   next();
+    // });
     
     // Routes
     // Mount auth routes at both paths in case DigitalOcean strips /api prefix
