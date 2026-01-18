@@ -86,7 +86,8 @@ const ClearanceItems = () => {
   const [localPhotoChanges, setLocalPhotoChanges] = useState({}); // Track local changes
   const [photosToDelete, setPhotosToDelete] = useState(new Set()); // Track photos to delete
   const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({}); // Track local description changes
-  const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] = useState(null); // Track which photo description is being edited
+  const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] =
+    useState(null); // Track which photo description is being edited
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
   const [compressionStatus, setCompressionStatus] = useState(null);
@@ -494,10 +495,22 @@ const ClearanceItems = () => {
       });
 
       // Fetch asbestos removal job ID for breadcrumb navigation (separate from main data loading)
-      if (clearanceData?.projectId) {
+      // First check if clearance has direct job ID link - this is the most reliable method
+      if (clearanceData?.asbestosRemovalJobId) {
+        const jobId =
+          clearanceData.asbestosRemovalJobId._id ||
+          clearanceData.asbestosRemovalJobId;
+        setAsbestosRemovalJobId(jobId);
+        console.log("[ClearanceItems] fetchData - Using direct job ID link", {
+          jobId: jobId,
+          timestamp: new Date().toISOString(),
+        });
+      } else if (clearanceData?.projectId) {
+        // Fallback: Find job by project ID if direct link is not available
+        // This should only happen for older clearances created before asbestosRemovalJobId was added
         try {
           console.log(
-            "[ClearanceItems] fetchData - Fetching asbestos removal job ID",
+            "[ClearanceItems] fetchData - Fetching asbestos removal job ID (fallback to project lookup)",
             {
               projectId: clearanceData.projectId._id || clearanceData.projectId,
               timestamp: new Date().toISOString(),
@@ -547,19 +560,19 @@ const ClearanceItems = () => {
               projectId: job.projectId,
               projectIdId: job.projectId?._id,
               name: job.name,
+              asbestosRemovalist: job.asbestosRemovalist,
             }))
           );
 
           // Find the asbestos removal job that matches this project
-          // Try multiple matching strategies to be more robust
-          const matchingJob = jobsArray.find((job) => {
+          // When multiple jobs exist for same project, try to match by asbestosRemovalist first
+          let matchingJob = null;
+
+          // First, filter jobs by project ID
+          const projectJobs = jobsArray.filter((job) => {
             const jobProjectId = job.projectId?._id || job.projectId;
             const clearanceProjectId =
               clearanceData.projectId._id || clearanceData.projectId;
-
-            console.log(
-              `Comparing job ${job._id} projectId (${jobProjectId}) with clearance projectId (${clearanceProjectId})`
-            );
 
             return (
               jobProjectId === clearanceProjectId ||
@@ -570,6 +583,27 @@ const ClearanceItems = () => {
               job.projectId?._id === clearanceData.projectId
             );
           });
+
+          // If multiple jobs found, try to match by asbestosRemovalist
+          if (projectJobs.length > 1 && clearanceData?.asbestosRemovalist) {
+            matchingJob = projectJobs.find(
+              (job) =>
+                job.asbestosRemovalist === clearanceData.asbestosRemovalist
+            );
+            console.log(
+              "[ClearanceItems] fetchData - Multiple jobs found, attempting to match by asbestosRemovalist",
+              {
+                clearanceAsbestosRemovalist: clearanceData.asbestosRemovalist,
+                matchedByRemovalist: !!matchingJob,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
+
+          // If still no match or only one job found, use first one
+          if (!matchingJob && projectJobs.length > 0) {
+            matchingJob = projectJobs[0];
+          }
 
           console.log("Matching job found:", matchingJob);
 
@@ -1355,7 +1389,11 @@ const ClearanceItems = () => {
       return item.materialDescription || "Unknown Item";
     } else {
       const roomArea = (item.roomArea || "unknown room/area").toLowerCase();
-      const materialDesc = (item.locationDescription || item.materialDescription || "unknown material").toLowerCase();
+      const materialDesc = (
+        item.locationDescription ||
+        item.materialDescription ||
+        "unknown material"
+      ).toLowerCase();
       return `Photograph after removal of ${materialDesc} to ${roomArea}`;
     }
   };
@@ -1366,13 +1404,15 @@ const ClearanceItems = () => {
     if (localPhotoDescriptions[photoId] !== undefined) {
       return localPhotoDescriptions[photoId];
     }
-    
+
     // Check if photo has a stored description
-    const photo = selectedItemForPhotos?.photographs?.find((p) => p._id === photoId);
+    const photo = selectedItemForPhotos?.photographs?.find(
+      (p) => p._id === photoId
+    );
     if (photo?.description) {
       return photo.description;
     }
-    
+
     // Generate default description
     return generateDefaultPhotoDescription(item, clearance?.clearanceType);
   };
@@ -1387,9 +1427,11 @@ const ClearanceItems = () => {
 
   // Helper function to check if there are unsaved changes
   const hasUnsavedChanges = () => {
-    return Object.keys(localPhotoChanges).length > 0 || 
-           photosToDelete.size > 0 || 
-           Object.keys(localPhotoDescriptions).length > 0;
+    return (
+      Object.keys(localPhotoChanges).length > 0 ||
+      photosToDelete.size > 0 ||
+      Object.keys(localPhotoDescriptions).length > 0
+    );
   };
 
   // Helper function to apply local changes to photo state
@@ -1475,7 +1517,11 @@ const ClearanceItems = () => {
       }
 
       // Combine results
-      const allResults = [...toggleResults, ...descriptionResults, ...deletionResults];
+      const allResults = [
+        ...toggleResults,
+        ...descriptionResults,
+        ...deletionResults,
+      ];
       const failures = allResults.filter((r) => r.status === "rejected");
       const successes = allResults.filter((r) => r.status === "fulfilled");
 
@@ -1704,53 +1750,46 @@ const ClearanceItems = () => {
     try {
       setLoadingReports(true);
 
-      // Use asbestos removal job ID if available, otherwise fall back to project ID
-      if (asbestosRemovalJobId) {
-        console.log(
-          "[ClearanceItems] fetchAirMonitoringReports - Fetching by job ID",
+      // Always use asbestos removal job ID - this ensures we only show reports for the correct job
+      // This is critical when multiple asbestos removal jobs exist for the same project
+      if (!asbestosRemovalJobId) {
+        console.error(
+          "[ClearanceItems] fetchAirMonitoringReports - No asbestos removal job ID available",
           {
-            asbestosRemovalJobId,
+            projectId: clearance?.projectId?._id,
             timestamp: new Date().toISOString(),
           }
         );
-        const apiStartTime = performance.now();
-        const reports =
-          await asbestosClearanceService.getAirMonitoringReportsByJob(
-            asbestosRemovalJobId
-          );
-        const apiEndTime = performance.now();
-        console.log(
-          "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by job",
-          {
-            reportsCount: Array.isArray(reports) ? reports.length : 0,
-            apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
-            timestamp: new Date().toISOString(),
-          }
+        showSnackbar(
+          "Unable to identify asbestos removal job for this clearance. Please ensure the clearance is properly linked to an asbestos removal job.",
+          "error"
         );
-        setAirMonitoringReports(reports);
-      } else {
-        console.log(
-          "[ClearanceItems] fetchAirMonitoringReports - Fetching by project ID",
-          {
-            projectId: clearance.projectId._id,
-            timestamp: new Date().toISOString(),
-          }
-        );
-        const apiStartTime = performance.now();
-        const reports = await asbestosClearanceService.getAirMonitoringReports(
-          clearance.projectId._id
-        );
-        const apiEndTime = performance.now();
-        console.log(
-          "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by project",
-          {
-            reportsCount: Array.isArray(reports) ? reports.length : 0,
-            apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
-            timestamp: new Date().toISOString(),
-          }
-        );
-        setAirMonitoringReports(reports);
+        setLoadingReports(false);
+        return;
       }
+
+      console.log(
+        "[ClearanceItems] fetchAirMonitoringReports - Fetching by job ID",
+        {
+          asbestosRemovalJobId,
+          timestamp: new Date().toISOString(),
+        }
+      );
+      const apiStartTime = performance.now();
+      const reports =
+        await asbestosClearanceService.getAirMonitoringReportsByJob(
+          asbestosRemovalJobId
+        );
+      const apiEndTime = performance.now();
+      console.log(
+        "[ClearanceItems] fetchAirMonitoringReports - Reports fetched by job",
+        {
+          reportsCount: Array.isArray(reports) ? reports.length : 0,
+          apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
+          timestamp: new Date().toISOString(),
+        }
+      );
+      setAirMonitoringReports(reports);
 
       const endTime = performance.now();
       console.log("[ClearanceItems] fetchAirMonitoringReports - Completed", {
@@ -2172,7 +2211,7 @@ const ClearanceItems = () => {
                     },
                   }}
                 >
-                  Delete Report
+                  Remove Attachment
                 </Button>
                 <Typography
                   variant="body2"
@@ -3040,85 +3079,134 @@ const ClearanceItems = () => {
               ) : airMonitoringReports.length === 0 ? (
                 <Alert severity="info">
                   No air monitoring reports found for this project. Reports must
-                  be completed and authorized to appear here.
+                  be completed and authorised to appear here.
                 </Alert>
               ) : (
                 <Box sx={{ maxHeight: 400, overflow: "auto" }}>
-                  {airMonitoringReports.map((report, index) => (
-                    <Card
-                      key={report._id}
-                      sx={{
-                        mb: 2,
-                        cursor: "pointer",
-                        "&:hover": {
-                          backgroundColor: "action.hover",
-                        },
-                        border: selectedReport?._id === report._id ? 2 : 1,
-                        borderColor:
-                          selectedReport?._id === report._id
-                            ? "primary.main"
-                            : "divider",
-                      }}
-                      onClick={() => handleSelectAirMonitoringReport(report)}
-                    >
-                      <CardContent sx={{ py: 2 }}>
-                        <Box
-                          display="flex"
-                          justifyContent="space-between"
-                          alignItems="flex-start"
-                        >
-                          <Box flex={1}>
-                            <Box
-                              display="flex"
-                              alignItems="center"
-                              gap={1}
-                              mb={1}
-                            >
-                              <Typography
-                                variant="subtitle1"
-                                fontWeight="medium"
+                  {airMonitoringReports.map((report, index) => {
+                    const isSelected = selectedReport?._id === report._id;
+                    const isAuthorised = !!report.reportApprovedBy;
+                    return (
+                      <Card
+                        key={report._id}
+                        sx={{
+                          mb: 2,
+                          cursor: isAuthorised ? "pointer" : "not-allowed",
+                          transition: "all 0.2s ease-in-out",
+                          opacity: isAuthorised ? 1 : 0.6,
+                          "&:hover": isAuthorised
+                            ? {
+                                backgroundColor: isSelected
+                                  ? "rgba(25, 118, 210, 0.15)"
+                                  : "action.hover",
+                                transform: "translateY(-2px)",
+                                boxShadow: 2,
+                              }
+                            : {},
+                          border: isSelected ? 3 : 1,
+                          borderColor: isSelected ? "primary.main" : "divider",
+                          backgroundColor: isSelected
+                            ? "rgba(25, 118, 210, 0.12)"
+                            : "background.paper",
+                          boxShadow: isSelected
+                            ? "0 4px 12px rgba(25, 118, 210, 0.3)"
+                            : "none",
+                          ...(isSelected && {
+                            "& .MuiCardContent-root": {
+                              backgroundColor: "rgba(25, 118, 210, 0.12)",
+                            },
+                          }),
+                        }}
+                        onClick={() => {
+                          if (isAuthorised) {
+                            setSelectedReport(report);
+                          }
+                        }}
+                      >
+                        <CardContent sx={{ py: 2 }}>
+                          <Box
+                            display="flex"
+                            justifyContent="space-between"
+                            alignItems="flex-start"
+                          >
+                            <Box flex={1}>
+                              <Box
+                                display="flex"
+                                alignItems="center"
+                                gap={1}
+                                mb={1}
                               >
-                                {formatDate(report.date)}
+                                {isSelected && (
+                                  <CheckIcon
+                                    sx={{
+                                      color: "primary.main",
+                                      fontSize: 20,
+                                    }}
+                                  />
+                                )}
+                                <Typography
+                                  variant="subtitle1"
+                                  fontWeight="medium"
+                                >
+                                  {formatDate(report.date)}
+                                </Typography>
+                                <Chip
+                                  label={
+                                    report.reportApprovedBy
+                                      ? "Authorised"
+                                      : formatStatus(report.status)
+                                  }
+                                  color={
+                                    report.reportApprovedBy
+                                      ? "success"
+                                      : "default"
+                                  }
+                                  size="small"
+                                />
+                              </Box>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                mb={0.5}
+                              >
+                                <Box component="span" fontWeight="bold">
+                                  Asbestos Removalist:{" "}
+                                </Box>
+                                {report.asbestosRemovalist || "Not specified"}
                               </Typography>
-                              <Chip
-                                label={
-                                  report.reportApprovedBy
-                                    ? "Authorized"
-                                    : formatStatus(report.status)
-                                }
-                                color={
-                                  report.reportApprovedBy
-                                    ? "success"
-                                    : "default"
-                                }
-                                size="small"
-                              />
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                mb={!isAuthorised ? 1 : 0}
+                              >
+                                <Box component="span" fontWeight="bold">
+                                  Description of Works:{" "}
+                                </Box>
+                                {report.descriptionOfWorks ||
+                                  "No description provided"}
+                              </Typography>
+                              {!isAuthorised && (
+                                <Alert
+                                  severity="error"
+                                  sx={{
+                                    mt: 1,
+                                    py: 0.5,
+                                    "& .MuiAlert-message": {
+                                      fontSize: "0.875rem",
+                                      padding: 0,
+                                    },
+                                  }}
+                                >
+                                  Report requires authorisation before
+                                  attachment
+                                </Alert>
+                              )}
                             </Box>
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              mb={0.5}
-                            >
-                              <Box component="span" fontWeight="bold">
-                                Asbestos Removalist:{" "}
-                              </Box>
-                              {report.asbestosRemovalist || "Not specified"}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              <Box component="span" fontWeight="bold">
-                                Description of Works:{" "}
-                              </Box>
-                              {report.descriptionOfWorks ||
-                                "No description provided"}
-                            </Typography>
                           </Box>
-                          {selectedReport?._id === report._id && (
-                            <CircularProgress size={20} />
-                          )}
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </Box>
               )}
             </Box>
@@ -3138,6 +3226,34 @@ const ClearanceItems = () => {
               }}
             >
               Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedReport && selectedReport.reportApprovedBy) {
+                  handleSelectAirMonitoringReport(selectedReport);
+                }
+              }}
+              variant="contained"
+              disabled={
+                !selectedReport ||
+                !selectedReport.reportApprovedBy ||
+                generatingAirMonitoringPDF
+              }
+              startIcon={
+                generatingAirMonitoringPDF ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <CheckIcon />
+                )
+              }
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {generatingAirMonitoringPDF ? "Attaching..." : "Attach Report"}
             </Button>
           </DialogActions>
         </Dialog>
@@ -4248,11 +4364,7 @@ const ClearanceItems = () => {
                             </IconButton>
                           </Box>
                           <CardContent sx={{ py: 1 }}>
-                            <Box
-                              display="flex"
-                              flexDirection="column"
-                              gap={1}
-                            >
+                            <Box display="flex" flexDirection="column" gap={1}>
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
@@ -4264,9 +4376,19 @@ const ClearanceItems = () => {
                                 <TextField
                                   fullWidth
                                   size="small"
-                                  value={getCurrentPhotoDescription(photo._id, selectedItemForPhotos)}
-                                  onChange={(e) => handleDescriptionChange(photo._id, e.target.value)}
-                                  onBlur={() => setEditingDescriptionPhotoId(null)}
+                                  value={getCurrentPhotoDescription(
+                                    photo._id,
+                                    selectedItemForPhotos
+                                  )}
+                                  onChange={(e) =>
+                                    handleDescriptionChange(
+                                      photo._id,
+                                      e.target.value
+                                    )
+                                  }
+                                  onBlur={() =>
+                                    setEditingDescriptionPhotoId(null)
+                                  }
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter" && !e.shiftKey) {
                                       e.preventDefault();
@@ -4315,15 +4437,26 @@ const ClearanceItems = () => {
                                     sx={{
                                       display: "block",
                                       wordBreak: "break-word",
-                                      fontStyle: photo.description || localPhotoDescriptions[photo._id] ? "normal" : "italic",
+                                      fontStyle:
+                                        photo.description ||
+                                        localPhotoDescriptions[photo._id]
+                                          ? "normal"
+                                          : "italic",
                                     }}
                                   >
-                                    {getCurrentPhotoDescription(photo._id, selectedItemForPhotos)}
+                                    {getCurrentPhotoDescription(
+                                      photo._id,
+                                      selectedItemForPhotos
+                                    )}
                                   </Typography>
                                   <Typography
                                     variant="caption"
                                     color="text.disabled"
-                                    sx={{ fontSize: "0.65rem", mt: 0.5, display: "block" }}
+                                    sx={{
+                                      fontSize: "0.65rem",
+                                      mt: 0.5,
+                                      display: "block",
+                                    }}
                                   >
                                     Click to edit
                                   </Typography>

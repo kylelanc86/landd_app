@@ -703,35 +703,6 @@ pdfMake.fonts = {
         },
         {
           stack: [
-            // Header for Site Plan page
-            {
-              columns: [
-                { image: companyLogo, width: 165 },
-                {
-                  stack: [
-                    { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
-                    { text: '4/6 Dacre Street, Mitchell ACT 2911', style: 'subheader' },
-                    { text: 'W: www.landd.com.au', style: 'subheader' },
-                  ],
-                  alignment: 'right',
-                },
-              ],
-              margin: [0, 0, 0, 4],
-            },
-            
-            // Green border beneath header
-            {
-              canvas: [
-                {
-                  type: 'line',
-                  x1: 0, y1: 0, x2: 520, y2: 0,
-                  lineWidth: 1.5,
-                  lineColor: '#16b12b'
-                }
-              ],
-              margin: [0, 0, 0, 20]
-            },
-            
             { text: 'SITE PLAN', style: 'header', margin: [0, 0, 0, 20], alignment: 'center' },
             
             // Site plan diagram with North indicator overlay
