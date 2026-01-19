@@ -259,10 +259,12 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
 
 
+    // Get PDF generation date (current date) - used for Issue Date in document details and Original Issue in revision history
+    const pdfGenerationDate = new Date().toLocaleDateString('en-GB');
+    
     // Generate revision history rows
     const generateRevisionHistory = () => {
       const revision = clearanceData.revision || 0;
-      const currentDate = new Date().toLocaleDateString('en-GB');
       const laaName = clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? 
         `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : 
         clearanceData.LAA || 'Unknown LAA';
@@ -274,7 +276,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             <td>Original Issue</td>
             <td>0</td>
             <td>${laaName}</td>
-            <td>${currentDate}</td>
+            <td>${pdfGenerationDate}</td>
           </tr>
         `;
       } else {
@@ -284,14 +286,14 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             <td>Original Issue</td>
             <td>0</td>
             <td>${laaName}</td>
-            <td>${currentDate}</td>
+            <td>${pdfGenerationDate}</td>
           </tr>
         `;
         
         // Use actual revision reasons if available
         if (clearanceData.revisionReasons && clearanceData.revisionReasons.length > 0) {
           clearanceData.revisionReasons.forEach((revisionData) => {
-            const revisionDate = revisionData.revisedAt ? new Date(revisionData.revisedAt).toLocaleDateString('en-GB') : currentDate;
+            const revisionDate = revisionData.revisedAt ? new Date(revisionData.revisedAt).toLocaleDateString('en-GB') : pdfGenerationDate;
             const revisedByName = revisionData.revisedBy?.firstName && revisionData.revisedBy?.lastName ? 
               `${revisionData.revisedBy.firstName} ${revisionData.revisedBy.lastName}` : 
               laaName;
@@ -313,7 +315,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
                 <td>Report Revision</td>
                 <td>${i}</td>
                 <td>${laaName}</td>
-                <td>${currentDate}</td>
+                <td>${pdfGenerationDate}</td>
               </tr>
             `;
           }
@@ -372,7 +374,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[REPORT_TITLE\]/g, versionControlTitle)
       .replace(/\[SITE_ADDRESS\]/g, siteAddress)
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
-      .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
+      .replace(/\[CLEARANCE_DATE\]/g, pdfGenerationDate) // Use PDF generation date for Issue Date in document details
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[REPORT_AUTHORISER\]/g, reportAuthoriserText)
       .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${clearanceTypePrefix}${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})`)

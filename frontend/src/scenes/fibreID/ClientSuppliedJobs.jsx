@@ -457,6 +457,42 @@ const ClientSuppliedJobs = () => {
     });
   };
 
+  const generateCOCFilename = (file, job) => {
+    // Get project ID
+    const projectID = job?.projectId?.projectID || "UNKNOWN";
+    
+    // Get sample receipt date and format it (dd-mm-yyyy for filename)
+    let dateStr = "";
+    if (job?.sampleReceiptDate) {
+      const date = new Date(job.sampleReceiptDate);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      dateStr = `${day}-${month}-${year}`;
+    } else {
+      dateStr = "NO-DATE";
+    }
+    
+    // Get file extension from original file name, or derive from MIME type
+    let fileExtension = "";
+    if (file.name && file.name.includes(".")) {
+      fileExtension = file.name.split(".").pop().toLowerCase();
+    } else {
+      // Fallback to MIME type mapping
+      const mimeToExt = {
+        "application/pdf": "pdf",
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+      };
+      fileExtension = mimeToExt[file.type] || "file";
+    }
+    
+    // Generate filename: {ProjectID}-Chain of Custody-{SampleReceiptDate}.{ext}
+    return `${projectID}-Chain of Custody-${dateStr}.${fileExtension}`;
+  };
+
   const handleCOCUpload = async (event, jobId) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -491,10 +527,16 @@ const ClientSuppliedJobs = () => {
       setUploadingCOC((prev) => ({ ...prev, [jobId]: true }));
       const compressedFile = await compressFile(file);
 
+      // Get the job to access project ID and sample receipt date
+      const job = selectedJobForCOC || jobs.find((j) => j._id === jobId);
+      
+      // Generate filename using naming convention
+      const fileName = generateCOCFilename(file, job);
+
       // Update job with COC data
       await clientSuppliedJobsService.update(jobId, {
         chainOfCustody: {
-          fileName: file.name,
+          fileName: fileName,
           fileType: file.type,
           uploadedAt: new Date().toISOString(),
           data: compressedFile,

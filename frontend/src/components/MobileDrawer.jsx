@@ -202,12 +202,12 @@ const MobileDrawer = ({ open, onClose }) => {
               to="/clients"
               icon={<PeopleOutlinedIcon />}
             />
-
+{/* 
             <MenuItem
               title="Invoices"
               to="/invoices"
               icon={<AttachMoneyIcon />}
-            />
+            /> */}
 
             {isFeatureEnabled("ADVANCED.REPORTS") && (
               <MenuItem

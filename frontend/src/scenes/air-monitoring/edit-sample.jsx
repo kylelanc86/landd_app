@@ -437,23 +437,34 @@ const EditSample = () => {
           }
         }
 
-        // Filter for passed calibrations and extract unique flowrates
+        // Find the most recent calibration that is still valid (not expired)
+        // Calibrations are sorted by calibrationDate descending (most recent first)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const currentCalibration = calibrations.find((cal) => {
+          if (!cal.nextCalibrationDue) return false;
+          const nextDueDate = new Date(cal.nextCalibrationDue);
+          nextDueDate.setHours(0, 0, 0, 0);
+          return nextDueDate >= today; // Calibration is valid if nextCalibrationDue is today or in the future
+        });
+
+        // Extract unique flowrates from test results that passed
+        // Only use the current valid calibration, not historical ones
         // Convert setFlowrate from mL/min to L/min
         const passedFlowrates = [];
-        calibrations
-          .filter((cal) => cal.overallResult === "Pass")
-          .forEach((cal) => {
-            if (cal.testResults && cal.testResults.length > 0) {
-              // Iterate through all test results (each can have a different flowrate)
-              cal.testResults.forEach((testResult) => {
-                const setFlowrateMlMin = testResult.setFlowrate;
-                const flowrateLMin = setFlowrateMlMin / 1000; // Convert to L/min
-                if (!passedFlowrates.includes(flowrateLMin)) {
-                  passedFlowrates.push(flowrateLMin);
-                }
-              });
-            }
-          });
+        if (currentCalibration && currentCalibration.testResults && currentCalibration.testResults.length > 0) {
+          // Only include flowrates from test results that passed
+          currentCalibration.testResults
+            .filter((testResult) => testResult.passed)
+            .forEach((testResult) => {
+              const setFlowrateMlMin = testResult.setFlowrate;
+              const flowrateLMin = setFlowrateMlMin / 1000; // Convert to L/min
+              if (!passedFlowrates.includes(flowrateLMin)) {
+                passedFlowrates.push(flowrateLMin);
+              }
+            });
+        }
         // Sort ascending
         passedFlowrates.sort((a, b) => a - b);
 
@@ -779,7 +790,8 @@ const EditSample = () => {
       const totalVolume = minutes * parseFloat(form.finalFlowrate);
       isInsufficient = totalVolume < 360;
     } else if (filterSize === "13mm") {
-      isInsufficient = minutes < 90;
+      const totalVolume = minutes * parseFloat(form.finalFlowrate);
+      isInsufficient = totalVolume < 72;
     }
 
     setInsufficientSampleTime(isInsufficient);

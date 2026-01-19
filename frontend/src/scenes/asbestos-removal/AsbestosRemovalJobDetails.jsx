@@ -110,6 +110,7 @@ const AsbestosRemovalJobDetails = () => {
   // Clearance modal state
   const [clearanceDialogOpen, setClearanceDialogOpen] = useState(false);
   const [editingClearance, setEditingClearance] = useState(null);
+  const [pendingClearanceEdit, setPendingClearanceEdit] = useState(null);
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
 
@@ -418,42 +419,6 @@ const AsbestosRemovalJobDetails = () => {
           const shiftsPercentage = Math.round(
             (shiftsPayloadSize / totalDataSize) * 100
           );
-
-          console.warn(
-            `${TIMING_LOG_PREFIX} ⚠️ PERFORMANCE BOTTLENECK DETECTED ⚠️`,
-            {
-              totalResponseSizeKB:
-                Math.round((totalDataSize / 1024) * 100) / 100,
-              breakdown: {
-                clearances: {
-                  sizeKB: Math.round((clearancesSize / 1024) * 100) / 100,
-                  percentage: `${clearancesPercentage}%`,
-                  count: clearancesPayload.length,
-                  avgSizePerClearanceKB:
-                    clearancesPayload.length > 0
-                      ? Math.round(
-                          (clearancesSize / clearancesPayload.length / 1024) *
-                            100
-                        ) / 100
-                      : 0,
-                },
-                job: {
-                  sizeKB: Math.round((jobDataSize / 1024) * 100) / 100,
-                  percentage: `${jobPercentage}%`,
-                },
-                shifts: {
-                  sizeKB: Math.round((shiftsPayloadSize / 1024) * 100) / 100,
-                  percentage: `${shiftsPercentage}%`,
-                  count: shiftsPayload.length,
-                },
-              },
-              requestDurationMs: requestDuration,
-              recommendation:
-                clearancesPercentage > 50
-                  ? "Clearances data is the main bottleneck. Consider reducing populated fields or pagination."
-                  : "Review backend query to reduce response size.",
-            }
-          );
         }
       } catch (err) {
         if (!isActive()) {
@@ -608,7 +573,7 @@ const AsbestosRemovalJobDetails = () => {
       logDebug("fetchAsbestosAssessors skipped - already loaded", {
         assessorCount: asbestosAssessors.length,
       });
-      return;
+      return asbestosAssessors;
     }
 
     const startTs = getTimestamp();
@@ -650,6 +615,7 @@ const AsbestosRemovalJobDetails = () => {
           setStateMs: setDuration,
         },
       });
+      return sortedData;
     } catch (error) {
       console.error("Error fetching asbestos assessors:", error);
       logDebug("fetchAsbestosAssessors error", {
@@ -657,8 +623,9 @@ const AsbestosRemovalJobDetails = () => {
         message: error?.message,
       });
       setAsbestosAssessors([]);
+      return [];
     }
-  }, [asbestosAssessors.length, logDebug]);
+  }, [asbestosAssessors, logDebug]);
 
   useEffect(() => {
     if (jobId) {
@@ -744,6 +711,48 @@ const AsbestosRemovalJobDetails = () => {
       timestamp: new Date().toISOString(),
     });
   }, [job, logDebug]);
+
+  // Open clearance edit dialog once assessors are loaded
+  useEffect(() => {
+    if (pendingClearanceEdit && asbestosAssessors.length > 0) {
+      const clearance = pendingClearanceEdit;
+      setPendingClearanceEdit(null); // Clear pending
+      
+      setEditingClearance(clearance);
+      const clearanceType = clearance.clearanceType || "Non-friable";
+      
+      // Find the matching LAA value from the assessors list
+      // This ensures the value format matches exactly what the Select expects
+      const storedLAA = clearance.LAA || "";
+      const matchingAssessor = asbestosAssessors.find(
+        (assessor) =>
+          `${assessor.firstName} ${assessor.lastName}` === storedLAA
+      );
+      const laaValue = matchingAssessor
+        ? `${matchingAssessor.firstName} ${matchingAssessor.lastName}`
+        : storedLAA; // Fallback to stored value if no exact match found
+      
+      setClearanceForm({
+        projectId: clearance.projectId._id || clearance.projectId,
+        clearanceDate: clearance.clearanceDate
+          ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
+          : "",
+        inspectionTime: formatTimeForDisplay(clearance.inspectionTime),
+        clearanceType: clearanceType,
+        asbestosRemovalist: clearance.asbestosRemovalist || "",
+        LAA: laaValue,
+        jurisdiction: clearance.jurisdiction || "ACT",
+        secondaryHeader: clearance.secondaryHeader || "",
+        vehicleEquipmentDescription: clearance.vehicleEquipmentDescription || "",
+        notes: clearance.notes || "",
+        useComplexTemplate: clearance.useComplexTemplate || false,
+        jobSpecificExclusions: clearance.jobSpecificExclusions || "",
+      });
+      
+      // Now open the dialog - assessors are loaded and form is set
+      setClearanceDialogOpen(true);
+    }
+  }, [pendingClearanceEdit, asbestosAssessors]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1481,30 +1490,17 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
-  const handleEditClearance = (clearance, event) => {
+  const handleEditClearance = async (clearance, event) => {
     event.stopPropagation();
+    // Store the clearance to edit - we'll set up the form once assessors are loaded
+    setPendingClearanceEdit(clearance);
+    
     // Lazy load removalists and assessors only when needed
-    fetchAsbestosRemovalists();
-    fetchAsbestosAssessors();
-    setEditingClearance(clearance);
-    const clearanceType = clearance.clearanceType || "Non-friable";
-    setClearanceForm({
-      projectId: clearance.projectId._id || clearance.projectId,
-      clearanceDate: clearance.clearanceDate
-        ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
-        : "",
-      inspectionTime: formatTimeForDisplay(clearance.inspectionTime),
-      clearanceType: clearanceType,
-      asbestosRemovalist: clearance.asbestosRemovalist || "",
-      LAA: clearance.LAA || "",
-      jurisdiction: clearance.jurisdiction || "ACT",
-      secondaryHeader: clearance.secondaryHeader || "",
-      vehicleEquipmentDescription: clearance.vehicleEquipmentDescription || "",
-      notes: clearance.notes || "",
-      useComplexTemplate: clearance.useComplexTemplate || false,
-      jobSpecificExclusions: clearance.jobSpecificExclusions || "",
-    });
-    setClearanceDialogOpen(true);
+    // Await these to ensure options are available before opening modal
+    await Promise.all([
+      fetchAsbestosAssessors(),
+      fetchAsbestosRemovalists(),
+    ]);
   };
 
   const handleDeleteClearance = (clearance, event) => {
@@ -2605,7 +2601,7 @@ const AsbestosRemovalJobDetails = () => {
                 <FormControl fullWidth required>
                   <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
                   <Select
-                    value={clearanceForm.LAA}
+                    value={clearanceForm.LAA || ""}
                     onChange={(e) =>
                       setClearanceForm({
                         ...clearanceForm,
@@ -2613,15 +2609,23 @@ const AsbestosRemovalJobDetails = () => {
                       })
                     }
                     label="LAA (Licensed Asbestos Assessor)"
+                    key={`laa-select-${asbestosAssessors.length}-${clearanceForm.LAA}`}
                   >
-                    {asbestosAssessors.map((assessor) => (
-                      <MenuItem
-                        key={assessor._id}
-                        value={`${assessor.firstName} ${assessor.lastName}`}
-                      >
-                        {assessor.firstName} {assessor.lastName}
-                      </MenuItem>
-                    ))}
+                    {asbestosAssessors.length === 0 ? (
+                      <MenuItem value="" disabled>Loading assessors...</MenuItem>
+                    ) : (
+                      asbestosAssessors.map((assessor) => {
+                        const assessorValue = `${assessor.firstName} ${assessor.lastName}`;
+                        return (
+                          <MenuItem
+                            key={assessor._id}
+                            value={assessorValue}
+                          >
+                            {assessor.firstName} {assessor.lastName}
+                          </MenuItem>
+                        );
+                      })
+                    )}
                   </Select>
                 </FormControl>
               </Grid>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -88,6 +88,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [originalState, setOriginalState] = useState(null);
+  const isInitializedRef = useRef(false);
+  const initializationTimeoutRef = useRef(null);
+  const finalResultCalculatedRef = useRef(false);
+  const userHasInteractedRef = useRef(false);
 
   useEffect(() => {
     if (jobId && sampleIndex !== undefined && sampleIndex !== null) {
@@ -204,40 +208,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           }
         }
 
-        // Set original state for change tracking after data is loaded
-        setTimeout(() => {
-          setOriginalState({
-            microscope: savedData?.microscope || "LD-PLM-1",
-            sampleDescription: savedData?.sampleDescription || "",
-            sampleType: savedData?.sampleType || "mass",
-            sampleMass: savedData?.sampleMass || "",
-            sampleDimensions: savedData?.sampleDimensions || {
-              x: "",
-              y: "",
-              z: "",
-            },
-            ashing: savedData?.ashing || "no",
-            crucibleNo: savedData?.crucibleNo || "",
-            fibres: savedData?.fibres || [],
-            finalResult: savedData?.finalResult || "",
-            traceAsbestos: savedData?.traceAsbestos || "no",
-            traceAsbestosContent: savedData?.traceAsbestosContent || "",
-            traceCount: savedData?.traceCount || "",
-            comments: savedData?.comments || "",
-            noFibreDetected: wasNoFibreDetected,
-            analysisDate: savedData?.analysedAt
-              ? new Date(savedData.analysedAt)
-              : new Date(),
-            analyst: sampleData.analysedBy
-              ? typeof sampleData.analysedBy === "object" &&
-                sampleData.analysedBy._id
-                ? sampleData.analysedBy._id
-                : typeof sampleData.analysedBy === "string"
-                ? sampleData.analysedBy
-                : ""
-              : "",
-          });
-        }, 100);
+        // Mark that we're starting initialization
+        isInitializedRef.current = false;
       } else {
         // Reset all form fields for new analysis
         setNoFibreDetected(false);
@@ -261,27 +233,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           setAnalyst(analysts[0]._id);
         }
 
-        // For new analysis, set original state as empty
-        setTimeout(() => {
-          setOriginalState({
-            microscope: "LD-PLM-1",
-            sampleDescription: "",
-            sampleType: "mass",
-            sampleMass: "",
-            sampleDimensions: { x: "", y: "", z: "" },
-            ashing: "no",
-            crucibleNo: "",
-            fibres: [],
-            finalResult: "",
-            traceAsbestos: "no",
-            traceAsbestosContent: "",
-            traceCount: "",
-            comments: "",
-            noFibreDetected: false,
-            analysisDate: new Date(),
-            analyst: analysts.length > 0 ? analysts[0]._id : "",
-          });
-        }, 100);
+        // Mark that we're starting initialization
+        isInitializedRef.current = false;
       }
       setLoading(false);
     } catch (error) {
@@ -692,6 +645,36 @@ const ClientSuppliedFibreIDAnalysis = () => {
     }
   };
 
+  // Reset initialization when jobId or sampleIndex changes
+  useEffect(() => {
+    isInitializedRef.current = false;
+    finalResultCalculatedRef.current = false;
+    userHasInteractedRef.current = false;
+    setOriginalState(null);
+    setHasUnsavedChanges(false);
+    if (initializationTimeoutRef.current) {
+      clearTimeout(initializationTimeoutRef.current);
+    }
+  }, [jobId, sampleIndex]);
+
+  // Enable change tracking after a grace period following initialization
+  useEffect(() => {
+    if (!originalState) {
+      userHasInteractedRef.current = false;
+      return;
+    }
+    
+    // Wait a bit after originalState is set before enabling change tracking
+    // This prevents false positives from any lingering effects
+    const timeoutId = setTimeout(() => {
+      if (isInitializedRef.current) {
+        userHasInteractedRef.current = true;
+      }
+    }, 500); // 500ms grace period after initialization
+    
+    return () => clearTimeout(timeoutId);
+  }, [originalState]);
+
   const handleSaveAnalysis = async () => {
     try {
       console.log("Starting to save analysis...");
@@ -1037,6 +1020,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
   useEffect(() => {
     setFinalResult(calculateFinalResult());
+    // Mark that finalResult has been calculated at least once
+    if (!isInitializedRef.current) {
+      finalResultCalculatedRef.current = true;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fibres,
@@ -1046,9 +1033,99 @@ const ClientSuppliedFibreIDAnalysis = () => {
     noFibreDetected,
   ]);
 
+  // Helper function to normalize Date objects and ensure consistent object structure for comparison
+  const normalizeStateForComparison = (state) => {
+    return {
+      ...state,
+      analysisDate: state.analysisDate instanceof Date 
+        ? state.analysisDate.toISOString() 
+        : (state.analysisDate ? new Date(state.analysisDate).toISOString() : null),
+      sampleDimensions: state.sampleDimensions ? {
+        x: String(state.sampleDimensions.x || ""),
+        y: String(state.sampleDimensions.y || ""),
+        z: String(state.sampleDimensions.z || ""),
+      } : { x: "", y: "", z: "" },
+      fibres: state.fibres ? state.fibres.map((f) => ({ ...f })).sort((a, b) => (a.id || 0) - (b.id || 0)) : [],
+      sampleMass: String(state.sampleMass || ""),
+      sampleDescription: String(state.sampleDescription || ""),
+      crucibleNo: String(state.crucibleNo || ""),
+      comments: String(state.comments || ""),
+      traceAsbestosContent: String(state.traceAsbestosContent || ""),
+      traceCount: String(state.traceCount || ""),
+      finalResult: String(state.finalResult || ""),
+      analyst: String(state.analyst || ""),
+    };
+  };
+
+  // Helper function to compare states properly
+  const statesAreEqual = (state1, state2) => {
+    if (!state1 || !state2) return false;
+    const normalized1 = normalizeStateForComparison(state1);
+    const normalized2 = normalizeStateForComparison(state2);
+    return JSON.stringify(normalized1) === JSON.stringify(normalized2);
+  };
+
+  // Capture original state after all initialization effects have stabilized
+  useEffect(() => {
+    // Only capture original state if we're not yet initialized and not loading
+    if (isInitializedRef.current || loading || !sample) return;
+
+    // Wait for finalResult to be calculated at least once
+    if (!finalResultCalculatedRef.current) return;
+
+    // Clear any existing timeout
+    if (initializationTimeoutRef.current) {
+      clearTimeout(initializationTimeoutRef.current);
+    }
+
+    // Wait for all effects to stabilize before capturing original state
+    // Use a longer timeout to ensure all effects have run
+    initializationTimeoutRef.current = setTimeout(() => {
+      // Double-check we're still not initialized (in case something changed)
+      if (isInitializedRef.current) return;
+
+      const stateToCapture = {
+        microscope,
+        sampleDescription,
+        sampleType,
+        sampleMass,
+        sampleDimensions: { ...sampleDimensions },
+        ashing,
+        crucibleNo,
+        fibres: fibres.map((f) => ({ ...f })),
+        finalResult,
+        traceAsbestos,
+        traceAsbestosContent,
+        traceCount,
+        comments,
+        noFibreDetected,
+        analysisDate,
+        analyst,
+      };
+
+      setOriginalState(stateToCapture);
+      
+      // Add a small delay before marking as initialized to ensure state is truly stable
+      setTimeout(() => {
+        isInitializedRef.current = true;
+      }, 50);
+    }, 300); // Give enough time for all effects to run and stabilize
+
+    return () => {
+      if (initializationTimeoutRef.current) {
+        clearTimeout(initializationTimeoutRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, sample, finalResult]);
+
   // Track form changes and compare with original values
   useEffect(() => {
-    if (!originalState) return;
+    // Don't track changes until initialization is complete AND user has interacted
+    if (!isInitializedRef.current || !originalState || !userHasInteractedRef.current) {
+      setHasUnsavedChanges(false);
+      return;
+    }
 
     const currentState = {
       microscope,
@@ -1069,8 +1146,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       analyst,
     };
 
-    const hasChanges =
-      JSON.stringify(currentState) !== JSON.stringify(originalState);
+    const hasChanges = !statesAreEqual(currentState, originalState);
 
     setHasUnsavedChanges(hasChanges);
 

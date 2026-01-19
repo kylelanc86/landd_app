@@ -245,9 +245,9 @@ pdfMake.fonts = {
   // Document definition
   const docDefinition = {
     pageSize: "A4",
-    // Increase top margin for air monitoring reports to account for header on page 2+
+    // Increase top margin to account for header on page 2+
     // Header is approximately 90px tall, so we add that to the base 30px margin
-    pageMargins: [40, !isClientSupplied ? 120 : 30, 40, 90],
+    pageMargins: [40, 120, 40, 90],
     defaultStyle: {
       font: 'Gothic'
     },
@@ -255,9 +255,9 @@ pdfMake.fonts = {
       ...(nataLogo ? { nataLogo: nataLogo } : {}),
       ...(companyLogo ? { companyLogo: companyLogo } : {})
     },
-    // Header function for all pages - full header on page 1, logo/company info only on page 2+
-    header: !isClientSupplied && companyLogo ? function(currentPage, pageCount) {
-      const headerContent = {
+    // Header function for all pages - logo/company info only (title is in content)
+    header: companyLogo ? function(currentPage, pageCount) {
+      return {
         stack: [
           {
             columns: [
@@ -305,25 +305,12 @@ pdfMake.fonts = {
         ],
         margin: [40, 30, 40, 0]
       };
-
-      // On page 1, include the report title
-      if (currentPage === 1) {
-        headerContent.stack.push({ 
-          text: 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', 
-          fontSize: 12,
-          bold: true,
-          margin: [0, 10, 0, 10], 
-          alignment: 'center' 
-        });
-      }
-
-      return headerContent;
     } : undefined,
     styles: {
       header: {
         fontSize: 12,
         bold: true,
-        margin: [0, 0, 0, 4],
+        margin: [0, 0, 0, 1],
       },
       subheader: {
         fontSize: 9,
@@ -350,7 +337,7 @@ pdfMake.fonts = {
       {
         stack: [
           // Report title
-          { text: isClientSupplied ? 'ASBESTOS FIBRE COUNT REPORT' : 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, -5, 0, 10], alignment: 'center' },
+          { text: isClientSupplied ? 'ASBESTOS FIBRE COUNT REPORT' : 'AIRBORNE ASBESTOS FIBRE ESTIMATION TEST REPORT', style: 'header', margin: [0, -10, 0, 10], alignment: 'center' },
           
           // Client and Lab details in single table
           {
@@ -489,7 +476,7 @@ pdfMake.fonts = {
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Report Completion Date: ', bold: true }, { text: shift?.reportIssueDate ? formatDate(shift.reportIssueDate) : formatDate(new Date()) } ],
+                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], // Always use PDF generation date
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -690,7 +677,7 @@ pdfMake.fonts = {
                 return isClientSupplied ? 7 : 4; 
               },
             },
-            margin: [0, 0, 0, 20]
+            margin: [0, 0, 0, 2]
           },
         ]
       },
