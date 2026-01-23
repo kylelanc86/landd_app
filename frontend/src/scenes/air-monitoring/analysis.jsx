@@ -51,6 +51,84 @@ import { useSnackbar } from "../../context/SnackbarContext";
 const SAMPLES_KEY = "ldc_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_analysis_progress";
 
+// Optimized deep equality check - much faster than JSON.stringify
+// This function performs shallow comparison first, then deep comparison only when needed
+// Increased maxDepth to handle nested sampleAnalyses structure (sampleAnalyses -> sample -> fibreCounts arrays)
+const deepEqual = (a, b, depth = 0, maxDepth = 15) => {
+  // Prevent infinite recursion (should rarely hit this with proper data structure)
+  // Instead of falling back to JSON.stringify, use a simplified check
+  if (depth > maxDepth) {
+    // Last resort: type and length checks for arrays/objects
+    if (Array.isArray(a) && Array.isArray(b)) {
+      return a.length === b.length && a.every((val, i) => val === b[i]);
+    }
+    if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
+      const keysA = Object.keys(a);
+      const keysB = Object.keys(b);
+      return keysA.length === keysB.length && keysA.every(key => a[key] === b[key]);
+    }
+    return a === b;
+  }
+
+  // Same reference
+  if (a === b) return true;
+
+  // Handle null/undefined
+  if (a == null || b == null) return a === b;
+
+  // Different types
+  if (typeof a !== typeof b) return false;
+
+  // Primitives
+  if (typeof a !== "object") return a === b;
+
+  // Arrays
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i], depth + 1, maxDepth)) return false;
+    }
+    return true;
+  }
+
+  // Objects - check keys first (shallow check)
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+
+  // Quick shallow comparison for common case
+  if (depth === 0) {
+    // For top-level, check if all keys match first
+    for (const key of keysA) {
+      if (!keysB.includes(key)) return false;
+      // For primitive values at top level, do quick comparison
+      if (
+        typeof a[key] !== "object" ||
+        a[key] === null ||
+        Array.isArray(a[key])
+      ) {
+        if (a[key] !== b[key]) {
+          // For arrays, need deep check
+          if (Array.isArray(a[key])) {
+            if (!deepEqual(a[key], b[key], depth + 1, maxDepth)) return false;
+          } else {
+            return false;
+          }
+        }
+      }
+    }
+  }
+
+  // Deep comparison for nested objects
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+    if (!deepEqual(a[key], b[key], depth + 1, maxDepth)) return false;
+  }
+
+  return true;
+};
+
 // Simplified Sample Summary Component
 const SampleSummary = React.memo(
   ({
@@ -79,7 +157,9 @@ const SampleSummary = React.memo(
     return (
       <Box
         sx={{
-          backgroundColor: isComplete
+          backgroundColor: sample.status === "failed"
+            ? "#ffebee" // Light red for failed samples
+            : isComplete
             ? "#e8f5e9" // Light green
             : "#f5f5f5", // Light grey
           borderRadius: 2,
@@ -141,14 +221,18 @@ const SampleSummary = React.memo(
               </Button>
               <Chip
                 label={
-                  isFilterUncountable(sample._id)
+                  sample.status === "failed"
+                    ? "Failed Sample Collection"
+                    : isFilterUncountable(sample._id)
                     ? "Uncountable"
                     : isSampleAnalysed(sample._id)
                     ? "Sample Analysed"
                     : "To be counted"
                 }
                 color={
-                  isFilterUncountable(sample._id)
+                  sample.status === "failed"
+                    ? "error"
+                    : isFilterUncountable(sample._id)
                     ? "error"
                     : isSampleAnalysed(sample._id)
                     ? "success"
@@ -156,7 +240,9 @@ const SampleSummary = React.memo(
                 }
                 size="small"
                 sx={{
-                  backgroundColor: isFilterUncountable(sample._id)
+                  backgroundColor: sample.status === "failed"
+                    ? "error.main"
+                    : isFilterUncountable(sample._id)
                     ? "error.main"
                     : isSampleAnalysed(sample._id)
                     ? "success.main"
@@ -168,73 +254,74 @@ const SampleSummary = React.memo(
             </Box>
           </Box>
 
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={3}
-            sx={{ mb: 2 }}
-          >
-            <FormControl component="fieldset">
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Edges/Distribution
-              </Typography>
-              <RadioGroup
-                row
-                value={analysis.edgesDistribution || ""}
-                onChange={(e) =>
-                  onAnalysisChange(
-                    sample._id,
-                    "edgesDistribution",
-                    e.target.value
-                  )
-                }
-                disabled={isReadOnly}
-              >
-                <FormControlLabel
-                  value="pass"
-                  control={<Radio size="small" />}
-                  label="Pass"
-                />
-                <FormControlLabel
-                  value="fail"
-                  control={<Radio size="small" />}
-                  label={<span style={{ color: "red" }}>Fail</span>}
-                />
-              </RadioGroup>
-            </FormControl>
-            <FormControl component="fieldset">
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Background Dust
-              </Typography>
-              <RadioGroup
-                row
-                value={analysis.backgroundDust || ""}
-                onChange={(e) =>
-                  onAnalysisChange(sample._id, "backgroundDust", e.target.value)
-                }
-                disabled={isReadOnly}
-              >
-                <FormControlLabel
-                  value="low"
-                  control={<Radio size="small" />}
-                  label="Low"
-                />
-                <FormControlLabel
-                  value="medium"
-                  control={<Radio size="small" />}
-                  label="Medium"
-                />
-                <FormControlLabel
-                  value="high"
-                  control={<Radio size="small" />}
-                  label="High"
-                />
-                <FormControlLabel
-                  value="fail"
-                  control={<Radio size="small" />}
-                  label={<span style={{ color: "red" }}>Fail</span>}
-                />
-              </RadioGroup>
-            </FormControl>
+          {sample.status !== "failed" && (
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={3}
+              sx={{ mb: 2 }}
+            >
+              <FormControl component="fieldset">
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Edges/Distribution
+                </Typography>
+                <RadioGroup
+                  row
+                  value={analysis.edgesDistribution || ""}
+                  onChange={(e) =>
+                    onAnalysisChange(
+                      sample._id,
+                      "edgesDistribution",
+                      e.target.value
+                    )
+                  }
+                  disabled={isReadOnly}
+                >
+                  <FormControlLabel
+                    value="pass"
+                    control={<Radio size="small" />}
+                    label="Pass"
+                  />
+                  <FormControlLabel
+                    value="fail"
+                    control={<Radio size="small" />}
+                    label={<span style={{ color: "red" }}>Fail</span>}
+                  />
+                </RadioGroup>
+              </FormControl>
+              <FormControl component="fieldset">
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Background Dust
+                </Typography>
+                <RadioGroup
+                  row
+                  value={analysis.backgroundDust || ""}
+                  onChange={(e) =>
+                    onAnalysisChange(sample._id, "backgroundDust", e.target.value)
+                  }
+                  disabled={isReadOnly}
+                >
+                  <FormControlLabel
+                    value="low"
+                    control={<Radio size="small" />}
+                    label="Low"
+                  />
+                  <FormControlLabel
+                    value="medium"
+                    control={<Radio size="small" />}
+                    label="Medium"
+                  />
+                  <FormControlLabel
+                    value="high"
+                    control={<Radio size="small" />}
+                    label="High"
+                  />
+                  <FormControlLabel
+                    value="fail"
+                    control={<Radio size="small" />}
+                    label={<span style={{ color: "red" }}>Fail</span>}
+                  />
+                </RadioGroup>
+              </FormControl>
             <Box
               sx={{
                 display: "flex",
@@ -268,6 +355,7 @@ const SampleSummary = React.memo(
               )}
             </Box>
           </Stack>
+          )}
 
           {/* Comment Display */}
           {analysis?.comment && (
@@ -622,17 +710,80 @@ const Analysis = () => {
   }, [samples]);
 
   // Track form changes and compare with original values
+  // Use refs to cache previous values and avoid unnecessary deep comparisons
+  const prevDepsRef = useRef({
+    analysisDetails: null,
+    sampleAnalyses: null,
+    analysedBy: null,
+  });
+  const comparisonCacheRef = useRef(null);
+
+  // Use useMemo to perform the comparison only when dependencies change
+  const hasChanges = useMemo(() => {
+    if (!originalState) {
+      // Reset cache when originalState is not set
+      comparisonCacheRef.current = null;
+      return false;
+    }
+
+    // Check if any dependencies have changed by reference (fast shallow check)
+    const depsChanged =
+      prevDepsRef.current.analysisDetails !== analysisDetails ||
+      prevDepsRef.current.sampleAnalyses !== sampleAnalyses ||
+      prevDepsRef.current.analysedBy !== analysedBy;
+
+    // If no dependencies changed and we have a cached result, use it
+    if (!depsChanged && comparisonCacheRef.current !== null) {
+      return comparisonCacheRef.current;
+    }
+
+    // Fast path: check primitive value first (analysedBy)
+    if (analysedBy !== originalState.analysedBy) {
+      prevDepsRef.current = { analysisDetails, sampleAnalyses, analysedBy };
+      comparisonCacheRef.current = true;
+      return true;
+    }
+
+    // Fast path: check analysisDetails shallow equality
+    // analysisDetails is a simple object with 3 string properties
+    if (
+      analysisDetails?.microscope !== originalState.analysisDetails?.microscope ||
+      analysisDetails?.testSlide !== originalState.analysisDetails?.testSlide ||
+      analysisDetails?.testSlideLines !== originalState.analysisDetails?.testSlideLines
+    ) {
+      prevDepsRef.current = { analysisDetails, sampleAnalyses, analysedBy };
+      comparisonCacheRef.current = true;
+      return true;
+    }
+
+    // Slow path: deep equality check for sampleAnalyses (only when needed)
+    // This is the expensive operation, but we only do it when other checks pass
+    const sampleAnalysesChanged = !deepEqual(
+      sampleAnalyses,
+      originalState.sampleAnalyses
+    );
+
+    const hasChangesResult = sampleAnalysesChanged;
+    
+    // Cache the result and update tracked dependencies
+    prevDepsRef.current = { analysisDetails, sampleAnalyses, analysedBy };
+    comparisonCacheRef.current = hasChangesResult;
+    
+    return hasChangesResult;
+  }, [analysisDetails, sampleAnalyses, analysedBy, originalState]);
+
+  // Reset cache when originalState changes (e.g., after loading new data)
+  useEffect(() => {
+    comparisonCacheRef.current = null;
+    prevDepsRef.current = {
+      analysisDetails: null,
+      sampleAnalyses: null,
+      analysedBy: null,
+    };
+  }, [originalState]);
+
   useEffect(() => {
     if (!originalState) return;
-
-    const currentState = {
-      analysisDetails,
-      sampleAnalyses,
-      analysedBy,
-    };
-
-    const hasChanges =
-      JSON.stringify(currentState) !== JSON.stringify(originalState);
 
     setHasUnsavedChanges(hasChanges);
 
@@ -652,7 +803,7 @@ const Analysis = () => {
         window.showUnsavedChangesDialog = null;
       }
     };
-  }, [analysisDetails, sampleAnalyses, analysedBy, originalState]);
+  }, [hasChanges, originalState]);
 
   // Handle page refresh and browser navigation
   useEffect(() => {
@@ -1638,7 +1789,7 @@ const Analysis = () => {
         analysedBy,
       });
       // Navigate back to samples page
-      navigate(-1);
+      navigate(`/air-monitoring/shift/${shiftId}/samples`);
     } catch (error) {
       console.error("Error saving progress data:", error);
     }
@@ -1946,39 +2097,30 @@ const Analysis = () => {
   };
 
   // Helper to check if all required fields are filled
-  const isAllAnalysisComplete = () => {
-    console.log("Checking analysis completion...");
-
+  // Memoized to prevent recalculation on every render
+  const isAllAnalysisComplete = useMemo(() => {
     // Check analysis details
     if (
       !analysisDetails.microscope ||
       !analysisDetails.testSlide ||
       !analysisDetails.testSlideLines
     ) {
-      console.log("Analysis details incomplete:", {
-        microscope: analysisDetails.microscope,
-        testSlide: analysisDetails.testSlide,
-        testSlideLines: analysisDetails.testSlideLines,
-      });
       return false;
     }
 
-    // Check all samples
+    // Check all samples (exclude failed samples - they don't need analysis)
     const incompleteSamples = samples.filter((sample) => {
+      // Skip failed samples - they don't need analysis
+      if (sample.status === "failed") {
+        return false;
+      }
+
       const analysis = sampleAnalyses[sample._id];
       if (!analysis) {
-        console.log(`No analysis found for sample ${sample.fullSampleID}`);
         return true;
       }
 
       if (!analysis.edgesDistribution || !analysis.backgroundDust) {
-        console.log(
-          `Sample ${sample.fullSampleID} missing edges/distribution or background dust:`,
-          {
-            edgesDistribution: analysis.edgesDistribution,
-            backgroundDust: analysis.backgroundDust,
-          }
-        );
         return true;
       }
 
@@ -1988,49 +2130,21 @@ const Analysis = () => {
         analysis.backgroundDust === "fail" ||
         analysis.uncountableDueToDust === true
       ) {
-        console.log(
-          `Sample ${sample.fullSampleID} is uncountable, skipping fibre counts`
-        );
         return false;
       }
 
-      // Check fibre counts
-      const hasEmptyCells = analysis.fibreCounts.some((row, rowIndex) => {
-        const emptyCells = row.filter(
+      // Check fibre counts - ensure all cells are filled
+      const hasEmptyCells = analysis.fibreCounts.some((row) => {
+        return row.some(
           (cell) => cell === "" || cell === null || typeof cell === "undefined"
         );
-        if (emptyCells.length > 0) {
-          console.log(
-            `Sample ${sample.fullSampleID} has empty cells in row ${
-              rowIndex + 1
-            }:`,
-            emptyCells
-          );
-        }
-        return emptyCells.length > 0;
       });
 
-      if (hasEmptyCells) {
-        console.log(
-          `Sample ${sample.fullSampleID} has empty fibre count cells`
-        );
-        return true;
-      }
-
-      return false;
+      return hasEmptyCells;
     });
 
-    if (incompleteSamples.length > 0) {
-      console.log(
-        "Incomplete samples:",
-        incompleteSamples.map((s) => s.fullSampleID)
-      );
-      return false;
-    }
-
-    console.log("All samples are complete!");
-    return true;
-  };
+    return incompleteSamples.length === 0;
+  }, [samples, sampleAnalyses, analysisDetails]);
 
   // Render a single sample form
   const renderSampleForm = useCallback(
@@ -2067,7 +2181,7 @@ const Analysis = () => {
             calculateConcentration={calculateConcentration}
             getReportedConcentration={getReportedConcentration}
             inputRefs={inputRefs}
-            isReadOnly={shiftStatus === "analysis_complete"}
+            isReadOnly={shiftStatus === "analysis_complete" || sample.status === "failed"}
             onOpenFibreCountModal={handleOpenFibreCountModal}
             onOpenCommentModal={handleOpenCommentModal}
           />
@@ -2118,7 +2232,7 @@ const Analysis = () => {
                 calculateConcentration={calculateConcentration}
                 getReportedConcentration={getReportedConcentration}
                 inputRefs={inputRefs}
-                isReadOnly={shiftStatus === "analysis_complete"}
+                isReadOnly={shiftStatus === "analysis_complete" || sample.status === "failed"}
                 onOpenFibreCountModal={handleOpenFibreCountModal}
                 onOpenCommentModal={handleOpenCommentModal}
                 isLast={true}
@@ -2355,7 +2469,7 @@ const Analysis = () => {
                 <Button
                   variant="contained"
                   onClick={handleSubmit}
-                  disabled={!isAllAnalysisComplete()}
+                  disabled={!isAllAnalysisComplete}
                   sx={{
                     backgroundColor: "#1976d2",
                     "&:hover": {

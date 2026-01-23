@@ -129,16 +129,13 @@ const EFAPage = () => {
       setLabSignatoriesLoading(true);
 
       const response = await userService.getAll();
-      const allUsers = response.data || [];
+      const allUsers = response.data || response || [];
 
-      // Filter users who have labSignatory permission and are active
-      // Check both role-based and property-based lab signatory flags
+      // Filter users who have signatory=true OR calibration approval=true
       const labSignatoryUsers = allUsers.filter(
         (user) =>
           user.isActive &&
-          (user.role === "lab-signatory" ||
-            user.role === "admin" ||
-            user.labSignatory === true)
+          (user.labSignatory === true || user.labApprovals?.calibrations === true)
       );
 
       // Sort alphabetically by name

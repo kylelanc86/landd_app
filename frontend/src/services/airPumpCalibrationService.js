@@ -69,5 +69,19 @@ export const airPumpCalibrationService = {
       console.error('Error fetching calibration statistics:', error);
       throw error;
     }
+  },
+
+  // Bulk fetch calibrations for multiple pumps
+  getBulkPumpCalibrations: async (pumpIds, limit = 1000) => {
+    try {
+      const response = await api.post(`${BASE_URL}/pumps/bulk`, {
+        pumpIds,
+        limit
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error bulk fetching pump calibrations:', error);
+      throw error;
+    }
   }
 }; 

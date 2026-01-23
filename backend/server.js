@@ -24,6 +24,8 @@ const plmMicroscopeCalibrationRoutes = require('./routes/plmMicroscopeCalibratio
 const stereomicroscopeCalibrationRoutes = require('./routes/stereomicroscopeCalibrations');
 const hseTestSlideCalibrationRoutes = require('./routes/hseTestSlideCalibrations');
 const flowmeterCalibrationRoutes = require('./routes/flowmeterCalibrations');
+const acetoneVaporiserCalibrationRoutes = require('./routes/acetoneVaporiserCalibrations');
+const riLiquidCalibrationRoutes = require('./routes/riLiquidCalibrations');
 const calibrationFrequencyRoutes = require('./routes/calibrationFrequency');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
@@ -38,6 +40,9 @@ const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 const sampleItemsRoutes = require('./routes/sampleItems');
 const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
 const invoiceItemsRoutes = require('./routes/invoiceItems');
+const iaqRecordsRoutes = require('./routes/iaqRecords');
+const blanksRoutes = require('./routes/blanks');
+const iaqSamplesRoutes = require('./routes/iaqSamples');
 
 // Load environment variables
 dotenv.config();
@@ -234,6 +239,12 @@ connectDB()
     app.use('/api/flowmeter-calibrations', requireAuth, checkTokenBlacklist, flowmeterCalibrationRoutes);
     app.use('/flowmeter-calibrations', requireAuth, checkTokenBlacklist, flowmeterCalibrationRoutes);
     
+    app.use('/api/acetone-vaporiser-calibrations', requireAuth, checkTokenBlacklist, acetoneVaporiserCalibrationRoutes);
+    app.use('/acetone-vaporiser-calibrations', requireAuth, checkTokenBlacklist, acetoneVaporiserCalibrationRoutes);
+    
+    app.use('/api/ri-liquid-calibrations', requireAuth, checkTokenBlacklist, riLiquidCalibrationRoutes);
+    app.use('/ri-liquid-calibrations', requireAuth, checkTokenBlacklist, riLiquidCalibrationRoutes);
+    
     app.use('/api/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
     app.use('/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
     
@@ -283,6 +294,14 @@ connectDB()
     app.use('/api/project-audits', requireAuth, checkTokenBlacklist, require('./routes/projectAudits'));
     app.use('/project-audits', requireAuth, checkTokenBlacklist, require('./routes/projectAudits'));
 
+    app.use('/api/iaq-records', requireAuth, checkTokenBlacklist, iaqRecordsRoutes);
+    app.use('/iaq-records', requireAuth, checkTokenBlacklist, iaqRecordsRoutes);
+
+    app.use('/api/iaq-samples', requireAuth, checkTokenBlacklist, iaqSamplesRoutes);
+    app.use('/iaq-samples', requireAuth, checkTokenBlacklist, iaqSamplesRoutes);
+
+    app.use('/api/blanks', requireAuth, checkTokenBlacklist, blanksRoutes);
+    app.use('/blanks', requireAuth, checkTokenBlacklist, blanksRoutes);
 
     
     // Error handling middleware

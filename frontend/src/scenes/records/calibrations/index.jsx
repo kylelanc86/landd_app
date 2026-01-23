@@ -160,35 +160,35 @@ const Calibrations = () => {
       {activeTab === 1 && (
         <Grid container spacing={3}>
           {/* PCM Microscope */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <MicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/microscope" />
           </Grid>
           {/* PLM Microscope */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <PLMMicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/plm-microscope" />
           </Grid>
           {/* Stereomicroscope */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <StereomicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope" />
           </Grid>
           {/* HSE Test Slide */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <HSETestSlideCalibration viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide" />
           </Grid>
           {/* Primary Flowmeter */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <PrimaryFlowmeter viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter" />
           </Grid>
           {/* Sieves */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <Sieves viewCalibrationsPath="/records/laboratory/calibrations/sieves" />
           </Grid>
           {/* Pure Asbestos */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <PureAsbestos viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos" />
           </Grid>
           {/* Furnace */}
-          <Grid item xs={12} md={6} lg={4}>
+          <Grid item xs={12} md={6} lg={3}>
             <Furnace viewCalibrationsPath="/records/laboratory/calibrations/furnace" />
           </Grid>
         </Grid>

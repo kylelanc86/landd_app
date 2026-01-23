@@ -66,6 +66,7 @@ const AcetoneVaporiser = ({ viewCalibrationsPath }) => {
         "/records/laboratory/calibrations/acetone-vaporiser"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/vaporiser.png"}
+      color="#00acc1"
     />
   );
 };

@@ -65,6 +65,7 @@ const Furnace = ({ viewCalibrationsPath }) => {
         viewCalibrationsPath || "/records/laboratory/calibrations/furnace"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/furnace.png"}
+      color="#795548"
     />
   );
 };

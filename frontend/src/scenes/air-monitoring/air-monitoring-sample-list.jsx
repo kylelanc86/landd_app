@@ -207,13 +207,36 @@ const SampleList = () => {
 
       // If it's a field blank sample, only validate basic required fields
       if (sample.location === "Field blank") {
-        return (
+        const isValid = (
           sample.sampleNumber && sample.location && sampler && sample.cowlNo
         );
+        console.log(`[SampleList] Field blank sample ${sample.fullSampleID} validation:`, isValid);
+        return isValid;
       }
 
-      // For non-field blank samples, validate all required fields
-      return (
+      // If sample has failed status, it's considered complete (has all required data, just failed flowrate validation)
+      if (sample.status === "failed") {
+        const isValid = (
+          sample.sampleNumber &&
+          sample.type &&
+          sample.location &&
+          sampler &&
+          sample.pumpNo &&
+          sample.flowmeter &&
+          sample.cowlNo &&
+          sample.filterSize &&
+          sample.startTime &&
+          sample.endTime &&
+          sample.initialFlowrate &&
+          sample.finalFlowrate &&
+          sample.averageFlowrate
+        );
+        console.log(`[SampleList] Failed sample ${sample.fullSampleID} validation (status=failed, checking required fields only):`, isValid);
+        return isValid;
+      }
+
+      // For non-field blank, non-failed samples, validate all required fields AND flowrates
+      const isValid = (
         sample.sampleNumber &&
         sample.type &&
         sample.location &&
@@ -227,23 +250,63 @@ const SampleList = () => {
         sample.initialFlowrate &&
         sample.finalFlowrate &&
         sample.averageFlowrate &&
-        // Ensure flowrates are valid numbers and not failed
+        // Ensure flowrates are valid numbers
         parseFloat(sample.initialFlowrate) > 0 &&
-        parseFloat(sample.finalFlowrate) > 0 &&
-        sample.status !== "failed"
+        parseFloat(sample.finalFlowrate) > 0
       );
+      console.log(`[SampleList] Regular sample ${sample.fullSampleID} validation:`, isValid);
+      return isValid;
     });
   }, []);
 
   // Re-validate samples whenever samples change
   useEffect(() => {
     if (samples.length > 0) {
+      console.log("[SampleList] Validating samples for completion:", {
+        totalSamples: samples.length,
+        samples: samples.map(s => ({
+          id: s.fullSampleID,
+          status: s.status,
+          hasRequiredFields: {
+            sampleNumber: !!s.sampleNumber,
+            type: !!s.type,
+            location: !!s.location,
+            sampler: !!(s.sampler || s.collectedBy),
+            pumpNo: !!s.pumpNo,
+            flowmeter: !!s.flowmeter,
+            cowlNo: !!s.cowlNo,
+            filterSize: !!s.filterSize,
+            startTime: !!s.startTime,
+            endTime: !!s.endTime,
+            initialFlowrate: !!s.initialFlowrate,
+            finalFlowrate: !!s.finalFlowrate,
+            averageFlowrate: !!s.averageFlowrate,
+          },
+          flowrateValues: {
+            initial: s.initialFlowrate,
+            final: s.finalFlowrate,
+            average: s.averageFlowrate,
+          },
+          isFieldBlank: s.location === "Field blank",
+        }))
+      });
+      
       const isValid = validateSamplesCompleteMemo(samples);
+      
+      console.log("[SampleList] Validation result:", {
+        isValid,
+        isCompleteDisabled: !isValid,
+        shiftStatus: shift?.status,
+        isReportAuthorized,
+        buttonWillBeDisabled: !isValid || shift?.status !== "ongoing" || isReportAuthorized
+      });
+      
       setIsCompleteDisabled(!isValid);
     } else {
+      console.log("[SampleList] No samples, disabling completion button");
       setIsCompleteDisabled(true);
     }
-  }, [samples, validateSamplesCompleteMemo]);
+  }, [samples, validateSamplesCompleteMemo, shift?.status, isReportAuthorized]);
 
   // Cleanup: stop dictation when component unmounts
   useEffect(() => {
@@ -1013,66 +1076,82 @@ const SampleList = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {sortedSamples.map((sample) => (
-              <TableRow key={sample._id}>
-                <TableCell
-                  sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
-                >
-                  {sample.fullSampleID}
-                </TableCell>
-                <TableCell
-                  sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
-                >
-                  {sample.cowlNo || "-"}
-                </TableCell>
-                <TableCell
-                  sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
-                >
-                  {sample.location === "Field blank" ? "-" : sample.type}
-                </TableCell>
-                <TableCell sx={{ minWidth: "200px", flex: 2 }}>
-                  {sample.location}
-                </TableCell>
-                <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
-                  {formatTime(sample.startTime)}
-                </TableCell>
-                <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
-                  {sample.endTime ? formatTime(sample.endTime) : "-"}
-                </TableCell>
-                <TableCell sx={{ minWidth: "100px", maxWidth: "150px" }}>
-                  {sample.averageFlowrate || "-"}
-                </TableCell>
-                <TableCell
-                  sx={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}
-                >
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() =>
-                      navigate(
-                        `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
-                      )
-                    }
-                    disabled={isReportAuthorized}
-                    sx={{ mr: 1 }}
-                  >
-                    Edit Sample
-                  </Button>
-                  <PermissionGate
-                    requiredPermissions={["admin.view"]}
-                    fallback={null}
-                  >
-                    <IconButton
-                      onClick={() => handleDelete(sample._id)}
-                      disabled={isReportAuthorized}
-                      title="Delete (Admin Only)"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </PermissionGate>
+            {sortedSamples.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                  <Typography variant="body1" color="text.secondary">
+                  No samples found for this job. Click 'Add Samples' to get started.
+                  </Typography>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              sortedSamples.map((sample) => (
+                <TableRow key={sample._id}>
+                  <TableCell
+                    sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
+                  >
+                    {sample.fullSampleID}
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                  >
+                    {sample.cowlNo || "-"}
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                  >
+                    {sample.location === "Field blank" ? "-" : sample.type}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                    {sample.location}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
+                    {formatTime(sample.startTime)}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
+                    {sample.endTime ? formatTime(sample.endTime) : "-"}
+                  </TableCell>
+                  <TableCell sx={{ minWidth: "100px", maxWidth: "150px" }}>
+                    {sample.status === "failed" ? (
+                      <Typography component="span" sx={{ color: "error.main", fontWeight: "bold", fontSize: "inherit" }}>
+                        Failed
+                      </Typography>
+                    ) : (
+                      sample.averageFlowrate || "-"
+                    )}
+                  </TableCell>
+                  <TableCell
+                    sx={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}
+                  >
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() =>
+                        navigate(
+                          `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
+                        )
+                      }
+                      disabled={isReportAuthorized}
+                      sx={{ mr: 1 }}
+                    >
+                      Edit Sample
+                    </Button>
+                    <PermissionGate
+                      requiredPermissions={["admin.view"]}
+                      fallback={null}
+                    >
+                      <IconButton
+                        onClick={() => handleDelete(sample._id)}
+                        disabled={isReportAuthorized}
+                        title="Delete (Admin Only)"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </PermissionGate>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -1095,7 +1174,15 @@ const SampleList = () => {
             <Button
               variant="contained"
               color="primary"
-              onClick={handleSampleComplete}
+              onClick={() => {
+                console.log("[SampleList] Sampling Complete button clicked", {
+                  isCompleteDisabled,
+                  shiftStatus: shift?.status,
+                  isReportAuthorized,
+                  buttonDisabled: isCompleteDisabled || shift?.status !== "ongoing" || isReportAuthorized
+                });
+                handleSampleComplete();
+              }}
               disabled={
                 isCompleteDisabled ||
                 shift?.status !== "ongoing" ||
@@ -1229,7 +1316,7 @@ const SampleList = () => {
                     <TableCell>Location</TableCell>
                     <TableCell>Start Time</TableCell>
                     <TableCell>End Time</TableCell>
-                    <TableCell>Avg Flow Rate</TableCell>
+                    <TableCell>Flow Rate</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1258,9 +1345,13 @@ const SampleList = () => {
                           {sample.endTime ? formatTime(sample.endTime) : "-"}
                         </TableCell>
                         <TableCell>
-                          {sample.averageFlowrate
-                            ? `${sample.averageFlowrate} L/min`
-                            : "-"}
+                          {sample.status === "failed" ? (
+                            <Typography component="span" sx={{ color: "error.main", fontWeight: "bold", fontSize: "inherit" }}>
+                              Failed
+                            </Typography>
+                          ) : sample.averageFlowrate
+                          ? `${sample.averageFlowrate} L/min`
+                          : "-"}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -57,7 +57,8 @@ const Sieves = ({ viewCalibrationsPath }) => {
       viewCalibrationsPath={
         viewCalibrationsPath || "/records/laboratory/calibrations/sieves"
       }
-      icon={process.env.PUBLIC_URL + "/air-mon-icons/Sieves.png"}
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/sieve.png"}
+      color="#f57c00"
     />
   );
 };

@@ -96,6 +96,7 @@ const PrimaryFlowmeter = ({ viewCalibrationsPath }) => {
         "/records/laboratory/calibrations/primary-flowmeter"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/primary flowmeter.png"}
+      color="#388e3c"
     />
   );
 };

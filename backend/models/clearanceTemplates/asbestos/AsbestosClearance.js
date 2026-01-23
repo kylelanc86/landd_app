@@ -188,6 +188,12 @@ const asbestosClearanceSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    sequenceNumber: {
+      type: Number,
+      required: false,
+      min: 1,
+      max: 5,
+    },
   },
   {
     timestamps: true,
@@ -198,5 +204,6 @@ const asbestosClearanceSchema = new mongoose.Schema(
 asbestosClearanceSchema.index({ projectId: 1, status: 1 });
 asbestosClearanceSchema.index({ clearanceDate: 1 });
 asbestosClearanceSchema.index({ asbestosRemovalJobId: 1 });
+asbestosClearanceSchema.index({ projectId: 1, clearanceType: 1, clearanceDate: 1 });
 
 module.exports = mongoose.model("AsbestosClearance", asbestosClearanceSchema); 

@@ -123,6 +123,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
     const versionControlTemplateWithUrl = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
     const inspectionDetailsTemplate = fs.readFileSync(path.join(templateDir, 'InspectionDetails.html'), 'utf8');
+    const signOffPageTemplate = fs.readFileSync(path.join(templateDir, 'SignOffPage.html'), 'utf8');
     const backgroundInformationTemplate = fs.readFileSync(path.join(templateDir, 'BackgroundInformation.html'), 'utf8');
     const appendixACoverTemplateWithUrl = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
     // photographsTemplate no longer used - photos generated independently
@@ -139,6 +140,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const coverTemplateWithUrl = replaceFrontendUrl(coverTemplate);
     const versionControlTemplateWithUrlWithUrl = replaceFrontendUrl(versionControlTemplateWithUrl);
     const inspectionDetailsTemplateWithUrl = replaceFrontendUrl(inspectionDetailsTemplate);
+    const signOffPageTemplateWithUrl = replaceFrontendUrl(signOffPageTemplate);
     const backgroundInformationTemplateWithUrl = replaceFrontendUrl(backgroundInformationTemplate);
     const appendixACoverTemplateWithUrlWithUrl = replaceFrontendUrl(appendixACoverTemplateWithUrl);
     const photoItemTemplateWithUrl = replaceFrontendUrl(photoItemTemplate);
@@ -263,11 +265,10 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const pdfGenerationDate = new Date().toLocaleDateString('en-GB');
     
     // Generate revision history rows
-    const generateRevisionHistory = () => {
+    const generateRevisionHistory = (reportAuthoriserText) => {
       const revision = clearanceData.revision || 0;
-      const laaName = clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? 
-        `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : 
-        clearanceData.LAA || 'Unknown LAA';
+      // Approved By should be the same as report authoriser
+      const approvedBy = reportAuthoriserText;
       
       if (revision === 0) {
         // Original report - no revisions
@@ -275,7 +276,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           <tr>
             <td>Original Issue</td>
             <td>0</td>
-            <td>${laaName}</td>
+            <td>${approvedBy}</td>
             <td>${pdfGenerationDate}</td>
           </tr>
         `;
@@ -285,7 +286,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           <tr>
             <td>Original Issue</td>
             <td>0</td>
-            <td>${laaName}</td>
+            <td>${approvedBy}</td>
             <td>${pdfGenerationDate}</td>
           </tr>
         `;
@@ -294,15 +295,14 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         if (clearanceData.revisionReasons && clearanceData.revisionReasons.length > 0) {
           clearanceData.revisionReasons.forEach((revisionData) => {
             const revisionDate = revisionData.revisedAt ? new Date(revisionData.revisedAt).toLocaleDateString('en-GB') : pdfGenerationDate;
-            const revisedByName = revisionData.revisedBy?.firstName && revisionData.revisedBy?.lastName ? 
-              `${revisionData.revisedBy.firstName} ${revisionData.revisedBy.lastName}` : 
-              laaName;
+            // Approved By should be the same as report authoriser
+            const revisedByApprovedBy = approvedBy;
             
             revisionRows += `
               <tr>
                 <td>${revisionData.reason}</td>
                 <td>${revisionData.revisionNumber}</td>
-                <td>${revisedByName}</td>
+                <td>${revisedByApprovedBy}</td>
                 <td>${revisionDate}</td>
               </tr>
             `;
@@ -314,7 +314,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
               <tr>
                 <td>Report Revision</td>
                 <td>${i}</td>
-                <td>${laaName}</td>
+                <td>${approvedBy}</td>
                 <td>${pdfGenerationDate}</td>
               </tr>
             `;
@@ -377,11 +377,11 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLEARANCE_DATE\]/g, pdfGenerationDate) // Use PDF generation date for Issue Date in document details
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[REPORT_AUTHORISER\]/g, reportAuthoriserText)
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${clearanceTypePrefix}${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})`)
+      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${clearanceTypePrefix}${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})${clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : ''}`)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
       .replace(/\[FOOTER_TEXT\]/g, footerText)
-      .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateRevisionHistory());
+      .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateRevisionHistory(reportAuthoriserText));
 
     // Generate clearance items table headers
     const generateClearanceItemsHeaders = () => {
@@ -637,6 +637,11 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const clearanceCertificationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, templateData) : 'Clearance certification content not found';
     const signOffContent = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
 
+    // When 5+ items: sign-off moves to a dedicated page (page 2); Inspection Details keeps only certification. Background becomes page 3.
+    const itemCount = (clearanceData.items || []).length;
+    const hasSignOffPage = itemCount >= 5;
+    const inspectionDetailsSignOff = hasSignOffPage ? '' : signOffContent;
+
     // Populate inspection details template with data
     const populatedInspectionDetails = inspectionDetailsTemplateWithUrl
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
@@ -646,7 +651,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
       .replace(/\[ASBESTOS_TYPE\]/g, clearanceData.clearanceType || 'Non-friable')
       .replace(/\[ASBESTOS_REMOVALIST\]/g, clearanceData.asbestosRemovalist || 'Unknown Removalist')
-      .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
+      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
       .replace(/\[LAA_LICENSE\]/g, 'AA00031')
       .replace(/\[INSPECTION_TIME\]/g, formatInspectionTime(clearanceData.inspectionTime))
       .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
@@ -660,7 +665,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[INSPECTION_EXCLUSIONS_CONTENT\]/g, inspectionExclusionsContent)
       .replace(/\[CLEARANCE_CERTIFICATION_TITLE\]/g, templateContent?.standardSections?.clearanceCertificationTitle || 'CLEARANCE CERTIFICATION')
       .replace(/\[CLEARANCE_CERTIFICATION_CONTENT\]/g, clearanceCertificationContent)
-      .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent)
+      .replace(/\[SIGN_OFF_CONTENT\]/g, inspectionDetailsSignOff)
       .replace(/\[ATTACHMENTS\]/g, generateAttachmentText(clearanceData))
       .replace(/\[FOOTER_TEXT\]/g, footerText);
 
@@ -687,6 +692,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     }
 
     // Populate background information template with data
+    // Page number: 3 when sign-off has its own page (5+ items), otherwise 2
+    const backgroundPageNumber = hasSignOffPage ? '3' : '2';
     const populatedBackgroundInformation = backgroundInformationTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
@@ -698,7 +705,17 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[LEGISLATIVE_REQUIREMENTS_CONTENT\]/g, legislativeRequirementsContent)
       .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE\]/g, clearanceCertificateLimitationsTitle)
       .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT\]/g, clearanceCertificateLimitationsContent)
+      .replace(/\[BACKGROUND_PAGE_NUMBER\]/g, backgroundPageNumber)
       .replace(/\[FOOTER_TEXT\]/g, footerText);
+
+    // Populate sign-off page (used only when 5+ items): header, footer, page number 2
+    const populatedSignOffPage = hasSignOffPage
+      ? signOffPageTemplateWithUrl
+          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+          .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent)
+          .replace(/\[FOOTER_TEXT\]/g, footerText)
+          .replace(/\[SIGN_OFF_PAGE_NUMBER\]/g, '2')
+      : '';
 
     // Extract just the page content from each template
     const extractPageContent = (html) => {
@@ -1094,7 +1111,11 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         <!-- Inspection Details Page -->
           ${populatedInspectionDetails}
         <div class="page-break"></div>
-        
+        ${hasSignOffPage ? `
+        <!-- Sign-off Page (5+ items: dedicated page with header, footer, page 2) -->
+          ${populatedSignOffPage}
+        <div class="page-break"></div>
+        ` : ''}
         <!-- Background Information Page -->
           ${populatedBackgroundInformation}
         
@@ -1414,7 +1435,9 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     }
     // Vehicle/Equipment clearances don't get a prefix
     
-    const filename = `${projectId}_${clearanceTypePrefix}${reportTypeName} - ${siteName} (${clearanceDate}).pdf`;
+    // Add sequence number suffix if it exists (for multiple clearances of same type/project/date)
+    const sequenceSuffix = clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : '';
+    const filename = `${projectId}_${clearanceTypePrefix}${reportTypeName} - ${siteName} (${clearanceDate})${sequenceSuffix}.pdf`;
 
     // Generate PDF using DocRaptor with optimized settings
     const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {

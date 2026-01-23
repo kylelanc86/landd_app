@@ -49,7 +49,8 @@ const PLMMicroscopeCalibration = ({ viewCalibrationsPath }) => {
     try {
       // Fetch all PLM microscope calibrations
       const response = await plmMicroscopeService.getAll({ limit: 1000 });
-      const calibrations = response.data || [];
+      // Service returns the array directly, not wrapped in a data property
+      const calibrations = Array.isArray(response) ? response : (response.data || []);
 
       // Fetch equipment to check for items without calibration
       const equipmentResponse = await equipmentService.getAll({
@@ -71,6 +72,7 @@ const PLMMicroscopeCalibration = ({ viewCalibrationsPath }) => {
       const validNextCalibrations = calibrations
         .filter((cal) => cal.nextCalibration)
         .map((cal) => new Date(cal.nextCalibration))
+        .filter((date) => !isNaN(date.getTime())) // Filter out invalid dates
         .sort((a, b) => a - b);
 
       if (validNextCalibrations.length > 0) {
@@ -87,6 +89,8 @@ const PLMMicroscopeCalibration = ({ viewCalibrationsPath }) => {
       let dueInNextMonth = calibrations.filter((cal) => {
         if (!cal.nextCalibration) return false;
         const nextCalDate = new Date(cal.nextCalibration);
+        // Check if date is valid before comparing
+        if (isNaN(nextCalDate.getTime())) return false;
         return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
       }).length;
 
@@ -148,7 +152,8 @@ const PLMMicroscopeCalibration = ({ viewCalibrationsPath }) => {
         viewCalibrationsPath ||
         "/records/laboratory/calibrations/plm-microscope"
       }
-      icon={process.env.PUBLIC_URL + "/air-mon-icons/microscope.png"}
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/microscope - PLM.png"}
+      color="#7b1fa2"
     />
   );
 };

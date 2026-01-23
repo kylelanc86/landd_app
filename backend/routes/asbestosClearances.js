@@ -113,6 +113,44 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       vehicleEquipmentDescription,
     } = req.body;
 
+    // Calculate sequence number for clearances of the same type, project, and date
+    let sequenceNumber = 1;
+    if (clearanceDate && projectId && clearanceType) {
+      try {
+        // Normalize clearanceDate to start of day for comparison
+        const clearanceDateObj = new Date(clearanceDate);
+        const startOfDay = new Date(clearanceDateObj);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(clearanceDateObj);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Find existing clearances with same project, type, and date
+        const existingClearances = await AsbestosClearance.find({
+          projectId,
+          clearanceType,
+          clearanceDate: {
+            $gte: startOfDay,
+            $lte: endOfDay,
+          },
+        })
+          .select("sequenceNumber")
+          .lean();
+
+        if (existingClearances.length > 0) {
+          // Find the maximum sequence number
+          const maxSequence = existingClearances.reduce((max, clearance) => {
+            const seq = clearance.sequenceNumber || 1;
+            return Math.max(max, seq);
+          }, 0);
+          sequenceNumber = maxSequence + 1;
+        }
+      } catch (error) {
+        console.error("Error calculating sequence number:", error);
+        // Default to 1 if there's an error
+        sequenceNumber = 1;
+      }
+    }
+
     const clearance = new AsbestosClearance({
       projectId,
       ...(asbestosRemovalJobId && { asbestosRemovalJobId }),
@@ -136,6 +174,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       jobSpecificExclusions: jobSpecificExclusions || null,
       notes,
       vehicleEquipmentDescription,
+      sequenceNumber,
       createdBy: req.user.id,
     });
 

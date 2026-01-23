@@ -213,14 +213,16 @@ const FlowmeterPage = () => {
     }
   }, []);
 
-  // Fetch lab signatories
+  // Fetch lab signatories (users with signatory=true OR calibration approval=true)
   const fetchLabSignatories = useCallback(async () => {
     try {
       setLabSignatoriesLoading(true);
       const response = await userService.getAll();
       const users = response.data || response || [];
       const signatories = users.filter(
-        (user) => user.role === "lab-signatory" || user.role === "admin"
+        (user) =>
+          user.isActive &&
+          (user.labSignatory === true || user.labApprovals?.calibrations === true)
       );
       setLabSignatories(signatories);
     } catch (err) {

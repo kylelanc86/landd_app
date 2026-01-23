@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -37,6 +37,7 @@ const EditSample = () => {
   const { currentUser } = useAuth();
   const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [airPumps, setAirPumps] = useState([]);
+  const [airPumpsLoaded, setAirPumpsLoaded] = useState(false);
   const [flowmeters, setFlowmeters] = useState([]);
   const [availableFlowrates, setAvailableFlowrates] = useState([]);
   // Cache for calibration data to avoid re-fetching
@@ -69,8 +70,36 @@ const EditSample = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [insufficientSampleTime, setInsufficientSampleTime] = useState(false);
+  const [collectionTimeBeforeSetup, setCollectionTimeBeforeSetup] = useState(false);
+  const [showCollectionSection, setShowCollectionSection] = useState(false);
+  const [collectionFieldsEdited, setCollectionFieldsEdited] = useState(false);
 
   const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
+
+  // Check if the selected pump has a 1.5 L/min calibration available
+  // If not, 13mm filter size should not be available (since 13mm requires 1.5 L/min)
+  const hasOnePointFiveFlowrate = useMemo(() => {
+    return availableFlowrates.some(flowrate => Math.abs(flowrate - 1.5) < 0.01);
+  }, [availableFlowrates]);
+
+  // Filter available flowrates based on filter size
+  // 1.5 L/min should only be offered when filter size is 13mm
+  // For 13mm filters, 1.5 L/min is the only permitted option
+  // For 25mm filters, 1.5 L/min should be excluded
+  const filteredFlowrates = useMemo(() => {
+    if (!form.filterSize) {
+      // If no filter size selected, exclude 1.5 L/min
+      return availableFlowrates.filter(flowrate => Math.abs(flowrate - 1.5) > 0.01);
+    }
+    
+    if (form.filterSize === "13mm") {
+      // For 13mm, only show 1.5 L/min if available
+      return availableFlowrates.filter(flowrate => Math.abs(flowrate - 1.5) < 0.01);
+    } else {
+      // For 25mm (or other sizes), exclude 1.5 L/min
+      return availableFlowrates.filter(flowrate => Math.abs(flowrate - 1.5) > 0.01);
+    }
+  }, [availableFlowrates, form.filterSize]);
 
   // Fetch asbestos assessors when component mounts
   useEffect(() => {
@@ -387,8 +416,10 @@ const EditSample = () => {
 
         setAirPumps(activePumps);
         setFlowmeters(activeFlowmeters);
+        setAirPumpsLoaded(true);
       } catch (error) {
         console.error("Error fetching equipment and calibrations:", error);
+        setAirPumpsLoaded(true); // Set to true even on error so field can be enabled
       }
     };
     fetchEquipmentAndCalibrations();
@@ -557,6 +588,12 @@ const EditSample = () => {
           status: sampleData.status || "pending",
         });
 
+        // Show collection section if sample already has collection data
+        if (sampleData.endTime || sampleData.finalFlowrate || sampleData.nextDay) {
+          setShowCollectionSection(true);
+          setCollectionFieldsEdited(true);
+        }
+
         setJob(sampleData.job);
         setError(null);
       } catch (err) {
@@ -577,12 +614,32 @@ const EditSample = () => {
     }
   }, [form.pumpNo, airPumps.length, fetchAvailableFlowrates]);
 
+  // Effect to clear filter size if it's 13mm and pump doesn't support 1.5 L/min
+  useEffect(() => {
+    if (form.filterSize === "13mm" && form.pumpNo && !hasOnePointFiveFlowrate) {
+      setForm((prev) => ({
+        ...prev,
+        filterSize: "25mm", // Default to 25mm if 13mm is not supported
+        initialFlowrate: "",
+        finalFlowrate: "",
+        averageFlowrate: "",
+      }));
+    }
+  }, [form.filterSize, form.pumpNo, hasOnePointFiveFlowrate]);
+
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
 
     // Clear field error when user starts typing
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
+
+    // Track if collection fields have been edited
+    const collectionFields = ["endTime", "nextDay", "finalFlowrate"];
+    if (collectionFields.includes(name)) {
+      setCollectionFieldsEdited(true);
+      setShowCollectionSection(true);
     }
 
     if (name === "isFieldBlank") {
@@ -660,14 +717,20 @@ const EditSample = () => {
           const initial = parseFloat(newForm.initialFlowrate);
           const final = parseFloat(newForm.finalFlowrate);
 
-          if (!isNaN(initial) && !isNaN(final)) {
+          if (!isNaN(initial) && !isNaN(final) && initial > 0) {
             const avg = (initial + final) / 2;
+            // Check if final flowrate is within 10% of initial flowrate
+            const allowedDifference = initial * 0.1;
             const newStatus =
-              Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+              Math.abs(initial - final) <= allowedDifference ? "pending" : "failed";
+            
+            // Format average: whole numbers and values with 1 decimal place to 1 dp, others to 2 dp
+            const hasAtMostOneDecimal = parseFloat(avg.toFixed(1)) === avg;
+            const formattedAvg = hasAtMostOneDecimal ? avg.toFixed(1) : avg.toFixed(2);
 
             return {
               ...newForm,
-              averageFlowrate: avg.toFixed(1),
+              averageFlowrate: formattedAvg,
               status: newStatus,
             };
           }
@@ -683,10 +746,36 @@ const EditSample = () => {
       return;
     }
 
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => {
+      const newForm = {
+        ...prev,
+        [name]: value,
+      };
+
+      // When filterSize changes, clear initialFlowrate if it's not valid for the new filter size
+      if (name === "filterSize") {
+        const currentFlowrate = parseFloat(prev.initialFlowrate);
+        if (!isNaN(currentFlowrate)) {
+          if (value === "13mm") {
+            // For 13mm, only 1.5 L/min is allowed
+            if (Math.abs(currentFlowrate - 1.5) > 0.01) {
+              newForm.initialFlowrate = "";
+              newForm.finalFlowrate = "";
+              newForm.averageFlowrate = "";
+            }
+          } else {
+            // For 25mm, 1.5 L/min is not allowed
+            if (Math.abs(currentFlowrate - 1.5) < 0.01) {
+              newForm.initialFlowrate = "";
+              newForm.finalFlowrate = "";
+              newForm.averageFlowrate = "";
+            }
+          }
+        }
+      }
+
+      return newForm;
+    });
 
     // When pump changes, fetch available flowrates
     if (name === "pumpNo" && value) {
@@ -709,10 +798,16 @@ const EditSample = () => {
       const initial = parseFloat(form.initialFlowrate);
       const final = parseFloat(form.finalFlowrate);
 
-      if (!isNaN(initial) && !isNaN(final)) {
+      if (!isNaN(initial) && !isNaN(final) && initial > 0) {
         const avg = (initial + final) / 2;
+        // Check if final flowrate is within 10% of initial flowrate
+        const allowedDifference = initial * 0.1;
         const newStatus =
-          Math.abs(initial - final) < 0.1 ? "pending" : "failed";
+          Math.abs(initial - final) <= allowedDifference ? "pending" : "failed";
+        
+        // Format average: whole numbers and values with 1 decimal place to 1 dp, others to 2 dp
+        const hasAtMostOneDecimal = parseFloat(avg.toFixed(1)) === avg;
+        const formattedAvg = hasAtMostOneDecimal ? avg.toFixed(1) : avg.toFixed(2);
 
         setForm((prev) => {
           // Only update if the calculated values are different to avoid infinite loops
@@ -720,7 +815,7 @@ const EditSample = () => {
           if (Math.abs(currentAvg - avg) > 0.01 || prev.status !== newStatus) {
             return {
               ...prev,
-              averageFlowrate: avg.toFixed(1),
+              averageFlowrate: formattedAvg,
               status: newStatus,
             };
           }
@@ -760,6 +855,29 @@ const EditSample = () => {
 
     return diffMinutes;
   };
+
+  // Validate that collection time is not before setup time (unless nextDay is checked)
+  useEffect(() => {
+    if (isSimplifiedSample) {
+      setCollectionTimeBeforeSetup(false);
+      return;
+    }
+
+    if (!form.startTime || !form.endTime) {
+      setCollectionTimeBeforeSetup(false);
+      return;
+    }
+
+    const [startHours, startMinutes] = form.startTime.split(":").map(Number);
+    const [endHours, endMinutes] = form.endTime.split(":").map(Number);
+
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    // Check if end time is before start time when nextDay is not checked
+    const isBefore = endTotalMinutes < startTotalMinutes;
+    setCollectionTimeBeforeSetup(isBefore && !form.nextDay);
+  }, [form.startTime, form.endTime, form.nextDay, isSimplifiedSample]);
 
   // Validate sample time based on filter size
   useEffect(() => {
@@ -863,26 +981,52 @@ const EditSample = () => {
   };
 
   // Helper functions for time dropdowns
-  const parseTime = (timeString) => {
-    if (!timeString) return { hour: "00", minute: "00" };
+  const parseTime = (timeString, field = null) => {
+    if (!timeString || timeString.trim() === "") {
+      // For both startTime and endTime fields, return "-" as placeholder
+      if (field === "startTime" || field === "endTime") {
+        return { hour: "-", minute: "-" };
+      }
+      return { hour: "00", minute: "00" };
+    }
     const [hour, minute] = timeString.split(":");
     return {
-      hour: hour || "00",
-      minute: minute || "00",
+      hour: hour || ((field === "startTime" || field === "endTime") ? "-" : "00"),
+      minute: minute || ((field === "startTime" || field === "endTime") ? "-" : "00"),
     };
   };
 
   const formatTime = (hour, minute) => {
+    // Handle "-" placeholder for startTime and endTime
+    if (hour === "-" || minute === "-") {
+      return "";
+    }
     return `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
   };
 
   const handleTimeChange = (field, type, value) => {
-    const currentTime = parseTime(form[field]);
-    const newTime =
-      type === "hour"
-        ? formatTime(value, currentTime.minute)
-        : formatTime(currentTime.hour, value);
+    // If user selects "-", clear the time field
+    if (value === "-") {
+      setForm((prev) => ({ ...prev, [field]: "" }));
+      if (field === "endTime") {
+        setCollectionFieldsEdited(true);
+        setShowCollectionSection(true);
+      }
+      return;
+    }
+    
+    const currentTime = parseTime(form[field], field);
+    // Use "00" as default if current time part is "-"
+    const hour = type === "hour" ? value : (currentTime.hour === "-" ? "00" : currentTime.hour);
+    const minute = type === "minute" ? value : (currentTime.minute === "-" ? "00" : currentTime.minute);
+    const newTime = formatTime(hour, minute);
     setForm((prev) => ({ ...prev, [field]: newTime }));
+    
+    // Track if collection time has been edited
+    if (field === "endTime") {
+      setCollectionFieldsEdited(true);
+      setShowCollectionSection(true);
+    }
   };
 
   const validateForm = () => {
@@ -896,8 +1040,13 @@ const EditSample = () => {
       errors.sampleNumber = "Sample number is required";
     }
 
-    if (!isSimplifiedSample && !form.flowmeter) {
-      errors.flowmeter = "Flowmeter is required";
+    if (!isSimplifiedSample) {
+      if (!form.pumpNo) {
+        errors.pumpNo = "Pump No. is required";
+      }
+      if (!form.flowmeter) {
+        errors.flowmeter = "Flowmeter is required";
+      }
     }
 
     if (!isSimplifiedSample) {
@@ -910,6 +1059,16 @@ const EditSample = () => {
       if (!form.startTime) {
         errors.startTime = "Start time is required";
       }
+      // Only require collection fields if they have been edited
+      if (collectionFieldsEdited) {
+        if (!form.endTime) {
+          errors.endTime = "End time is required";
+        }
+        // Validate that collection time is not before setup time unless nextDay is checked
+        if (form.startTime && form.endTime && collectionTimeBeforeSetup) {
+          errors.endTime = "Collection time cannot be before setup time Next Day' is selected";
+        }
+      }
       if (!form.isNegAirExhaust && !form.initialFlowrate) {
         errors.initialFlowrate = "Initial flowrate is required";
       }
@@ -921,7 +1080,11 @@ const EditSample = () => {
     }
 
     setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    const isValid = Object.keys(errors).length === 0;
+    if (!isValid) {
+      console.log("[EditSample] Validation failed with errors:", errors);
+    }
+    return { isValid, errors };
   };
 
   const handleSubmit = async (e) => {
@@ -938,12 +1101,15 @@ const EditSample = () => {
     setError("");
     setFieldErrors({});
 
-    const isValid = validateForm();
+    const { isValid, errors: validationErrors } = validateForm();
     console.timeEnd(`${logLabel} validation`);
     if (!isValid) {
+      console.log("[EditSample] Form validation failed, errors:", validationErrors);
       console.timeEnd(`${logLabel} total`);
       return;
     }
+    
+    console.log("[EditSample] Form validation passed, proceeding with submission");
 
     setIsSubmitting(true);
 
@@ -1212,16 +1378,24 @@ const EditSample = () => {
           )}
           {!isSimplifiedSample && (
             <>
-              <FormControl fullWidth>
+              <FormControl fullWidth required error={!!fieldErrors.pumpNo}>
                 <InputLabel>Pump No.</InputLabel>
                 <Select
                   name="pumpNo"
                   value={form.pumpNo}
                   onChange={handleChange}
                   label="Pump No."
+                  required
+                  disabled={!airPumpsLoaded}
                 >
                   <MenuItem value="">
-                    <em>Select a pump</em>
+                    <em>
+                      {!airPumpsLoaded
+                        ? "Loading pumps..."
+                        : airPumps.length > 0
+                        ? "Select a pump"
+                        : "No active air pumps available"}
+                    </em>
                   </MenuItem>
                   {airPumps.length > 0 ? (
                     airPumps.map((pump) => (
@@ -1230,12 +1404,17 @@ const EditSample = () => {
                         {pump.brandModel ? ` - ${pump.brandModel}` : ""}
                       </MenuItem>
                     ))
-                  ) : (
+                  ) : airPumpsLoaded ? (
                     <MenuItem disabled value="">
                       No active air pumps available
                     </MenuItem>
-                  )}
+                  ) : null}
                 </Select>
+                {fieldErrors.pumpNo && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.pumpNo}
+                  </Typography>
+                )}
               </FormControl>
               <FormControl fullWidth>
                 <InputLabel>Filter Size</InputLabel>
@@ -1244,9 +1423,12 @@ const EditSample = () => {
                   value={form.filterSize}
                   onChange={handleChange}
                   label="Filter Size"
+                  disabled={!form.pumpNo}
                 >
                   <MenuItem value="25mm">25mm</MenuItem>
-                  <MenuItem value="13mm">13mm</MenuItem>
+                  {hasOnePointFiveFlowrate && (
+                    <MenuItem value="13mm">13mm</MenuItem>
+                  )}
                 </Select>
               </FormControl>
             </>
@@ -1324,10 +1506,11 @@ const EditSample = () => {
                 <FormControl required sx={{ minWidth: 100 }} error={!!fieldErrors.startTime}>
                   <InputLabel>Hour</InputLabel>
                   <Select
-                    value={parseTime(form.startTime).hour}
+                    value={parseTime(form.startTime, "startTime").hour}
                     onChange={(e) => handleTimeChange("startTime", "hour", e.target.value)}
                     label="Hour"
                   >
+                    <MenuItem value="-">-</MenuItem>
                     {Array.from({ length: 24 }, (_, i) => 
                       i.toString().padStart(2, "0")
                     ).map((hour) => (
@@ -1340,10 +1523,11 @@ const EditSample = () => {
                 <FormControl required sx={{ minWidth: 100 }} error={!!fieldErrors.startTime}>
                   <InputLabel>Minutes</InputLabel>
                   <Select
-                    value={parseTime(form.startTime).minute}
+                    value={parseTime(form.startTime, "startTime").minute}
                     onChange={(e) => handleTimeChange("startTime", "minute", e.target.value)}
                     label="Minutes"
                   >
+                    <MenuItem value="-">-</MenuItem>
                     {Array.from({ length: 60 }, (_, i) => 
                       i.toString().padStart(2, "0")
                     ).map((minute) => (
@@ -1376,18 +1560,22 @@ const EditSample = () => {
                   value={form.initialFlowrate}
                   onChange={handleChange}
                   label="Initial Flowrate (L/min)"
-                  disabled={!form.pumpNo || availableFlowrates.length === 0}
+                  disabled={!form.pumpNo || !form.filterSize || filteredFlowrates.length === 0}
                 >
                   <MenuItem value="">
                     <em>
                       {!form.pumpNo
                         ? "Select a pump first"
-                        : availableFlowrates.length === 0
-                        ? "No passed calibrations available"
+                        : !form.filterSize
+                        ? "Select filter size first"
+                        : filteredFlowrates.length === 0
+                        ? form.filterSize === "13mm"
+                          ? "No 1.5 L/min calibration available for 13mm filter"
+                          : "No passed calibrations available"
                         : "Select flowrate"}
                     </em>
                   </MenuItem>
-                  {availableFlowrates.map((flowrate) => {
+                  {filteredFlowrates.map((flowrate) => {
                     const flowrateStr = flowrate.toFixed(1);
                     return (
                       <MenuItem key={flowrateStr} value={flowrateStr}>
@@ -1402,126 +1590,151 @@ const EditSample = () => {
                   </Typography>
                 )}
               </FormControl>
-              <Typography
-                variant="h6"
-                sx={{
-                  color: theme.palette.primary.main,
-                  borderBottom: `2px solid ${theme.palette.primary.main}`,
-                  pb: 1,
-                  mb: 2,
-                  mt: 3,
-                }}
-              >
-                Air-monitor Collection
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                <FormControl required sx={{ minWidth: 100 }} error={insufficientSampleTime}>
-                  <InputLabel>Hour</InputLabel>
-                  <Select
-                    value={parseTime(form.endTime).hour}
-                    onChange={(e) => handleTimeChange("endTime", "hour", e.target.value)}
-                    label="Hour"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => 
-                      i.toString().padStart(2, "0")
-                    ).map((hour) => (
-                      <MenuItem key={hour} value={hour}>
-                        {hour}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl required sx={{ minWidth: 100 }} error={insufficientSampleTime}>
-                  <InputLabel>Minutes</InputLabel>
-                  <Select
-                    value={parseTime(form.endTime).minute}
-                    onChange={(e) => handleTimeChange("endTime", "minute", e.target.value)}
-                    label="Minutes"
-                  >
-                    {Array.from({ length: 60 }, (_, i) => 
-                      i.toString().padStart(2, "0")
-                    ).map((minute) => (
-                      <MenuItem key={minute} value={minute}>
-                        {minute}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <IconButton
-                  onClick={() => setCurrentTime("endTime")}
-                  sx={{ alignSelf: "flex-end", mb: 1 }}
+              {!showCollectionSection && !collectionFieldsEdited ? (
+                <Button
+                  variant="outlined"
+                  onClick={() => setShowCollectionSection(true)}
+                  sx={{ mt: 3, mb: 2 }}
                 >
-                  <AccessTimeIcon />
-                </IconButton>
-              </Box>
-              {insufficientSampleTime && (
-                <Typography variant="caption" color="error" sx={{ mt: -1, mb: 1, ml: 1 }}>
-                  Insufficient sample time
-                </Typography>
-              )}
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    name="nextDay"
-                    checked={form.nextDay}
-                    onChange={handleChange}
-                  />
-                }
-                label="Next Day"
-                sx={{ mt: -1, mb: 1 }}
-              />
-              <FormControl fullWidth error={!!fieldErrors.finalFlowrate}>
-                <InputLabel>Final Flowrate (L/min)</InputLabel>
-                <Select
-                  name="finalFlowrate"
-                  value={form.finalFlowrate}
-                  onChange={handleChange}
-                  label="Final Flowrate (L/min)"
-                  disabled={!form.pumpNo || availableFlowrates.length === 0}
-                >
-                  <MenuItem value="">
-                    <em>
-                      {!form.pumpNo
-                        ? "Select a pump first"
-                        : availableFlowrates.length === 0
-                        ? "No passed calibrations available"
-                        : "Select flowrate"}
-                    </em>
-                  </MenuItem>
-                  {availableFlowrates.map((flowrate) => {
-                    const flowrateStr = flowrate.toFixed(1);
-                    return (
-                      <MenuItem key={flowrateStr} value={flowrateStr}>
-                        {flowrateStr}
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-                {fieldErrors.finalFlowrate && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {fieldErrors.finalFlowrate}
+                  Air Monitor Pick-Up
+                </Button>
+              ) : (
+                <>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      color: theme.palette.primary.main,
+                      borderBottom: `2px solid ${theme.palette.primary.main}`,
+                      pb: 1,
+                      mb: 2,
+                      mt: 3,
+                    }}
+                  >
+                    Air-monitor Pick-Up
                   </Typography>
-                )}
-              </FormControl>
-              <TextField
-                name="averageFlowrate"
-                label="Average Flowrate"
-                value={
-                  form.status === "failed"
-                    ? "FAILED - Flowrates don't match"
-                    : form.averageFlowrate
-                }
-                disabled
-                required
-                fullWidth
-                sx={{
-                  "& .MuiInputBase-input": {
-                    color:
-                      form.status === "failed" ? "error.main" : "text.primary",
-                    fontWeight: form.status === "failed" ? "bold" : "normal",
-                  },
-                }}
-              />
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                    <FormControl required sx={{ minWidth: 100 }} error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}>
+                      <InputLabel>Hour</InputLabel>
+                      <Select
+                        value={parseTime(form.endTime, "endTime").hour}
+                        onChange={(e) => handleTimeChange("endTime", "hour", e.target.value)}
+                        label="Hour"
+                      >
+                        <MenuItem value="-">-</MenuItem>
+                        {Array.from({ length: 24 }, (_, i) => 
+                          i.toString().padStart(2, "0")
+                        ).map((hour) => (
+                          <MenuItem key={hour} value={hour}>
+                            {hour}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <FormControl required sx={{ minWidth: 100 }} error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}>
+                      <InputLabel>Minutes</InputLabel>
+                      <Select
+                        value={parseTime(form.endTime, "endTime").minute}
+                        onChange={(e) => handleTimeChange("endTime", "minute", e.target.value)}
+                        label="Minutes"
+                      >
+                        <MenuItem value="-">-</MenuItem>
+                        {Array.from({ length: 60 }, (_, i) => 
+                          i.toString().padStart(2, "0")
+                        ).map((minute) => (
+                          <MenuItem key={minute} value={minute}>
+                            {minute}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <IconButton
+                      onClick={() => {
+                        setCurrentTime("endTime");
+                        setCollectionFieldsEdited(true);
+                        setShowCollectionSection(true);
+                      }}
+                      sx={{ alignSelf: "flex-end", mb: 1 }}
+                    >
+                      <AccessTimeIcon />
+                    </IconButton>
+                  </Box>
+                  {fieldErrors.endTime && (
+                    <Typography variant="caption" color="error" sx={{ mt: -1, mb: 1, ml: 1 }}>
+                      {fieldErrors.endTime}
+                    </Typography>
+                  )}
+                  {insufficientSampleTime && !fieldErrors.endTime && (
+                    <Typography variant="caption" color="error" sx={{ mt: -1, mb: 1, ml: 1 }}>
+                      Insufficient sample time
+                    </Typography>
+                  )}
+                  <Box sx={{ display: "flex", alignItems: "center", mt: -1, mb: 1 }}>
+                    <Checkbox
+                      name="nextDay"
+                      checked={form.nextDay}
+                      onChange={handleChange}
+                    />
+                    <Typography variant="body1" sx={{ ml: -1, mr: 1 }}>
+                      Next Day
+                    </Typography>
+                  </Box>
+                  <TextField
+                    name="finalFlowrate"
+                    label="Final Flowrate (L/min)"
+                    value={form.finalFlowrate}
+                    onChange={handleChange}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value && !isNaN(parseFloat(value))) {
+                        const num = parseFloat(value);
+                        // If whole number or has only 1 decimal place, format to 1 decimal place, otherwise 2 decimal places
+                        const hasAtMostOneDecimal = parseFloat(num.toFixed(1)) === num;
+                        const formatted = hasAtMostOneDecimal ? num.toFixed(1) : num.toFixed(2);
+                        setForm((prev) => ({
+                          ...prev,
+                          finalFlowrate: formatted,
+                        }));
+                      }
+                    }}
+                    type="number"
+                    inputProps={{ step: "0.01", min: "0" }}
+                    fullWidth
+                    error={!!fieldErrors.finalFlowrate}
+                    helperText={
+                      fieldErrors.finalFlowrate ||
+                      (form.initialFlowrate && !isNaN(parseFloat(form.initialFlowrate))
+                        ? `Must be within 10% of initial flowrate (${(parseFloat(form.initialFlowrate) * 0.9).toFixed(2)} - ${(parseFloat(form.initialFlowrate) * 1.1).toFixed(2)} L/min)`
+                        : "")
+                    }
+                  />
+                  <TextField
+                    name="averageFlowrate"
+                    label="Average Flowrate"
+                    value={
+                      form.status === "failed"
+                        ? "FAILED - Final flowate is not within 10% of initial flowrate"
+                        : form.averageFlowrate && !isNaN(parseFloat(form.averageFlowrate))
+                        ? (() => {
+                            const num = parseFloat(form.averageFlowrate);
+                            // If whole number or has only 1 decimal place, display to 1 decimal place, otherwise 2 decimal places
+                            const hasAtMostOneDecimal = parseFloat(num.toFixed(1)) === num;
+                            return hasAtMostOneDecimal ? num.toFixed(1) : num.toFixed(2);
+                          })()
+                        : form.averageFlowrate
+                    }
+                    disabled
+                    required
+                    fullWidth
+                    sx={{
+                      "& .MuiInputBase-input": {
+                        color:
+                          form.status === "failed" ? "error.main" : "text.primary",
+                        fontWeight: form.status === "failed" ? "bold" : "normal",
+                      },
+                    }}
+                  />
+                </>
+              )}
             </>
           )}
           <TextField

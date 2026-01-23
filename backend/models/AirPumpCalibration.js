@@ -93,10 +93,14 @@ airPumpCalibrationSchema.pre('save', function(next) {
   }
 
   // Calculate next calibration due date (1 year from calibration date)
-  if (this.calibrationDate) {
-    const nextDue = new Date(this.calibrationDate);
-    nextDue.setFullYear(nextDue.getFullYear() + 1);
-    this.nextCalibrationDue = nextDue;
+  // Only set if not explicitly set to null (e.g., for out-of-service records)
+  if (this.calibrationDate && this.nextCalibrationDue !== null) {
+    // Only calculate if nextCalibrationDue is undefined or not explicitly set to null
+    if (this.nextCalibrationDue === undefined) {
+      const nextDue = new Date(this.calibrationDate);
+      nextDue.setFullYear(nextDue.getFullYear() + 1);
+      this.nextCalibrationDue = nextDue;
+    }
   }
 
   next();

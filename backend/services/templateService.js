@@ -369,199 +369,157 @@ const replacePlaceholders = async (content, data) => {
   let laaLicenceNumber = 'AA00031'; // Default fallback
   let laaLicenceState = ''; // Default fallback
   let userSignature = null;
+  // ALWAYS use data.LAA for the name (not createdBy)
   let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
   
-  // PRIORITY 1: Check if createdBy exists and use its _id for direct lookup (most reliable)
-  // This avoids name-based lookup issues and cache staleness problems
-  // Even if createdBy is only partially populated (firstName/lastName), we can use the _id
-  let useCreatedByLookup = false;
-  let createdByUserId = null;
+  // Look up the user identified by data.LAA to get their licence information
+  // data.LAA is a name string (e.g., "FirstName LastName")
+  let userIdentifier = null;
   
-  if (data.createdBy && typeof data.createdBy === 'object' && data.createdBy._id) {
-    createdByUserId = data.createdBy._id.toString();
-    useCreatedByLookup = true;
+  // PRIORITY 1: Use data.LAA for clearance certificates
+  if (data.LAA) {
+    userIdentifier = data.LAA;
+    console.log('[TEMPLATE SERVICE] Using data.LAA for lookup:', userIdentifier);
+  } else if (data.assessorId) {
+    // Fall back to assessorId for assessment reports
+    userIdentifier = data.assessorId;
     
-    // Extract name from populated object if available
-    if (data.createdBy.firstName && data.createdBy.lastName) {
-      laaName = `${data.createdBy.firstName} ${data.createdBy.lastName}`;
+    // Handle assessorId object structure for assessments
+    if (typeof data.assessorId === 'object') {
+      userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
     }
-    
-    // Check if signature and licences are already in the populated object
-    if (data.createdBy.signature) {
-      userSignature = data.createdBy.signature;
-      console.log('[TEMPLATE SERVICE] Signature found in createdBy object, length:', userSignature.length);
-    }
-    
-    if (data.createdBy.licences && Array.isArray(data.createdBy.licences) && data.createdBy.licences.length > 0) {
-      const asbestosAssessorLicence = data.createdBy.licences.find(licence => 
-        licence.licenceType === 'Asbestos Assessor' || 
-        licence.licenceType === 'LAA'
-      );
-      
-      if (asbestosAssessorLicence) {
-        laaLicenceNumber = asbestosAssessorLicence.licenceNumber || laaLicenceNumber;
-        laaLicenceState = asbestosAssessorLicence.state || '';
-        console.log('[TEMPLATE SERVICE] Found licence in createdBy object:', laaLicenceNumber, 'State:', laaLicenceState);
-      }
-    }
-    
-    // If we have everything we need, skip database lookup
-    if (userSignature && laaLicenceNumber !== 'AA00031') {
-      console.log('[TEMPLATE SERVICE] Using fully populated createdBy object, skipping database lookup');
-      // Cache the user data using the user ID for future lookups
-      if (!userLookupCache.has(createdByUserId)) {
-        userLookupCache.set(createdByUserId, {
-          name: laaName,
-          licenceNumber: laaLicenceNumber,
-          licenceState: laaLicenceState,
-          signature: userSignature
-        });
-        console.log('[TEMPLATE SERVICE] Cached user data from createdBy for:', createdByUserId);
-      }
-      useCreatedByLookup = false; // Skip the lookup below
-    } else {
-      console.log('[TEMPLATE SERVICE] createdBy object found, will use _id for direct database lookup');
-    }
+    console.log('[TEMPLATE SERVICE] Using data.assessorId for lookup:', userIdentifier);
   }
   
-  // If we need to do a database lookup (either because createdBy needs fetching, or createdBy doesn't exist)
-  if (useCreatedByLookup || !userSignature) {
-    // PRIORITY 2: Use createdBy._id for direct lookup if available (more reliable than name)
-    // PRIORITY 3: Fall back to existing LAA/assessorId lookup for backward compatibility
-    let userIdentifier = null;
-    
-    if (useCreatedByLookup && createdByUserId) {
-      // Use the user ID from createdBy for direct lookup
-      userIdentifier = createdByUserId;
-      console.log('[TEMPLATE SERVICE] Using createdBy._id for lookup:', userIdentifier);
+  if (userIdentifier) {
+    // Check cache first
+    if (userLookupCache.has(userIdentifier)) {
+      const cachedUser = userLookupCache.get(userIdentifier);
+      console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
+      // Keep laaName as data.LAA (don't override with cached name)
+      laaLicenceNumber = cachedUser.licenceNumber;
+      laaLicenceState = cachedUser.licenceState || '';
+      userSignature = cachedUser.signature;
     } else {
-      // Fall back to name-based lookup
-      userIdentifier = data.LAA || data.assessorId;
-      
-      // Handle assessorId object structure for assessments
-      if (data.assessorId && typeof data.assessorId === 'object') {
-        userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
-      }
-    }
-    
-    if (userIdentifier) {
-      // Check cache first
-      if (userLookupCache.has(userIdentifier)) {
-        const cachedUser = userLookupCache.get(userIdentifier);
-        console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
-        laaName = cachedUser.name;
-        laaLicenceNumber = cachedUser.licenceNumber;
-        laaLicenceState = cachedUser.licenceState || '';
-        userSignature = cachedUser.signature;
-      } else {
-        try {
-          console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
-          const User = require('../models/User');
-          
-          // Add timeout to prevent hanging
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('User lookup timeout')), 5000); // 5 second timeout
-          });
-          
-          // Check if userIdentifier is a valid ObjectId (24 hex characters)
-          const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
-          console.log('[TEMPLATE SERVICE] Is valid ObjectId:', isValidObjectId);
-          
-          let queryConditions = [];
-          
-          // If it's a valid ObjectId, prioritize direct ID lookup
-          if (isValidObjectId) {
-            queryConditions = [{ _id: userIdentifier }];
-          } else {
-            // Fallback to name-based lookup for backward compatibility
+      try {
+        console.log('[TEMPLATE SERVICE] Looking up user with identifier:', userIdentifier);
+        const User = require('../models/User');
+        
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('User lookup timeout')), 5000); // 5 second timeout
+        });
+        
+        // Check if userIdentifier is a valid ObjectId (24 hex characters)
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(userIdentifier);
+        console.log('[TEMPLATE SERVICE] Is valid ObjectId:', isValidObjectId);
+        
+        let queryConditions = [];
+        
+        // If it's a valid ObjectId, prioritize direct ID lookup
+        if (isValidObjectId) {
+          queryConditions = [{ _id: userIdentifier }];
+        } else {
+          // Name-based lookup - split by space for first/last name
+          const nameParts = userIdentifier.trim().split(/\s+/);
+          if (nameParts.length >= 2) {
+            // Has first and last name
             queryConditions = [
-              { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
+              { firstName: { $regex: new RegExp(`^${nameParts[0]}$`, 'i') }, lastName: { $regex: new RegExp(`^${nameParts.slice(1).join(' ')}$`, 'i') } },
+              { firstName: { $regex: new RegExp(nameParts[0], 'i') }, lastName: { $regex: new RegExp(nameParts[1], 'i') } }
+            ];
+          } else {
+            // Single name - try first or last name
+            queryConditions = [
               { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
               { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
             ];
           }
+        }
+        
+        console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
+        
+        // Race between the query and timeout
+        const user = await Promise.race([
+          User.findOne({
+            $or: queryConditions
+          }),
+          timeoutPromise
+        ]);
+        
+        if (user) {
+          console.log('[TEMPLATE SERVICE] Found user:', user.firstName, user.lastName);
+          console.log('[TEMPLATE SERVICE] User signature exists:', !!user.signature);
+          console.log('[TEMPLATE SERVICE] User licences:', user.licences?.length || 0);
           
-          console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
-          
-          // Race between the query and timeout
-          const user = await Promise.race([
-            User.findOne({
-              $or: queryConditions
-            }),
-            timeoutPromise
-          ]);
-          
-          if (user) {
-            console.log('[TEMPLATE SERVICE] Found user:', user.firstName, user.lastName);
-            console.log('[TEMPLATE SERVICE] User signature exists:', !!user.signature);
-            console.log('[TEMPLATE SERVICE] User licences:', user.licences?.length || 0);
-            
-            // Update LAA name with actual user name from database
+          // Keep laaName as data.LAA (don't override with database name)
+          // Only update if data.LAA was not provided
+          if (!data.LAA && !data.laaName) {
             laaName = `${user.firstName} ${user.lastName}`;
+          }
+          
+          // Get user's signature
+          if (user.signature) {
+            userSignature = user.signature;
+            console.log('[TEMPLATE SERVICE] Signature length:', userSignature.length);
+          }
+          
+          // Find the Asbestos Assessor licence
+          if (user.licences && user.licences.length > 0) {
+            console.log('[TEMPLATE SERVICE] Available licences:', user.licences.map(l => ({ type: l.licenceType, number: l.licenceNumber })));
             
-            // Get user's signature
-            if (user.signature) {
-              userSignature = user.signature;
-              console.log('[TEMPLATE SERVICE] Signature length:', userSignature.length);
+            const asbestosAssessorLicence = user.licences.find(licence => 
+              licence.licenceType === 'Asbestos Assessor' || 
+              licence.licenceType === 'LAA'
+            );
+            
+            if (asbestosAssessorLicence) {
+              laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
+              laaLicenceState = asbestosAssessorLicence.state || '';
+              console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber, 'State:', laaLicenceState);
             }
-            
-            // Find the Asbestos Assessor licence
-            if (user.licences && user.licences.length > 0) {
-              console.log('[TEMPLATE SERVICE] Available licences:', user.licences.map(l => ({ type: l.licenceType, number: l.licenceNumber })));
-              
-              const asbestosAssessorLicence = user.licences.find(licence => 
-                licence.licenceType === 'Asbestos Assessor' || 
-                licence.licenceType === 'LAA'
-              );
-              
-              if (asbestosAssessorLicence) {
-                laaLicenceNumber = asbestosAssessorLicence.licenceNumber;
-                laaLicenceState = asbestosAssessorLicence.state || '';
-                console.log('[TEMPLATE SERVICE] Found licence:', laaLicenceNumber, 'State:', laaLicenceState);
-              }
-            }
-            
-            // Cache the user data for future lookups
-            // Cache by the identifier used (ID or name) for direct lookups
-            userLookupCache.set(userIdentifier, {
-              name: laaName,
-              licenceNumber: laaLicenceNumber,
-              licenceState: laaLicenceState,
-              signature: userSignature
-            });
-            console.log('[TEMPLATE SERVICE] Cached user data for:', userIdentifier);
-            
-            // Also cache by user ID and name for backward compatibility
-            // This ensures future lookups by either method will hit the cache
-            if (user._id) {
-              const userIdString = user._id.toString();
-              if (userIdString !== userIdentifier) {
-                userLookupCache.set(userIdString, {
-                  name: laaName,
-                  licenceNumber: laaLicenceNumber,
-                  licenceState: laaLicenceState,
-                  signature: userSignature
-                });
-                console.log('[TEMPLATE SERVICE] Also cached user data by ID:', userIdString);
-              }
-            }
-            if (laaName && laaName !== userIdentifier && laaName !== 'Unknown LAA') {
-              userLookupCache.set(laaName, {
+          }
+          
+          // Cache the user data for future lookups
+          // Cache by the identifier used (ID or name) for direct lookups
+          userLookupCache.set(userIdentifier, {
+            name: laaName, // Store the name from data.LAA, not the database name
+            licenceNumber: laaLicenceNumber,
+            licenceState: laaLicenceState,
+            signature: userSignature
+          });
+          console.log('[TEMPLATE SERVICE] Cached user data for:', userIdentifier);
+          
+          // Also cache by user ID and database name for backward compatibility
+          if (user._id) {
+            const userIdString = user._id.toString();
+            if (userIdString !== userIdentifier) {
+              userLookupCache.set(userIdString, {
                 name: laaName,
                 licenceNumber: laaLicenceNumber,
                 licenceState: laaLicenceState,
                 signature: userSignature
               });
-              console.log('[TEMPLATE SERVICE] Also cached user data by name:', laaName);
+              console.log('[TEMPLATE SERVICE] Also cached user data by ID:', userIdString);
             }
-          } else {
-            console.log('[TEMPLATE SERVICE] No user found for identifier:', userIdentifier);
           }
-        } catch (error) {
-          console.error('Error looking up user licence and signature:', error);
-          // Continue with default values if lookup fails
-          console.log('[TEMPLATE SERVICE] Using default values due to lookup error');
+          const dbUserName = `${user.firstName} ${user.lastName}`;
+          if (dbUserName && dbUserName !== userIdentifier && dbUserName !== 'Unknown LAA') {
+            userLookupCache.set(dbUserName, {
+              name: laaName,
+              licenceNumber: laaLicenceNumber,
+              licenceState: laaLicenceState,
+              signature: userSignature
+            });
+            console.log('[TEMPLATE SERVICE] Also cached user data by database name:', dbUserName);
+          }
+        } else {
+          console.log('[TEMPLATE SERVICE] No user found for identifier:', userIdentifier);
         }
+      } catch (error) {
+        console.error('Error looking up user licence and signature:', error);
+        // Continue with default values if lookup fails
+        console.log('[TEMPLATE SERVICE] Using default values due to lookup error');
       }
     }
   }

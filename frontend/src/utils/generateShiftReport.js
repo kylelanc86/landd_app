@@ -627,22 +627,29 @@ pdfMake.fonts = {
                 ...sortedSamples.map(sample => {
                   if (isClientSupplied) {
                     const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
+                    const isFailed = sample.status === "failed";
                     return [
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
-                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A'), style: 'tableContent' },
-                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A'), style: 'tableContent' }
+                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A')), style: 'tableContent' },
+                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A')), style: 'tableContent' }
                     ];
                   } else {
                     const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
+                    const isFailed = sample.status === "failed";
                     return [
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
                       { text: sample.startTime ? formatTime(sample.startTime) : '-', style: 'tableContent' },
                       { text: sample.endTime ? formatTime(sample.endTime) : '-', style: 'tableContent' },
-                      { text: sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-', style: 'tableContent' },
-                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A'), style: 'tableContent' },
-                      { text: uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A'), style: 'tableContent' },
+                      { 
+                        text: isFailed 
+                          ? [{ text: 'Failed', color: 'red', bold: true }]
+                          : (sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-'), 
+                        style: 'tableContent'
+                      },
+                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A')), style: 'tableContent' },
+                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A')), style: 'tableContent' },
                       { 
                         text: formatReportedConcentration(sample),
                         style: 'tableContent',
@@ -690,82 +697,78 @@ pdfMake.fonts = {
         },
         {
           stack: [
-            { text: 'SITE PLAN', style: 'header', margin: [0, 0, 0, 20], alignment: 'center' },
+            { text: 'SITE PLAN', style: 'header', margin: [0, -5, 0, 10], alignment: 'center' },
             
             // Site plan diagram with North indicator overlay
             {
-              columns: [
-                { width: '*', text: '' }, // Left spacer
+              stack: [
                 {
-                  width: 500,
+                  image: sitePlanImage,
+                  // A4 width (595.28) - left margin (40) - right margin (40) = 515.28 points
+                  // Use exact width to match sampling locations table
+                  width: 515.28, // Full content width
+                  margin: [0, 0, 0, 0]
+                },
+                {
+                  // North indicator positioned at top-right of image
+                  // Image starts at x=40 (left margin), width=515.28, so right edge is at 555.28
+                  // Position indicator 30px from right edge: 40 + 515.28 - 30 = 525.28
+                  absolutePosition: { x: 525, y: 180 },
                   stack: [
                     {
-                      image: sitePlanImage,
-                      width: 500,
-                      margin: [0, 0, 0, 0]
-                    },
-                    {
-                      // North indicator positioned at top-right of image
-                      absolutePosition: { x: 490, y: 180 },
-                      stack: [
+                      canvas: [
+                        // White background circle
                         {
-                          canvas: [
-                            // White background circle
-                            {
-                              type: 'ellipse',
-                              x: 0,
-                              y: 5,
-                              r1: 20,
-                              r2: 20,
-                              color: 'white',
-                              fillOpacity: 0.9
-                            },
-                            // Arrow pointing up
-                            {
-                              type: 'line',
-                              x1: 0,
-                              y1: 8,
-                              x2: 0,
-                              y2: -8,
-                              lineWidth: 2,
-                              lineColor: '#333333'
-                            },
-                            // Arrow head left
-                            {
-                              type: 'line',
-                              x1: 1,
-                              y1: -8,
-                              x2: -4,
-                              y2: -4,
-                              lineWidth: 2,
-                              lineColor: '#333333'
-                            },
-                            // Arrow head right
-                            {
-                              type: 'line',
-                              x1: -1,
-                              y1: -8,
-                              x2: 4,
-                              y2: -4,
-                              lineWidth: 2,
-                              lineColor: '#333333'
-                            }
-                          ]
+                          type: 'ellipse',
+                          x: 0,
+                          y: 5,
+                          r1: 20,
+                          r2: 20,
+                          color: 'white',
+                          fillOpacity: 0.9
                         },
+                        // Arrow pointing up
                         {
-                          text: 'N',
-                          color: '#333333',
-                          fontSize: 12,
-                          bold: true,
-                          absolutePosition: { x: 485, y: 188 }
+                          type: 'line',
+                          x1: 0,
+                          y1: 8,
+                          x2: 0,
+                          y2: -8,
+                          lineWidth: 2,
+                          lineColor: '#333333'
+                        },
+                        // Arrow head left
+                        {
+                          type: 'line',
+                          x1: 1,
+                          y1: -8,
+                          x2: -4,
+                          y2: -4,
+                          lineWidth: 2,
+                          lineColor: '#333333'
+                        },
+                        // Arrow head right
+                        {
+                          type: 'line',
+                          x1: -1,
+                          y1: -8,
+                          x2: 4,
+                          y2: -4,
+                          lineWidth: 2,
+                          lineColor: '#333333'
                         }
                       ]
+                    },
+                    {
+                      text: 'N',
+                      color: '#333333',
+                      fontSize: 12,
+                      bold: true,
+                      absolutePosition: { x: 520, y: 188 }
                     }
                   ]
-                },
-                { width: '*', text: '' } // Right spacer
+                }
               ],
-              columnGap: 0,
               margin: [0, 0, 0, 15]
             },
 
